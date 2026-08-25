@@ -46,6 +46,9 @@ jobs:
       - name: Lint PWA source
         run: pnpm --filter @workspace/cafa-pmis run lint
 
+      - name: Prepare disposable CI database
+        run: pnpm --filter @workspace/api-server run migrate
+
       - name: Run API test suite
         run: pnpm --filter @workspace/api-server test
 
