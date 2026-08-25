@@ -337,6 +337,12 @@ export const plansTable = pgTable("plans", {
   version: integer("version").notNull().default(1),
   lockedBy: integer("locked_by"),
   lockedAt: timestamp("locked_at", { withTimezone: true }),
+  // The most recent explicit final approval. Retained through reopen so
+  // editability can require a reopen event after this exact boundary.
+  lastFinalApprovedAt: timestamp("last_final_approved_at", { withTimezone: true }),
+  // Historical 0/USD values identified by the bounded migration predicate are
+  // distinguishable from a deliberately entered zero budget.
+  budgetLegacyUnverified: boolean("budget_legacy_unverified").notNull().default(false),
 });
 
 export const planActivitiesTable = pgTable("plan_activities", {

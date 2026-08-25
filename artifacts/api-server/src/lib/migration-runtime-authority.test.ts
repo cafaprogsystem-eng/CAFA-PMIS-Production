@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 const query = vi.hoisted(() => vi.fn());
@@ -11,6 +12,21 @@ describe("tracked migration runtime authority", () => {
   it("has unique, valid full migration names", () => {
     expect(() => assertMigrationManifest()).not.toThrow();
     expect(new Set(MIGRATIONS.map((migration) => migration.name)).size).toBe(MIGRATIONS.length);
+  });
+
+  it("keeps the maintained Plan migration references aligned with runtime authority", () => {
+    for (const name of [
+      "057_plan_budget_legacy_unverified",
+      "058_plan_final_approval_timestamp",
+    ]) {
+      const migration = MIGRATIONS.find((candidate) => candidate.name === name);
+      const reference = readFileSync(
+        new URL(`../migrations/${name}.sql`, import.meta.url),
+        "utf8",
+      );
+      expect(migration).toBeDefined();
+      expect(reference).toContain(migration!.sql.trim());
+    }
   });
 
   it("takes a database advisory lock before inspecting or mutating history", async () => {
