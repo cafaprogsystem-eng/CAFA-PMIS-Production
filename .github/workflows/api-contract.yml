@@ -11,6 +11,8 @@ jobs:
   quality:
     name: Contract, build, test, and migration gates
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
     services:
       postgres:
         image: postgres:16

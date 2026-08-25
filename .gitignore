@@ -107,3 +107,6 @@ infra/aws-staging/*.state
 infra/aws-staging/*.plan
 infra/aws-staging/*.json
 infra/aws-staging/*.log
+
+# Exception: canonical initial schema required by migration runner
+!artifacts/api-server/src/lib/initial-schema.sql
