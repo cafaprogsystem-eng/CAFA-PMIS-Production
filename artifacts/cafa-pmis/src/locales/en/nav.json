@@ -1,0 +1,131 @@
+{
+  "home": "Home",
+  "groups": {
+    "overview": "Overview",
+    "programmeManagement": "Programme Management",
+    "communication": "Communication",
+    "dataManagement": "Data Management",
+    "administration": "Administration"
+  },
+  "items": {
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "planning": "Planning",
+    "plans": "Plans",
+    "planningDashboard": "Dashboard",
+    "budget": "Budget",
+    "reports": "Reports",
+    "projectReports": "Project Reports",
+    "activityReports": "Activity Reports",
+    "hqSectorReports": "HQ Sector Reports",
+    "stateProgrammeReports": "State Programme Reports",
+    "risks": "Risks",
+    "notifications": "Notifications",
+    "communicationCentre": "Communication Centre",
+    "fileArchive": "File & Archive",
+    "systemManual": "System Manual",
+    "ai": "AI",
+    "users": "Users",
+    "states": "States",
+    "auditLog": "Audit Log",
+    "profile": "Profile",
+    "syncStatus": "Sync Status",
+    "notificationPreferences": "Notification Preferences"
+  },
+  "pageTitles": {
+    "budgetAndFinance": "Budgets",
+    "riskRegister": "Risk Register",
+    "userManagement": "User Management",
+    "planningDashboard": "Plans"
+  },
+  "tooltips": {
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "closeMenu": "Close navigation menu",
+    "platformName": "CAFA PMIS"
+  },
+  "brand": {
+    "name": "CAFA PMIS",
+    "subtitle": "Programme Management Information System"
+  },
+  "user": {
+    "myProfile": "My Profile",
+    "settings": "Settings",
+    "notificationPreferences": "Notification Preferences",
+    "syncStatus": "Sync Status",
+    "installApp": "Install App",
+    "switchUser": "Switch User (Dev)",
+    "signOut": "Log out"
+  },
+  "search": {
+    "placeholder": "Search or jump to…",
+    "shortcut": "⌘K"
+  },
+  "language": {
+    "switch": "Language",
+    "en": "English",
+    "ar": "العربية"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark All Read",
+    "allCaughtUp": "You're all caught up.",
+    "viewAll": "View All Notifications"
+  },
+  "commandPalette": {
+    "label": "Command palette",
+    "searchPlaceholder": "Search projects, reports, users, or navigate…",
+    "searchAriaLabel": "Command palette search",
+    "clearSearch": "Clear",
+    "clearRecentLabel": "Clear recent history",
+    "clearRecent": "Clear",
+    "resultsAriaLabel": "Command palette results",
+    "noResultsFor": "No results for",
+    "noResultsTip": "Try a project code, user name, report title, or state name",
+    "recentSearchHint": "Recent search — click to re-run",
+    "pinLabel": "Add to favourites",
+    "unpinLabel": "Remove from favourites",
+    "clearHistoryConfirm": "Clear all recently visited pages? This cannot be undone.",
+    "groups": {
+      "favorites": "Favourites",
+      "recent": "Recent",
+      "quickNav": "Quick Navigation",
+      "actions": "Actions",
+      "navigation": "Navigation",
+      "projects": "Projects",
+      "plans": "Plans",
+      "reports": "Reports",
+      "risks": "Risks",
+      "documents": "Documents",
+      "users": "Users"
+    },
+    "hints": {
+      "navigate": "navigate",
+      "open": "open",
+      "next": "next",
+      "close": "close"
+    },
+    "brand": "CAFA Command",
+    "submenu": {
+      "expand": "Expand {{label}} submenu",
+      "collapse": "Collapse {{label}} submenu"
+    }
+  },
+  "cmdSubtitles": {
+    "dashboard": "Overview & analytics",
+    "projects": "All programme projects",
+    "plans": "Planning & activities",
+    "reports": "Programme reports",
+    "risks": "Risk management",
+    "notifications": "Your notifications",
+    "states": "State offices",
+    "fileArchive": "Organisation documents and resources",
+    "systemManual": "Help & documentation",
+    "budget": "Financial overview",
+    "communicationCentre": "Messages & chat",
+    "users": "Manage team members",
+    "auditLog": "Activity history",
+    "ai": "Assistant and administration",
+    "syncStatus": "Offline queue"
+  }
+}

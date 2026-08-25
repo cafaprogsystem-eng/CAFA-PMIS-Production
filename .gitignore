@@ -1,0 +1,109 @@
+# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+
+# compiled output
+dist
+tmp
+out-tsc
+*.tsbuildinfo
+
+# API contract declarations are committed so CI can detect declaration drift.
+!lib/api-client-react/dist/
+!lib/api-client-react/dist/**
+!lib/api-zod/dist/
+!lib/api-zod/dist/**
+.expo
+.expo-shared
+
+# dependencies
+node_modules
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# misc
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
+/typings
+
+# System Files
+.DS_Store
+__MACOSX
+Thumbs.db
+*.swp
+*.swo
+
+# Replit
+.cache/
+.local/
+
+# Uploaded planning prompts are local agent input, never application source.
+attached_assets/Pasted-*.txt
+attached_assets/.Pasted-*.txt.*
+CAFA-PMIS-PRODUCTION-CLEAN.zip
+
+# Environment / Secrets — NEVER commit these
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+
+# Logs
+logs/
+*.log
+pnpm-debug.log*
+
+# Browser-test evidence is generated per run and retained only by CI/artifact storage.
+artifacts/cafa-pmis/test-results/
+artifacts/cafa-pmis/e2e/.limited-scope-attachment-fixture.json
+
+# Runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Build output
+build/
+
+# Database backups — contain plaintext schema and data; NEVER commit
+database-backups/
+*.sql
+# Exception: application migration files are tracked source code
+!artifacts/api-server/src/migrations/*.sql
+
+# Pre-migration source backup — large directory, not needed in repo
+backup-before-github-migration/
+service-account.json
+service-account.b64
+backups/
+
+# AWS staging operator output — state, plans, generated templates, and logs
+infra/aws-staging/.state/
+infra/aws-staging/*.state
+infra/aws-staging/*.plan
+infra/aws-staging/*.json
+infra/aws-staging/*.log

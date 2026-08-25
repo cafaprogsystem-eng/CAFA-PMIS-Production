@@ -1,0 +1,227 @@
+{
+  "title": "Risk Register",
+  "newRisk": "Register Risk",
+  "registerRisk": "Register Risk",
+  "editRisk": "Edit Risk",
+  "noRisks": "No risks found",
+  "noRisksDesc": "No risks match your current filters.",
+  "noRisksFiltered": "No risks match the selected filters.",
+  "loadError": "Could not load risks",
+  "loadErrorDesc": "An error occurred while fetching the risk register. Please try again.",
+  "registerSuccess": "Risk registered",
+  "updateSuccess": "Risk updated",
+  "deleteSuccess": "Risk deleted",
+  "projectRemoved": "[Project removed]",
+  "levels": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "critical": "Critical"
+  },
+  "likelihood": {
+    "unlikely": "Unlikely",
+    "possible": "Possible",
+    "likely": "Likely",
+    "almost_certain": "Almost Certain"
+  },
+  "status": {
+    "open": "Open",
+    "under_mitigation": "Under Mitigation",
+    "closed": "Closed",
+    "identified": "Identified",
+    "assigned": "Assigned",
+    "mitigation_plan": "Mitigation Plan",
+    "follow_up": "Follow Up",
+    "escalation": "Escalation",
+    "mitigated": "Mitigated"
+  },
+  "workflow": {
+    "identified": "Identified",
+    "assigned": "Assigned",
+    "mitigation_plan": "Mitigation Plan",
+    "follow_up": "Follow Up",
+    "escalation": "Escalation"
+  },
+  "fields": {
+    "title": "Risk Title",
+    "titlePh": "Brief risk description",
+    "description": "Detailed Description",
+    "descriptionPh": "Detailed description of the risk…",
+    "level": "Risk Level",
+    "likelihood": "Likelihood",
+    "impact": "Impact",
+    "category": "Category",
+    "state": "State",
+    "project": "Project",
+    "assignedTo": "Assigned To",
+    "dueDate": "Due Date",
+    "mitigationPlan": "Mitigation Plan",
+    "mitigationPh": "Planned or current mitigation steps…",
+    "status": "Status",
+    "probability": "Probability",
+    "linkedProject": "Linked project",
+    "responsiblePerson": "Responsible person",
+    "mitigationAction": "Mitigation Action",
+    "statePh": "Select state"
+  },
+  "filters": {
+    "toolbar": "Filters",
+    "searchRisks": "Search risks",
+    "searchPlaceholder": "Search title, description, project, state…",
+    "riskLevel": "Risk level",
+    "status": "Status",
+    "category": "Category",
+    "project": "Project",
+    "state": "State",
+    "responsible": "Responsible person",
+    "allLevels": "All levels",
+    "allStatuses": "All statuses",
+    "allCategories": "All categories",
+    "allProjects": "All projects",
+    "allStates": "All states",
+    "allPersons": "All persons",
+    "clearCount": "Clear ({{count}})",
+    "clearFilters": "Clear filters"
+  },
+  "stats": {
+    "critical": "Critical",
+    "criticalSub": "Immediate action",
+    "high": "High",
+    "highSub": "Risk level",
+    "medium": "Medium",
+    "mediumSub": "Risk level",
+    "low": "Low",
+    "lowSub": "Risk level"
+  },
+  "history": {
+    "created": "Risk Created",
+    "updated": "Risk Updated",
+    "closed": "Risk Closed",
+    "statusChanged": "Status Changed",
+    "mitigationUpdated": "Mitigation Plan Updated",
+    "assigned": "Responsibility Assigned",
+    "dueDateSet": "Due Date Set",
+    "system": "System",
+    "noHistory": "No history recorded yet.",
+    "statusChangedTo": "Status Changed to {{status}}",
+    "loadError": "Could not load history.",
+    "retry": "Try again"
+  },
+  "saving": "Saving…",
+  "registering": "Registering…",
+  "unassigned": "Unassigned",
+  "saveChanges": "Save Changes",
+  "editingRisk": "Editing risk",
+  "sections": {
+    "riskIdentification": "Risk identification",
+    "riskAssessment": "Risk assessment",
+    "ownershipFollowUp": "Ownership & follow-up"
+  },
+  "form": {
+    "stateLocation": "State / Location",
+    "stateLocationRequired": "* required",
+    "stateLocationPh": "Select state / location",
+    "none": "None",
+    "cancel": "Cancel",
+    "couldNotSave": "Could not save risk changes.",
+    "couldNotRegister": "Could not register risk."
+  },
+  "detail": {
+    "category": "Category",
+    "status": "Status",
+    "probability": "Probability",
+    "impact": "Impact",
+    "riskLevel": "Risk Level",
+    "responsiblePerson": "Responsible Person",
+    "dateIdentified": "Date Identified",
+    "dueDate": "Due Date",
+    "description": "Description",
+    "mitigationAction": "Mitigation Action",
+    "editRisk": "Edit Risk",
+    "tabDetails": "Details",
+    "tabComments": "Comments",
+    "tabHistory": "History",
+    "tabAttachments": "Attachments"
+  },
+  "table": {
+    "riskTitle": "Risk Title",
+    "category": "Category",
+    "probability": "Probability",
+    "impact": "Impact",
+    "riskLevel": "Risk Level",
+    "status": "Status",
+    "state": "State",
+    "project": "Project",
+    "responsible": "Responsible",
+    "dueDate": "Due Date",
+    "identified": "Identified"
+  },
+  "page": {
+    "description": "Operational, security and programmatic risks across the portfolio",
+    "registerNewRisk": "Register New Risk",
+    "registerNewRiskDesc": "Add a risk to the central register. New risks start as Open.",
+    "risksCount": "{{count}} risk",
+    "risksCountPlural": "{{count}} risks",
+    "filterActive": "{{count}} filter active",
+    "filtersActive": "{{count}} filters active",
+    "loading": "Loading…"
+  },
+  "pagination": {
+    "pageOf": "Page {{page}} of {{totalPages}} ({{total}} risks)",
+    "previous": "Previous",
+    "next": "Next",
+    "previousPage": "Previous page",
+    "nextPage": "Next page"
+  },
+  "accessibility": {
+    "openRisk": "Open risk: {{title}}",
+    "registerRegion": "Risk register",
+    "toolbar": "Risk register filters and presentation"
+  },
+  "views": {
+    "card": "Card view",
+    "board": "Board view",
+    "boardDescription": "Risks grouped by their current status",
+    "unknownStatus": "Some risks have an unsupported legacy status and are not shown on the board."
+  },
+  "presentation": {
+    "project": "Project",
+    "owner": "Owner",
+    "assessment": "Likelihood / impact",
+    "mitigation": "Mitigation",
+    "unassigned": "Unassigned",
+    "dueDate": "Due date",
+    "identified": "Identified",
+    "categories": {
+      "security": "Security",
+      "operational": "Operational",
+      "financial": "Financial",
+      "programmatic": "Programmatic",
+      "environmental": "Environmental"
+    },
+    "likelihoods": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "unlikely": "Unlikely",
+      "possible": "Possible",
+      "likely": "Likely",
+      "almost_certain": "Almost Certain"
+    },
+    "impacts": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "unlikely": "Unlikely",
+      "possible": "Possible",
+      "likely": "Likely",
+      "almost_certain": "Almost Certain"
+    },
+    "riskLevels": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    }
+  }
+}

@@ -1,0 +1,170 @@
+{
+  "nav": {
+    "modules": "Modules",
+    "features": "Features",
+    "benefits": "Benefits",
+    "support": "Support",
+    "signIn": "Sign In"
+  },
+  "hero": {
+    "eyebrow": "HUMANITARIAN PROGRAMME MANAGEMENT",
+    "headline": "One Platform for CAFA's Programme Operations",
+    "title": "One Platform for CAFA's Programme Operations",
+    "subheadline": "Integrated project tracking, reporting, and data-driven decision-making — designed for CAFA's field and headquarters teams.",
+    "description": "Integrated project tracking, reporting, planning and data-driven decision-making for CAFA programme teams across field offices and headquarters.",
+    "ctaPrimary": "Sign In",
+    "ctaDashboard": "Dashboard",
+    "ctaSecondary": "Learn More"
+  },
+  "stats": {
+    "activeProjects": "Active Projects",
+    "programmeStates": "Programme States",
+    "staffUsers": "Staff Users",
+    "reportsMonthly": "Reports / Month"
+  },
+  "modules": {
+    "sectionLabel": "PLATFORM MODULES",
+    "title": "Everything Your Programme Team Needs",
+    "subtitle": "CAFA PMIS brings together project management, reporting, and coordination in one secure platform.",
+    "items": {
+      "projects": {
+        "name": "Projects",
+        "description": "Register, track, and manage all CAFA projects from submission through final approval."
+      },
+      "planning": {
+        "name": "Planning & Activities",
+        "description": "Build state-level programme plans, assign activities, and track completion rates."
+      },
+      "reports": {
+        "name": "Reporting",
+        "description": "Submit monthly and quarterly reports with structured workflows and indicator tracking."
+      },
+      "budget": {
+        "name": "Budgets",
+        "description": "Track budget allocations, expenditures, and utilisation rates across projects and states."
+      },
+      "risks": {
+        "name": "Risk Register",
+        "description": "Identify, assess, and mitigate programme risks with a structured follow-up workflow."
+      },
+      "communications": {
+        "name": "Communications",
+        "description": "Secure messaging, announcements, and document sharing for dispersed CAFA teams."
+      }
+    }
+  },
+  "features": {
+    "sectionLabel": "PLATFORM CAPABILITIES",
+    "description": "Four core workspaces connect your programme data — from strategic dashboard to integrated planning, reporting, and programme coordination."
+  },
+  "benefits": {
+    "sectionLabel": "WHY CAFA PMIS",
+    "title": "Built for CAFA's Operational Realities",
+    "items": {
+      "offline": {
+        "title": "Works Offline",
+        "description": "Field staff can continue working in low-connectivity areas — data syncs automatically when back online."
+      },
+      "realtime": {
+        "title": "Real-Time Visibility",
+        "description": "HQ and state teams share a live operational picture, eliminating delays and information silos."
+      },
+      "approvals": {
+        "title": "Structured Approvals",
+        "description": "Multi-level approval workflows ensure accountability from submission to final sign-off."
+      },
+      "analytics": {
+        "title": "Performance Analytics",
+        "description": "Automated performance scores and dashboards let managers identify issues before they escalate."
+      },
+      "security": {
+        "title": "Role-Based Security",
+        "description": "Granular permissions ensure staff see only the data relevant to their role and location."
+      },
+      "bilingual": {
+        "title": "Consistent Interface",
+        "description": "A single clear, professional system language — British English — across all modules and staff."
+      }
+    }
+  },
+  "support": {
+    "sectionLabel": "SUPPORT",
+    "title": "Help When You Need It",
+    "subtitle": "Comprehensive documentation, step-by-step guides, and role-based resources to keep your team moving.",
+    "exploreLink": "Sign In to Access the System Manual",
+    "items": {
+      "manual": {
+        "title": "System Manual",
+        "description": "Step-by-step guides for every module and workflow in CAFA PMIS.",
+          "cta": "Browse the Manual"
+      },
+      "training": {
+        "title": "Training Videos",
+        "description": "Short video tutorials for new staff onboarding and feature updates.",
+          "cta": "Watch Tutorials"
+      },
+      "helpdesk": {
+        "title": "IT Helpdesk",
+        "description": "Technical support from the CAFA IT team for system issues and access requests.",
+          "cta": "Contact Support"
+      }
+    }
+  },
+  "footer": {
+    "copyright": "CAFA Development Organisation. All rights reserved.",
+    "system": "Programme Management Information System",
+    "tagline": "Integrated programme management for CAFA's field and headquarters teams.",
+    "platformNav": "Platform",
+    "legalNav": "Resources",
+    "links": {
+      "systemManual": "System Manual"
+    }
+  },
+  "content": {
+    "skipToContent": "Skip to main content",
+    "homeAriaLabel": "CAFA PMIS — home",
+    "siteNavigation": "Site navigation",
+    "openNavigation": "Open navigation",
+    "closeNavigation": "Close navigation",
+    "modules": {
+      "projects": { "category": "Delivery", "name": "Project Management", "description": "End-to-end project delivery from registration through structured approval and monitoring.", "tags": ["Workflows", "Multi-State", "Approvals"] },
+      "planning": { "category": "Planning", "name": "Planning", "description": "Activity plans linked to outputs, owners, timeframes, and implementation targets.", "tags": ["Activities", "Indicators", "Monitoring"] },
+      "reports": { "category": "Reporting", "name": "Reports", "description": "Structured reporting at project, state, and programme level with full approval chains.", "tags": ["Role-Based", "Approvals", "Audit Trail"] },
+      "budgets": { "category": "Finance", "name": "Budget Management", "description": "Integrated visibility of allocations, expenditure, and available balances.", "tags": ["Allocations", "Expenditure", "Balances"] },
+      "risks": { "category": "Governance", "name": "Risk Management", "description": "Centralised risk register with severity assessment and mitigation tracking.", "tags": ["Risk Register", "Mitigation", "Severity"] },
+      "files": { "category": "Knowledge", "name": "File & Archive", "description": "Central document registry with classification, search, and archive across all programme files.", "tags": ["Classification", "Search", "Archive"] },
+      "manual": { "category": "Knowledge", "name": "System Manual", "description": "Practical guides, FAQs, and role-based guidance for every workflow in CAFA PMIS.", "tags": ["Guides", "FAQs", "Role Guidance"] },
+      "ai": { "category": "AI", "name": "AI", "description": "Contextual summaries, guidance, and drafting support across all modules.", "tags": ["Summaries", "Guidance", "Drafting"] }
+    },
+    "featureHeading": "One Platform. Every Stage of Programme Delivery.",
+    "featuresContent": {
+      "dashboard": { "category": "Overview", "title": "Strategic Dashboard", "description": "Monitor projects, budgets, risks, beneficiaries, reports, and organisational performance from one executive dashboard.", "alt": "CAFA PMIS Strategic Dashboard — organisation-wide programme performance overview (demo data)" },
+      "projects": { "category": "Project Delivery", "title": "End-to-End Project Management", "description": "Register, implement, monitor, approve, budget, and report on projects through one connected workflow.", "alt": "CAFA PMIS Projects workspace — card view of active and submitted projects (demo data)" },
+      "programme": { "category": "Programme Delivery", "title": "Planning, Monitoring and Reporting", "description": "Connect planning, implementation, indicators, budgets, approvals, and reporting within a unified programme workspace.", "alt": "CAFA PMIS Plans workspace — current operational planning, monitoring, and reporting workflow (synthetic fixture data)" },
+      "ai": { "category": "AI", "title": "Built-In AI Assistance", "description": "Built-in AI module for contextual summaries, report drafting, and programme Q&A — activated after deployment configuration.", "alt": "CAFA PMIS AI workspace — pending activation and ready for administrator configuration" }
+    },
+    "benefitsIntro": "Everything programme staff need to plan, coordinate, monitor, report, collaborate, and manage projects from one connected platform.",
+    "benefitsContent": {
+      "projects": { "title": "Plan and Track Projects", "description": "Manage projects from registration through implementation, monitoring, reporting, and completion." },
+      "coordination": { "title": "Coordinate Across Offices", "description": "Connect headquarters, technical teams, and state offices through one shared programme workspace." },
+      "progress": { "title": "Monitor Progress and Trends", "description": "Track activities, indicators, budgets, risks, and implementation progress across all programme levels." },
+      "approvals": { "title": "Manage Reports and Approvals", "description": "Prepare reports, submit approvals, and streamline programme workflows across departments." },
+      "resources": { "title": "Access Knowledge and Resources", "description": "Find SOPs, templates, manuals, and role-based guidance for every workflow in CAFA PMIS." }
+    },
+    "supportChecklist": ["System Manual", "Programme SOPs", "Role-Based Guides", "Frequently Asked Questions"],
+    "helpMockup": {
+      "title": "CAFA PMIS System Manual",
+      "subtitle": "How can we help you today?",
+      "search": "Search guides, SOPs, FAQs…",
+      "browse": "Browse by category",
+      "categories": [
+        { "label": "Quick Start", "description": "Get started fast" },
+        { "label": "System Manual", "description": "Full documentation" },
+        { "label": "Programme SOPs", "description": "Operating procedures" },
+        { "label": "FAQs", "description": "Common questions" },
+        { "label": "Role-Based Guides", "description": "By user role" },
+        { "label": "AI Help", "description": "Ask the assistant" }
+      ]
+    }
+  }
+}

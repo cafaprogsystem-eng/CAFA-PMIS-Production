@@ -1,0 +1,37 @@
+{
+  "status": "approved-baseline",
+  "sourceRevision": "9fb2589b4e71ae0082edeaa3940ed2b6e8612946",
+  "captureDate": "2026-08-24",
+  "fixtureConfirmation": "Authorised non-production synthetic fixture (CAFA-PMIS-NONPROD-SYNTHETIC)",
+  "assets": [
+    {
+      "asset": "landing-dashboard.webp",
+      "route": "/dashboard",
+      "viewport": "1440x810@2x",
+      "outputDimensions": "2880x1620",
+      "description": "Strategic dashboard overview"
+    },
+    {
+      "asset": "landing-projects.webp",
+      "route": "/projects",
+      "viewport": "1440x810@2x",
+      "outputDimensions": "2880x1620",
+      "description": "Projects workspace"
+    },
+    {
+      "asset": "landing-plans.webp",
+      "route": "/plans",
+      "viewport": "1440x810@2x",
+      "outputDimensions": "2880x1620",
+      "description": "Plans workspace"
+    },
+    {
+      "asset": "landing-ai.webp",
+      "route": "/ai",
+      "viewport": "1440x810@2x",
+      "outputDimensions": "2880x1620",
+      "description": "AI assistant workspace"
+    }
+  ],
+  "refreshCommand": "pnpm capture:landing -- --replace-approved-assets"
+}

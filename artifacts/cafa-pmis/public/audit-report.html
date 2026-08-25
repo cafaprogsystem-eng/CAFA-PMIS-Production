@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Monthly Reports — Full Audit</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --header-h: 44px;
+      --toc-w: 260px;
+      --body-bg: #f8f8f7;
+      --surface: #ffffff;
+      --border: #e2e2e0;
+      --text: #1a1a18;
+      --muted: #6b6b68;
+      --accent: #1d6fb8;
+      --accent-light: #eef4fb;
+      --code-bg: #f4f4f2;
+      --danger: #c0392b;
+      --warning: #b7791f;
+      --success: #276749;
+    }
+
+    /* ── sticky header ─────────────────────────────────────────────────────── */
+    #site-header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: var(--header-h);
+      background: #1a2744;
+      color: #fff;
+      display: flex; align-items: center; gap: 14px;
+      padding: 0 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.25);
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #site-header .badge {
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 2px 8px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    #site-header h1 { font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+    #toc-toggle {
+      margin-left: auto;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.2);
+      color: #fff;
+      border-radius: 5px;
+      padding: 4px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    #toc-toggle:hover { background: rgba(255,255,255,.22); }
+
+    /* ── layout ────────────────────────────────────────────────────────────── */
+    body {
+      background: var(--body-bg);
+      font-family: system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    #layout {
+      display: flex;
+      padding-top: var(--header-h);
+      min-height: 100vh;
+    }
+
+    /* ── ToC sidebar ───────────────────────────────────────────────────────── */
+    #toc-sidebar {
+      position: fixed;
+      top: var(--header-h);
+      left: 0;
+      bottom: 0;
+      width: var(--toc-w);
+      overflow-y: auto;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 16px 0 40px;
+      transition: transform .22s ease;
+      z-index: 50;
+    }
+    #toc-sidebar.hidden { transform: translateX(calc(-1 * var(--toc-w))); }
+
+    #toc-sidebar h2 {
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 0 16px 10px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    #toc-sidebar ul { list-style: none; }
+    #toc-sidebar li { border-left: 3px solid transparent; }
+    #toc-sidebar li.active { border-left-color: var(--accent); background: var(--accent-light); }
+    #toc-sidebar a {
+      display: block;
+      padding: 4px 14px 4px 13px;
+      font-size: 12.5px;
+      color: var(--text);
+      text-decoration: none;
+      line-height: 1.4;
+    }
+    #toc-sidebar a:hover { color: var(--accent); }
+    #toc-sidebar li.depth-h2 > a { font-weight: 600; padding-top: 6px; }
+    #toc-sidebar li.depth-h3 > a { padding-left: 24px; color: var(--muted); font-size: 12px; }
+
+    /* ── main content ──────────────────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      margin-left: var(--toc-w);
+      transition: margin-left .22s ease;
+      padding: 40px 32px 80px;
+    }
+    #main.toc-hidden { margin-left: 0; }
+
+    #content {
+      max-width: 860px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 40px 48px;
+    }
+
+    /* ── typography ────────────────────────────────────────────────────────── */
+    #content h1 {
+      font-size: 26px; font-weight: 700; line-height: 1.25;
+      margin-bottom: 12px; color: #111;
+      padding-bottom: 14px; border-bottom: 2px solid var(--border);
+    }
+    #content h2 {
+      font-size: 19px; font-weight: 700; margin-top: 44px; margin-bottom: 12px;
+      padding-bottom: 6px; border-bottom: 1px solid var(--border);
+      scroll-margin-top: calc(var(--header-h) + 12px);
+    }
+    #content h3 {
+      font-size: 15px; font-weight: 600; margin-top: 28px; margin-bottom: 8px;
+      color: #2a2a28;
+      scroll-margin-top: calc(var(--header-h) + 12px);
+    }
+    #content h4 {
+      font-size: 13.5px; font-weight: 600; margin-top: 20px; margin-bottom: 6px;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+    }
+
+    #content p { margin-bottom: 14px; }
+    #content ul, #content ol { margin: 0 0 14px 24px; }
+    #content li { margin-bottom: 4px; }
+    #content li > ul, #content li > ol { margin-bottom: 0; }
+
+    #content strong { font-weight: 600; }
+    #content em { font-style: italic; }
+    #content a { color: var(--accent); }
+
+    #content hr {
+      border: none; border-top: 1px solid var(--border);
+      margin: 32px 0;
+    }
+
+    /* ── code ──────────────────────────────────────────────────────────────── */
+    #content code {
+      background: var(--code-bg);
+      border: 1px solid #e0e0dc;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 12.5px;
+      padding: 1px 5px;
+    }
+    #content pre {
+      background: #1e1e1c;
+      color: #d4d4d0;
+      border-radius: 6px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      margin: 16px 0 20px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    #content pre code {
+      background: none; border: none; padding: 0;
+      color: inherit; font-size: inherit;
+    }
+
+    /* ── tables ────────────────────────────────────────────────────────────── */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 16px 0 20px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    #content table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    #content thead tr { background: #f2f2f0; }
+    #content th {
+      text-align: left; padding: 8px 12px; font-weight: 600; font-size: 12px;
+      text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    #content td { padding: 8px 12px; border-bottom: 1px solid #f0f0ee; vertical-align: top; }
+    #content tr:last-child td { border-bottom: none; }
+    #content tbody tr:hover { background: #fafaf8; }
+
+    /* severity colour coding */
+    #content td:first-child { white-space: nowrap; }
+
+    /* ── blockquote ────────────────────────────────────────────────────────── */
+    #content blockquote {
+      border-left: 4px solid var(--accent);
+      background: var(--accent-light);
+      padding: 12px 16px;
+      margin: 16px 0;
+      border-radius: 0 6px 6px 0;
+      color: #2a3e5c;
+    }
+
+    /* ── loading / error ───────────────────────────────────────────────────── */
+    #loading {
+      text-align: center; padding: 80px 20px;
+      color: var(--muted); font-size: 15px;
+    }
+    #loading .spinner {
+      display: inline-block; width: 28px; height: 28px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .7s linear infinite;
+      margin-bottom: 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── responsive ────────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      #toc-sidebar { transform: translateX(calc(-1 * var(--toc-w))); }
+      #toc-sidebar.visible { transform: translateX(0); }
+      #main { margin-left: 0 !important; }
+      #content { padding: 24px 20px; }
+    }
+
+    /* ── print ─────────────────────────────────────────────────────────────── */
+    @media print {
+      #site-header, #toc-sidebar, #toc-toggle { display: none; }
+      #main { margin-left: 0; padding: 0; }
+      #content { border: none; box-shadow: none; padding: 0; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<header id="site-header">
+  <span class="badge">Internal Review</span>
+  <h1>Project Monthly Reports — Full Audit</h1>
+  <button id="toc-toggle" onclick="toggleToc()">☰ Contents</button>
+</header>
+
+<div id="layout">
+  <nav id="toc-sidebar" aria-label="Table of contents">
+    <h2>Table of Contents</h2>
+    <ul id="toc-list"></ul>
+  </nav>
+
+  <main id="main">
+    <div id="content">
+      <div id="loading">
+        <div class="spinner"></div><br>Loading audit report…
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // ── ToC toggle ──────────────────────────────────────────────────────────────
+  let tocVisible = true;
+  function toggleToc() {
+    const sidebar = document.getElementById('toc-sidebar');
+    const main    = document.getElementById('main');
+    const narrow  = window.innerWidth <= 900;
+    if (narrow) {
+      sidebar.classList.toggle('visible');
+    } else {
+      tocVisible = !tocVisible;
+      sidebar.classList.toggle('hidden', !tocVisible);
+      main.classList.toggle('toc-hidden', !tocVisible);
+    }
+  }
+
+  // ── Fetch and render ────────────────────────────────────────────────────────
+  async function loadReport() {
+    const content = document.getElementById('content');
+    try {
+      const res = await fetch('/api/audit/report-md');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const md = await res.text();
+
+      // Render markdown
+      content.innerHTML = marked.parse(md, { gfm: true, breaks: false });
+
+      // Wrap tables for horizontal scroll
+      content.querySelectorAll('table').forEach(tbl => {
+        const wrap = document.createElement('div');
+        wrap.className = 'table-wrap';
+        tbl.parentNode.insertBefore(wrap, tbl);
+        wrap.appendChild(tbl);
+      });
+
+      // Build ToC from h2 and h3 headings
+      buildToc();
+
+      // Activate ToC item on scroll
+      setupScrollSpy();
+
+    } catch (e) {
+      content.innerHTML = `
+        <h2 style="color:#c0392b">Could not load audit report</h2>
+        <p>Make sure the API server is running and the audit file exists at
+        <code>.local/audit-reports/project-monthly-reports-full-audit.md</code></p>
+        <p style="color:#888;font-size:13px">${e.message}</p>`;
+    }
+  }
+
+  function slugify(text) {
+    return text.toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+  }
+
+  function buildToc() {
+    const tocList = document.getElementById('toc-list');
+    const headings = document.getElementById('content').querySelectorAll('h2, h3');
+    headings.forEach(h => {
+      // Ensure each heading has a stable id
+      if (!h.id) h.id = slugify(h.textContent || '');
+      const li = document.createElement('li');
+      li.className = `depth-${h.tagName.toLowerCase()}`;
+      li.dataset.target = h.id;
+      const a = document.createElement('a');
+      a.href = `#${h.id}`;
+      a.textContent = h.textContent;
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Close sidebar on mobile after click
+        if (window.innerWidth <= 900) {
+          document.getElementById('toc-sidebar').classList.remove('visible');
+        }
+      });
+      li.appendChild(a);
+      tocList.appendChild(li);
+    });
+  }
+
+  function setupScrollSpy() {
+    const headings = Array.from(document.getElementById('content').querySelectorAll('h2, h3'));
+    const tocItems = document.getElementById('toc-list').querySelectorAll('li[data-target]');
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          tocItems.forEach(li => li.classList.remove('active'));
+          const active = document.querySelector(`#toc-list li[data-target="${entry.target.id}"]`);
+          if (active) {
+            active.classList.add('active');
+            active.scrollIntoView({ block: 'nearest' });
+          }
+        }
+      });
+    }, { rootMargin: `-${44 + 8}px 0px -70% 0px`, threshold: 0 });
+
+    headings.forEach(h => observer.observe(h));
+  }
+
+  loadReport();
+</script>
+
+</body>
+</html>

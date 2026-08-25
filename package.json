@@ -1,0 +1,27 @@
+{
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
+  "packageManager": "pnpm@10.26.1",
+  "scripts": {
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "db:migrate:prod": "pnpm --filter @workspace/api-server run migrate:prod",
+    "check:api-contract": "node ./scripts/check-api-contract.mjs",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "release:readiness": "node ./scripts/release-readiness.mjs",
+    "test:offline-browser": "playwright test --config artifacts/cafa-pmis/playwright.offline.config.ts",
+    "test:visual:sidebar": "pnpm --filter @workspace/cafa-pmis run test:visual:sidebar",
+    "test:visual:sidebar:update": "pnpm --filter @workspace/cafa-pmis run test:visual:sidebar:update"
+  },
+  "private": true,
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "tsx": "catalog:",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "@playwright/test": "1.57.0"
+  }
+}

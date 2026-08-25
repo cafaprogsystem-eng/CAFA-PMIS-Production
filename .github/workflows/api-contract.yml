@@ -1,0 +1,65 @@
+name: Repository quality gates
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Contract, build, test, and migration gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Keep this before the broader typecheck so stale contracts fail fast.
+      - name: Check generated API contract and declarations
+        run: pnpm run check:api-contract
+
+      - name: Typecheck workspace
+        run: pnpm run typecheck
+
+      - name: Lint PWA source
+        run: pnpm --filter @workspace/cafa-pmis run lint
+
+      - name: Run API test suite
+        run: pnpm --filter @workspace/api-server test
+
+      - name: Run PWA test suite
+        run: pnpm --filter @workspace/cafa-pmis test
+
+      - name: Build API production bundle
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build PWA production assets
+        run: pnpm --filter @workspace/cafa-pmis run build
+
+      - name: Verify tracked migrations against disposable PostgreSQL
+        env:
+          MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pnpm --filter @workspace/api-server exec vitest run src/lib/migration-real-postgres.test.ts
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high

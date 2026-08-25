@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1a2744"/>
+  <!-- Stylised CAFA "C" arc + bar motif -->
+  <circle cx="256" cy="256" r="148" fill="none" stroke="white" stroke-width="32" stroke-dasharray="700 1000" stroke-dashoffset="-120" stroke-linecap="round"/>
+  <!-- Horizontal bars representing management / data -->
+  <rect x="224" y="176" width="140" height="24" rx="12" fill="white" opacity=".95"/>
+  <rect x="224" y="232" width="110" height="24" rx="12" fill="white" opacity=".95"/>
+  <rect x="224" y="288" width="125" height="24" rx="12" fill="white" opacity=".95"/>
+  <!-- Dot accent -->
+  <circle cx="188" cy="256" r="16" fill="#4c9fe8"/>
+</svg>

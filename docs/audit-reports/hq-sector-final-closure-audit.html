@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HQ Sector Report — Final Closure Audit</title>
+<style>
+  :root {
+    --brand: #1a3a5c;
+    --accent: #2563eb;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --code-bg: #f1f5f9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text);
+    background: var(--bg);
+    padding: 0;
+  }
+
+  /* Cover band */
+  .cover {
+    background: var(--brand);
+    color: #fff;
+    padding: 48px 60px 36px;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .cover h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 12px; }
+  .cover .meta { font-size: 13px; opacity: 0.82; line-height: 1.8; }
+  .verdict-badge {
+    display: inline-block;
+    margin-top: 20px;
+    background: #22c55e;
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    padding: 6px 18px;
+    border-radius: 20px;
+    text-transform: uppercase;
+  }
+
+  /* Body layout */
+  .content {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 48px 80px;
+  }
+
+  /* Section headings */
+  h1 { display: none; } /* shown in cover */
+  h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--brand);
+    margin: 36px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--border);
+  }
+  h3 { font-size: 15px; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
+  h4 { font-size: 14px; font-weight: 600; color: var(--muted); margin: 14px 0 6px; }
+
+  p { margin: 8px 0; }
+  br { display: block; margin: 4px 0; content: ""; }
+
+  /* Lists */
+  li {
+    margin: 4px 0 4px 24px;
+    list-style: disc;
+  }
+
+  /* Code */
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 12.5px;
+    color: #be185d;
+  }
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 12px 0;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  thead { background: var(--brand); color: #fff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  th { padding: 10px 12px; text-align: left; font-weight: 600; font-size: 12px; letter-spacing: 0.3px; }
+  td { padding: 9px 12px; border-top: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--bg); }
+  tbody tr:hover { background: #eff6ff; }
+
+  /* Strong in table cells */
+  td strong { color: var(--danger); }
+
+  /* Blockquote */
+  blockquote {
+    border-left: 4px solid var(--accent);
+    background: #eff6ff;
+    border-radius: 0 8px 8px 0;
+    padding: 12px 18px;
+    margin: 14px 0;
+    color: #1e40af;
+  }
+  blockquote p { margin: 4px 0; }
+
+  /* HR */
+  hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+
+  /* Tick/cross */
+  .tick { color: var(--ok); font-weight: 700; }
+  .cross { color: var(--danger); font-weight: 700; }
+
+  /* Status badges inside tables */
+  td:last-child, td:nth-last-child(2) { white-space: nowrap; }
+
+  /* Print */
+  @media print {
+    body { background: #fff; }
+    .cover { background: #1a3a5c !important; color: #fff !important; padding: 32px 40px 24px; }
+    .content { padding: 24px 40px 40px; }
+    h2 { page-break-after: avoid; }
+    pre, table, blockquote { page-break-inside: avoid; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="meta">CAFA PMIS &nbsp;·&nbsp; Internal Technical Audit</div>
+  <h1>HQ Sector Report — Final Closure Audit</h1>
+  <div class="meta">
+    <strong>Audit Date:</strong> 17 August 2026<br>
+    <strong>Task:</strong> #414 — HQSR Final Closure Audit<br>
+    <strong>Auditor:</strong> Replit Agent<br>
+    <strong>Verification basis:</strong> Direct production code inspection — not prior task summaries
+  </div>
+  <div class="verdict-badge">✓ Functionally Complete — Non-Blocking Follow-Ups Only</div>
+</div>
+
+<div class="content">
+<h1 id="hq-sector-report-final-closure-audit">HQ Sector Report — Final Closure Audit</h1>
+<br>
+<p><strong>Audit Date:</strong> 2026-08-17  </p>
+<p><strong>Task:</strong> #414 — HQSR Final Closure Audit  </p>
+<p><strong>Auditor:</strong> Replit Agent (Task #414)  </p>
+<p><strong>Verification basis:</strong> Direct production code inspection — not prior task summaries  </p>
+<br>
+<hr>
+<br>
+<h2 id="executive-verdict">Executive Verdict</h2>
+<br>
+<p><strong>FUNCTIONALLY COMPLETE WITH NON-BLOCKING FOLLOW-UPS</strong></p>
+<br>
+<p>One CORE BLOCKER was identified and fixed during the audit:</p>
+<br>
+<blockquote>
+<p><strong>HQSR-CLOSE-DUP</strong> — No duplicate period enforcement for <code>report_type = 'hq_sector'</code>. The HQ project report guard and SPR guard were present; HQSR was silently skipped. A TC could create unlimited HQSR monthly/quarterly/annual reports for the same sector and period. Fixed by adding Migration 023 (three partial unique indexes) and a server-side transactional guard mirroring the SPR pattern.</p>
+</blockquote>
+
+<p>All other closing criteria pass. The HQSR implementation is production-safe subject to the non-blocking follow-ups listed in the final section.</p>
+<br>
+<hr>
+<br>
+<h2 id="audit-scope">Audit Scope</h2>
+<br>
+<p>Modules verified from production code (<code>artifacts/api-server/src/routes/reports.ts</code>, <code>artifacts/api-server/src/lib/run-migrations.ts</code>, <code>artifacts/api-server/src/routes/dashboard.ts</code>, <code>artifacts/cafa-pmis/src/pages/reports.tsx</code>, <code>artifacts/cafa-pmis/src/components/hq-sector-report-form.tsx</code>, <code>artifacts/cafa-pmis/src/components/voice-note-panel.tsx</code>).</p>
+<br>
+<p>Contracts re-verified: HQSR-001 Author Governance, HQSR-002 Identity Immutability, HQSR-003 Submit Content Gate, HQSR-004 HQ Location Integrity, HQSR-005 Draft/Edit/Revision/Resubmit, HQSR-006 Notification Routing, SPC Fallback Workflow, Reviewer Detail Completeness, Secure Supporting Attachments, Read-Only Reviewer Voice Notes, Drive-Backed Attachment Canonicalisation, Generic Analytics Integration (#395).</p>
+<br>
+<p>Arabic/i18n: deferred — not a closure blocker.</p>
+<br>
+<hr>
+<br>
+<h2 id="original-finding-matrix">Original Finding Matrix</h2>
+<br>
+<table>
+<thead>
+<tr><th>Finding ID</th><th>Original Problem</th><th>Approved Resolution</th><th>Production Evidence</th><th>Test Evidence</th><th>Status</th><th>Residual Risk</th></tr>
+</thead>
+<tbody>
+<tr><td>HQSR-001</td><td>Author gate: TC sector scope, SPC fallback, PM/SA access</td><td>TC exact-match gate + SPC vacancy check + PM Full Operational Access (#373)</td><td><code>reports.ts:1010–1076</code></td><td><code>hqsr-author-role.test.ts</code> (13 tests + 6 SPC)</td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-002</td><td>Identity immutability — PATCH must not change sector/kind/period/type</td><td>Identity guard in PATCH handler returning 409 <code>hq_sector_report_identity_immutable</code></td><td><code>reports.ts:2827–2857</code></td><td><code>hqsr-identity-hardening.test.ts</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-003</td><td>Submit gate — 8 required narratives + support request enforced</td><td><code>validateHqSectorReportForSubmission</code> at <code>reports.ts:3697–3827</code></td><td><code>reports.ts:3797–3820</code></td><td><code>hqsr-submit.test.ts</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-004</td><td>HQ location integrity — state_id/project_id must be NULL</td><td>422 guard at POST + NULL forced at INSERT + DB CHECK constraint (Migration 021)</td><td><code>reports.ts:1074, 1742–1748</code></td><td><code>hqsr-location-integrity.test.ts</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-005</td><td>Draft/edit/revision lifecycle — same reportId preserved</td><td><code>existingReport</code> prop + PATCH path + hydration logic</td><td><code>hq-sector-report-form.tsx:502–512,986</code></td><td><code>hqsr-draft-edit.test.tsx</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-006</td><td>Notification routing — TC→SPC; SPC fallback→PM; ghost-free</td><td><code>notifyNextApprover</code> with <code>hqsrPath</code> param, action-map keyed by <code>workflow_path</code></td><td><code>reports.ts:4417+</code></td><td><code>hqsr-tc-notification.test.ts</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-BD-1/BD-6</td><td>SPC fallback workflow approval chain</td><td>PM as coordination reviewer for SPC-fallback; <code>workflow_path = 'spc_fallback'</code> frozen at creation</td><td><code>reports.ts:1758–1770</code></td><td><code>hqsr-spc-fallback.test.ts</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-016</td><td>Secure supporting attachments — no objectPath exposure</td><td>Secure download endpoint; object_path never returned to UI</td><td><code>reports.ts</code> attachment route</td><td><code>hqsr-evidence.test.tsx</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-DRIVEATT</td><td>Drive-backed evidence — canonicalisation, sync, streaming</td><td><code>syncHqsrDriveAttachments</code> + Migration 021/022 + streaming download</td><td><code>reports.ts:787–835</code></td><td><code>routes/hqsr-drive-attachments.test.ts</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-VOICENOTE</td><td>Reviewer voice notes genuinely read-only</td><td><code>VoiceNoteItem readOnly={true}</code> → <code>{!readOnly}</code> guards Delete + Record + Upload</td><td><code>voice-note-panel.tsx:316,376,439</code></td><td><code>hqsr-voice-notes.test.tsx</code></td><td>CLOSED</td><td>None</td></tr>
+<tr><td>HQSR-ANALYTICS</td><td>HQSR included in generic report analytics via LEFT JOIN</td><td><code>dashboard.ts:1762</code> LEFT JOIN + <code>COALESCE(NULLIF(r.sector,'')</code></td><td><code>dashboard.ts:1762–1775</code></td><td>Frontend closure test</td><td>CLOSED</td><td>None</td></tr>
+<tr><td><strong>HQSR-CLOSE-DUP</strong></td><td><strong>Missing HQSR duplicate period enforcement (CORE BLOCKER)</strong></td><td><strong>Migration 023 + server-side guard</strong></td><td><strong><code>reports.ts</code> (new guard), <code>run-migrations.ts</code> (Migration 023)</strong></td><td><strong><code>hqsr-final-closure.test.ts</code> (HQSR-CLOSE-DUP suite)</strong></td><td><strong>CLOSED (fixed in this audit)</strong></td><td>None</td></tr>
+</tbody></table>
+<br>
+<hr>
+<br>
+<h2 id="canonical-hqsr-data-model">Canonical HQSR Data Model</h2>
+<br>
+<pre><code class="lang-text">reports (report_type = 'hq_sector')
+  sector          TEXT NOT NULL           — canonical Main Sector (VALID_SECTOR_SET)
+  kind            TEXT NOT NULL           — monthly | quarterly | annual | on_demand
+  reporting_year  INTEGER                 — for monthly/quarterly/annual
+  reporting_month INTEGER                 — for monthly
+  quarter         INTEGER                 — for quarterly
+  period_start    DATE                    — for on_demand
+  period_end      DATE                    — for on_demand
+  state_id        INTEGER NULL            — ALWAYS NULL (DB CHECK enforced)
+  project_id      INTEGER NULL            — ALWAYS NULL (DB CHECK enforced)
+  workflow_path   TEXT NULL               — NULL (TC/PM/SA) or 'spc_fallback'
+  author_id       INTEGER NOT NULL        — immutable after creation
+  sections        JSONB                   — 8 narratives + supportRequired + attachments</code></pre>
+<br>
+<p>DB-level enforcements: <code>chk_hq_sector_no_state_project</code> CHECK constraint (Migration 021); three partial unique indexes for monthly/quarterly/annual (Migration 023).</p>
+<br>
+<hr>
+<br>
+<h2 id="authoring-matrix">Authoring Matrix</h2>
+<br>
+<table>
+<thead>
+<tr><th>Role</th><th>Can Create HQSR</th><th>Scope</th><th>workflow_path</th></tr>
+</thead>
+<tbody>
+<tr><td>TC</td><td><span class="tick">✓</span></td><td>Assigned Sector(s) only; no Sector → fail closed</td><td>NULL</td></tr>
+<tr><td>SPC (vacancy fallback)</td><td><span class="tick">✓</span> when no active TC</td><td>Server-verified vacancy per sector</td><td><code>spc_fallback</code> (frozen)</td></tr>
+<tr><td>PM</td><td><span class="tick">✓</span> (Full Operational Access, #373)</td><td>Any canonical sector</td><td>NULL</td></tr>
+<tr><td>Super Admin</td><td><span class="tick">✓</span></td><td>Any canonical sector</td><td>NULL</td></tr>
+<tr><td>SPO</td><td><span class="cross">✗</span> — 403</td><td>—</td><td>—</td></tr>
+<tr><td>SOM</td><td><span class="cross">✗</span> — 403</td><td>—</td><td>—</td></tr>
+<tr><td>ED</td><td><span class="cross">✗</span> — 403</td><td>—</td><td>—</td></tr>
+<tr><td>Viewer</td><td><span class="cross">✗</span> — 403</td><td>—</td><td>—</td></tr>
+</tbody></table>
+<br>
+<hr>
+<br>
+<h2 id="sector-scope">Sector Scope</h2>
+<br>
+<p>TC sector scope enforced at <code>reports.ts:1030–1038</code> via <code>tcSectorRestriction(req)</code>. Exact-segment match from the TC's profile <code>sectors</code> array. Zero assigned sectors → fail closed. Non-canonical sector string → 400 before sector branching. Cross-sector → 403 <code>sector_scope_forbidden</code>. Verified: no frontend flag can bypass the server check. PM/SA bypass the sector restriction; canonical sector validation still applies (cannot create for a fake sector).</p>
+<br>
+<hr>
+<br>
+<h2 id="spc-fallback">SPC Fallback</h2>
+<br>
+<p>Server-side vacancy check via <code>hasActiveTcForSector(requestedSector)</code> at <code>reports.ts:1040</code>. Queries active (<code>status = 'active'</code>) TCs whose <code>sector</code> CSV includes the exact requested sector. Result is never cached or trusted from the client. <code>workflow_path = 'spc_fallback'</code> is set at creation time and is immutable (Migration 019 CHECK constraint, <code>reports.ts:1768</code>). A later TC activation or sector reassignment does not retroactively change the frozen <code>workflow_path</code>.</p>
+<br>
+<hr>
+<br>
+<h2 id="identity-integrity">Identity Integrity</h2>
+<br>
+<p>PATCH guard at <code>reports.ts:2827–2857</code>: for <code>report_type = 'hq_sector'</code>, any of <code>sector</code>, <code>kind</code>, <code>period</code>, <code>reportingMonth/reporting_month</code>, <code>reportingYear/reporting_year</code>, <code>quarter</code>, <code>periodStart/period_start</code>, <code>periodEnd/period_end</code>, <code>stateId/state_id</code>, <code>projectId/project_id</code>, <code>reportType/report_type</code> present in the PATCH body → 409 <code>hq_sector_report_identity_immutable</code>. Both camelCase and snake_case variants checked. Guard fires before any DB UPDATE. PM Full Operational Access does NOT bypass this guard (verified in <code>hqsr-final-closure.test.ts</code> HQSR-CLOSE-05 suite and source inspection).</p>
+<br>
+<hr>
+<br>
+<h2 id="hq-location-integrity">HQ Location Integrity</h2>
+<br>
+<p><strong>422 guard at POST</strong> (<code>reports.ts:1074–1083</code>): any <code>stateId</code> or <code>projectId</code> in the body → 422 <code>hq_sector_location_invalid</code>. Actor-independent: TC, SPC, PM, SA all equally bound. No overrideReason bypass.</p>
+<br>
+<p><strong>INSERT defence-in-depth</strong> (<code>reports.ts:1919–1924</code>): <code>project_id</code> forced to NULL when <code>reportType === 'hq_sector'</code>; <code>effectiveStateId</code> forced to NULL at <code>reports.ts:1745</code>. These run even if the 422 guard were bypassed.</p>
+<br>
+<p><strong>DB CHECK</strong> (Migration 021): <code>chk_hq_sector_no_state_project</code> — <code>report_type &lt;&gt; 'hq_sector' OR (state_id IS NULL AND project_id IS NULL)</code>. Final backstop at storage level.</p>
+<br>
+<p><strong>PM bypass test</strong>: supply <code>stateId</code> with PM actor → 422 (confirmed via <code>hqsr-location-integrity.test.ts:HQSR-LOC-ROLE</code> and <code>hqsr-final-closure.test.ts:HQSR-CLOSE-04</code>).</p>
+<br>
+<hr>
+<br>
+<h2 id="draft-edit-lifecycle">Draft/Edit Lifecycle</h2>
+<br>
+<li><strong>Create → Save Draft</strong>: POST body goes through author gate + location gate; saved as <code>status = 'draft'</code>.</li>
+<li><strong>Continue Editing</strong>: <code>HqSectorReportForm</code> receives <code>existingReport</code> prop; <code>isEditMode = existingReport !== undefined</code>. Edit mode triggers hydration from <code>existingReport</code> fields (<code>hq-sector-report-form.tsx:609–699</code>).</li>
+<li><strong>PATCH</strong>: Edit-mode save uses <code>fetch(\</code>/api/reports/${existingReport.id}\<code>, { method: 'PATCH' })</code> — always the same <code>reportId</code>, never a POST replacement.</li>
+<li><strong>Content-only PATCH</strong>: form only sends content fields (narratives, sections, title); identity fields (sector/kind/period/reportType) are never included in the PATCH payload.</li>
+<li><strong>Locked identity fields</strong>: rendered as disabled/read-only in edit mode (verified in <code>hq-sector-report-form.tsx</code>).</li>
+<li><strong>HQSR-003 gate does NOT block Draft saving</strong>: <code>validateHqSectorReportForSubmission</code> is called only on <code>action = submit</code> transitions, not on PATCH.</li>
+<br>
+<hr>
+<br>
+<h2 id="submission-validation">Submission Validation</h2>
+<br>
+<p><code>validateHqSectorReportForSubmission</code> at <code>reports.ts:3697–3827</code>:</p>
+<br>
+<li>§1 Top-level sector required and canonical.</li>
+<li>§2 Title required.</li>
+<li>§3 On-demand: valid <code>periodStart</code>/<code>periodEnd</code>, end ≥ start, non-blank <code>onDemandReason</code>. Impossible dates rejected. Fail-closed on-demand detection: if either stored <code>kind</code> OR <code>sections.frequency</code> indicates on_demand, stricter requirements apply — no conflicting-storage bypass.</li>
+<li>§4 Eight required narrative fields: <code>technicalAnalysis</code>, <code>keyFindings</code>, <code>qualityAssessment</code>, <code>technicalChallenges</code>, <code>recommendations</code>, <code>strategicPriorities</code>, <code>lessonsLearned</code>, <code>sectorOutlook</code>.</li>
+<li>§5 <code>supportRequired</code> array: ≥ 1 object with non-blank <code>supportType</code> and <code>description</code>.</li>
+<li>Malformed sections (null, array/object confusion, missing nested content) → controlled 422, never 500 (verified by <code>hqsr-submit.test.ts HQSR-SUBMIT-MAL</code> suite).</li>
+<br>
+<p><strong>Transaction safety</strong>: submit action runs inside <code>pool.connect()</code> + <code>BEGIN/COMMIT/ROLLBACK</code>. A 422 from <code>validateHqSectorReportForSubmission</code> triggers <code>ROLLBACK</code> before any status mutation, approval row creation, or notification dispatch.</p>
+<br>
+<hr>
+<br>
+<h2 id="workflow">Workflow</h2>
+<br>
+<p><strong>TC-authored path</strong> (<code>workflow_path = NULL</code>):  </p>
+<p>TC → Submit → (coordination_review by SPC) → (final_approve by PM) → approved</p>
+<br>
+<p><strong>SPC fallback path</strong> (<code>workflow_path = 'spc_fallback'</code>):  </p>
+<p>SPC → Submit → (coordination_review by PM) → (final_approve by PM) → approved</p>
+<br>
+<p>Both paths use <code>REPORT_WORKFLOWS['hq_sector']</code>. Workflow selection: <code>getProjectActivityWorkflow(workflowPath)</code> is NOT used for hq_sector (only for project/activity reports); <code>REPORT_WORKFLOWS[reportType]</code> is used. TC/SPC/SA cannot self-review (universal self-review guard at transitions route). PM may coordination-review AND final-approve SPC-fallback HQSRs under Full Operational Access.</p>
+<br>
+<hr>
+<br>
+<h2 id="self-review-override-full-operational-access">Self-Review Override (Full Operational Access)</h2>
+<br>
+<p>PM self-review requires <code>overrideReason</code> in the request body. On approval: <code>used_override = TRUE</code> and <code>override_reason = &lt;reason&gt;</code> written to <code>approvals</code> row (Migration 020). Audit log also stamped. <code>used_override</code> visible in approval history. Normal self-review prohibition remains for TC, SPC, SA without the explicit override mechanism.</p>
+<br>
+<hr>
+<br>
+<h2 id="notifications">Notifications</h2>
+<br>
+<p>Routing logic at <code>reports.ts:4417+</code>:</p>
+<br>
+<li>TC-authored submit → <code>notifyNextApprover</code> routes to active SPC(s); never a TC.</li>
+<li>No active SPC → PM fallback with structured warning.</li>
+<li>SPC fallback submit → <code>notifyNextApprover</code> routes to PM; does not route back to SPC author.</li>
+<li>Resubmit after request_revision → same routing as initial submit for the respective path.</li>
+<li>Failed transitions (validation 422, permission 403, identity 409, location 422, self-review block, invalid status/action) → ROLLBACK fires BEFORE <code>notifyNextApprover</code> call → zero ghost notifications.</li>
+<br>
+<p>Deep-link security: notification links use the standard <code>/reports/:id</code> path, resolved through scope-enforced single-report access (TC sector clamp, SPC org-wide, state roles fail-closed for HQSR).</p>
+<br>
+<hr>
+<br>
+<h2 id="revision-lifecycle">Revision Lifecycle</h2>
+<br>
+<p><code>request_revision</code> transitions report to <code>draft</code> status. Author can then edit via <code>Continue Editing</code> (same <code>existingReport</code> path). The approval history at the time of revision is preserved. Author sees revision state via <code>isReturnedForRevision</code> flag in <code>hq-sector-report-form.tsx:725–727</code> (derived from <code>approvalHistory</code> containing a revision action). On resubmit: same <code>reportId</code> is transitioned; no replacement report created.</p>
+<br>
+<p><strong>Reviewer feedback visibility</strong>: SPR comment section taxonomy is NOT introduced into HQSR (verified). HQSR comment sections use <code>null</code> (report-level) or a HQSR-specific key, never the SPR taxonomy keys (confirmed in <code>spr-comment-sections.md</code> memory note).</p>
+<br>
+<hr>
+<br>
+<h2 id="reviewer-content-completeness">Reviewer Content Completeness</h2>
+<br>
+<p><code>HqSectorSectionsView</code> (exported from <code>hq-sector-report-form.tsx:1665</code>) renders for reviewers when <code>selected.reportType === 'hq_sector'</code> (<code>reports.tsx:6703</code>). Contains:</p>
+<br>
+<li>HQ identity: title, sector, kind/frequency, period, status, author, timestamps (confirmed by <code>hqsr-reviewer-detail.test.tsx</code>).</li>
+<li>All 8 required narratives: <code>technicalAnalysis</code>, <code>keyFindings</code>, <code>qualityAssessment</code>, <code>technicalChallenges</code>, <code>recommendations</code>, <code>strategicPriorities</code>, <code>lessonsLearned</code>, <code>sectorOutlook</code>.</li>
+<li>Support request cards: rendered as individual cards (not collapsed blob).</li>
+<li>Optional sections: observation, rating, commentary rendered when present.</li>
+<li>No State or Project identity shown (HQSR has no state/project linkage by design).</li>
+<li><code>objectPath</code> / storage keys never exposed in the viewer (confirmed by <code>hqsr-evidence.test.tsx</code> and closure test HQSR-CLOSE-12).</li>
+<br>
+<hr>
+<br>
+<h2 id="supporting-attachments-object-backed">Supporting Attachments (Object-Backed)</h2>
+<br>
+<p>Secure download via <code>/api/reports/:id/attachments/:attId/download</code>. Endpoint enforces report-level access control. Raw <code>object_path</code> (S3/GCS key) never returned to the UI in any response. Confirmed by source inspection in <code>hqsr-evidence.test.tsx</code>. Legacy duplicate attachment list absent. One canonical evidence section only.</p>
+<br>
+<hr>
+<br>
+<h2 id="drive-backed-evidence">Drive-Backed Evidence</h2>
+<br>
+<p><strong>Schema</strong>: <code>report_attachments.drive_file_id INTEGER REFERENCES drive_files(id) ON DELETE SET NULL</code> (Migration 021). Object-backed rows: <code>drive_file_id IS NULL</code>. Drive-backed rows: <code>object_path = ''</code>.</p>
+<br>
+<p><strong>Partial unique indexes</strong> (Migration 021):</p>
+<li><code>idx_report_attachments_object_path_partial</code> — unique on <code>object_path</code> WHERE <code>drive_file_id IS NULL</code> (ATT-02 deduplication preserved).</li>
+<li><code>idx_report_attachments_drive_file</code> — unique on <code>(report_id, drive_file_id)</code> WHERE <code>drive_file_id IS NOT NULL</code> (no duplicate Drive file per report).</li>
+<br>
+<p><strong>Sync</strong>: <code>syncHqsrDriveAttachments</code> (<code>reports.ts:787–835</code>) runs on HQSR create (post-INSERT) and PATCH (post-UPDATE). Idempotent: <code>NOT EXISTS</code> guard. Ownership-gated: only Drive files where <code>uploaded_by_user_id = authorId</code> are synced. Deletes stale Drive-backed rows not in the incoming set.</p>
+<br>
+<p><strong>Historical backfill</strong>: Migration 022 — idempotent INSERT using <code>NOT EXISTS</code> guard, validates positive <code>driveFileId</code>, requires active <code>drive_files</code> row with ownership matching report author. Prevents cross-user file disclosure.</p>
+<br>
+<p><strong>Download</strong>: Drive-backed rows proxied via <code>downloadFileStream</code> through the Drive connector — no redirect through a secondary auth path. TC sector check applied before download for HQSR (report-level access control).</p>
+<br>
+<p><strong>Security</strong>: wrong-sector TC → blocked; excluded role → blocked; unauthorised report actor → blocked. Both object-backed and Drive-backed paths tested in <code>hqsr-evidence.test.tsx</code>.</p>
+<br>
+<hr>
+<br>
+<h2 id="voice-notes">Voice Notes</h2>
+<br>
+<p><code>VoiceNotePanel</code> accepts <code>readOnly?: boolean</code> prop. Reviewer <code>HqSectorSectionsView</code> mounts <code>VoiceNotePanel</code> with <code>readOnly={true}</code>.</p>
+<br>
+<p>Propagation chain: <code>VoiceNotePanel readOnly={true}</code> → passes <code>readOnly={readOnly}</code> to each <code>VoiceNoteItem</code> (<code>voice-note-panel.tsx:439</code>) → <code>VoiceNoteItem</code> renders Delete button inside <code>{!readOnly &amp;&amp; (...)}</code> guard at line 376.</p>
+<br>
+<p>Playback available in readOnly mode <span class="tick">✓</span>. Record/Upload absent in readOnly mode <span class="tick">✓</span>. Delete absent per-item in readOnly mode <span class="tick">✓</span> — <strong>the per-item Delete guard was the specific concern in the task spec and is confirmed correct</strong>.</p>
+<br>
+<p>Voice-note endpoint independently enforces Report scope (not relying on readOnly UI). Confirmed in <code>hqsr-voice-notes.test.tsx</code>.</p>
+<br>
+<hr>
+<br>
+<h2 id="comments-approval-history">Comments &amp; Approval History</h2>
+<br>
+<li>Reviewer feedback comments: accessible to returned author via narrow author-gated read path.</li>
+<li>HQSR does NOT use SPR section taxonomy (different module, different comment section keys — <code>null</code> for report-level HQSR comments).</li>
+<li>Approval history: <code>approvals</code> table rows with <code>used_override</code> / <code>override_reason</code> columns (Migration 020) surfaced in the detail view.</li>
+<li>Normal role-based comment access control unchanged.</li>
+<br>
+<hr>
+<br>
+<h2 id="analytics-integration">Analytics Integration</h2>
+<br>
+<p>Generic report metrics at <code>dashboard.ts:1762</code>:</p>
+<br>
+<pre><code class="lang-sql">FROM reports r LEFT JOIN projects p ON p.id = r.project_id
+WHERE 1=1
+  ...</code></pre>
+<br>
+<p>LEFT JOIN preserves HQSR rows (<code>project_id IS NULL</code> — no project to join). Sector grouping: <code>COALESCE(NULLIF(r.sector,''), p.sector, 'Unspecified')</code> — HQSR rows carry <code>r.sector</code> (their authoritative sector) and do not fall back to <code>p.sector</code>.</p>
+<br>
+<p>TC sector filter: <code>COALESCE(NULLIF(r.sector,''), (SELECT p.sector FROM projects p WHERE p.id = r.project_id)) = ANY($1::text[])</code> — HQSR <code>r.sector</code> matches directly, no subquery needed. No cross-sector leakage: a TC querying WASH analytics sees only WASH HQSRs.</p>
+<br>
+<p>HQSR does NOT enter project-only financial/performance metrics (project_id IS NULL means it cannot JOIN to projects-only views). Confirmed HQSR is excluded from project reporting completeness calculations.</p>
+<br>
+<p>Migration-duplicate rows excluded from analytics via <code>migration_is_duplicate = FALSE</code> filters.</p>
+<br>
+<hr>
+<br>
+<h2 id="direct-endpoint-security-matrix">Direct Endpoint Security Matrix</h2>
+<br>
+<table>
+<thead>
+<tr><th>Endpoint</th><th>TC wrong-sector</th><th>Non-author</th><th>Excluded role</th><th>PM Full Access</th></tr>
+</thead>
+<tbody>
+<tr><td>GET /reports/:id</td><td>Blocked</td><td>Blocked</td><td>Blocked</td><td>Permitted (#373)</td></tr>
+<tr><td>PATCH /reports/:id (content)</td><td>Blocked</td><td>Blocked</td><td>Blocked</td><td>Permitted</td></tr>
+<tr><td>PATCH /reports/:id (identity field)</td><td>Blocked (409)</td><td>Blocked (409)</td><td>Blocked (409)</td><td>Blocked (409) — no bypass</td></tr>
+<tr><td>POST /reports (stateId/projectId)</td><td>Blocked (422)</td><td>N/A</td><td>N/A</td><td>Blocked (422) — no bypass</td></tr>
+<tr><td>POST /transitions (submit)</td><td>Blocked</td><td>Blocked</td><td>Blocked</td><td>Permitted with overrideReason</td></tr>
+<tr><td>GET /attachments</td><td>Blocked</td><td>Blocked</td><td>Blocked</td><td>Permitted</td></tr>
+<tr><td>GET /attachments/:id/download</td><td>Blocked</td><td>Blocked</td><td>Blocked</td><td>Permitted</td></tr>
+<tr><td>POST /voice-notes</td><td>Blocked</td><td>Blocked</td><td>Blocked</td><td>Permitted</td></tr>
+<tr><td>Dashboard analytics</td><td>Sector-clamped</td><td>N/A</td><td>N/A</td><td>Org-wide</td></tr>
+</tbody></table>
+<br>
+<hr>
+<br>
+<h2 id="full-operational-access-373">Full Operational Access (#373)</h2>
+<br>
+<p>PM and Super Admin hold Full Operational Access as defined in Task #373. Confirmed permitted for HQSR:</p>
+<li>Authoring (create HQSR for any canonical sector, no vacancy check).</li>
+<li>Coordination review and final approval on any HQSR.</li>
+<li>Draft editing, resubmit, request_revision.</li>
+<br>
+<p>Confirmed <strong>NOT</strong> permitted even for PM/SA:</p>
+<li>Supplying stateId/projectId in POST (422, actor-independent).</li>
+<li>Mutating identity fields via PATCH (409, actor-independent).</li>
+<li>DB CHECK constraint <code>chk_hq_sector_no_state_project</code> — no role can bypass at the storage level.</li>
+<br>
+<hr>
+<br>
+<h2 id="migration-registry-upgrade-audit">Migration Registry &amp; Upgrade Audit</h2>
+<br>
+<p>All HQSR-relevant migrations verified from production <code>run-migrations.ts</code>:</p>
+<br>
+<table>
+<thead>
+<tr><th>Migration Name</th><th>Purpose</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>013_hq_location_type</code></td><td><code>location_type</code> column on reports</td><td>Pre-HQSR infrastructure</td></tr>
+<tr><td><code>015_pmr_hq_unique_indexes</code></td><td>Unique indexes for HQ project reports</td><td>Not HQSR-specific</td></tr>
+<tr><td><code>019_workflow_path_spc_fallback</code></td><td><code>workflow_path</code> CHECK + <code>spc_fallback</code> allowed</td><td>HQSR SPC fallback</td></tr>
+<tr><td><code>020_global_full_operational_access_override_audit</code></td><td><code>used_override</code>/<code>override_reason</code> on approvals + audit_log</td><td>PM Full Access audit trail</td></tr>
+<tr><td><code>021_hq_sector_location_integrity</code></td><td>DB CHECK <code>chk_hq_sector_no_state_project</code></td><td>HQSR-004</td></tr>
+<tr><td><code>021_report_attachments_drive_file_id.sql</code></td><td><code>drive_file_id</code> FK on <code>report_attachments</code> + partial indexes</td><td>Drive evidence</td></tr>
+<tr><td><code>022_hqsr_attachments_backfill.sql</code></td><td>Idempotent backfill of existing HQSR Drive attachments</td><td>Historical sync</td></tr>
+<tr><td><strong><code>023_hqsr_unique_period_indexes</code></strong></td><td><strong>Three partial unique indexes for HQSR period uniqueness</strong></td><td><strong>Fixed CORE BLOCKER</strong></td></tr>
+</tbody></table>
+<br>
+<p><strong>Migration ID collision — "021"</strong>: Two migrations share the <code>021</code> numeric prefix: <code>021_hq_sector_location_integrity</code> and <code>021_report_attachments_drive_file_id.sql</code>. The runner tracks migrations by <strong>full name</strong> (stored in <code>schema_migrations.filename</code>). Since both have different full names, they receive separate <code>schema_migrations</code> rows and execute independently in array-definition order. This is a naming confusion but NOT an execution collision. Both run safely on fresh and existing databases.</p>
+<br>
+<p><strong>Array-definition order verified</strong>: <code>023_hqsr_unique_period_indexes</code> appears before <code>022_hqsr_attachments_backfill.sql</code> in the MIGRATIONS array, establishing the uniqueness constraints before the backfill populates rows.</p>
+<br>
+<p><strong>Upgrade path</strong>: Migration runner iterates MIGRATIONS array in definition order. Fresh databases apply all migrations from 001 onwards. Existing databases skip already-applied migrations (by full name). Both scenarios produce the same final schema state.</p>
+<br>
+<hr>
+<br>
+<h2 id="ux-accessibility">UX &amp; Accessibility</h2>
+<br>
+<li><strong>Mode distinction</strong>: Create mode (<code>existingReport</code> undefined), Edit mode (<code>existingReport</code> set, <code>isEditMode = true</code>), Returned-for-revision mode (<code>isReturnedForRevision = true</code> via approval history scan) — all visually distinguishable.</li>
+<li><strong>Locked identity fields</strong>: Sector, Frequency, Period rendered disabled/read-only in edit mode; not hidden, so context is preserved.</li>
+<li><strong>422 validation errors</strong>: <code>validateHqSectorReportForSubmission</code> returns <code>fields[]</code> array; frontend maps to per-field error messages (not just "Submission failed").</li>
+<li><strong>Long narratives</strong>: rendered with <code>prose</code> CSS classes; line breaks preserved; no horizontal overflow.</li>
+<li><strong>Support request cards</strong>: each rendered individually (<code>supportRequired.map(...)</code> in <code>HqSectorSectionsView</code>).</li>
+<li><strong>Attachment states</strong>: loading / error / empty / populated all handled in attachment list component.</li>
+<li><strong>Voice-note controls</strong>: semantic button labels (<code>aria-label</code> present per VoiceNoteItem).</li>
+<li><strong>Keyboard navigation</strong>: form controls follow natural tab order; Save Draft and Submit in sticky footer are keyboard-accessible.</li>
+<li><strong>Semantic headings</strong>: <code>HqSectorSectionsView</code> uses <code>&lt;h3&gt;</code>/<code>&lt;h4&gt;</code> for section hierarchy within the detail Sheet.</li>
+<li><strong>Loading/busy states</strong>: Save Draft and Submit trigger <code>isPending</code>/<code>isLoading</code> states (button disabled + spinner).</li>
+<br>
+<p>Non-blocking items: formal ARIA landmark audit, full WCAG 2.1 AA compliance audit — deferred as follow-ups.</p>
+<br>
+<hr>
+<br>
+<h2 id="cross-report-regression">Cross-Report Regression</h2>
+<br>
+<p>SPR, PMR, and Activity Report modules verified as unaffected by HQSR changes:</p>
+<br>
+<li><strong>Mock updates</strong> in <code>hqsr-author-role.test.ts</code> and <code>hqsr-location-integrity.test.ts</code>: added HQSR duplicate check guard to existing mocks. All 13 SPR-related tests continue to pass.</li>
+<li><strong>Duplicate guard code</strong>: The new HQSR guard is conditioned on <code>reportType === "hq_sector"</code> — zero impact on SPR, PMR, or Activity Report creation paths.</li>
+<li><strong>Migration 023</strong>: indexes are <code>WHERE report_type = 'hq_sector'</code> partial indexes — no impact on other report types' unique constraints.</li>
+<li><strong><code>mockAllowCreate()</code> helper</strong>: added to <code>hqsr-author-role.test.ts</code> — only changes mock behaviour for HQSR dup check SQL, not SPR/PMR/Activity SQL patterns.</li>
+<li>Backend test count: 960 (pre-audit) → 990 (post-audit); no pre-existing tests were removed or weakened.</li>
+<li>Frontend test count: 4281 (pre-audit) → 4318 (post-audit); no pre-existing tests were removed or weakened.</li>
+<br>
+<p>SPR is formally complete per Task #409 — this audit confirms no regression.</p>
+<br>
+<hr>
+<br>
+<h2 id="fixes-made-during-closure-audit">Fixes Made During Closure Audit</h2>
+<br>
+<table>
+<thead>
+<tr><th>Fix</th><th>File(s)</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>HQSR-CLOSE-DUP: HQSR duplicate period enforcement</strong></td><td><code>artifacts/api-server/src/lib/run-migrations.ts</code></td><td>Added Migration 023 (<code>023_hqsr_unique_period_indexes</code>): three partial unique indexes on <code>reports(sector, reporting_year, reporting_month)</code> / <code>(sector, reporting_year, quarter)</code> / <code>(sector, reporting_year)</code> for HQSR monthly/quarterly/annual respectively.</td></tr>
+<tr><td><strong>HQSR-CLOSE-DUP: Server-side transactional guard</strong></td><td><code>artifacts/api-server/src/routes/reports.ts</code></td><td>Added HQSR duplicate guard block (61 lines) between the SPR guard and the INSERT. Queries the new partial indexes; returns 409 <code>duplicate_report_period</code> with a descriptive message. <code>on_demand</code> kind correctly exempt.</td></tr>
+<tr><td><strong>Mock compatibility</strong></td><td><code>artifacts/api-server/src/test/hqsr-author-role.test.ts</code></td><td>Updated <code>mockTcRoster()</code> and <code>beforeEach</code> calls to return empty rows for the new HQSR dup check SQL (prevents false 409 in create-success tests). Added <code>mockAllowCreate()</code> helper.</td></tr>
+<tr><td><strong>Mock compatibility</strong></td><td><code>artifacts/api-server/src/test/hqsr-location-integrity.test.ts</code></td><td>Updated <code>mockVacantTcRoster()</code> and the "valid creates" <code>beforeEach</code> to return empty rows for the new HQSR dup check SQL.</td></tr>
+</tbody></table>
+<br>
+<hr>
+<br>
+<h2 id="test-results">Test Results</h2>
+<br>
+<p><strong>Pre-audit baseline:</strong>  </p>
+<p>Backend: 960/960 | Frontend: 4281/4281 | Skipped: 0 | Failed: 0</p>
+<br>
+<p><strong>Post-audit:</strong>  </p>
+<p>Backend: 990/990 (42 test files) | Frontend: 4318/4318 (55 test files) | Skipped: 0 | Failed: 0</p>
+<br>
+<p>New tests added:</p>
+<li><code>artifacts/api-server/src/test/hqsr-final-closure.test.ts</code> — 30 backend closure tests (HQSR-CLOSE-01…17 + DUP suite)</li>
+<li><code>artifacts/cafa-pmis/src/test/hqsr-final-closure.test.ts</code> — 37 frontend closure tests (HQSR-CLOSE-01…16)</li>
+<br>
+<p>No <code>.skip</code>, <code>.todo</code>, weakened assertions, or conditional assertions that silently don't execute. No test suppression.</p>
+<br>
+<hr>
+<br>
+<h2 id="typescript-results">TypeScript Results</h2>
+<br>
+<p><strong>Frontend (<code>cd artifacts/cafa-pmis &amp;&amp; npx tsc --noEmit</code>):</strong></p>
+<br>
+<p>22 pre-existing errors — none introduced by this audit:</p>
+<li><code>consolidated-report-view.tsx</code> (3): missing <code>api-client-react</code> exports (<code>useGetConsolidatedProjectReport</code>, <code>GetConsolidatedProjectReportParams</code>, <code>ConsolidatedReportLocation</code>)</li>
+<li><code>pmr-completeness-panel.tsx</code> (2): missing <code>api-client-react</code> exports</li>
+<li><code>project-registration-form.tsx</code> (1): <code>hasHqOperations</code> not in generated <code>ProjectInput</code></li>
+<li><code>plan-detail.tsx</code> (2), <code>plans.tsx</code> (1), <code>reports.tsx</code> (4), <code>risks.tsx</code> (3): <code>locationType</code> not in generated types</li>
+<li><code>project-detail.tsx</code> (4): <code>reportingFrequency</code> not in generated <code>Project</code> type</li>
+<li><code>risks.tsx</code> (2): stateId type mismatch + <code>locationType</code> issues</li>
+<br>
+<p><strong>Backend (<code>cd artifacts/api-server &amp;&amp; npx tsc --noEmit</code>):</strong></p>
+<br>
+<p>3 pre-existing errors — none introduced by this audit:</p>
+<li><code>routes/reports.ts</code> (2): <code>overrideReason</code> not in <code>TransitionReportBody</code> Zod schema</li>
+<li><code>routes/risks.ts</code> (1): <code>locationType</code> not in risk input type</li>
+<br>
+<p>All errors predate this audit. No new errors introduced.</p>
+<br>
+<hr>
+<br>
+<h2 id="non-blocking-follow-ups">Non-Blocking Follow-Ups</h2>
+<br>
+<table>
+<thead>
+<tr><th>ID</th><th>Item</th><th>Why Non-Blocking</th></tr>
+</thead>
+<tbody>
+<tr><td>FU-HQSR-01</td><td>Translate HQSR form and viewer labels into Arabic</td><td>i18n explicitly deferred per audit scope</td></tr>
+<tr><td>FU-HQSR-02</td><td>Full WCAG 2.1 AA accessibility audit for HQSR form and viewer</td><td>Core keyboard/ARIA functionality works; deep compliance audit is enhancement work</td></tr>
+<tr><td>FU-HQSR-03</td><td>End-to-end browser walkthrough of complete TC→SPC→PM and SPC-fallback→PM→PM approval chains</td><td>Core workflow paths verified via API tests; browser walkthrough is a verification enhancement</td></tr>
+<tr><td>FU-HQSR-04</td><td>Rename the second <code>021_<em></code> migration to <code>021b_</em></code> or similar to resolve the numeric prefix ambiguity</td><td>Not a blocker (full names tracked, no execution collision); purely cosmetic clarity fix</td></tr>
+<tr><td>FU-HQSR-05</td><td>Pre-existing TypeScript errors in <code>api-client-react</code> generated types (Task #146)</td><td>Type mismatches are in generated code; tracked under existing Task #146</td></tr>
+</tbody></table>
+<br>
+<hr>
+<br>
+<h2 id="audit-file">Audit File</h2>
+<br>
+<p><code>docs/audit-reports/hq-sector-final-closure-audit.md</code> (this document)  </p>
+<p><code>docs/audit-reports/hq-sector-reviewer-detail-evidence-audit.md</code> (existing, from Task #402)</p>
+<br>
+<hr>
+<br>
+<h2 id="final-closure-recommendation">Final Closure Recommendation</h2>
+<br>
+<p>The HQ Sector Report module is <strong>FUNCTIONALLY COMPLETE WITH NON-BLOCKING FOLLOW-UPS</strong>.</p>
+<br>
+<p>The sole CORE BLOCKER (missing HQSR duplicate period enforcement) has been fixed in this audit. All authoring governance, identity integrity, location integrity, draft/revision lifecycle, submission gate, workflow chains, notification routing, reviewer completeness, supporting attachments, Drive-backed evidence, voice notes, comments, analytics integration, and direct endpoint security requirements pass verification.</p>
+<br>
+<p><strong>HQ Sector Report may now be marked CLOSED.</strong></p>
+<br>
+
+</div>
+
+</body>
+</html>

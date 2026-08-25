@@ -1,0 +1,1284 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CAFA PMIS isolated staging environment. This is the only AWS infrastructure
+  definition for staging. Production resources are intentionally not referenced.
+
+Parameters:
+  ProvisionEcrOnly:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Create only the immutable staging ECR repository during phase one.
+  EnableApplicationService:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable the ECS service only after the migration task succeeds.
+  ImageUri:
+    Type: String
+    Default: ""
+    Description: Immutable ECR image URI, including a sha256 digest.
+  EcrRepositoryArn:
+    Type: String
+    Default: ""
+    Description: Immutable staging ECR repository ARN from the bootstrap stack.
+  StagingHostname:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$"
+    Description: Approved staging DNS name without a scheme, path, wildcard, or port.
+  CertificateArn:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^arn:[^:]+:acm:[^:]+:[0-9]{12}:certificate/[A-Za-z0-9-]+$"
+    Description: ACM certificate covering the approved staging hostname.
+  AvailabilityZone1:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[a-z]{2}-[a-z]+-[0-9][a-z]$"
+    Description: First approved AZ in the selected AWS region.
+  AvailabilityZone2:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[a-z]{2}-[a-z]+-[0-9][a-z]$"
+    Description: Second approved AZ in the selected AWS region.
+  VpcCidr:
+    Type: String
+    Default: 10.72.0.0/16
+  PublicSubnet1Cidr:
+    Type: String
+    Default: 10.72.0.0/20
+  PublicSubnet2Cidr:
+    Type: String
+    Default: 10.72.16.0/20
+  AppSubnet1Cidr:
+    Type: String
+    Default: 10.72.32.0/20
+  AppSubnet2Cidr:
+    Type: String
+    Default: 10.72.48.0/20
+  DbSubnet1Cidr:
+    Type: String
+    Default: 10.72.64.0/20
+  DbSubnet2Cidr:
+    Type: String
+    Default: 10.72.80.0/20
+  ServiceTaskDefinitionArn:
+    Type: String
+    Default: ""
+    Description: >
+      Existing service task definition preserved while a new image is migrated.
+      Set only by the deployment script after it reads the current ECS service.
+  AlarmTopicArn:
+    Type: String
+    Default: ""
+    Description: Optional approved SNS topic for staging alarms.
+
+Rules:
+  TwoDistinctAvailabilityZones:
+    Assertions:
+      - Assert:
+          Fn::Or:
+            - Fn::Equals:
+                - Ref: ProvisionEcrOnly
+                - "true"
+            - Fn::Not:
+                - Fn::Equals:
+                    - Ref: AvailabilityZone1
+                    - Ref: AvailabilityZone2
+        AssertDescription: Staging requires two distinct Availability Zones.
+
+Conditions:
+  EcrOnly: !Equals [!Ref ProvisionEcrOnly, "true"]
+  CoreEnabled: !Equals [!Ref ProvisionEcrOnly, "false"]
+  ServiceEnabled: !And
+    - !Equals [!Ref ProvisionEcrOnly, "false"]
+    - !Equals [!Ref EnableApplicationService, "true"]
+  HasExistingServiceTaskDefinition: !Not [!Equals [!Ref ServiceTaskDefinitionArn, ""]]
+  HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, ""]]
+
+Resources:
+  EcrRepository:
+    Condition: EcrOnly
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: cafa-pmis-staging
+      ImageTagMutability: IMMUTABLE
+      EmptyOnDelete: false
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+        - Key: ManagedBy
+          Value: cloudformation
+
+  Vpc:
+    Condition: CoreEnabled
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-vpc
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  InternetGateway:
+    Condition: CoreEnabled
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-igw
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  VpcGatewayAttachment:
+    Condition: CoreEnabled
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnet1:
+    Condition: CoreEnabled
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: !Ref PublicSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-public-az1
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  PublicSubnet2:
+    Condition: CoreEnabled
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AvailabilityZone2
+      CidrBlock: !Ref PublicSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-public-az2
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  AppSubnet1:
+    Condition: CoreEnabled
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: !Ref AppSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-app-az1
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  AppSubnet2:
+    Condition: CoreEnabled
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AvailabilityZone2
+      CidrBlock: !Ref AppSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-app-az2
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  DbSubnet1:
+    Condition: CoreEnabled
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: !Ref DbSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-db-az1
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  DbSubnet2:
+    Condition: CoreEnabled
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AvailabilityZone2
+      CidrBlock: !Ref DbSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-db-az2
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  PublicRouteTable:
+    Condition: CoreEnabled
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-public-routes
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  PublicRoute:
+    Condition: CoreEnabled
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicRouteAssociation1:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicRouteAssociation2:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  NatEip:
+    Condition: CoreEnabled
+    Type: AWS::EC2::EIP
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-nat-eip
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  NatGateway:
+    Condition: CoreEnabled
+    Type: AWS::EC2::NatGateway
+    DependsOn: PublicRouteAssociation1
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-nat
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  PrivateAppRouteTable:
+    Condition: CoreEnabled
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-app-routes
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  PrivateAppRoute:
+    Condition: CoreEnabled
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway
+    Properties:
+      RouteTableId: !Ref PrivateAppRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateAppRouteAssociation1:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateAppRouteTable
+      SubnetId: !Ref AppSubnet1
+
+  PrivateAppRouteAssociation2:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateAppRouteTable
+      SubnetId: !Ref AppSubnet2
+
+  PrivateDbRouteTable:
+    Condition: CoreEnabled
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-db-routes
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  PrivateDbRouteAssociation1:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateDbRouteTable
+      SubnetId: !Ref DbSubnet1
+
+  PrivateDbRouteAssociation2:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateDbRouteTable
+      SubnetId: !Ref DbSubnet2
+
+  S3Endpoint:
+    Condition: CoreEnabled
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        - !Ref PrivateAppRouteTable
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcId: !Ref Vpc
+      VpcEndpointType: Gateway
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-s3-endpoint
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  AlbSecurityGroup:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public HTTPS entry point for CAFA PMIS staging.
+      VpcId: !Ref Vpc
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-alb-sg
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  AppSecurityGroup:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private ECS application task access.
+      VpcId: !Ref Vpc
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-app-sg
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  DbSecurityGroup:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private RDS PostgreSQL access from ECS only.
+      VpcId: !Ref Vpc
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-db-sg
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  AlbIngressHttp:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+
+  AlbIngressHttps:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+
+  AlbEgressApp:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      DestinationSecurityGroupId: !Ref AppSecurityGroup
+
+  AppIngressAlb:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref AlbSecurityGroup
+
+  AppEgressDb:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      DestinationSecurityGroupId: !Ref DbSecurityGroup
+
+  AppEgressTls:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+
+  AppEgressDnsTcp:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 53
+      ToPort: 53
+      CidrIp: !Ref VpcCidr
+
+  AppEgressDnsUdp:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: udp
+      FromPort: 53
+      ToPort: 53
+      CidrIp: !Ref VpcCidr
+
+  DbIngressApp:
+    Condition: CoreEnabled
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref AppSecurityGroup
+
+  AttachmentBucket:
+    Condition: CoreEnabled
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub cafa-pmis-staging-${AWS::AccountId}-${AWS::Region}
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: retain-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-attachments
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  DbSubnetGroup:
+    Condition: CoreEnabled
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private two-AZ subnet group for CAFA PMIS staging.
+      SubnetIds:
+        - !Ref DbSubnet1
+        - !Ref DbSubnet2
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-db-subnets
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  DbInstance:
+    Condition: CoreEnabled
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: cafa-pmis-staging-postgres
+      DBInstanceClass: db.t4g.micro
+      Engine: postgres
+      EngineVersion: "16.4"
+      AllocatedStorage: "20"
+      MaxAllocatedStorage: 100
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: cafa_pmis_staging
+      MasterUsername: cafa_staging
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DbMasterPasswordSecret}:SecretString}}"
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !GetAtt DbSecurityGroup.GroupId
+      PubliclyAccessible: false
+      MultiAZ: true
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: 02:00-03:00
+      PreferredMaintenanceWindow: sun:03:00-sun:04:00
+      CopyTagsToSnapshot: true
+      AutoMinorVersionUpgrade: true
+      EnableCloudwatchLogsExports:
+        - postgresql
+        - upgrade
+      Tags:
+        - Key: Name
+          Value: cafa-pmis-staging-postgres
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  DbMasterPasswordSecret:
+    Condition: CoreEnabled
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: cafa-pmis-staging/database-master-password
+      Description: Staging-only RDS master password. Never inject into ECS tasks.
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  DatabaseUrlSecret:
+    Condition: CoreEnabled
+    Type: AWS::SecretsManager::Secret
+    DependsOn:
+      - DbInstance
+      - DbMasterPasswordSecret
+    Properties:
+      Name: cafa-pmis-staging/database-url
+      Description: Staging DATABASE_URL. Managed by the staging CloudFormation stack.
+      SecretString: !Sub '{"DATABASE_URL":"postgresql://cafa_staging:{{resolve:secretsmanager:${DbMasterPasswordSecret}:SecretString}}@${DbInstance.Endpoint.Address}:5432/cafa_pmis_staging?sslmode=require"}'
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  SessionSecret:
+    Condition: CoreEnabled
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: cafa-pmis-staging/session-secret
+      Description: Staging-only session signing secret.
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  PublicOriginSecret:
+    Condition: CoreEnabled
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: cafa-pmis-staging/public-origin
+      Description: Exact HTTPS origin for the staging browser and API.
+      SecretString: !Sub https://${StagingHostname}
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  ApplicationLogGroup:
+    Condition: CoreEnabled
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /cafa-pmis/staging/application
+      RetentionInDays: 30
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  MigrationLogGroup:
+    Condition: CoreEnabled
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /cafa-pmis/staging/migration
+      RetentionInDays: 90
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  DeploymentLogGroup:
+    Condition: CoreEnabled
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /cafa-pmis/staging/deployment
+      RetentionInDays: 90
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  EcsExecutionRole:
+    Condition: CoreEnabled
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cafa-pmis-staging-ecs-execution
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cafa-pmis-staging-ecs-execution
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                Resource: !Ref EcrRepositoryArn
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !GetAtt ApplicationLogGroup.Arn
+                  - !GetAtt MigrationLogGroup.Arn
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref DatabaseUrlSecret
+                  - !Ref SessionSecret
+                  - !Ref PublicOriginSecret
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  EcsTaskRole:
+    Condition: CoreEnabled
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cafa-pmis-staging-ecs-task
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cafa-pmis-staging-attachment-objects
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub ${AttachmentBucket.Arn}/objects/*
+                  - !Sub ${AttachmentBucket.Arn}/public/*
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  EcsCluster:
+    Condition: CoreEnabled
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: cafa-pmis-staging
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  ApplicationTaskDefinition:
+    Condition: CoreEnabled
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: cafa-pmis-staging-application
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt EcsExecutionRole.Arn
+      TaskRoleArn: !GetAtt EcsTaskRole.Arn
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: X86_64
+      ContainerDefinitions:
+        - Name: cafa-pmis
+          Image: !Ref ImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8080
+              Protocol: tcp
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: "8080"
+            - Name: STATIC_FILES_PATH
+              Value: /app/public
+            - Name: RUN_MIGRATIONS_ON_STARTUP
+              Value: "false"
+            - Name: SCHEDULER_ENABLED
+              Value: "true"
+            - Name: STORAGE_PROVIDER
+              Value: s3
+            - Name: S3_BUCKET
+              Value: !Ref AttachmentBucket
+            - Name: S3_REGION
+              Value: !Ref AWS::Region
+            - Name: S3_PUBLIC_PREFIX
+              Value: public
+            - Name: S3_PRIVATE_PREFIX
+              Value: objects
+            - Name: MAX_ATTACHMENT_SIZE_MB
+              Value: "25"
+            - Name: EMAIL_ENABLED
+              Value: "false"
+            - Name: EMAIL_PROVIDER
+              Value: smtp
+            - Name: EMAIL_FROM_ADDRESS
+              Value: no-reply@staging.invalid
+            - Name: EMAIL_FROM_NAME
+              Value: CAFA Program Management System Staging
+            - Name: AI_ENABLED
+              Value: "false"
+            - Name: LOG_LEVEL
+              Value: info
+          Secrets:
+            - Name: DATABASE_URL
+              ValueFrom: !Sub "${DatabaseUrlSecret}:DATABASE_URL::"
+            - Name: SESSION_SECRET
+              ValueFrom: !Ref SessionSecret
+            - Name: PUBLIC_APP_URL
+              ValueFrom: !Ref PublicOriginSecret
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ApplicationLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: application
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - >-
+                node -e "require('http').get('http://localhost:8080/api/readyz',
+                r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error',
+                () => process.exit(1))"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 60
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  MigrationTaskDefinition:
+    Condition: CoreEnabled
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: cafa-pmis-staging-migration
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt EcsExecutionRole.Arn
+      TaskRoleArn: !GetAtt EcsTaskRole.Arn
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: X86_64
+      ContainerDefinitions:
+        - Name: cafa-pmis-migration
+          Image: !Ref ImageUri
+          Essential: true
+          Command:
+            - node
+            - --enable-source-maps
+            - /app/scripts/migrate.mjs
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: RUN_MIGRATIONS_ON_STARTUP
+              Value: "false"
+            - Name: SCHEDULER_ENABLED
+              Value: "false"
+          Secrets:
+            - Name: DATABASE_URL
+              ValueFrom: !Sub "${DatabaseUrlSecret}:DATABASE_URL::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref MigrationLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: migration
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  LoadBalancer:
+    Condition: CoreEnabled
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: cafa-pmis-staging-alb
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  TargetGroup:
+    Condition: CoreEnabled
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: cafa-pmis-staging-targets
+      VpcId: !Ref Vpc
+      Port: 8080
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckEnabled: true
+      HealthCheckPath: /api/readyz
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: "200"
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  HttpListener:
+    Condition: CoreEnabled
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: "443"
+            StatusCode: HTTP_301
+
+  HttpsListener:
+    Condition: CoreEnabled
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  SocketIoRoute:
+    Condition: CoreEnabled
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 10
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /api/socket.io/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  ApiRoute:
+    Condition: CoreEnabled
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 20
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /api/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  SpaRoute:
+    Condition: CoreEnabled
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 30
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  ApplicationService:
+    Condition: ServiceEnabled
+    Type: AWS::ECS::Service
+    DependsOn:
+      - HttpsListener
+      - DatabaseUrlSecret
+      - MigrationTaskDefinition
+    Properties:
+      ServiceName: cafa-pmis-staging
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !If
+        - HasExistingServiceTaskDefinition
+        - !Ref ServiceTaskDefinitionArn
+        - !Ref ApplicationTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      EnableExecuteCommand: false
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref AppSecurityGroup
+          Subnets:
+            - !Ref AppSubnet1
+            - !Ref AppSubnet2
+      LoadBalancers:
+        - ContainerName: cafa-pmis
+          ContainerPort: 8080
+          TargetGroupArn: !Ref TargetGroup
+      HealthCheckGracePeriodSeconds: 120
+      PropagateTags: SERVICE
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  Alb5xxAlarm:
+    Condition: CoreEnabled
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cafa-pmis-staging-alb-5xx
+      AlarmDescription: Staging ALB is returning elevated 5xx responses.
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_ELB_5XX_Count
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt LoadBalancer.LoadBalancerFullName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
+  UnhealthyTargetAlarm:
+    Condition: CoreEnabled
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cafa-pmis-staging-alb-unhealthy-target
+      AlarmDescription: Staging ALB has an unhealthy target.
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt LoadBalancer.LoadBalancerFullName
+        - Name: TargetGroup
+          Value: !GetAtt TargetGroup.TargetGroupFullName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: breaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
+  RunningTaskAlarm:
+    Condition: CoreEnabled
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cafa-pmis-staging-running-task-count
+      AlarmDescription: The one-replica staging service is not running one task.
+      Namespace: AWS/ECS
+      MetricName: RunningTaskCount
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref EcsCluster
+        - Name: ServiceName
+          Value: cafa-pmis-staging
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
+  RdsCpuAlarm:
+    Condition: CoreEnabled
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cafa-pmis-staging-rds-cpu
+      AlarmDescription: Staging RDS CPU requires review.
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref DbInstance
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
+  RdsFreeStorageAlarm:
+    Condition: CoreEnabled
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cafa-pmis-staging-rds-free-storage
+      AlarmDescription: Staging RDS free storage is below 5 GiB.
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref DbInstance
+      Statistic: Minimum
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 5368709120
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
+  ApplicationErrorMetric:
+    Condition: CoreEnabled
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref ApplicationLogGroup
+      FilterPattern: '{ $.level = 50 }'
+      MetricTransformations:
+        - MetricNamespace: CAFA/PMIS/Staging
+          MetricName: ApplicationErrors
+          MetricValue: "1"
+          DefaultValue: 0
+
+  ApplicationErrorAlarm:
+    Condition: CoreEnabled
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cafa-pmis-staging-application-errors
+      AlarmDescription: Structured application error logs require review.
+      Namespace: CAFA/PMIS/Staging
+      MetricName: ApplicationErrors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
+  MigrationFailureMetric:
+    Condition: CoreEnabled
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref MigrationLogGroup
+      FilterPattern: '"Tracked migration command failed"'
+      MetricTransformations:
+        - MetricNamespace: CAFA/PMIS/Staging
+          MetricName: MigrationFailures
+          MetricValue: "1"
+          DefaultValue: 0
+
+  MigrationFailureAlarm:
+    Condition: CoreEnabled
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cafa-pmis-staging-migration-failures
+      AlarmDescription: Migration logs contain a release-blocking failure.
+      Namespace: CAFA/PMIS/Staging
+      MetricName: MigrationFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
+
+Outputs:
+  EcrRepositoryUri:
+    Description: Immutable staging ECR repository URI.
+    Condition: EcrOnly
+    Value: !GetAtt EcrRepository.RepositoryUri
+  VpcId:
+    Condition: CoreEnabled
+    Value: !Ref Vpc
+  ClusterName:
+    Condition: CoreEnabled
+    Value: !Ref EcsCluster
+  ApplicationServiceName:
+    Condition: ServiceEnabled
+    Value: !Ref ApplicationService
+  ApplicationTaskDefinition:
+    Condition: CoreEnabled
+    Value: !Ref ApplicationTaskDefinition
+  MigrationTaskDefinition:
+    Condition: CoreEnabled
+    Value: !Ref MigrationTaskDefinition
+  ApplicationSecurityGroupId:
+    Condition: CoreEnabled
+    Value: !Ref AppSecurityGroup
+  AppSubnet1Id:
+    Condition: CoreEnabled
+    Value: !Ref AppSubnet1
+  AppSubnet2Id:
+    Condition: CoreEnabled
+    Value: !Ref AppSubnet2
+  LoadBalancerDnsName:
+    Condition: CoreEnabled
+    Value: !GetAtt LoadBalancer.DNSName
+  StagingOrigin:
+    Condition: CoreEnabled
+    Value: !Sub https://${StagingHostname}
+  AttachmentBucketName:
+    Condition: CoreEnabled
+    Value: !Ref AttachmentBucket

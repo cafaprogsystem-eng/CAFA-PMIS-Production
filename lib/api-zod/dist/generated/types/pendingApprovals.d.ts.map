@@ -1,0 +1,1 @@
+{"version":3,"file":"pendingApprovals.d.ts","sourceRoot":"","sources":["../../../src/generated/types/pendingApprovals.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,kBAAkB,CAAC;AACvD,OAAO,KAAK,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAEvC,MAAM,WAAW,gBAAgB;IAC/B,QAAQ,EAAE,cAAc,EAAE,CAAC;IAC3B,OAAO,EAAE,MAAM,EAAE,CAAC;CACnB"}

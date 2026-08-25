@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Offline — CAFA PMS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+      background: #f5f6fa;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      background: white;
+      border-radius: 1rem;
+      padding: 3rem 2.5rem;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(26,39,68,0.08);
+    }
+    .icon-wrap {
+      width: 80px; height: 80px;
+      background: #e8edf5;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 1.5rem;
+    }
+    .icon-wrap svg { width: 40px; height: 40px; color: #1a2744; }
+    h1 { font-size: 1.5rem; font-weight: 700; color: #1a2744; margin-bottom: .5rem; }
+    p  { font-size: .9375rem; color: #6b7280; line-height: 1.6; margin-bottom: 1.75rem; }
+    button {
+      background: #1a2744; color: white;
+      border: none; border-radius: .5rem;
+      padding: .75rem 2rem;
+      font-size: .9375rem; font-weight: 600;
+      cursor: pointer; width: 100%;
+      transition: background .2s;
+    }
+    button:hover { background: #243460; }
+    .badge {
+      display: inline-flex; align-items: center; gap: .375rem;
+      background: #fef3c7; color: #92400e;
+      font-size: .75rem; font-weight: 600;
+      padding: .25rem .75rem; border-radius: 999px;
+      margin-bottom: 1.5rem;
+    }
+    .badge svg { width: 12px; height: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 6s4-2 11-2 11 2 11 2"/>
+        <path d="M1 6v14a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1V6"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+      </svg>
+    </div>
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      No Internet Connection
+    </div>
+    <h1>You're Offline</h1>
+    <p>CAFA Program Management System requires an internet connection. Please check your network and try again.</p>
+    <button onclick="window.location.reload()">Try Again</button>
+  </div>
+</body>
+</html>

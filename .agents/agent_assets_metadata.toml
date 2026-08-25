@@ -1,0 +1,66 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "hA2cTHu-N1yyyeyQcxBOi"
+uri = "file://CAFA_PMIS_System_Manual.md"
+type = "text"
+title = "CAFA PMIS System Manual v1.0"
+
+[[outputs]]
+id = "kpUllHPjgPTDcBPuk0-97"
+uri = "file://cafa-pmis-clean.zip"
+type = "unspecified"
+title = "CAFA PMIS — Clean Deployment Archive"
+
+[[outputs]]
+id = "-BsmADTBbmlYWH0h7mtkF"
+uri = "file://CAFA-PMIS-PRODUCTION-CLEAN.zip"
+type = "unspecified"
+title = "CAFA-PMIS-PRODUCTION-CLEAN.zip — Final Production Package"
+
+[[outputs]]
+id = "HmTIeTYGyqpY86PkQt-wf"
+uri = "file://budget-assessment-report.txt"
+type = "text"
+title = "CAFA PMIS — Budget Module Assessment Report"
+
+[[outputs]]
+id = "h2bYVs3UTwYXrASE7p2in"
+uri = "file://docs/uat-roles-permissions-checklist.md"
+type = "text"
+title = "UAT — Roles, Permissions & State Security Checklist"
+
+[[outputs]]
+id = "QOQe_bM9RIfO236iVzj0i"
+uri = "file://docs/notifications-golive-report.md"
+type = "text"
+title = "Notifications Go-Live Validation Report"
+
+[[outputs]]
+id = "zUtAPsAmTgyf5RklInTLz"
+uri = "file://artifacts/cafa-pmis/public/audit-report.html"
+type = "text"
+title = "Project Report Form — Comprehensive Audit (Sections 1–114)"
+description = "Read-only audit of the CAFA PMIS New/Edit Project Report form. 114 sections, 7 P1 defects, 7 P2 defects, 31 test coverage gaps, priority-ranked fixes. Use the sidebar to navigate."
+
+[[outputs]]
+id = "NQ7Ms3zqUt70KubTGS0M9"
+uri = "file://.local/audit-reports/activity-reports-audit-verified.md"
+type = "text"
+title = "Activity Reports — Verified Audit (65-issue register)"
+description = "Full verification of all 65 original audit findings against current source. 755 lines · 52 KB · 24 sections · 65-row master register with fix groups."
+
+[[outputs]]
+id = "96W2KKuh1ub8momH26PY5"
+uri = "file://.local/audit-reports/audit-report-standalone.html"
+type = "text"
+title = "Project Monthly Reports — Full Audit"
+description = "Complete read-only audit report — all 31 sections, 24 findings, 3 production blockers, 5 business decisions."
+
+[[outputs]]
+id = "I-16HoCnPe7Rtz2dWzuYh"
+uri = "file://docs/audit-reports/hq-sector-final-closure-audit.html"
+type = "text"
+title = "HQ Sector Report — Final Closure Audit"
+description = "Complete audit report covering all HQSR findings, fixes, test results, and closure verdict. Open to view inline or save as HTML and print to PDF from your browser (File → Print → Save as PDF)."

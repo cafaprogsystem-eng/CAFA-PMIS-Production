@@ -1,0 +1,471 @@
+================================================================================
+    CAFA PMIS — BUDGET MODULE ASSESSMENT REPORT
+    Assessment Date: 03 June 2026
+    Assessor:        CAFA PMIS Agent (Automated)
+    Scope:           Read-only. Zero code changes made.
+  ================================================================================
+
+  EXECUTIVE SUMMARY
+  -----------------
+  This report evaluates the Budget Module across 12 assessment areas using live data
+  from the development environment. The module covers 25 projects totalling USD 17.4M.
+  Key strengths are solid activity-level tracking and dashboard integration. The most
+  critical gap is that the state-level budget allocation subsystem (schema present,
+  code present) has ZERO populated data across all 25 projects, rendering state-level
+  budget drill-down non-functional in practice.
+
+  Overall Readiness Score: 68% (41 / 60 points)
+  Final Recommendation:   ⚠  REQUIRES FIXES BEFORE GO-LIVE
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 1 — PROJECT INTEGRATION
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Budget linked to projects, follows lifecycle, visibility, totals correct.
+
+  Findings:
+    ✅ All 25 projects carry budget data (budget_total, direct_cost, indirect_cost,
+       cafa_contribution, currency). No null or zero values found.
+    ✅ Currency: 100% USD across all 25 projects.
+    ✅ Budget total range: $1,000 (test) – $3,200,000. Org total: $17,429,869.
+    ✅ Project lifecycle (draft → submitted → approved → active → closed) intact.
+       Budget total is editable until at least the 'approved' stage.
+    ✅ GET /api/projects/:id/budget endpoint returns per-project breakdown correctly.
+    ⚠  Project budget endpoint has NO state-scoped guard. State Manager (mona,
+       stateId=1, Khartoum) successfully retrieved full budget for project CAFA-2024-001
+       (North Darfur — a different state). Budget visibility does not follow project
+       state permissions at this endpoint.
+    ✅ Budget totals appear in project detail view (budgetTotal field on project DTO).
+
+  Sample data:
+    CAFA-2024-004  MPCA      $3,200,000   approved   hq_managed   2 activities
+    CAFA-2024-002  Health    $2,400,000   approved   hq_managed   3 activities
+    CAFA-2024-001  WASH      $1,850,000   approved   hq_managed   4 activities
+
+  Result:  PASS WITH CONCERNS  |  Score: 4 / 5
+  Issues:  [P2] /projects/:id/budget endpoint returns data to state_managers
+           regardless of whether the project belongs to their state.
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 2 — ACTIVITY INTEGRATION
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Budget lines linked to activities, roll-up correct, edits update totals.
+
+  Findings:
+    ✅ Activities table has budget_planned and budget_spent columns.
+    ✅ 31 / 31 activities have budget_planned > 0. 21 / 31 have budget_spent > 0.
+    ✅ Total planned across all activities: $12,766,454.
+    ✅ Total spent across all activities: $5,775,000.
+    ✅ Roll-up verified on CAFA-2024-001 (WASH — North Darfur):
+         Project budget_total:   $1,850,000
+         Activity sum planned:   $1,190,000
+         Activity sum spent:     $1,012,000
+         Remaining:              $838,000
+         Burn rate:              55%
+         API response matches:   ✅ CONFIRMED
+    ✅ Output → Activity hierarchy rendered in budget lines table with nested rows.
+    ✅ Alert system: A1.1.1 (borehole drilling) is at 100% burn — alert fires.
+    ✅ Budget breakdown available: Output level + Activity level with planned/spent/
+       remaining/burn rate per row.
+    ⚠  No cascade: deleting an activity via the project form does not have an
+       explicit test path for ensuring the dashboard re-aggregates immediately.
+       (Mechanism is live SQL aggregation so it should update on next load.)
+
+  Activity-level sample:
+    A1.1.1 Drill boreholes  Planned $420,000  Spent $418,000  Burn 100%  ⚠
+    A1.1.2 Water trucking   Planned $310,000  Spent $238,000  Burn  77%
+    A1.2.1 Latrines         Planned $280,000  Spent $232,000  Burn  83%
+
+  Result:  PASS  |  Score: 5 / 5
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 3 — STATE ALLOCATION INTEGRATION
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Budget allocated by state, multi-state projects correct, allocations
+             equal project budget, allocation changes update dashboards.
+
+  Findings:
+    ❌ CRITICAL: project_state_allocations table exists with budget_allocation column
+       but contains ZERO records with any budget_allocation value across all 25 projects.
+         Total projects:                 25
+         Projects with state allocations: 0
+         Projects with budget_allocation: 0
+    ❌ The project registration form captures state allocation (per replit.md) and
+       the POST /projects route inserts into project_state_allocations, but no
+       seeded or manually created project has populated budget_allocation data.
+    ❌ State budget totals cannot be verified — all unallocated.
+    ❌ The dashboard state performance widgets cannot display state-level budget
+       figures since the allocation table is empty.
+    ⚠  Dashboard sector-budget works because it queries budget_total on the project
+       directly (not from allocations), so sector cards show correct totals — but
+       state-level breakdown is missing entirely.
+    ✅ Schema and INSERT code are present and correct (code path exists).
+    ✅ Multi-state project support (project_states + project_state_allocations) is
+       architecturally in place.
+
+  Result:  FAIL  |  Score: 1 / 5
+  Issues:  [P1] All 25 projects have zero state budget allocations. The subsystem
+           is functionally dead until projects are re-registered or migrated with
+           allocation values.
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 4 — BUDGET CALCULATION REVIEW
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Verify Total, Allocated, Remaining, Burn Rate, Utilization%, State/Activity totals.
+
+  Formula Verification Table (source: live DB + API):
+
+   Calculation         Formula                         Expected      Actual        Status
+   ─────────────────────────────────────────────────────────────────────────────────────
+   Total Budget        SUM(projects.budget_total)      $17,429,869   $17,429,869   ✅ PASS
+   Total Spent         SUM(activities.budget_spent)    $5,775,000    $5,775,000    ✅ PASS
+   Remaining           Total - Spent                   $11,654,869   $11,654,869   ✅ PASS
+   Burn Rate           Spent / Total × 100             33.1%         33%           ✅ PASS
+   Utilization %       (budgetAllocated/Total)×100     N/A           null          ❌ FAIL
+   Allocated Budget    (returned by API)               N/A           null          ❌ FAIL
+   State Totals        SUM(psa.budget_allocation)      N/A           0 (no data)   ❌ FAIL
+   Activity Total Pl.  SUM(activities.budget_planned)  $12,766,454   $12,766,454   ✅ PASS
+   Activity Total Sp.  SUM(activities.budget_spent)    $5,775,000    $5,775,000    ✅ PASS
+
+  Project-level verification (CAFA-2024-004 MPCA):
+    budget_total:      $3,200,000
+    sum(planned):      $2,580,000
+    sum(spent):        $2,180,000
+    remaining:         $1,020,000
+    burn_pct:          68.1%
+    API confirms:      ✅ All match
+
+  Result:  PARTIAL PASS  |  Score: 4 / 5
+  Issues:  [P2] budgetUtilization and budgetAllocated return null from
+           GET /dashboard/summary. Dashboard Overview section shows these as empty.
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 5 — DASHBOARD INTEGRATION
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Budget cards, summaries, state/project charts, filters.
+
+  Findings:
+    ✅ Budget & Finance page (/budget) exists — 730 lines, full feature set.
+    ✅ Overview tab: 4 KPI cards (Total Budget, Total Spent, Remaining, Burn Rate)
+       all render correctly with live data.
+    ✅ Sector Budget tab: clickable sector cards with progress bars, utilization %,
+       variance badges (On Track / Over Budget / Under Budget). Working.
+    ✅ GET /dashboard/sector-budget returns 5 sectors with correct aggregates:
+       Health $5.5M (20% util), MPCA $3.2M (68% util), WASH $2.9M (35% util),
+       Protection $1.84M (10% util).
+    ✅ Donor Portfolio table: donor / projects / budget / spent / beneficiaries /
+       utilization — renders correctly.
+    ✅ Project-level budget view: 4-card summary + monthly line chart + budget
+       breakdown table (output → activity hierarchy) + alert banners.
+    ✅ Filters panel: Donor, State, Sector, Project Status, Date From/To — all
+       wired to API parameters.
+    ⚠  budgetUtilization and budgetAllocated null in dashboard/summary. Budget
+       overview page renders remaining as computed client-side (Total - Spent)
+       rather than from API field — works but field is not populated server-side.
+    ⚠  Monthly Planned vs Actual chart renders but monthly time-series data
+       is simulated via static monthly arrays in the project budget endpoint
+       (not derived from dated transaction records — no dated spend ledger exists).
+    ❌ No state-level budget breakdown card (blocked by empty allocations).
+
+  Result:  PASS WITH CONCERNS  |  Score: 4 / 5
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 6 — REPORTING INTEGRATION
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Budget data correct in Project Reports, State Reports, HQ Reports,
+             Dashboard Analytics.
+
+  Findings:
+    ✅ Reports table has planned_budget and actual_expenditure columns.
+    ✅ GET /reports/:id/aggregates returns:
+         budget.planned  (from project.budget_total)
+         budget.actual   (from SUM activities.budget_spent)
+         budget.remaining
+         budget.burnRatePct
+    ✅ Project-type reports: Section 3 (Activities Implemented) captures per-activity
+       planned_budget and actual_expenditure as manual narrative entry.
+    ✅ Budget status analysis: activitiesOnBudget / activitiesUnderBudget /
+       activitiesOverBudget computed and returned in report aggregates.
+    ✅ Report detail sheet includes reference-only budget card (auto-pulled from
+       project data — displayed but not editable in report form).
+    ✅ HQ Sector and Program State reports include budget fields in Section 3.
+    ⚠  activitiesOnBudget/Under/Over counts are derived from JSONB activities
+       stored inside reports.activities (manual entry), not from the activities
+       table — creating potential discrepancy between narrative and actual DB data.
+    ⚠  No budget variance warning surfaced in reports when reported actual exceeds
+       project budget_total.
+
+  Result:  PASS WITH CONCERNS  |  Score: 4 / 5
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 7 — PERMISSIONS REVIEW
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Role-based access matrix for budget module.
+
+  Permissions used in code:
+    budget.view.all   — HQ roles (super_admin, executive_director, program_manager)
+    budget.view.state — state roles (state_manager, state_officer)
+    budget.view       — other roles
+
+  Role Matrix (verified via live auth tests):
+
+   Role                    View  Create  Edit  Delete  Export  Approve  Notes
+   ─────────────────────────────────────────────────────────────────────────────
+   super_admin             ✅     N/A     N/A   N/A     ✅      N/A     Full access, all sectors/states
+   executive_director      ✅     N/A     N/A   N/A     ✅      N/A     Full access (budget.view.all)
+   program_manager         ✅     N/A     N/A   N/A     ✅      N/A     Full access (budget.view.all)
+   senior_coordinator      ✅     N/A     N/A   N/A     ✅      N/A     Full org view
+   technical_coordinator   ✅     N/A     N/A   N/A     ✅      N/A     Sector-filtered via TC restriction
+   state_manager           ✅     N/A     N/A   N/A     ✅      N/A     State-scoped sector budget ✅
+                                                                         BUT project budget endpoint
+                                                                         NOT state-gated ❌
+   state_officer           ✅     N/A     N/A   N/A     ✅      N/A     Same as state_manager
+   (unlisted roles)        ❌     N/A     N/A   N/A     ❌      N/A     Blocked by hasPerm check ✅
+
+  Notes:
+    ✅ TC sector restriction correctly filters /dashboard/sector-budget response.
+    ✅ State manager (mona) gets Khartoum-scoped sector budget data correctly.
+    ❌ /projects/:id/budget bypasses state check — any authenticated user can read
+       any project's budget breakdown.
+    ⚠  No explicit Create/Edit/Delete permissions for budget lines (budget editing
+       is embedded inside project/activity forms — not a standalone budget route).
+    ⚠  No approval workflow for budget amendments (e.g. budget revision requests).
+    ⚠  Export is client-side CSV only — no server-side export permission gating.
+
+  Result:  PARTIAL PASS  |  Score: 3 / 5
+  Issues:  [P2] Project-level budget endpoint missing state-guard.
+           [P3] No budget amendment approval workflow.
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 8 — EXPORT REVIEW
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: PDF, Excel, CSV exports with formatting, totals, filters, breakdowns.
+
+  Findings:
+    ✅ CSV — "Export All CSV" button on Sector Budget tab exports all visible sectors:
+       Columns: Sector, Projects, Budget Total, Budget Planned, Budget Spent,
+                Remaining, Utilization %, Active Activities, Variance.
+    ✅ CSV — Per-sector "Export CSV" in sector detail sheet exports single-sector
+       summary row.
+    ✅ Both CSV exports respect active filter state (TC sees only their sectors).
+    ⚠  CSV exports contain summary-level data only — no output/activity line detail.
+    ❌ NO PDF export from the Budget page.
+    ❌ NO Excel/XLS export from the Budget page.
+    ❌ NO full project budget breakdown export (the per-project output+activity
+       breakdown table has no export button).
+    ❌ NO state-level budget export (blocked by empty allocations + no export button).
+    ⚠  Project Reports do have a CSV export button but this exports report
+       metadata, not detailed budget lines.
+
+  Export summary:
+    PDF Export:          ❌ NOT IMPLEMENTED
+    Excel Export:        ❌ NOT IMPLEMENTED
+    CSV (sector summ.):  ✅ IMPLEMENTED
+    CSV (project lines): ❌ NOT IMPLEMENTED
+    Filter-aware export: ✅ YES (sector only)
+    State breakdown:     ❌ NOT IMPLEMENTED
+
+  Result:  PARTIAL PASS  |  Score: 2 / 5
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 9 — RISKS INTEGRATION
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Risks reference budget issues, overruns appear in Risks, financial
+             risks tracked, risk dashboard shows budget risks.
+
+  Findings:
+    ✅ Risk schema supports category field with 'financial' as a valid category.
+    ✅ 2 financial risks exist in the DB:
+         Risk #3: "Delayed MPCA disbursement — Gedaref" (financial, medium, CAFA-2024-004)
+         Risk #10: "Donor reporting deadline at risk — UNICEF Q3" (financial, medium, CAFA-2024-001)
+    ✅ Risks can reference specific projects (project_id FK) — financial risks are
+       linked to the correct budget-heavy projects.
+    ✅ Risk categories in DB: operational(5), financial(2), security(2),
+       programmatic(2), environmental(1).
+    ✅ Risks module has severity × likelihood heat-map display.
+    ✅ Risk dashboard displays financial risks alongside other categories.
+    ⚠  No automated link between budget overrun detection (budget alert system in
+       ProjectBudgetView) and risk creation — the alert system is display-only.
+       Overrun detection does NOT auto-create a risk record.
+    ⚠  Budget overrun alert threshold (>90% burn on activity) does not trigger any
+       notification or workflow event — it only renders an orange/red alert banner
+       on the budget view page.
+    ❌ No "budget-related risks" filter on the Risks page or dashboard — staff must
+       manually browse all risks and look for financial category.
+
+  Result:  PARTIAL PASS  |  Score: 3 / 5
+  Issues:  [P3] Overrun alert system is display-only. No auto-risk creation.
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 10 — DATA INTEGRITY REVIEW
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: No duplicates, no orphans, FK validity, soft-delete, audit trail.
+
+  Findings:
+    ✅ Orphan activities (activities without valid project):   0
+    ✅ Orphan state allocations (no parent project):          0
+    ✅ Negative budget values:                                0
+    ✅ Audit log exists (table: audit_log) with: id, user_id, action, module,
+       entity_id, old_value, new_value, timestamp.
+    ✅ Budget changes captured: project updates with budget changes are logged to
+       audit_log with old_value/new_value snapshots.
+    ✅ All 25 projects have budget_total > 0 (no zero-value projects in seed data).
+    ✅ Activities all have valid output_id FK references (no orphan activities).
+    ⚠  No deleted_at / soft-delete column on the projects table — project deletion
+       would be a hard delete. No soft-delete behavior to verify.
+    ❌ State allocations: 0 records with budget_allocation populated out of 25
+       projects — data completeness issue (structural integrity fine, data absent).
+    ⚠  No unique constraint on (project_id, state_id) visible — duplicate state
+       allocation records per project are structurally possible.
+
+  Result:  PASS WITH CONCERNS  |  Score: 4 / 5
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 11 — PERFORMANCE REVIEW
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: Measure page load, save, export, and dashboard refresh times.
+
+  Findings (estimated from query patterns and architecture review):
+    ✅ GET /dashboard/summary: Single aggregation query with no joins on large tables.
+       Budget fields (totalBudget, totalSpent) use SUM on ~25 projects / ~31 activities.
+       Estimated load time: <200ms at current data size.
+    ✅ GET /dashboard/sector-budget: Single aggregation query grouping by sector.
+       No N+1 queries. Estimated: <300ms.
+    ✅ GET /projects/:id/budget: 2 direct queries (project row + activity SUM).
+       Fixed O(1) complexity regardless of org size. Estimated: <100ms.
+    ✅ CSV export: Client-side computation from pre-loaded sector data — instant.
+    ⚠  Monthly planned-vs-actual chart: Uses a static 6-month array construction
+       in the backend (not a time-series query) — actual performance is fine but
+       the data is not based on dated transaction records.
+    ⚠  At scale (1,000+ projects): No database indexes verified on budget-related
+       aggregate queries (budget_planned, budget_spent on activities table).
+       Performance may degrade without indexes as data grows.
+    ⚠  No server-side caching on budget aggregates — every page load hits the DB.
+       Acceptable for current scale; monitor when project count exceeds 200.
+
+  Result:  PASS  |  Score: 4 / 5
+
+  ────────────────────────────────────────────────────────────────────────────────
+
+  SECTION 12 — SECURITY REVIEW
+  ────────────────────────────────────────────────────────────────────────────────
+  Objective: State isolation, role-based filtering, API protection, export protection,
+             unauthorized access prevention.
+
+  Findings:
+    ✅ All budget endpoints require authentication (requireAuth middleware on all routes).
+    ✅ Unauthenticated requests to /api/projects/:id/budget return 401.
+    ✅ Budget page renders "Access restricted" for roles without budget.view* perms.
+    ✅ TC sector restriction applied server-side on /dashboard/sector-budget —
+       TCs only receive their assigned sectors' data.
+    ✅ State manager receives state-scoped sector budget in /dashboard/sector-budget.
+    ✅ No SQL injection vectors found — all queries use parameterized placeholders ($1, $2…).
+    ✅ CSV export is entirely client-side — no server endpoint to exploit; requires
+       an authenticated session to have loaded the data first.
+    ❌ SECURITY GAP: GET /projects/:id/budget has no state_id guard. A state_manager
+       in Khartoum can retrieve the full project budget (outputs, activities, amounts)
+       for projects in North Darfur, Kassala, or any other state by simply knowing
+       the project ID. Verified with live test (mona accessed project CAFA-2024-001
+       successfully despite it being a North Darfur project).
+    ⚠  No rate limiting on budget aggregate endpoints — repeated rapid calls possible.
+    ⚠  Budget data in audit_log old_value/new_value stored as plain JSON — readable
+       by anyone with audit_log access.
+
+  Result:  PARTIAL PASS  |  Score: 3 / 5
+  Issues:  [P1] GET /projects/:id/budget missing state-scoping guard for state roles.
+
+  ================================================================================
+    FINAL READINESS SCORECARD
+  ================================================================================
+
+   Section                       Status                Score  Priority Issues
+   ─────────────────────────────────────────────────────────────────────────────
+   1. Project Integration        PASS WITH CONCERNS     4/5   P2: project budget no state guard
+   2. Activity Integration       PASS                   5/5   —
+   3. State Allocation           FAIL                   1/5   P1: 0/25 projects allocated
+   4. Budget Calculations        PASS WITH CONCERNS     4/5   P2: 2 null dashboard fields
+   5. Dashboard Integration      PASS WITH CONCERNS     4/5   P2: null utilization/allocated
+   6. Reporting Integration      PASS WITH CONCERNS     4/5   P3: JSONB vs DB mismatch risk
+   7. Permissions                PARTIAL PASS           3/5   P2: project budget endpoint gap
+   8. Exports                    PARTIAL PASS           2/5   P2: no PDF/Excel, limited CSV
+   9. Risks Integration          PARTIAL PASS           3/5   P3: no auto risk on overrun
+   10. Data Integrity            PASS WITH CONCERNS     4/5   P2: alloc data empty
+   11. Performance               PASS                   4/5   P3: no indexes confirmed
+   12. Security                  PARTIAL PASS           3/5   P1: project budget state gap
+
+   ─────────────────────────────────────────────────────────────────────────────
+   TOTAL                                               41/60 = 68%
+   ─────────────────────────────────────────────────────────────────────────────
+
+  ================================================================================
+    PRIORITY ISSUE REGISTER
+  ================================================================================
+
+  P1 — MUST FIX BEFORE GO-LIVE:
+    [P1-01] State budget allocations unpopulated (Section 3, 10)
+            The project_state_allocations.budget_allocation column is empty for all
+            25 projects. State-level budget tracking is structurally ready but has
+            no data. All projects must be updated with state allocation values before
+            the state budget breakdown feature is meaningful.
+
+    [P1-02] GET /projects/:id/budget missing state_id authorization guard (Section 1, 12)
+            Any authenticated state_manager can read the full output/activity budget
+            breakdown for ANY project regardless of state assignment.
+            Fix: add state ownership check in the /projects/:projectId/budget handler.
+
+  P2 — SHOULD FIX BEFORE GO-LIVE:
+    [P2-01] budgetUtilization and budgetAllocated null in GET /dashboard/summary
+            (Section 4, 5). The client works around this, but nulls indicate
+            the calculation is not implemented server-side.
+
+    [P2-02] No PDF or Excel export from Budget module (Section 8)
+            Only CSV summary exports exist. Finance staff likely require PDF
+            for donor reporting and Excel for further analysis.
+
+    [P2-03] Monthly Planned vs Actual chart uses simulated time-series (Section 5, 11)
+            The chart data is constructed as a static N-month projection, not
+            derived from dated transaction/disbursement records. True trend
+            reporting requires a spend ledger with dates.
+
+  P3 — NICE TO HAVE / FUTURE SPRINT:
+    [P3-01] Budget overrun alert does not auto-create a risk record (Section 9)
+    [P3-02] No "financial risks" quick-filter on Risks page (Section 9)
+    [P3-03] No index confirmation on activities.budget_planned/budget_spent (Section 11)
+    [P3-04] No budget amendment approval workflow (Section 7)
+    [P3-05] CSV exports only contain sector summary — no project-level line detail (Section 8)
+
+  ================================================================================
+    FINAL RECOMMENDATION
+  ================================================================================
+
+  ⚠  REQUIRES FIXES BEFORE GO-LIVE
+
+  The Budget Module has a solid foundation: activity-level tracking, calculation
+  accuracy, dashboard integration, and sector-level analysis are all functional.
+  However two P1 issues must be resolved:
+
+    1. Populate state budget allocations for all active projects
+       (Data entry / migration task — no code change required)
+
+    2. Add state-scoping guard to GET /projects/:id/budget
+       (Small code change — ~5 lines in projects.ts)
+
+  Resolving these two P1 items would raise the module score to approximately 83%
+  and bring the core security and data completeness to an acceptable go-live standard.
+  P2 items (PDF export, null dashboard fields) are recommended but non-blocking for
+  a limited initial rollout to HQ users where state-level data isolation is less
+  critical.
+
+  ================================================================================
+    END OF REPORT
+  ================================================================================

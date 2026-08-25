@@ -1,0 +1,11 @@
+{
+  "name": "@workspace/api-spec",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "codegen": "orval --config ./orval.config.ts && pnpm exec prettier --write ../api-client-react/src/generated ../api-zod/src/generated && pnpm -w exec tsc --build --force"
+  },
+  "devDependencies": {
+    "orval": "^8.9.1"
+  }
+}

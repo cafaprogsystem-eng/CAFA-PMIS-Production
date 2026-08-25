@@ -1,0 +1,156 @@
+# ─── CAFA PMIS — local/VPS Docker Compose reference ───────────────────────────
+#
+# Services:
+#   api      — Express API + serves the compiled Vite frontend
+#   db       — PostgreSQL 16
+#   nginx    — TLS termination + reverse proxy (optional; omit if you handle
+#              TLS at the load-balancer / cloud level)
+#
+# This file is not the AWS deployment path. AWS uses ECS Fargate, ALB, RDS,
+# Secrets Manager, CloudWatch, and a standalone ECS migration task. See
+# docs/aws-deployment-runbook.md.
+#
+# Quick start (explicitly approved local/VPS use):
+#   cp .env.production.example .env
+#   # fill in every value in .env
+#   docker compose up -d --build
+# The one-shot migrate service completes before the API is started.
+# Production never runs demo seed or browser-test fixture provisioning.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-cafa_pmis}
+      POSTGRES_USER:     ${POSTGRES_USER:-cafa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Health check: on a full local/VPS Docker host, this passes within ~15s.
+    # In restricted Docker sandboxes (no exec), use HEALTHCHECK NONE or
+    # change the api dependency below to service_started instead of service_healthy.
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "cafa", "-d", "cafa_pmis"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - internal
+
+  # ── Tracked migration release job ──────────────────────────────────────────
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+    # Matches the canonical standalone migration command used by the ECS task.
+    command: ["node", "--enable-source-maps", "/app/scripts/migrate.mjs"]
+    networks:
+      - internal
+
+  # ── API server ──────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # Loopback only. Put the retained Nginx reference in front for public VPS
+      # traffic; AWS instead exposes the task only through its ALB.
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        # A full Docker host should keep strict migration/database gating.
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV:            production
+      PORT:                8080
+      DATABASE_URL:        ${DATABASE_URL}
+      SESSION_SECRET:      ${SESSION_SECRET}
+      PUBLIC_APP_URL:      ${PUBLIC_APP_URL}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-CAFA Program Management System}
+      EMAIL_REPLY_TO: ${EMAIL_REPLY_TO:-}
+      AI_ENABLED: ${AI_ENABLED:-false}
+      AI_INTEGRATIONS_OPENAI_API_KEY: ${AI_INTEGRATIONS_OPENAI_API_KEY:-}
+      AI_INTEGRATIONS_OPENAI_BASE_URL: ${AI_INTEGRATIONS_OPENAI_BASE_URL:-}
+      STATIC_FILES_PATH:   /app/public
+      # Production API processes verify the tracked schema but never mutate it.
+      RUN_MIGRATIONS_ON_STARTUP: "false"
+      # Initial topology: exactly one API replica deliberately owns schedules.
+      SCHEDULER_ENABLED: "true"
+
+      # ── Storage provider ──────────────────────────────────────────────────
+      # Production standard: private AWS S3 (or another explicitly selected
+      # S3-compatible endpoint for non-production environments).
+      STORAGE_PROVIDER: s3
+      MAX_ATTACHMENT_SIZE_MB: ${MAX_ATTACHMENT_SIZE_MB}
+      # The API reads only these canonical S3 settings. Do not put credentials
+      # in the image or Compose file: prefer the AWS SDK default chain/IAM role.
+      S3_BUCKET:            ${S3_BUCKET}
+      S3_REGION:            ${S3_REGION}
+      S3_ENDPOINT_URL:      ${S3_ENDPOINT_URL:-}
+      S3_PUBLIC_PREFIX:     ${S3_PUBLIC_PREFIX:-public}
+      S3_PRIVATE_PREFIX:    ${S3_PRIVATE_PREFIX:-objects}
+
+      # ── Email ──────────────────────────────────────────────────────────────
+      EMAIL_ENABLED:   ${EMAIL_ENABLED:-false}
+      EMAIL_PROVIDER:  ${EMAIL_PROVIDER:-smtp}
+      EMAIL_API_KEY:   ${EMAIL_API_KEY:-}
+      SMTP_HOST:       ${SMTP_HOST:-}
+      SMTP_PORT:       ${SMTP_PORT:-587}
+      SMTP_USER:       ${SMTP_USER:-}
+      SMTP_PASS:       ${SMTP_PASS:-}
+
+      # ── AI assistant (optional) ────────────────────────────────────────────
+
+    networks:
+      - internal
+      - external
+    # Direct port access — uncomment ONLY if you are NOT using the nginx service.
+    # With Nginx enabled (recommended), the API is reachable only via the
+    # internal Docker network; Nginx handles all external traffic on 80/443.
+    #  ports:
+    #    - "8080:8080"
+
+  # ── Nginx TLS proxy ─────────────────────────────────────────────────────────
+  # Uncomment this block when running on a VPS with your own domain + Let's Encrypt.
+  # Replace YOURDOMAIN in nginx/nginx.conf first.
+  #
+  # nginx:
+  #   image: nginx:1.27-alpine
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - api
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - /etc/letsencrypt:/etc/letsencrypt:ro
+  #     - /var/www/certbot:/var/www/certbot:ro
+  #   networks:
+  #     - external
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+    driver: bridge
+  external:
+    driver: bridge

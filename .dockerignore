@@ -1,0 +1,48 @@
+# Version control
+.git
+.gitignore
+
+# macOS artifacts
+**/.DS_Store
+**/__MACOSX
+
+# Node modules — reinstalled inside the image
+node_modules
+**/node_modules
+
+# Build outputs — rebuilt inside the image
+artifacts/*/dist
+lib/*/dist
+**/.tsbuildinfo
+
+# Replit-specific files
+.replit
+.replit-artifact
+.local
+replit.nix
+
+# Local planning inputs and historical release archives are never image content.
+attached_assets/Pasted-*.txt
+attached_assets/.Pasted-*.txt.*
+CAFA-PMIS-PRODUCTION-CLEAN.zip
+
+# Dev config and secrets
+.env
+.env.*
+!.env.production.example
+
+# Logs and caches
+logs
+*.log
+.cache
+**/.cache
+
+# Test artefacts
+coverage
+**/__tests__/__snapshots__
+
+# Editor / IDE
+.vscode
+.idea
+*.swp
+*.swo

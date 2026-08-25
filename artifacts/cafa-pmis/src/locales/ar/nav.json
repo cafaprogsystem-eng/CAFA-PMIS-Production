@@ -1,0 +1,131 @@
+{
+  "home": "الرئيسية",
+  "groups": {
+    "overview": "نظرة عامة",
+    "programmeManagement": "إدارة البرنامج",
+    "communication": "التواصل",
+    "dataManagement": "إدارة البيانات",
+    "administration": "الإدارة"
+  },
+  "items": {
+    "dashboard": "لوحة التحكم",
+    "projects": "المشاريع",
+    "planning": "التخطيط",
+    "plans": "الخطط",
+    "planningDashboard": "لوحة التحكم",
+    "budget": "الميزانية",
+    "reports": "التقارير",
+    "projectReports": "تقارير المشاريع",
+    "activityReports": "تقارير الأنشطة",
+    "hqSectorReports": "تقارير قطاع المقر",
+    "stateProgrammeReports": "تقارير برنامج الولاية",
+    "risks": "المخاطر",
+    "notifications": "الإشعارات",
+    "communicationCentre": "مركز التواصل",
+    "fileArchive": "الملفات والأرشيف",
+    "systemManual": "دليل النظام",
+    "ai": "الذكاء الاصطناعي",
+    "users": "المستخدمون",
+    "states": "الولايات",
+    "auditLog": "سجل المراجعة",
+    "profile": "الملف الشخصي",
+    "syncStatus": "حالة المزامنة",
+    "notificationPreferences": "تفضيلات الإشعارات"
+  },
+  "pageTitles": {
+    "budgetAndFinance": "الميزانيات",
+    "riskRegister": "سجل المخاطر",
+    "userManagement": "إدارة المستخدمين",
+    "planningDashboard": "الخطط"
+  },
+  "tooltips": {
+    "expandSidebar": "توسيع الشريط الجانبي",
+    "collapseSidebar": "طي الشريط الجانبي",
+    "closeMenu": "إغلاق قائمة التنقل",
+    "platformName": "CAFA PMIS"
+  },
+  "brand": {
+    "name": "CAFA PMIS",
+    "subtitle": "نظام معلومات إدارة البرنامج"
+  },
+  "user": {
+    "myProfile": "ملفي الشخصي",
+    "settings": "الإعدادات",
+    "notificationPreferences": "تفضيلات الإشعارات",
+    "syncStatus": "حالة المزامنة",
+    "installApp": "تثبيت التطبيق",
+    "switchUser": "تبديل المستخدم (تطوير)",
+    "signOut": "تسجيل الخروج"
+  },
+  "search": {
+    "placeholder": "بحث أو انتقال إلى…",
+    "shortcut": "⌘K"
+  },
+  "language": {
+    "switch": "اللغة",
+    "en": "English",
+    "ar": "العربية"
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "markAllRead": "تعيين الكل مقروءاً",
+    "allCaughtUp": "لا توجد إشعارات جديدة.",
+    "viewAll": "عرض كل الإشعارات"
+  },
+  "commandPalette": {
+    "label": "لوحة الأوامر",
+    "searchPlaceholder": "ابحث في المشاريع والتقارير والمستخدمين أو انتقل إلى…",
+    "searchAriaLabel": "بحث في لوحة الأوامر",
+    "clearSearch": "مسح",
+    "clearRecentLabel": "مسح السجل الأخير",
+    "clearRecent": "مسح",
+    "resultsAriaLabel": "نتائج لوحة الأوامر",
+    "noResultsFor": "لا توجد نتائج لـ",
+    "noResultsTip": "جرّب رمز مشروع أو اسم مستخدم أو عنوان تقرير أو اسم ولاية",
+    "recentSearchHint": "بحث أخير — انقر للتشغيل مجدداً",
+    "pinLabel": "إضافة إلى المفضلة",
+    "unpinLabel": "إزالة من المفضلة",
+    "clearHistoryConfirm": "مسح جميع الصفحات المزارة مؤخراً؟ لا يمكن التراجع عن هذا.",
+    "groups": {
+      "favorites": "المفضلة",
+      "recent": "الأخيرة",
+      "quickNav": "تنقل سريع",
+      "actions": "الإجراءات",
+      "navigation": "التنقل",
+      "projects": "المشاريع",
+      "plans": "الخطط",
+      "reports": "التقارير",
+      "risks": "المخاطر",
+      "documents": "الوثائق",
+      "users": "المستخدمون"
+    },
+    "hints": {
+      "navigate": "تنقل",
+      "open": "فتح",
+      "next": "التالي",
+      "close": "إغلاق"
+    },
+    "brand": "أوامر CAFA",
+    "submenu": {
+      "expand": "توسيع قائمة {{label}}",
+      "collapse": "طي قائمة {{label}}"
+    }
+  },
+  "cmdSubtitles": {
+    "dashboard": "نظرة عامة وتحليلات",
+    "projects": "جميع مشاريع البرنامج",
+    "plans": "التخطيط والأنشطة",
+    "reports": "تقارير البرنامج",
+    "risks": "إدارة المخاطر",
+    "notifications": "إشعاراتك",
+    "states": "مكاتب الولايات",
+    "fileArchive": "وثائق وموارد المنظمة",
+    "systemManual": "المساعدة والتوثيق",
+    "budget": "النظرة المالية",
+    "communicationCentre": "الرسائل والمحادثات",
+    "users": "إدارة الفريق",
+    "auditLog": "سجل الأنشطة",
+    "ai": "المساعد والإدارة",
+    "syncStatus": "قائمة انتظار اللاتصال"
+  }
+}

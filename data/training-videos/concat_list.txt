@@ -1,0 +1,6 @@
+file '/tmp/cafa-videos/1/slide_000.mp4'
+file '/tmp/cafa-videos/1/slide_001.mp4'
+file '/tmp/cafa-videos/1/slide_002.mp4'
+file '/tmp/cafa-videos/1/slide_003.mp4'
+file '/tmp/cafa-videos/1/slide_004.mp4'
+file '/tmp/cafa-videos/1/slide_outro.mp4'

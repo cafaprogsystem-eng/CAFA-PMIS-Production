@@ -1,0 +1,227 @@
+{
+  "title": "سجل المخاطر",
+  "newRisk": "تسجيل مخاطرة",
+  "registerRisk": "تسجيل مخاطرة",
+  "editRisk": "تعديل المخاطرة",
+  "noRisks": "لم يُعثر على مخاطر",
+  "noRisksDesc": "لا توجد مخاطر تطابق الفلاتر الحالية.",
+  "noRisksFiltered": "لا توجد مخاطر تطابق الفلاتر المختارة.",
+  "loadError": "تعذر تحميل المخاطر",
+  "loadErrorDesc": "حدث خطأ أثناء جلب سجل المخاطر. يرجى المحاولة مرة أخرى.",
+  "registerSuccess": "تم تسجيل المخاطرة",
+  "updateSuccess": "تم تحديث المخاطرة",
+  "deleteSuccess": "تم حذف المخاطرة",
+  "projectRemoved": "[تم حذف المشروع]",
+  "levels": {
+    "low": "منخفض",
+    "medium": "متوسط",
+    "high": "مرتفع",
+    "critical": "حرج"
+  },
+  "likelihood": {
+    "unlikely": "غير محتمل",
+    "possible": "محتمل",
+    "likely": "مرجّح",
+    "almost_certain": "شبه مؤكد"
+  },
+  "status": {
+    "open": "مفتوح",
+    "under_mitigation": "قيد التخفيف",
+    "closed": "مغلق",
+    "identified": "محدّد",
+    "assigned": "مُسنَد",
+    "mitigation_plan": "خطة التخفيف",
+    "follow_up": "المتابعة",
+    "escalation": "التصعيد",
+    "mitigated": "مُخفَّف"
+  },
+  "workflow": {
+    "identified": "محدّد",
+    "assigned": "مُسنَد",
+    "mitigation_plan": "خطة التخفيف",
+    "follow_up": "المتابعة",
+    "escalation": "التصعيد"
+  },
+  "fields": {
+    "title": "عنوان المخاطرة",
+    "titlePh": "وصف مختصر للمخاطرة",
+    "description": "الوصف التفصيلي",
+    "descriptionPh": "وصف تفصيلي للمخاطرة…",
+    "level": "مستوى المخاطرة",
+    "likelihood": "الاحتمالية",
+    "impact": "التأثير",
+    "category": "الفئة",
+    "state": "الولاية",
+    "project": "المشروع",
+    "assignedTo": "مُسنَد إلى",
+    "dueDate": "تاريخ الاستحقاق",
+    "mitigationPlan": "خطة التخفيف",
+    "mitigationPh": "خطوات التخفيف المخططة أو الحالية…",
+    "status": "الحالة",
+    "probability": "الاحتمالية",
+    "linkedProject": "المشروع المرتبط",
+    "responsiblePerson": "الشخص المسؤول",
+    "mitigationAction": "إجراء التخفيف",
+    "statePh": "اختر ولاية"
+  },
+  "filters": {
+    "toolbar": "الفلاتر",
+    "searchRisks": "البحث في المخاطر",
+    "searchPlaceholder": "البحث في العنوان أو الوصف أو المشروع أو الولاية…",
+    "riskLevel": "مستوى المخاطرة",
+    "status": "الحالة",
+    "category": "الفئة",
+    "project": "المشروع",
+    "state": "الولاية",
+    "responsible": "الشخص المسؤول",
+    "allLevels": "كل المستويات",
+    "allStatuses": "كل الحالات",
+    "allCategories": "كل الفئات",
+    "allProjects": "كل المشاريع",
+    "allStates": "كل الولايات",
+    "allPersons": "كل الأشخاص",
+    "clearCount": "مسح ({{count}})",
+    "clearFilters": "مسح الفلاتر"
+  },
+  "stats": {
+    "critical": "حرج",
+    "criticalSub": "إجراء فوري",
+    "high": "مرتفع",
+    "highSub": "مستوى المخاطرة",
+    "medium": "متوسط",
+    "mediumSub": "مستوى المخاطرة",
+    "low": "منخفض",
+    "lowSub": "مستوى المخاطرة"
+  },
+  "history": {
+    "created": "تم إنشاء المخاطرة",
+    "updated": "تم تحديث المخاطرة",
+    "closed": "تم إغلاق المخاطرة",
+    "statusChanged": "تم تغيير الحالة",
+    "mitigationUpdated": "تم تحديث خطة التخفيف",
+    "assigned": "تم إسناد المسؤولية",
+    "dueDateSet": "تم تحديد تاريخ الاستحقاق",
+    "system": "النظام",
+    "noHistory": "لا يوجد سجل تاريخي بعد.",
+    "statusChangedTo": "تغيّرت الحالة إلى {{status}}",
+    "loadError": "تعذر تحميل السجل التاريخي.",
+    "retry": "حاول مجدداً"
+  },
+  "saving": "جارٍ الحفظ…",
+  "registering": "جارٍ التسجيل…",
+  "unassigned": "غير مُسنَد",
+  "saveChanges": "حفظ التغييرات",
+  "editingRisk": "تعديل المخاطرة",
+  "sections": {
+    "riskIdentification": "تحديد المخاطرة",
+    "riskAssessment": "تقييم المخاطرة",
+    "ownershipFollowUp": "الملكية والمتابعة"
+  },
+  "form": {
+    "stateLocation": "الولاية / الموقع",
+    "stateLocationRequired": "* مطلوب",
+    "stateLocationPh": "اختر الولاية / الموقع",
+    "none": "لا شيء",
+    "cancel": "إلغاء",
+    "couldNotSave": "تعذر حفظ تغييرات المخاطرة.",
+    "couldNotRegister": "تعذر تسجيل المخاطرة."
+  },
+  "detail": {
+    "category": "الفئة",
+    "status": "الحالة",
+    "probability": "الاحتمالية",
+    "impact": "التأثير",
+    "riskLevel": "مستوى المخاطرة",
+    "responsiblePerson": "الشخص المسؤول",
+    "dateIdentified": "تاريخ التحديد",
+    "dueDate": "تاريخ الاستحقاق",
+    "description": "الوصف",
+    "mitigationAction": "إجراء التخفيف",
+    "editRisk": "تعديل المخاطرة",
+    "tabDetails": "التفاصيل",
+    "tabComments": "التعليقات",
+    "tabHistory": "السجل التاريخي",
+    "tabAttachments": "المرفقات"
+  },
+  "table": {
+    "riskTitle": "عنوان المخاطرة",
+    "category": "الفئة",
+    "probability": "الاحتمالية",
+    "impact": "التأثير",
+    "riskLevel": "مستوى المخاطرة",
+    "status": "الحالة",
+    "state": "الولاية",
+    "project": "المشروع",
+    "responsible": "المسؤول",
+    "dueDate": "تاريخ الاستحقاق",
+    "identified": "تاريخ التحديد"
+  },
+  "page": {
+    "description": "المخاطر التشغيلية والأمنية والبرنامجية عبر المحفظة",
+    "registerNewRisk": "تسجيل مخاطرة جديدة",
+    "registerNewRiskDesc": "أضف مخاطرة إلى السجل المركزي. تبدأ المخاطر الجديدة كمفتوحة.",
+    "risksCount": "{{count}} مخاطرة",
+    "risksCountPlural": "{{count}} مخاطر",
+    "filterActive": "{{count}} فلتر نشط",
+    "filtersActive": "{{count}} فلاتر نشطة",
+    "loading": "جارٍ التحميل…"
+  },
+  "pagination": {
+    "pageOf": "الصفحة {{page}} من {{totalPages}} ({{total}} مخاطر)",
+    "previous": "السابق",
+    "next": "التالي",
+    "previousPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية"
+  },
+  "accessibility": {
+    "openRisk": "فتح المخاطرة: {{title}}",
+    "registerRegion": "سجل المخاطر",
+    "toolbar": "فلاتر سجل المخاطر وعرضه"
+  },
+  "views": {
+    "card": "عرض البطاقات",
+    "board": "عرض اللوحة",
+    "boardDescription": "المخاطر مجمّعة حسب حالتها الحالية",
+    "unknownStatus": "بعض المخاطر لها حالة قديمة غير مدعومة ولا تظهر في اللوحة."
+  },
+  "presentation": {
+    "project": "المشروع",
+    "owner": "المالك",
+    "assessment": "الاحتمالية / التأثير",
+    "mitigation": "التخفيف",
+    "unassigned": "غير مُسنَد",
+    "dueDate": "تاريخ الاستحقاق",
+    "identified": "تاريخ التحديد",
+    "categories": {
+      "security": "أمني",
+      "operational": "تشغيلي",
+      "financial": "مالي",
+      "programmatic": "برنامجي",
+      "environmental": "بيئي"
+    },
+    "likelihoods": {
+      "low": "منخفض",
+      "medium": "متوسط",
+      "high": "مرتفع",
+      "unlikely": "غير محتمل",
+      "possible": "محتمل",
+      "likely": "مرجّح",
+      "almost_certain": "شبه مؤكد"
+    },
+    "impacts": {
+      "low": "منخفض",
+      "medium": "متوسط",
+      "high": "مرتفع",
+      "unlikely": "غير محتمل",
+      "possible": "محتمل",
+      "likely": "مرجّح",
+      "almost_certain": "شبه مؤكد"
+    },
+    "riskLevels": {
+      "low": "منخفض",
+      "medium": "متوسط",
+      "high": "مرتفع",
+      "critical": "حرج"
+    }
+  }
+}
