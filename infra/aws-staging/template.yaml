@@ -587,7 +587,7 @@ Resources:
       DBInstanceIdentifier: cafa-pmis-staging-postgres
       DBInstanceClass: db.t4g.micro
       Engine: postgres
-      EngineVersion: "16.4"
+      EngineVersion: "16.15"
       AllocatedStorage: "20"
       MaxAllocatedStorage: 100
       StorageType: gp3
