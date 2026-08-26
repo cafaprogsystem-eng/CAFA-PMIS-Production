@@ -101,6 +101,42 @@ rejection of a foreign credentialed origin. It does not substitute a local
 preview, use credentials, or claim authenticated, offline, attachment, email,
 Arabic, or restore certification.
 
+## One-time staging administrator bootstrap
+
+The staging stack defines a dedicated one-time administrator bootstrap task.
+It is intentionally separate from the normal application and migration tasks.
+
+Bootstrap inputs are stored in the staging-only Secrets Manager secret
+`cafa-pmis-staging/admin-bootstrap` and are injected into the bootstrap task as
+ECS secrets. Do not pass the administrator password, bcrypt hash, email, or
+name through ECS command overrides, shell command arguments, repository files,
+or CloudFormation parameters.
+
+The bootstrap task uses a dedicated ECS execution role that can read only the
+staging database URL and bootstrap secret, pull the immutable staging image,
+and write to the dedicated bootstrap log group. The normal application task
+does not receive access to the bootstrap secret.
+
+The bootstrap executable validates all of the following before creating the
+initial account:
+
+- `NODE_ENV=production`;
+- `CAFA_BOOTSTRAP_ENV=staging`;
+- the configured database URL targets `cafa_pmis_staging`;
+- the live PostgreSQL connection reports database `cafa_pmis_staging`;
+- the password value is a bcrypt cost-12 hash;
+- the users table contains exactly zero users.
+
+Creation occurs inside a database transaction protected by a PostgreSQL
+advisory transaction lock. If any user already exists, the bootstrap fails
+closed and does not create another account.
+
+The bootstrap task is never run automatically by the normal staging deployment.
+It must be started explicitly after the infrastructure update and after the
+bootstrap secret has been populated through an authorized Secrets Manager
+workflow. After successful creation of the initial administrator, remove the
+bootstrap input values from the secret.
+
 ## Safe repeat runs and cleanup
 
 Repeat runs use the fixed staging stacks and immutable image digests. If the
