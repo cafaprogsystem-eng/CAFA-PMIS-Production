@@ -819,30 +819,6 @@ Resources:
         - Key: Environment
           Value: staging
 
-  BootstrapAdminSecret:
-    Condition: CoreEnabled
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: cafa-pmis-staging/admin-bootstrap
-      Description: One-time staging initial administrator bootstrap inputs. Populate only through Secrets Manager; never pass values through ECS command overrides.
-      Tags:
-        - Key: Application
-          Value: cafa-pmis
-        - Key: Environment
-          Value: staging
-
-  BootstrapLogGroup:
-    Condition: CoreEnabled
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: /cafa-pmis/staging/admin-bootstrap
-      RetentionInDays: 30
-      Tags:
-        - Key: Application
-          Value: cafa-pmis
-        - Key: Environment
-          Value: staging
-
   ApplicationLogGroup:
     Condition: CoreEnabled
     Type: AWS::Logs::LogGroup
@@ -919,50 +895,6 @@ Resources:
                   - !Ref DatabaseUrlSecret
                   - !Ref SessionSecret
                   - !Ref PublicOriginSecret
-      Tags:
-        - Key: Application
-          Value: cafa-pmis
-        - Key: Environment
-          Value: staging
-
-  BootstrapExecutionRole:
-    Condition: CoreEnabled
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: cafa-pmis-staging-bootstrap-execution
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: cafa-pmis-staging-bootstrap-execution
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:BatchGetImage
-                  - ecr:GetDownloadUrlForLayer
-                Resource: !Ref EcrRepositoryArn
-              - Effect: Allow
-                Action: ecr:GetAuthorizationToken
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource:
-                  - !GetAtt BootstrapLogGroup.Arn
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource:
-                  - !Ref DatabaseUrlSecret
-                  - !Ref BootstrapAdminSecret
       Tags:
         - Key: Application
           Value: cafa-pmis
@@ -1140,58 +1072,6 @@ Resources:
               awslogs-group: !Ref MigrationLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: migration
-      Tags:
-        - Key: Application
-          Value: cafa-pmis
-        - Key: Environment
-          Value: staging
-
-  BootstrapTaskDefinition:
-    Condition: CoreEnabled
-    Type: AWS::ECS::TaskDefinition
-    Properties:
-      Family: cafa-pmis-staging-admin-bootstrap
-      Cpu: "512"
-      Memory: "1024"
-      NetworkMode: awsvpc
-      RequiresCompatibilities:
-        - FARGATE
-      ExecutionRoleArn: !GetAtt BootstrapExecutionRole.Arn
-      RuntimePlatform:
-        OperatingSystemFamily: LINUX
-        CpuArchitecture: X86_64
-      ContainerDefinitions:
-        - Name: cafa-pmis-admin-bootstrap
-          Image: !Ref ImageUri
-          Essential: true
-          Command:
-            - node
-            - --enable-source-maps
-            - /app/artifacts/api-server/dist/bootstrap-staging-admin.mjs
-          Environment:
-            - Name: NODE_ENV
-              Value: production
-            - Name: CAFA_BOOTSTRAP_ENV
-              Value: staging
-            - Name: RUN_MIGRATIONS_ON_STARTUP
-              Value: "false"
-            - Name: SCHEDULER_ENABLED
-              Value: "false"
-          Secrets:
-            - Name: DATABASE_URL
-              ValueFrom: !Sub "${DatabaseUrlSecret}:DATABASE_URL::"
-            - Name: BOOTSTRAP_ADMIN_NAME
-              ValueFrom: !Sub "${BootstrapAdminSecret}:BOOTSTRAP_ADMIN_NAME::"
-            - Name: BOOTSTRAP_ADMIN_EMAIL
-              ValueFrom: !Sub "${BootstrapAdminSecret}:BOOTSTRAP_ADMIN_EMAIL::"
-            - Name: BOOTSTRAP_ADMIN_PASSWORD_HASH
-              ValueFrom: !Sub "${BootstrapAdminSecret}:BOOTSTRAP_ADMIN_PASSWORD_HASH::"
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-group: !Ref BootstrapLogGroup
-              awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: bootstrap
       Tags:
         - Key: Application
           Value: cafa-pmis
@@ -1538,12 +1418,6 @@ Outputs:
   MigrationTaskDefinition:
     Condition: CoreEnabled
     Value: !Ref MigrationTaskDefinition
-  BootstrapTaskDefinition:
-    Condition: CoreEnabled
-    Value: !Ref BootstrapTaskDefinition
-  BootstrapAdminSecretArn:
-    Condition: CoreEnabled
-    Value: !Ref BootstrapAdminSecret
   ApplicationSecurityGroupId:
     Condition: CoreEnabled
     Value: !Ref AppSecurityGroup
