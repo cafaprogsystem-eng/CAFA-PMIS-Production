@@ -117,6 +117,176 @@ Resources:
         - Key: ManagedBy
           Value: cloudformation
 
+
+  BuildSourceBucket:
+    Condition: EcrOnly
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireStagingBuildSources
+            Status: Enabled
+            ExpirationInDays: 1
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+        - Key: Purpose
+          Value: remote-image-build-source
+
+  ImageBuildLogGroup:
+    Condition: EcrOnly
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /cafa-pmis/staging/image-build
+      RetentionInDays: 30
+
+  StagingImageBuildRole:
+    Condition: EcrOnly
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cafa-pmis-staging-image-build
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cafa-pmis-staging-image-build
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt ImageBuildLogGroup.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub ${BuildSourceBucket.Arn}/sources/*
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource: !GetAtt BuildSourceBucket.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeImages
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !GetAtt EcrRepository.Arn
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
+  StagingImageBuildProject:
+    Condition: EcrOnly
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: cafa-pmis-staging-image-build
+      Description: Builds immutable CAFA PMIS staging images remotely and pushes them to ECR.
+      ServiceRole: !GetAtt StagingImageBuildRole.Arn
+      ConcurrentBuildLimit: 1
+      TimeoutInMinutes: 60
+      QueuedTimeoutInMinutes: 30
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - |
+                  set -Eeuo pipefail
+
+                  : "${IMAGE_TAG:?IMAGE_TAG is required}"
+                  : "${SOURCE_REVISION:?SOURCE_REVISION is required}"
+
+                  ECR_LOOKUP_ERROR="$(mktemp)"
+                  trap 'rm -f "${ECR_LOOKUP_ERROR}"' EXIT
+
+                  if aws ecr describe-images \
+                    --region "${AWS_DEFAULT_REGION}" \
+                    --repository-name "${ECR_REPOSITORY}" \
+                    --image-ids "imageTag=${IMAGE_TAG}" \
+                    >/dev/null 2>"${ECR_LOOKUP_ERROR}"; then
+                    echo "Immutable image ${IMAGE_TAG} already exists; reusing it."
+                    exit 0
+                  elif grep -q "ImageNotFoundException" "${ECR_LOOKUP_ERROR}"; then
+                    echo "Immutable image ${IMAGE_TAG} is absent; building it remotely."
+                    rm -f "${ECR_LOOKUP_ERROR}"
+                    trap - EXIT
+                  else
+                    echo "Unable to determine immutable ECR image state." >&2
+                    cat "${ECR_LOOKUP_ERROR}" >&2
+                    exit 1
+                  fi
+
+                  aws ecr get-login-password \
+                    --region "${AWS_DEFAULT_REGION}" \
+                    | docker login \
+                        --username AWS \
+                        --password-stdin "${ECR_URI%/*}"
+
+                  docker build \
+                    --label "org.opencontainers.image.revision=${SOURCE_REVISION}" \
+                    --label "org.opencontainers.image.source=CAFA-PMIS" \
+                    --tag "${ECR_URI}:${IMAGE_TAG}" \
+                    .
+
+                  docker push "${ECR_URI}:${IMAGE_TAG}"
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Cache:
+        Type: NO_CACHE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/standard:7.0
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_URI
+            Value: !GetAtt EcrRepository.RepositoryUri
+          - Name: ECR_REPOSITORY
+            Value: cafa-pmis-staging
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref ImageBuildLogGroup
+          StreamName: image-build
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: staging
+
   Vpc:
     Condition: CoreEnabled
     Type: AWS::EC2::VPC
@@ -1256,6 +1426,16 @@ Resources:
       AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], []]
 
 Outputs:
+  BuildSourceBucketName:
+    Condition: EcrOnly
+    Description: Private S3 bucket used for ephemeral immutable staging build sources.
+    Value: !Ref BuildSourceBucket
+
+  ImageBuildProjectName:
+    Condition: EcrOnly
+    Description: CodeBuild project used to build immutable staging container images.
+    Value: !Ref StagingImageBuildProject
+
   EcrRepositoryUri:
     Description: Immutable staging ECR repository URI.
     Condition: EcrOnly

@@ -47,20 +47,33 @@ CAFA_STAGING_CERTIFICATE_ARN=<certificate-arn> \
 ```
 
 The script uses one CloudFormation template in two fixed staging-only stacks:
-`cafa-pmis-staging-ecr` owns the immutable ECR repository, while
-`cafa-pmis-staging` owns the networking and service platform. This separation
-prevents an image-bootstrap action from changing or deleting a live platform.
-It performs these phases:
+`cafa-pmis-staging-ecr` owns the immutable ECR repository and the isolated
+remote image-build infrastructure (private source bucket, CodeBuild project,
+build role, and build logs), while `cafa-pmis-staging` owns the networking and
+service platform. This separation prevents an image-bootstrap action from
+changing or deleting a live platform.
 
-1. create/update the immutable ECR repository;
-2. build the root `Dockerfile`, label it with the current source revision, and
-   push a tag that is immutable in ECR;
-3. create/update the VPC, ALB, RDS, S3, Secrets Manager, IAM, ECS task
-   definitions, logs, and alarms with the service disabled;
-4. run one ECS Fargate migration task using
+The deployment does not build Docker images in the operator shell. It performs
+these phases:
+
+1. create/update the immutable ECR repository and remote CodeBuild
+   infrastructure;
+2. check for the immutable `source-<git-sha>` image in ECR and reuse it when
+   present;
+3. when the image is absent, stream `git archive` for the clean source revision
+   to the private staging build-source bucket, run the root `Dockerfile` in
+   CodeBuild, and push the immutable source tag to ECR;
+4. resolve the resulting ECR image digest and create/update the VPC, ALB, RDS,
+   S3, Secrets Manager, IAM, ECS task definitions, logs, and alarms while
+   preserving the currently running service;
+5. run one ECS Fargate migration task using
    `node --enable-source-maps /app/scripts/migrate.mjs`;
-5. stop on a non-zero migration exit and preserve its log pointer;
-6. only after exit code zero, enable the ECS service at desired count one.
+6. stop on a non-zero migration exit and preserve its log pointer;
+7. only after exit code zero, enable the ECS service at desired count one.
+
+The uploaded build-source archive is removed after the remote build. The
+private source bucket also applies a one-day lifecycle expiry as a fallback if
+cleanup cannot complete.
 
 The service task definition always sets:
 
@@ -90,10 +103,13 @@ Arabic, or restore certification.
 
 ## Safe repeat runs and cleanup
 
-Repeat runs use the fixed stack name `cafa-pmis-staging` and immutable image
-digests. On later releases, the existing ECS service stays on its current task
-definition while the new task definition migrates; only a successful migration
-allows the script to update the service. The bucket and RDS instance
+Repeat runs use the fixed staging stacks and immutable image digests. If the
+current `source-<git-sha>` image already exists in ECR, the remote build is
+skipped and that immutable image is reused. On later releases, the existing ECS
+service stays on its current task definition while the new task definition
+migrates; only a successful migration allows the script to update the service.
+The build does not depend on local Docker storage in CloudShell or another
+operator workstation. The attachment bucket and RDS instance
 intentionally retain data/snapshots if the stack is deleted, so cleanup
 requires an explicit, separately approved data-retention decision.
 
