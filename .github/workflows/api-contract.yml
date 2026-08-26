@@ -24,6 +24,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Validate staging deployment shell scripts
+        run: |
+          bash -n infra/aws-staging/deploy-staging.sh
+          bash -n infra/aws-staging/codebuild-image-build.sh
+
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
 
