@@ -20,21 +20,6 @@ fi
 SOURCE_REVISION="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
 IMAGE_TAG="source-${SOURCE_REVISION}"
 
-stack_exists() {
-  local stack_name="$1"
-  local detail
-  if detail="$(aws cloudformation describe-stacks \
-    --region "${CAFA_STAGING_APPROVED_REGION}" \
-    --stack-name "${stack_name}" 2>&1 >/dev/null)"; then
-    return 0
-  fi
-  if [[ "${detail}" =~ does\ not\ exist|ValidationError ]]; then
-    return 1
-  fi
-  echo "AWS staging deployment blocked: cannot inspect CloudFormation stack ${stack_name}." >&2
-  exit 1
-}
-
 COMMON_PARAMS=(
   ProvisionEcrOnly=false
   EnableApplicationService=false
@@ -60,17 +45,15 @@ if [[ -z "${CAFA_STAGING_AZ1:-}" || -z "${CAFA_STAGING_AZ2:-}" ]]; then
   COMMON_PARAMS[5]="AvailabilityZone2=${AVAILABLE_AZS[1]}"
 fi
 
-if ! stack_exists "${ECR_STACK_NAME}"; then
-  echo "Creating the immutable staging ECR bootstrap stack (source revision ${SOURCE_REVISION})."
-  aws cloudformation deploy \
-    --region "${CAFA_STAGING_APPROVED_REGION}" \
-    --stack-name "${ECR_STACK_NAME}" \
-    --template-file "${TEMPLATE}" \
-    --no-fail-on-empty-changeset \
-    --capabilities CAPABILITY_NAMED_IAM \
-    --parameter-overrides ProvisionEcrOnly=true \
-    >/dev/null
-fi
+echo "Creating or updating immutable staging ECR and remote build infrastructure."
+aws cloudformation deploy \
+  --region "${CAFA_STAGING_APPROVED_REGION}" \
+  --stack-name "${ECR_STACK_NAME}" \
+  --template-file "${TEMPLATE}" \
+  --no-fail-on-empty-changeset \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides ProvisionEcrOnly=true \
+  >/dev/null
 
 ECR_URI="$(
   aws cloudformation describe-stacks \
@@ -79,10 +62,38 @@ ECR_URI="$(
     --query "Stacks[0].Outputs[?OutputKey=='EcrRepositoryUri'].OutputValue" \
     --output text
 )"
+
+BUILD_SOURCE_BUCKET="$(
+  aws cloudformation describe-stacks \
+    --region "${CAFA_STAGING_APPROVED_REGION}" \
+    --stack-name "${ECR_STACK_NAME}" \
+    --query "Stacks[0].Outputs[?OutputKey=='BuildSourceBucketName'].OutputValue" \
+    --output text
+)"
+
+IMAGE_BUILD_PROJECT="$(
+  aws cloudformation describe-stacks \
+    --region "${CAFA_STAGING_APPROVED_REGION}" \
+    --stack-name "${ECR_STACK_NAME}" \
+    --query "Stacks[0].Outputs[?OutputKey=='ImageBuildProjectName'].OutputValue" \
+    --output text
+)"
+
 if [[ -z "${ECR_URI}" || "${ECR_URI}" == "None" ]]; then
   echo "AWS staging deployment blocked: ECR repository output was not returned." >&2
   exit 1
 fi
+
+if [[ -z "${BUILD_SOURCE_BUCKET}" || "${BUILD_SOURCE_BUCKET}" == "None" ]]; then
+  echo "AWS staging deployment blocked: remote build source bucket output was not returned." >&2
+  exit 1
+fi
+
+if [[ -z "${IMAGE_BUILD_PROJECT}" || "${IMAGE_BUILD_PROJECT}" == "None" ]]; then
+  echo "AWS staging deployment blocked: CodeBuild project output was not returned." >&2
+  exit 1
+fi
+
 ECR_ARN="$(
   aws ecr describe-repositories \
     --region "${CAFA_STAGING_APPROVED_REGION}" \
@@ -90,52 +101,127 @@ ECR_ARN="$(
     --query "repositories[0].repositoryArn" \
     --output text
 )"
+
 if [[ ! "${ECR_ARN}" =~ ^arn:[^:]+:ecr: ]]; then
   echo "AWS staging deployment blocked: immutable ECR repository ARN was not returned." >&2
   exit 1
 fi
+
 COMMON_PARAMS+=("EcrRepositoryArn=${ECR_ARN}")
-
-echo "Building the root production Docker image."
-docker build \
-  --label "org.opencontainers.image.revision=${SOURCE_REVISION}" \
-  --label "org.opencontainers.image.source=CAFA-PMIS" \
-  --tag "${ECR_URI}:${IMAGE_TAG}" \
-  "${ROOT_DIR}"
-
-aws ecr get-login-password --region "${CAFA_STAGING_APPROVED_REGION}" |
-  docker login --username AWS --password-stdin "${ECR_URI%/*}" >/dev/null
 ECR_REPOSITORY="${ECR_URI#*/}"
-ECR_LOOKUP_ERROR="$(mktemp)"
-trap 'rm -f "${ECR_LOOKUP_ERROR}"' EXIT
 
-if aws ecr describe-images \
-  --region "${CAFA_STAGING_APPROVED_REGION}" \
-  --repository-name "${ECR_REPOSITORY}" \
-  --image-ids "imageTag=${IMAGE_TAG}" \
-  >/dev/null 2>"${ECR_LOOKUP_ERROR}"; then
+if ECR_LOOKUP_OUTPUT="$(
+  aws ecr describe-images \
+    --region "${CAFA_STAGING_APPROVED_REGION}" \
+    --repository-name "${ECR_REPOSITORY}" \
+    --image-ids "imageTag=${IMAGE_TAG}" \
+    2>&1
+)"; then
   echo "Immutable staging image ${IMAGE_TAG} already exists; reusing it."
-elif grep -q "ImageNotFoundException" "${ECR_LOOKUP_ERROR}"; then
-  echo "Pushing immutable staging image ${IMAGE_TAG}."
-  docker push "${ECR_URI}:${IMAGE_TAG}" >/dev/null
+
+elif grep -q "ImageNotFoundException" <<<"${ECR_LOOKUP_OUTPUT}"; then
+  BUILD_SOURCE_KEY="sources/${SOURCE_REVISION}-$(date -u +%Y%m%dT%H%M%SZ)-$$.zip"
+
+  cleanup_build_source() {
+    if [[ -n "${BUILD_SOURCE_KEY:-}" ]]; then
+      if ! aws s3 rm \
+        "s3://${BUILD_SOURCE_BUCKET}/${BUILD_SOURCE_KEY}" \
+        --region "${CAFA_STAGING_APPROVED_REGION}" \
+        --only-show-errors \
+        >/dev/null 2>&1; then
+        echo "Warning: remote build source cleanup failed; bucket lifecycle will expire it automatically." >&2
+      fi
+    fi
+  }
+
+  trap cleanup_build_source EXIT
+
+  echo "Streaming source revision ${SOURCE_REVISION} to the private remote build bucket."
+
+  git -C "${ROOT_DIR}" archive \
+    --format=zip \
+    "${SOURCE_REVISION}" \
+    | aws s3 cp \
+        - \
+        "s3://${BUILD_SOURCE_BUCKET}/${BUILD_SOURCE_KEY}" \
+        --region "${CAFA_STAGING_APPROVED_REGION}" \
+        --only-show-errors
+
+  echo "Starting remote CodeBuild image build."
+
+  BUILD_ID="$(
+    aws codebuild start-build \
+      --region "${CAFA_STAGING_APPROVED_REGION}" \
+      --project-name "${IMAGE_BUILD_PROJECT}" \
+      --source-type-override S3 \
+      --source-location-override "${BUILD_SOURCE_BUCKET}/${BUILD_SOURCE_KEY}" \
+      --environment-variables-override \
+        "name=IMAGE_TAG,value=${IMAGE_TAG},type=PLAINTEXT" \
+        "name=SOURCE_REVISION,value=${SOURCE_REVISION},type=PLAINTEXT" \
+      --query "build.id" \
+      --output text
+  )"
+
+  if [[ -z "${BUILD_ID}" || "${BUILD_ID}" == "None" ]]; then
+    echo "AWS staging deployment blocked: CodeBuild did not return a build ID." >&2
+    exit 1
+  fi
+
+  echo "Remote build started: ${BUILD_ID}"
+
+  while true; do
+    BUILD_STATUS="$(
+      aws codebuild batch-get-builds \
+        --region "${CAFA_STAGING_APPROVED_REGION}" \
+        --ids "${BUILD_ID}" \
+        --query "builds[0].buildStatus" \
+        --output text
+    )"
+
+    case "${BUILD_STATUS}" in
+      SUCCEEDED)
+        echo "Remote image build succeeded."
+        break
+        ;;
+      IN_PROGRESS)
+        sleep 10
+        ;;
+      FAILED|FAULT|STOPPED|TIMED_OUT)
+        echo "AWS staging deployment blocked: remote image build ended with ${BUILD_STATUS}." >&2
+        echo "CodeBuild evidence pointer: ${BUILD_ID}" >&2
+        exit 1
+        ;;
+      *)
+        echo "AWS staging deployment blocked: unexpected CodeBuild status '${BUILD_STATUS}'." >&2
+        echo "CodeBuild evidence pointer: ${BUILD_ID}" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  cleanup_build_source
+  trap - EXIT
+
 else
   echo "AWS staging deployment blocked: unable to determine whether ${IMAGE_TAG} already exists." >&2
-  cat "${ECR_LOOKUP_ERROR}" >&2
+  printf '%s\n' "${ECR_LOOKUP_OUTPUT}" >&2
   exit 1
 fi
 
 IMAGE_DIGEST="$(
   aws ecr describe-images \
     --region "${CAFA_STAGING_APPROVED_REGION}" \
-    --repository-name cafa-pmis-staging \
+    --repository-name "${ECR_REPOSITORY}" \
     --image-ids "imageTag=${IMAGE_TAG}" \
     --query "imageDetails[0].imageDigest" \
     --output text
 )"
+
 if [[ ! "${IMAGE_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
   echo "AWS staging deployment blocked: ECR did not return an immutable image digest." >&2
   exit 1
 fi
+
 IMAGE_URI="${ECR_URI%@*}@${IMAGE_DIGEST}"
 
 EXISTING_SERVICE_TASK_DEFINITION="$(
