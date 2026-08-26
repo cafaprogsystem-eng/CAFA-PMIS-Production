@@ -105,7 +105,24 @@ docker build \
 
 aws ecr get-login-password --region "${CAFA_STAGING_APPROVED_REGION}" |
   docker login --username AWS --password-stdin "${ECR_URI%/*}" >/dev/null
-docker push "${ECR_URI}:${IMAGE_TAG}" >/dev/null
+ECR_REPOSITORY="${ECR_URI#*/}"
+ECR_LOOKUP_ERROR="$(mktemp)"
+trap 'rm -f "${ECR_LOOKUP_ERROR}"' EXIT
+
+if aws ecr describe-images \
+  --region "${CAFA_STAGING_APPROVED_REGION}" \
+  --repository-name "${ECR_REPOSITORY}" \
+  --image-ids "imageTag=${IMAGE_TAG}" \
+  >/dev/null 2>"${ECR_LOOKUP_ERROR}"; then
+  echo "Immutable staging image ${IMAGE_TAG} already exists; reusing it."
+elif grep -q "ImageNotFoundException" "${ECR_LOOKUP_ERROR}"; then
+  echo "Pushing immutable staging image ${IMAGE_TAG}."
+  docker push "${ECR_URI}:${IMAGE_TAG}" >/dev/null
+else
+  echo "AWS staging deployment blocked: unable to determine whether ${IMAGE_TAG} already exists." >&2
+  cat "${ECR_LOOKUP_ERROR}" >&2
+  exit 1
+fi
 
 IMAGE_DIGEST="$(
   aws ecr describe-images \
