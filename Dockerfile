@@ -53,6 +53,18 @@ RUN pnpm --filter @workspace/cafa-pmis run build
 # ─── Stage 2: Production runner ───────────────────────────────────────────────
 FROM node:24-slim AS runner
 
+# Trust the official Amazon RDS certificate authorities while preserving
+# full TLS certificate and hostname verification for PostgreSQL connections.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && mkdir -p /opt/aws-rds-ca \
+ && curl --fail --silent --show-error --location \
+      https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+      --output /opt/aws-rds-ca/global-bundle.pem \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_EXTRA_CA_CERTS="/opt/aws-rds-ca/global-bundle.pem"
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
