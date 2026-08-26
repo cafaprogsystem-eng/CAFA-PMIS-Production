@@ -540,6 +540,15 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Sub https://${StagingHostname}
+            AllowedMethods:
+              - PUT
+            AllowedHeaders:
+              - Content-Type
+            MaxAge: 300
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
