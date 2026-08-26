@@ -640,7 +640,7 @@ Resources:
     Properties:
       Name: cafa-pmis-staging/database-url
       Description: Staging DATABASE_URL. Managed by the staging CloudFormation stack.
-      SecretString: !Sub '{"DATABASE_URL":"postgresql://cafa_staging:{{resolve:secretsmanager:${DbMasterPasswordSecret}:SecretString}}@${DbInstance.Endpoint.Address}:5432/cafa_pmis_staging?sslmode=require"}'
+      SecretString: !Sub '{"DATABASE_URL":"postgresql://cafa_staging:{{resolve:secretsmanager:${DbMasterPasswordSecret}:SecretString}}@${DbInstance.Endpoint.Address}:5432/cafa_pmis_staging?sslmode=verify-full"}'
       Tags:
         - Key: Application
           Value: cafa-pmis
