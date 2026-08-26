@@ -29,6 +29,13 @@ if (!sessionSecret) {
 }
 
 // ─── Security Headers ────────────────────────────────────────────────────────
+const s3ConnectOrigin =
+  process.env.STORAGE_PROVIDER === "s3" &&
+  process.env.S3_BUCKET &&
+  process.env.S3_REGION
+    ? `https://${process.env.S3_BUCKET}.s3.${process.env.S3_REGION}.amazonaws.com`
+    : null;
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -37,7 +44,7 @@ app.use(
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'", "https://cafa-pmis-attachments.s3.us-east-1.amazonaws.com"],
+        connectSrc: ["'self'", ...(s3ConnectOrigin ? [s3ConnectOrigin] : [])],
         fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
