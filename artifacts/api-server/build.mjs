@@ -18,10 +18,6 @@ async function buildAll() {
     entryPoints: {
       index: path.resolve(artifactDir, "src/index.ts"),
       migrate: path.resolve(artifactDir, "src/migrate.ts"),
-      "bootstrap-staging-admin": path.resolve(
-        artifactDir,
-        "src/bootstrap-staging-admin.ts",
-      ),
     },
     platform: "node",
     bundle: true,
