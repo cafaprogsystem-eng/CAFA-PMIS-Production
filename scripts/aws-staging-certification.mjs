@@ -160,6 +160,10 @@ const localCertifications = [
     script: "aws-staging-auth-certification.mjs",
   },
   {
+    name: "Core module runtime",
+    script: "aws-staging-core-runtime-certification.mjs",
+  },
+  {
     name: "S3 storage lifecycle",
     script: "aws-staging-storage-certification.mjs",
   },
@@ -197,5 +201,5 @@ console.log("========================================");
 console.log("CAFA PMIS AWS STAGING CERTIFICATION PASSED");
 console.log("========================================");
 console.log(
-  "Verified public runtime baseline, authenticated session security, and end-to-end S3 storage lifecycle.",
+  "Verified public runtime baseline, authenticated session security, core module runtime, and end-to-end S3 storage lifecycle.",
 );
