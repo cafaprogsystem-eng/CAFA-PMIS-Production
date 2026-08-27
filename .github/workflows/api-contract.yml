@@ -31,6 +31,7 @@ jobs:
           node --check scripts/aws-staging-preflight.mjs
           node --check scripts/aws-staging-baseline.mjs
           node --check scripts/aws-staging-auth-certification.mjs
+          node --check scripts/aws-staging-storage-certification.mjs
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
