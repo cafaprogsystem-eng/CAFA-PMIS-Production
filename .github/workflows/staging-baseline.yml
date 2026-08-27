@@ -1,0 +1,55 @@
+name: AWS staging public baseline
+
+run-name: AWS staging public baseline ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Exact approved staging HTTPS origin
+        required: true
+        default: https://staging.pmis.cafa.systems
+        type: string
+      request_id:
+        description: Unique certification request identifier
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-staging-public-baseline
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    name: Public runtime baseline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for staging browser certification
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Validate public staging baseline script
+        run: node --check scripts/aws-staging-baseline.mjs
+
+      - name: Run public staging baseline
+        env:
+          CAFA_STAGING_BASE_URL: ${{ inputs.base_url }}
+        run: node scripts/aws-staging-baseline.mjs
