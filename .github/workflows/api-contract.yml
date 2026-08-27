@@ -31,6 +31,7 @@ jobs:
           bash -n scripts/run-aws-staging-certification.sh
           node --check scripts/aws-staging-preflight.mjs
           node --check scripts/aws-staging-baseline.mjs
+          node --check scripts/aws-staging-certification.mjs
           node --check scripts/aws-staging-auth-certification.mjs
           node --check scripts/aws-staging-core-runtime-certification.mjs
           node --check scripts/aws-staging-project-business-flow-certification.mjs
