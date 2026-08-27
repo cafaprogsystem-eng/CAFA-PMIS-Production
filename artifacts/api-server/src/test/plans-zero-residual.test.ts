@@ -657,6 +657,34 @@ describe("PLAN-ZR-23: migration full-name identity", async () => {
   });
 });
 
+describe("PLAN-ZR-23B: draft Plan budget schema parity", async () => {
+  const { MIGRATIONS } = await import("../lib/run-migrations.js");
+
+  it("migration 059 makes draft budget/currency fields nullable without fabricated defaults", () => {
+    const migration = MIGRATIONS.find(
+      (m) => m.name === "059_plan_nullable_budget_fields",
+    );
+
+    expect(migration).toBeDefined();
+
+    const sql = migration!.sql;
+
+    expect(sql).toMatch(/ALTER COLUMN budget_planned DROP DEFAULT/);
+    expect(sql).toMatch(/ALTER COLUMN budget_planned DROP NOT NULL/);
+    expect(sql).toMatch(/ALTER COLUMN budget_actual\s+DROP DEFAULT/);
+    expect(sql).toMatch(/ALTER COLUMN budget_actual\s+DROP NOT NULL/);
+    expect(sql).toMatch(/ALTER COLUMN currency\s+DROP DEFAULT/);
+    expect(sql).toMatch(/ALTER COLUMN currency\s+DROP NOT NULL/);
+  });
+
+  it("migration 059 is defined after the legacy 057 budget-evidence migration", () => {
+    const names = MIGRATIONS.map((m) => m.name);
+    expect(names.indexOf("059_plan_nullable_budget_fields")).toBeGreaterThan(
+      names.indexOf("057_plan_budget_legacy_unverified"),
+    );
+  });
+});
+
 describe("PLAN-ZR-24: no Plans startup DDL", () => {
   it("plans.ts contains no CREATE/ALTER/DROP DDL statements", () => {
     expect(plansSrc).not.toMatch(/CREATE TABLE|ALTER TABLE|CREATE INDEX|DROP TABLE|CREATE OR REPLACE/);

@@ -33,6 +33,8 @@ jobs:
           node --check scripts/aws-staging-baseline.mjs
           node --check scripts/aws-staging-auth-certification.mjs
           node --check scripts/aws-staging-core-runtime-certification.mjs
+          node --check scripts/aws-staging-project-business-flow-certification.mjs
+          node --check scripts/aws-staging-plan-business-flow-certification.mjs
           node --check scripts/aws-staging-storage-certification.mjs
 
       - name: Set up pnpm
