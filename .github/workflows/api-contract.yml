@@ -28,6 +28,7 @@ jobs:
         run: |
           bash -n infra/aws-staging/deploy-staging.sh
           bash -n infra/aws-staging/codebuild-image-build.sh
+          bash -n scripts/run-aws-staging-certification.sh
           node --check scripts/aws-staging-preflight.mjs
           node --check scripts/aws-staging-baseline.mjs
           node --check scripts/aws-staging-auth-certification.mjs
