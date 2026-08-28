@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import React from "react";
 import "@testing-library/jest-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -42,8 +42,9 @@ vi.mock("react-i18next", () => ({
 }));
 
 // ── API hook mocks — swappable current user via mutable holder ──────────────
-const meHolder: { user: Record<string, unknown> } = {
+const meHolder: { user: Record<string, unknown>; permissions: string[] } = {
   user: { id: 11, name: "TC", role: "technical_coordinator", sector: "WASH" },
+  permissions: ["reports.create", "reports.view"],
 };
 vi.mock("@workspace/api-client-react", () => {
   const stable = <T,>(data: T) => {
@@ -52,7 +53,7 @@ vi.mock("@workspace/api-client-react", () => {
   };
   const mutation = { mutateAsync: async () => ({ id: 1 }), isPending: false };
   return {
-    useGetMe: () => ({ data: { user: meHolder.user, permissions: ["reports.create"] }, isLoading: false }),
+    useGetMe: () => ({ data: { user: meHolder.user, permissions: meHolder.permissions }, isLoading: false }),
     useListStates: stable([{ id: 1, name: "Khartoum" }]),
     useCreateReport: () => mutation,
     useTransitionReport: () => mutation,
@@ -67,11 +68,10 @@ global.fetch = vi.fn().mockResolvedValue({
 
 import { HqSectorReportForm } from "../components/hq-sector-report-form";
 
-function renderForm() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderForm(qc = new QueryClient({ defaultOptions: { queries: { retry: false } } }), existingReport?: Record<string, unknown>) {
   return render(
     <QueryClientProvider client={qc}>
-      <HqSectorReportForm onClose={() => {}} />
+      <HqSectorReportForm onClose={() => {}} existingReport={existingReport as never} />
     </QueryClientProvider>,
   );
 }
@@ -112,5 +112,23 @@ describe("HQ Sector form — sector options scoping (HQSR-AUTH-FE-02)", () => {
     renderForm();
     const opts = openSectorOptions();
     expect(opts.sort()).toEqual([...SECTORS].sort());
+  });
+
+  it("does not reuse a former-sector snapshot after the same TC is re-scoped", async () => {
+    meHolder.user = { id: 15, name: "TC", role: "technical_coordinator", sector: "WASH" };
+    meHolder.permissions = ["reports.create", "reports.view"];
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(["sector-snapshot", "Health"], {
+      snapshot: { activeProjects: 987654, activeStates: 1, activeLocalities: 1, activitiesImplemented: 1, beneficiariesReached: 1, indicatorProgressPct: 1, delayedActivities: 1, openRisks: 1, pendingApprovals: 1 },
+      stateSummaries: [], projectSummaries: [], beneficiaryBreakdown: { men: 0, women: 0, boys: 0, girls: 0, total: 0 },
+      beneficiariesByState: [], beneficiariesByProject: [], beneficiariesByDonor: [], indicators: [],
+    });
+    renderForm(qc, {
+      id: 88, title: "Former Health report", status: "draft", reportType: "hq_sector",
+      sector: "Health", kind: "monthly", period: "2026-08", reportingMonth: 8,
+      reportingYear: 2026, sections: {},
+    });
+    await waitFor(() => expect(screen.queryByText("987654")).not.toBeInTheDocument());
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("sector-snapshot"), expect.anything());
   });
 });
