@@ -39,7 +39,7 @@ import { AIChatWidget } from "@/components/ai-chat-widget";
 import { CommandPalette } from "@/components/command-palette";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { useSyncContext } from "@/contexts/sync-context";
-import { clearOfflineData, setOfflineUser } from "@/lib/offline/db";
+import { clearApiCache, clearOfflineData, setOfflineUser } from "@/lib/offline/db";
 import { clearAllAttachmentData } from "@/lib/offline/attachment-store";
 import { syncService } from "@/lib/offline/sync-service";
 import { inferItemMeta, clearItems } from "@/lib/recent-items";
@@ -235,12 +235,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
 
   const handleRoleSwitch = (userId: number) => {
+    const formerUserId = meData?.user?.id;
     window.localStorage.setItem("cafa.userId", userId.toString());
     // Recipient-private data must never survive a demo identity change. Active
     // observers refetch with the new dev identity after this clear.
     clearNotificationQueries(queryClient);
     queryClient.clear();
-    void queryClient.refetchQueries({ queryKey: ["auth", "me"], type: "active" });
+    void (async () => {
+      if (formerUserId) await clearApiCache(formerUserId);
+      window.location.reload();
+    })();
   };
 
   const handleLogout = async () => {

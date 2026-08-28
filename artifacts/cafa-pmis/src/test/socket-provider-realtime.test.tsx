@@ -258,6 +258,30 @@ describe("SocketProvider realtime convergence", () => {
     });
   });
 
+  it("fails closed and hides children when authorization refresh is unavailable", async () => {
+    const client = makeClient();
+    const projects = getListProjectsQueryKey({ status: "active" });
+    client.setQueryData(["auth", "me"], {
+      user: { id: 44, role: "technical_coordinator", stateId: null, sector: "Health", status: "active" },
+      permissions: ["reports.view"],
+    });
+    client.setQueryData(projects, { cached: "protected" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "temporarily_unavailable" }),
+    }));
+    const rendered = renderProvider(client);
+
+    window.dispatchEvent(new Event("cafa:authorization-changed"));
+
+    await waitFor(() => {
+      expect(client.getQueryData(projects)).toBeUndefined();
+      expect(rendered.queryByText("realtime client")).toBeNull();
+      expect(rendered.getByRole("status")).toHaveTextContent("Refreshing access");
+    });
+  });
+
   it("cannot restore auth data after the provider unmounts during a delayed identity refresh", async () => {
     let resolveIdentity!: (response: Response) => void;
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => {
@@ -313,5 +337,33 @@ describe("SocketProvider realtime convergence", () => {
       headers: { "Content-Type": "application/json" },
     }));
     await waitFor(() => expect(client.getQueryData(["auth", "me"])).toEqual(initialAuth));
+  });
+
+  it("prevents an obsolete purge from erasing data populated by a newer refresh", async () => {
+    let releaseFirstCancellation!: () => void;
+    const firstCancellation = new Promise<void>((resolve) => {
+      releaseFirstCancellation = resolve;
+    });
+    const client = makeClient();
+    vi.spyOn(client, "cancelQueries")
+      .mockImplementationOnce(() => firstCancellation)
+      .mockResolvedValue(undefined);
+    const projects = getListProjectsQueryKey({ status: "active" });
+    client.setQueryData(["auth", "me"], {
+      user: { id: 44, role: "program_manager", stateId: null, status: "active" },
+      permissions: ["projects.view"],
+    });
+    const rendered = renderProvider(client);
+
+    window.dispatchEvent(new Event("cafa:authorization-changed"));
+    window.dispatchEvent(new Event("cafa:authorization-changed"));
+    await waitFor(() => expect(rendered.getByText("realtime client")).toBeVisible());
+
+    client.setQueryData(projects, { populatedBy: "newer refresh" });
+    releaseFirstCancellation();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.getQueryData(projects)).toEqual({ populatedBy: "newer refresh" });
   });
 });

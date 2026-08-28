@@ -32,6 +32,7 @@ import {
   getGetUserEffectiveAccessQueryKey,
   getGetUserQueryKey,
   getGetUsersSummaryQueryKey,
+  getGetMeQueryKey,
   getListPlansQueryKey,
   getListProjectsQueryKey,
   getListReportsQueryKey,
@@ -39,6 +40,8 @@ import {
   getListUsersQueryKey,
 } from "@workspace/api-client-react";
 import { clearNotificationQueries, invalidateNotificationQueries } from "@/lib/notification-client";
+import { authorizationFingerprint, type AuthorizationContext } from "@/lib/authorization-context";
+import { clearApiCache } from "@/lib/offline/db";
 
 export type ConnectionStatus =
   | "connecting"
@@ -419,24 +422,6 @@ function removeEntityQueries(queryClient: QueryClient, entityType: OperationalEn
   }
 }
 
-type AuthSnapshot = {
-  user?: { id?: number; role?: string; stateId?: number | null; sector?: string | null; status?: string };
-  permissions?: string[];
-};
-
-function authFingerprint(value: AuthSnapshot | null | undefined): string | null {
-  const user = value?.user;
-  if (!user || !isPositiveInteger(user.id)) return null;
-  return JSON.stringify({
-    id: user.id,
-    role: user.role ?? null,
-    stateId: user.stateId ?? null,
-    sector: user.sector ?? null,
-    status: user.status ?? null,
-    permissions: [...(value?.permissions ?? [])].sort(),
-  });
-}
-
 type IdentityRefreshResult =
   | { status: "authenticated"; fingerprint: string }
   | { status: "unauthenticated"; fingerprint: null }
@@ -458,9 +443,9 @@ async function refreshAuthenticatedIdentity(
     if (!response.ok && response.status !== 401) {
       return { status: "unavailable", fingerprint: previous };
     }
-    const next = response.status === 401 ? null : await response.json() as AuthSnapshot;
+    const next = response.status === 401 ? null : await response.json() as AuthorizationContext;
     if (!isCurrent()) return { status: "unavailable", fingerprint: previous };
-    const nextFingerprint = authFingerprint(next);
+    const nextFingerprint = authorizationFingerprint(next);
     if (next !== null && nextFingerprint === null) {
       return { status: "unavailable", fingerprint: previous };
     }
@@ -468,9 +453,20 @@ async function refreshAuthenticatedIdentity(
     // former authority. Keep auth/me so AuthGate can redirect on 401.
     if (nextFingerprint !== previous) {
       clearNotificationQueries(queryClient);
+      await queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
+      if (!isCurrent()) return { status: "unavailable", fingerprint: previous };
       queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
+      const previousIdentity = queryClient.getQueryData<AuthorizationContext>(["auth", "me"]);
+      if (previousIdentity?.user?.id) {
+        // Browser storage cleanup must not suppress the authoritative auth
+        // result when IndexedDB is unavailable or already closing.
+        await clearApiCache(previousIdentity.user.id).catch(() => undefined);
+      }
+      if (!isCurrent()) return { status: "unavailable", fingerprint: previous };
     }
+    if (!isCurrent()) return { status: "unavailable", fingerprint: previous };
     queryClient.setQueryData(["auth", "me"], next);
+    queryClient.setQueryData(getGetMeQueryKey(), next);
     if (next === null) return { status: "unauthenticated", fingerprint: null };
     // The malformed-auth guard above establishes this narrowing for callers.
     return { status: "authenticated", fingerprint: nextFingerprint as string };
@@ -486,8 +482,9 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const socketRef = useRef<Socket | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [authorizationRefreshing, setAuthorizationRefreshing] = useState(false);
   const lastRevisionRef = useRef(new Map<string, number>());
-  const authRef = useRef<string | null>(authFingerprint(qc.getQueryData<AuthSnapshot>(["auth", "me"])));
+  const authRef = useRef<string | null>(authorizationFingerprint(qc.getQueryData<AuthorizationContext>(["auth", "me"])));
   const providerGenerationRef = useRef(0);
   const identityRefreshGenerationRef = useRef(0);
 
@@ -509,18 +506,57 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
     setSocket(s);
     setStatus("connecting");
 
-    const refreshIdentity = () => {
+    const purgeProtectedBrowserState = async (isCurrent: () => boolean) => {
+      clearNotificationQueries(qc);
+      const previousIdentity = qc.getQueryData<AuthorizationContext>(["auth", "me"]);
+      await qc.cancelQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
+      if (!isCurrent()) return false;
+      qc.removeQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
+      if (!isCurrent()) return false;
+      if (previousIdentity?.user?.id) {
+        await clearApiCache(previousIdentity.user.id).catch(() => undefined);
+        if (!isCurrent()) return false;
+      }
+      return true;
+    };
+    const refreshIdentity = (failClosed = false): Promise<IdentityRefreshResult & { current: boolean }> => {
       const refreshGeneration = ++identityRefreshGenerationRef.current;
-      return refreshAuthenticatedIdentity(
-        qc,
-        authRef.current,
-        abortController.signal,
-        () => (
+      const isCurrent = () => (
           !abortController.signal.aborted
           && providerGenerationRef.current === providerGeneration
           && identityRefreshGenerationRef.current === refreshGeneration
-        ),
       );
+      if (failClosed) setAuthorizationRefreshing(true);
+      return (async () => {
+        if (failClosed) {
+          const purged = await purgeProtectedBrowserState(isCurrent);
+          if (!purged || !isCurrent()) {
+            return { status: "unavailable", fingerprint: authRef.current, current: false };
+          }
+        }
+        const result = await refreshAuthenticatedIdentity(
+          qc,
+          authRef.current,
+          abortController.signal,
+          isCurrent,
+        );
+        if (isCurrent() && result.status !== "unavailable") {
+          authRef.current = result.fingerprint;
+          setAuthorizationRefreshing(false);
+        }
+        return { ...result, current: isCurrent() };
+      })();
+    };
+    // The browser session manager uses the same signal as the realtime
+    // authorization_changed event when a local session transition is detected.
+    // Keeping this on the canonical refresh function makes the boundary
+    // deterministic for routed browser certification without exposing data or
+    // creating a second authorization model.
+    const onAuthorizationChanged = () => {
+      void refreshIdentity(true).then((result) => {
+        if (!result.current) return;
+        if (result.status === "unauthenticated") s.disconnect();
+      });
     };
 
     const onConnect = () => {
@@ -528,7 +564,7 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
       // `connect` fires for the initial handshake and every reconnect. This
       // catches up active pages after a gap without assuming event delivery.
       void refreshIdentity().then((result) => {
-        authRef.current = result.fingerprint;
+        if (!result.current) return;
         if (result.status === "unauthenticated") {
           s.disconnect();
           return;
@@ -545,17 +581,13 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
       // Revalidate identity immediately; ordinary transport loss remains
       // separate from the PWA connectivity state and its replay policy.
       if (reason === "io server disconnect") {
-        void refreshIdentity().then((result) => {
-          authRef.current = result.fingerprint;
-        });
+        void refreshIdentity(true);
       }
     };
     const onConnectError = (error: Error) => {
       if (error.message === "unauthorized" || error.message === "auth_error") {
         setStatus("disconnected");
-        void refreshIdentity().then((result) => {
-          authRef.current = result.fingerprint;
-        });
+        void refreshIdentity(true);
         s.disconnect();
         return;
       }
@@ -581,10 +613,7 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
         return;
       }
       if (event.entityType === "user" && event.entityId === userId && event.action === "authorization_changed") {
-        void refreshIdentity().then((result) => {
-          authRef.current = result.fingerprint;
-          if (result.status === "unauthenticated") s.disconnect();
-        });
+        onAuthorizationChanged();
         return;
       }
       const revisionKey = `${event.entityType}:${event.entityId}`;
@@ -609,9 +638,7 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
       if (!isObject(value) || value.allowed !== false || !isPositiveInteger(value.entityId)) return;
       if (typeof value.entityType !== "string" || !ENTITY_TYPES.has(value.entityType as OperationalEntityType)) return;
       removeEntityQueries(qc, value.entityType as OperationalEntityType, value.entityId);
-      void refreshIdentity().then((result) => {
-        authRef.current = result.fingerprint;
-      });
+      void refreshIdentity();
     };
 
     s.on("connect", onConnect);
@@ -626,8 +653,10 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
     s.on("conversation:updated", onConversationChange);
     s.on("conversation:personal", onConversationChange);
     s.on("record:access", onRecordAccess);
+    window.addEventListener("cafa:authorization-changed", onAuthorizationChanged);
 
     return () => {
+      window.removeEventListener("cafa:authorization-changed", onAuthorizationChanged);
       abortController.abort();
       // Fence synthetic/ignored AbortSignal responses and any overlapping
       // reconnect refresh from writing into a later identity's QueryClient.
@@ -653,6 +682,18 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
       setStatus("disconnected");
     };
   }, [qc, userId]);
+
+  if (authorizationRefreshing) {
+    return createElement(
+      "div",
+      {
+        role: "status",
+        "aria-live": "polite",
+        className: "min-h-screen flex items-center justify-center text-muted-foreground",
+      },
+      "Refreshing access…",
+    );
+  }
 
   return createElement(SocketContext.Provider, { value: { socket, status } }, children);
 }

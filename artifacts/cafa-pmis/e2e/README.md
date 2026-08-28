@@ -18,6 +18,24 @@ pnpm test:offline-browser
 Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` when the environment provides Chromium
 through the system package manager rather than Playwright's managed browser.
 
+## HQ snapshot authorization boundary
+
+The HQ snapshot browser regression uses isolated network fixtures and does not
+mutate application data. It keeps the SPA mounted while the authenticated
+authorization scope changes, exercises the same refresh signal as realtime
+session convergence, and checks direct/tampered/history/refresh paths:
+
+```sh
+E2E_BASE_URL=https://<routed-development-url> \
+E2E_HQ_SNAPSHOT_MOCKED=true \
+PLAYWRIGHT_CHROMIUM_EXECUTABLE=<system-chromium> \
+pnpm exec playwright test e2e/hq-snapshot-browser-access.spec.ts \
+  --config playwright.offline.config.ts
+```
+
+This mocked browser suite complements, rather than replaces, the API
+`reportAuth` tests that prove the server-side role and sector boundary.
+
 ## Certification preflight
 
 The production certification flag is a mandatory release gate, not a test
