@@ -1606,6 +1606,18 @@ export const ListProjectsResponseItem = zod.object({
     .describe(
       "Scheduled PMR reporting cycle — null when not configured (historical projects)",
     ),
+  reportingStartDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "First day covered by the project's reporting configuration; null when not configured",
+    ),
+  reportingEndDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Last day covered by the project's reporting configuration; null when not configured",
+    ),
 });
 export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
 
@@ -1698,6 +1710,18 @@ export const CreateProjectBody = zod.object({
     .optional()
     .describe(
       "Scheduled PMR reporting cycle. Required for new projects (enforced at POST); nullable on update for historical projects.",
+    ),
+  reportingStartDate: zod.coerce
+    .date()
+    .optional()
+    .describe(
+      "First day covered by the reporting configuration. It may precede the implementation period.",
+    ),
+  reportingEndDate: zod.coerce
+    .date()
+    .optional()
+    .describe(
+      "Last day covered by the reporting configuration. Must be on or after reportingStartDate.",
     ),
   stateIds: zod.array(zod.number()),
   localities: zod
@@ -1915,6 +1939,18 @@ export const MergeProjectDataResponse = zod.object({
     .describe(
       "Scheduled PMR reporting cycle — null when not configured (historical projects)",
     ),
+  reportingStartDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "First day covered by the project's reporting configuration; null when not configured",
+    ),
+  reportingEndDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Last day covered by the project's reporting configuration; null when not configured",
+    ),
 });
 
 export const GetProjectParams = zod.object({
@@ -1994,6 +2030,18 @@ export const GetProjectResponse = zod.object({
       .optional()
       .describe(
         "Scheduled PMR reporting cycle — null when not configured (historical projects)",
+      ),
+    reportingStartDate: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "First day covered by the reporting configuration; null when not configured",
+      ),
+    reportingEndDate: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Last day covered by the reporting configuration; null when not configured",
       ),
     stateIds: zod
       .array(zod.number())
@@ -2337,6 +2385,35 @@ export const GetProjectResponse = zod.object({
 });
 
 /**
+ * @summary Update only the canonical reporting coverage of a non-draft Project
+ */
+
+export const UpdateProjectReportingCoverageParams = zod.object({
+  projectId: zod.coerce.number().min(1),
+});
+
+export const UpdateProjectReportingCoverageBody = zod.object({
+  reportingStartDate: zod.coerce.date(),
+  reportingEndDate: zod.coerce.date(),
+  expectedReportingStartDate: zod.coerce
+    .date()
+    .describe(
+      "Current persisted start date used as an optimistic-concurrency precondition.",
+    ),
+  expectedReportingEndDate: zod.coerce
+    .date()
+    .describe(
+      "Current persisted end date used as an optimistic-concurrency precondition.",
+    ),
+});
+
+export const UpdateProjectReportingCoverageResponse = zod.object({
+  projectId: zod.number(),
+  reportingStartDate: zod.coerce.date(),
+  reportingEndDate: zod.coerce.date(),
+});
+
+/**
  * Read-only administrator scan. It reports only unlinked values classified as confirmed placeholders and separately identifies the explicit Unknown missing-donor marker; legitimate registered donor names are excluded.
 
  * @summary Scan submitted, approved, and active projects for confirmed placeholder donors
@@ -2622,6 +2699,18 @@ export const TransitionProjectResponse = zod.object({
     .optional()
     .describe(
       "Scheduled PMR reporting cycle — null when not configured (historical projects)",
+    ),
+  reportingStartDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "First day covered by the reporting configuration; null when not configured",
+    ),
+  reportingEndDate: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Last day covered by the reporting configuration; null when not configured",
     ),
   stateIds: zod
     .array(zod.number())
@@ -3080,6 +3169,52 @@ export const UpdateRiskResponse = zod.object({
   followUpDate: zod.string().nullish(),
   identifiedAt: zod.string().optional(),
   updatedAt: zod.string().optional(),
+});
+
+/**
+ * @summary Run an idempotent monthly reporting evaluation or aggregate-only dry run
+ */
+export const evaluateMonthlyReportingDeadlinesBodyDryRunDefault = false;
+
+export const EvaluateMonthlyReportingDeadlinesBody = zod.object({
+  dryRun: zod
+    .boolean()
+    .default(evaluateMonthlyReportingDeadlinesBodyDryRunDefault),
+});
+
+export const evaluateMonthlyReportingDeadlinesResponseEvaluatedMin = 0;
+
+export const evaluateMonthlyReportingDeadlinesResponseRecipientsMin = 0;
+
+export const evaluateMonthlyReportingDeadlinesResponseDeliveredMin = 0;
+
+export const evaluateMonthlyReportingDeadlinesResponseStageDayMax = 31;
+
+export const evaluateMonthlyReportingDeadlinesResponseByStatusMinOne = 0;
+
+export const EvaluateMonthlyReportingDeadlinesResponse = zod.object({
+  evaluated: zod
+    .number()
+    .min(evaluateMonthlyReportingDeadlinesResponseEvaluatedMin),
+  recipients: zod
+    .number()
+    .min(evaluateMonthlyReportingDeadlinesResponseRecipientsMin)
+    .optional(),
+  delivered: zod
+    .number()
+    .min(evaluateMonthlyReportingDeadlinesResponseDeliveredMin),
+  stageDay: zod
+    .number()
+    .min(1)
+    .max(evaluateMonthlyReportingDeadlinesResponseStageDayMax)
+    .optional(),
+  byStatus: zod
+    .record(
+      zod.string(),
+      zod.number().min(evaluateMonthlyReportingDeadlinesResponseByStatusMinOne),
+    )
+    .optional(),
+  skipped: zod.string().nullish(),
 });
 
 export const listReportsQueryPageSizeMax = 200;
@@ -4124,6 +4259,18 @@ export const GetPendingApprovalsResponse = zod.object({
         .optional()
         .describe(
           "Scheduled PMR reporting cycle — null when not configured (historical projects)",
+        ),
+      reportingStartDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "First day covered by the project's reporting configuration; null when not configured",
+        ),
+      reportingEndDate: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Last day covered by the project's reporting configuration; null when not configured",
         ),
     }),
   ),

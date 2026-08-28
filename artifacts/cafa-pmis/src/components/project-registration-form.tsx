@@ -171,7 +171,7 @@ const TAB_FIELDS: Record<TabId, string[]> = {
   basic:     ["title", "description", "classification", "sectors", "reportingFrequency"],
   location:  ["hasHqOperations", "stateIds", "localities", "beneficiariesMale", "beneficiariesFemale", "beneficiariesBoys", "beneficiariesGirls", "beneficiariesTarget"],
   donor:     ["donorId", "donor", "newDonorName", "agreementNumber"],
-  timeline:  ["startDate", "endDate", "budgetTotal", "outputs"],
+  timeline:  ["startDate", "endDate", "reportingStartDate", "reportingEndDate", "budgetTotal", "outputs"],
   team:      ["assignments"],
   documents: ["documents"],
   review:    [],
@@ -256,6 +256,8 @@ const schema = z.object({
   internalNotes: z.string().optional(),
   startDate: z.string().min(1, "Required"),
   endDate: z.string().min(1, "Required"),
+  reportingStartDate: z.string().min(1, "Reporting start date is required"),
+  reportingEndDate: z.string().min(1, "Reporting end date is required"),
   budgetTotal: z.coerce.number().min(0, "Required"),
   directCost: z.coerce.number().optional(),
   indirectCost: z.coerce.number().optional(),
@@ -290,6 +292,13 @@ const schema = z.object({
       code: z.ZodIssueCode.custom,
       message: "Select at least one Operational Location: tick HQ or one or more states.",
       path: ["stateIds"],
+    });
+  }
+  if (data.reportingStartDate > data.reportingEndDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Reporting end date must be on or after reporting start date",
+      path: ["reportingEndDate"],
     });
   }
 });
@@ -415,6 +424,8 @@ function mapProjectToFormValues(
     internalNotes: String(project.internalNotes ?? ""),
     startDate: normDate(project.startDate),
     endDate: normDate(project.endDate),
+    reportingStartDate: normDate(project.reportingStartDate) || normDate(project.startDate),
+    reportingEndDate: normDate(project.reportingEndDate) || normDate(project.endDate),
     budgetTotal: Number(project.budgetTotal ?? 0),
     directCost: Number(project.directCost ?? 0),
     indirectCost: Number(project.indirectCost ?? 0),
@@ -1521,6 +1532,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   const editLoadedRef = useRef(false);
   // Guards the duplicate-check debounce while form.reset() is populating edit data.
   const isInitialisingRef = useRef(false);
+  const reportingCoverageCustomisedRef = useRef(false);
   const patchProject = usePatchProject();
 
   const states = statesData ?? [];
@@ -1546,6 +1558,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
       internalNotes: "",
       startDate: "",
       endDate: "",
+      reportingStartDate: "",
+      reportingEndDate: "",
       budgetTotal: 0,
       directCost: undefined,
       indirectCost: undefined,
@@ -1594,6 +1608,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
       internalNotes: operationalProjectDraft.internalNotes,
       startDate: operationalProjectDraft.startDate,
       endDate: operationalProjectDraft.endDate,
+      reportingStartDate: operationalProjectDraft.reportingStartDate,
+      reportingEndDate: operationalProjectDraft.reportingEndDate,
       hasHqOperations: operationalProjectDraft.hasHqOperations,
       reportingFrequency: operationalProjectDraft.reportingFrequency,
       stateIds: operationalProjectDraft.stateIds,
@@ -1646,6 +1662,23 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   const { control, watch } = form;
   const projectStart = watch("startDate");
   const projectEnd = watch("endDate");
+  const previousImplementationDates = useRef({ start: projectStart, end: projectEnd });
+  useEffect(() => {
+    const previous = previousImplementationDates.current;
+    const reportingStart = form.getValues("reportingStartDate");
+    const reportingEnd = form.getValues("reportingEndDate");
+    if (
+      !reportingCoverageCustomisedRef.current
+      && ((reportingStart && reportingStart !== previous.start) || (reportingEnd && reportingEnd !== previous.end))
+    ) {
+      reportingCoverageCustomisedRef.current = true;
+    }
+    if (!reportingCoverageCustomisedRef.current) {
+      form.setValue("reportingStartDate", projectStart, { shouldValidate: true });
+      form.setValue("reportingEndDate", projectEnd, { shouldValidate: true });
+    }
+    previousImplementationDates.current = { start: projectStart, end: projectEnd };
+  }, [form, projectStart, projectEnd]);
   const selectedStateIds = watch("stateIds");
   const hasHqOpsValue = watch("hasHqOperations");
   const freeLocalities = watch("localities");
@@ -1701,6 +1734,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
     // Block duplicate detection while form.reset() fires watchers (700ms debounce
     // + 300ms buffer = 1000ms). Cleared after that window so user changes still work.
     isInitialisingRef.current = true;
+    reportingCoverageCustomisedRef.current =
+      mapped.reportingStartDate !== mapped.startDate || mapped.reportingEndDate !== mapped.endDate;
     form.reset(mapped);
     editLoadedRef.current = true;
     const t = setTimeout(() => { isInitialisingRef.current = false; }, 1000);
@@ -1744,7 +1779,21 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   // ── Tab navigation ─────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>("basic");
   const activeTabIndex = TABS.findIndex(t => t.id === activeTab);
-  const goToNextTab = () => setActiveTab(TABS[Math.min(activeTabIndex + 1, TABS.length - 1)].id);
+  const goToNextTab = () => {
+    if (activeTab === "timeline") {
+      const reportingStart = form.getValues("reportingStartDate");
+      const reportingEnd = form.getValues("reportingEndDate");
+      if (reportingStart && reportingEnd && reportingStart > reportingEnd) {
+        form.setError("reportingEndDate", {
+          type: "validate",
+          message: t("form.validation.reportingCoverageOrder"),
+        }, { shouldFocus: true });
+        return;
+      }
+      form.clearErrors("reportingEndDate");
+    }
+    setActiveTab(TABS[Math.min(activeTabIndex + 1, TABS.length - 1)].id);
+  };
   const goToPrevTab = () => setActiveTab(TABS[Math.max(activeTabIndex - 1, 0)].id);
 
   if (!open) return null;
@@ -1907,6 +1956,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
           internalNotes: values.internalNotes || undefined,
           startDate: values.startDate,
           endDate: values.endDate,
+          reportingStartDate: values.reportingStartDate,
+          reportingEndDate: values.reportingEndDate,
           budgetTotal: values.budgetTotal,
           directCost: values.directCost,
           indirectCost: values.indirectCost,
@@ -1999,6 +2050,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
           internalNotes: values.internalNotes || undefined,
           startDate: values.startDate,
           endDate: values.endDate,
+          reportingStartDate: values.reportingStartDate,
+          reportingEndDate: values.reportingEndDate,
           budgetTotal: values.budgetTotal,
           directCost: values.directCost,
           indirectCost: values.indirectCost,
@@ -2158,6 +2211,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
         internalNotes: values.internalNotes || undefined,
         startDate: values.startDate,
         endDate: values.endDate,
+        reportingStartDate: values.reportingStartDate,
+        reportingEndDate: values.reportingEndDate,
         budgetTotal: values.budgetTotal,
         directCost: values.directCost,
         indirectCost: values.indirectCost,
@@ -2651,6 +2706,34 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
                 </div>
               </div>
               <div>
+                <SectionHeading
+                  title={t("form.timeline.reportingConfiguration")}
+                  description={t("form.timeline.reportingConfigurationDescription")}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-sm">
+                  <FormField control={control} name="reportingStartDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("form.timeline.reportingStartDate")} <span className="text-destructive">*</span></FormLabel>
+                      <FormControl><Input type="date" {...field} onChange={(event) => {
+                        reportingCoverageCustomisedRef.current = true;
+                        field.onChange(event);
+                      }} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={control} name="reportingEndDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("form.timeline.reportingEndDate")} <span className="text-destructive">*</span></FormLabel>
+                      <FormControl><Input type="date" {...field} onChange={(event) => {
+                        reportingCoverageCustomisedRef.current = true;
+                        field.onChange(event);
+                      }} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              </div>
+              <div>
                 <SectionHeading title={t("form.timeline.funding")} />
                 <div className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -2896,6 +2979,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
                   <p className="text-xs font-semibold text-muted-foreground mb-2 pb-1.5 border-b">{t("form.review.timelineBudget")}</p>
                   <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
                     <div><dt className="text-xs text-muted-foreground">{t("form.review.implementationPeriod")}</dt><dd>{[watch("startDate"), watch("endDate")].filter(Boolean).join(" – ") || "—"}</dd></div>
+                    <div><dt className="text-xs text-muted-foreground">{t("form.review.reportingPeriod")}</dt><dd>{[watch("reportingStartDate"), watch("reportingEndDate")].filter(Boolean).join(" – ") || "—"}</dd></div>
                     <div><dt className="text-xs text-muted-foreground">{t("form.review.totalBudget")}</dt><dd className="font-medium">{watch("budgetTotal") ? new Intl.NumberFormat("en-US", { style: "currency", currency: watch("currency") || "USD", maximumFractionDigits: 0 }).format(Number(watch("budgetTotal"))) : "—"}</dd></div>
                     <div><dt className="text-xs text-muted-foreground">{t("form.review.outputsDefined")}</dt><dd>{outputs.fields.length}</dd></div>
                   </dl>

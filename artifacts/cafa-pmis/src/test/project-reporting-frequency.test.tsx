@@ -317,3 +317,21 @@ describe("RFREQ-DISP — project detail frequency display", () => {
     expect(src).toMatch(/projectReportingFrequency=/);
   });
 });
+
+describe("Reporting coverage contract", () => {
+  it("permits coverage outside implementation while retaining strict date ordering and create/edit payload fields", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(
+      path.resolve(process.cwd(), "src/components/project-registration-form.tsx"),
+      "utf8",
+    );
+    expect(src).toContain('reportingStartDate: z.string().min(1');
+    expect(src).toContain('reportingEndDate: z.string().min(1');
+    expect(src).toContain("Reporting end date must be on or after reporting start date");
+    expect(src).not.toContain("must fall within the implementation period");
+    expect(src).toContain("reportingCoverageCustomisedRef");
+    expect((src.match(/reportingStartDate: values\.reportingStartDate/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect((src.match(/reportingEndDate: values\.reportingEndDate/g) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+});

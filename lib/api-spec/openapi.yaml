@@ -896,6 +896,51 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ProjectDetail" }
 
+  /projects/{projectId}/reporting-coverage:
+    patch:
+      operationId: updateProjectReportingCoverage
+      tags: [projects]
+      summary: Update only the canonical reporting coverage of a non-draft Project
+      parameters:
+        - { name: projectId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reportingStartDate
+                - reportingEndDate
+                - expectedReportingStartDate
+                - expectedReportingEndDate
+              properties:
+                reportingStartDate: { type: string, format: date }
+                reportingEndDate: { type: string, format: date }
+                expectedReportingStartDate:
+                  type: string
+                  format: date
+                  description: Current persisted start date used as an optimistic-concurrency precondition.
+                expectedReportingEndDate:
+                  type: string
+                  format: date
+                  description: Current persisted end date used as an optimistic-concurrency precondition.
+      responses:
+        "200":
+          description: Reporting coverage updated and audited
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projectId, reportingStartDate, reportingEndDate]
+                properties:
+                  projectId: { type: integer }
+                  reportingStartDate: { type: string, format: date }
+                  reportingEndDate: { type: string, format: date }
+        "403": { description: Project permission or scope denied }
+        "409": { description: "Draft Projects use the normal Project editor, or the reporting coverage changed since this edit began" }
+        "422": { description: Invalid or inverted reporting coverage }
+
   /projects/donor-integrity-scan:
     get:
       operationId: scanProjectDonorIntegrity
@@ -1178,6 +1223,39 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Risk" }
+
+  /reports/monthly-reporting/evaluate:
+    post:
+      operationId: evaluateMonthlyReportingDeadlines
+      tags: [reports]
+      summary: Run an idempotent monthly reporting evaluation or aggregate-only dry run
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dryRun: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Safe aggregate evaluation result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [evaluated, delivered]
+                properties:
+                  evaluated: { type: integer, minimum: 0 }
+                  recipients: { type: integer, minimum: 0 }
+                  delivered: { type: integer, minimum: 0 }
+                  stageDay: { type: integer, minimum: 1, maximum: 31 }
+                  byStatus:
+                    type: object
+                    additionalProperties: { type: integer, minimum: 0 }
+                  skipped: { type: ["string", "null"] }
+        "403": { description: Final report approval permission required }
+        "422": { description: Invalid dry-run input }
 
   /reports:
     get:
@@ -3085,6 +3163,14 @@ components:
             - $ref: "#/components/schemas/ProjectReportingFrequency"
             - type: "null"
           description: "Scheduled PMR reporting cycle — null when not configured (historical projects)"
+        reportingStartDate:
+          type: ["string", "null"]
+          format: date
+          description: "First day covered by the project's reporting configuration; null when not configured"
+        reportingEndDate:
+          type: ["string", "null"]
+          format: date
+          description: "Last day covered by the project's reporting configuration; null when not configured"
 
     ProjectReportingFrequency:
       type: string
@@ -3166,6 +3252,14 @@ components:
             - $ref: "#/components/schemas/ProjectReportingFrequency"
             - type: "null"
           description: "Scheduled PMR reporting cycle. Required for new projects (enforced at POST); nullable on update for historical projects."
+        reportingStartDate:
+          type: string
+          format: date
+          description: "First day covered by the reporting configuration. It may precede the implementation period."
+        reportingEndDate:
+          type: string
+          format: date
+          description: "Last day covered by the reporting configuration. Must be on or after reportingStartDate."
         stateIds:
           type: array
           items: { type: integer }
@@ -3375,6 +3469,14 @@ components:
             - $ref: "#/components/schemas/ProjectReportingFrequency"
             - type: "null"
           description: "Scheduled PMR reporting cycle — null when not configured (historical projects)"
+        reportingStartDate:
+          type: ["string", "null"]
+          format: date
+          description: "First day covered by the reporting configuration; null when not configured"
+        reportingEndDate:
+          type: ["string", "null"]
+          format: date
+          description: "Last day covered by the reporting configuration; null when not configured"
         stateIds:
           type: array
           items: { type: integer }

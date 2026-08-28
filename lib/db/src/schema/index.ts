@@ -96,6 +96,9 @@ export const projectsTable = pgTable("projects", {
   description: text("description"),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
+  // Authoritative inclusive interval used to determine monthly reporting obligations.
+  reportingStartDate: date("reporting_start_date").notNull(),
+  reportingEndDate: date("reporting_end_date").notNull(),
   budgetTotal: numeric("budget_total", { precision: 14, scale: 2 }).notNull().default("0"),
   directCost: numeric("direct_cost", { precision: 14, scale: 2 }).default("0"),
   indirectCost: numeric("indirect_cost", { precision: 14, scale: 2 }).default("0"),
@@ -540,6 +543,40 @@ export const notificationsTable = pgTable("notifications", {
   readAt: timestamp("read_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Durable per-channel lease/retry ledger for monthly reporting reminders. */
+export const monthlyReportReminderDeliveriesTable = pgTable("monthly_report_reminder_deliveries", {
+  id: serial("id").primaryKey(),
+  obligationKey: text("obligation_key").notNull(),
+  reportType: text("report_type").notNull(),
+  reportingYear: integer("reporting_year").notNull(),
+  reportingMonth: integer("reporting_month").notNull(),
+  scopeKey: text("scope_key").notNull(),
+  recipientUserId: integer("recipient_user_id").notNull().references(() => usersTable.id, { onDelete: "restrict" }),
+  channel: text("channel").notNull(),
+  stageDay: integer("stage_day").notNull(),
+  status: text("status").notNull().default("pending"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  leaseToken: text("lease_token"),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  resultMetadata: jsonb("result_metadata"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  logicalIdentity: uniqueIndex("monthly_report_reminder_deliveries_identity_idx")
+    .on(
+      table.reportType,
+      table.reportingYear,
+      table.reportingMonth,
+      table.scopeKey,
+      table.recipientUserId,
+      table.stageDay,
+      table.channel,
+    ),
+}));
 
 /**
  * One immutable, source-derived event claim per recipient. Kept separate from

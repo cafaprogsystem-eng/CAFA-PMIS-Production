@@ -39,6 +39,8 @@ import { verifyUploadToken, UploadTokenError } from "../lib/uploadToken";
 import { logger } from "../lib/logger";
 import { ObjectStorageService, ObjectNotFoundError, deleteStorageObjectSafely } from "../lib/objectStorage";
 import { isStorageDeleteSafeForRecord, partitionSafeStoragePathsForReport } from "../lib/evidenceOwnership";
+import { projectCoverageOverlapsMonth } from "../lib/project-reporting-coverage";
+import { evaluateMonthlyReportingDeadlines } from "../lib/monthly-reporting-deadline";
 
 const objectStorageService = new ObjectStorageService();
 
@@ -347,6 +349,19 @@ async function withHistory(rows: unknown[]) {
 // ── Router ────────────────────────────────────────────────────────────────────
 
 const router: IRouter = Router();
+
+router.post("/reports/monthly-reporting/evaluate", requirePerm("reports.approve.final"), async (req, res, next) => {
+  try {
+    const dryRun = req.body?.dryRun === true;
+    if (req.body?.dryRun !== undefined && typeof req.body.dryRun !== "boolean") {
+      res.status(422).json({ error: "dryRun must be boolean" });
+      return;
+    }
+    res.json(await evaluateMonthlyReportingDeadlines(new Date(), undefined, dryRun));
+  } catch (error) {
+    next(error);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // GET /reports — List reports
@@ -1539,8 +1554,15 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
       // Load the linked project and read its authoritative primary sector and management level.
       // Exclude soft-deleted projects (deleted_at IS NOT NULL) — they are unavailable in the
       // Projects module and may not be used as a PMR location basis.
-      const projectRow = await pool.query<{ id: number; sector: string | null; managementLevel: string | null; hasHqOperations: boolean }>(
-        `SELECT id, sector, management_level AS "managementLevel", has_hq_operations AS "hasHqOperations" FROM projects WHERE id = $1 AND deleted_at IS NULL`,
+      const projectRow = await pool.query<{
+        id: number; sector: string | null; managementLevel: string | null; hasHqOperations: boolean;
+        reportingStartDate: string; reportingEndDate: string;
+      }>(
+        `SELECT id, sector, management_level AS "managementLevel",
+                has_hq_operations AS "hasHqOperations",
+                reporting_start_date::text AS "reportingStartDate",
+                reporting_end_date::text AS "reportingEndDate"
+           FROM projects WHERE id = $1 AND deleted_at IS NULL`,
         [body.projectId],
       );
       if (projectRow.rows.length === 0) {
@@ -1632,6 +1654,25 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
           });
           return;
         }
+      }
+      const coverage = projectRow.rows[0];
+      if (
+        body.kind === "monthly" &&
+        body.reportingYear &&
+        body.reportingMonth &&
+        coverage.reportingStartDate &&
+        coverage.reportingEndDate &&
+        !projectCoverageOverlapsMonth(
+          coverage.reportingStartDate,
+          coverage.reportingEndDate,
+          { year: body.reportingYear, month: body.reportingMonth },
+        )
+      ) {
+        res.status(422).json({
+          error: "project_reporting_coverage_outside_period",
+          message: "Monthly Project Reports must overlap the project's reporting coverage.",
+        });
+        return;
       }
     }
 

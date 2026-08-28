@@ -1,5 +1,5 @@
 import type { QueryKey, UseMutationOptions, UseMutationResult, UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
-import type { Activity, ActivityEntry, ArchiveFileListResponse, AttachmentLifecycleResult, AttachmentReconciliationActionResult, AttachmentReconciliationDispositionInput, AttachmentReconciliationListResponse, AttachmentReconciliationRecoveryInput, AttachmentReconciliationReport, AttachmentUploadDescriptor, AttachmentUploadDescriptorRequest, AttachmentUploadFinalizationRequest, AuditLogPage, BeneficiariesBreakdown, Beneficiary, BeneficiaryInput, CanonicalAttachment, CanonicalAttachmentList, ChangePassword200, ChangePasswordInput, CheckProjectDuplicateParams, CheckReportDuplicateParams, ConsolidatedProjectReport, Conversation, ConversationInput, ConversationListPage, ConversationMedia, ConversationMemberInput, ConversationSummary, CurrentUser, DashboardAgenda, DashboardNotificationsSummary, DashboardSummary, DeleteUser200, Donor, DonorInput, DonorPortfolioEntry, DuplicateCheckResult, ExportReportsParams, FocusedProjectDonorScan, FollowUpProject, GetAttachmentReconciliationReportParams, GetBeneficiariesBreakdownParams, GetConsolidatedProjectReportParams, GetConversationsUnreadCount200, GetDashboardPerformanceProjectsParams, GetDashboardSummaryParams, GetLegacyStorageEvidenceInventoryParams, GetPmrReportingCompletenessParams, GetSectorBudgetParams, GetStatePerformanceParams, GetVoiceNoteUrl200, HealthStatus, Indicator, InvitationListPage, InviteActionResponse, InviteResendInput, LateReport, LegacyStorageEvidenceInventory, ListArchiveFilesParams, ListAttachmentReconciliationEntriesParams, ListAuditLog400, ListAuditLogParams, ListBeneficiariesParams, ListConversationMessagesParams, ListConversationsParams, ListLocalitiesParams, ListNotificationsParams, ListPlansParams, ListProjectsParams, ListReportAuthors200, ListReportAuthorsParams, ListReportsParams, ListRisksParams, ListStatesParams, ListUserInvitationsParams, ListUsersParams, ListVoiceNotesParams, LocalityWithState, LoginInput, Logout200, Message, MessageDeleteInput, MessageEditInput, MessageHistoryPage, MessageInput, NotificationListPage, NotificationMutationResponse, OkResponse, PasswordResetInput, PasswordResetResponse, PendingApprovals, PerformanceScore, PlanDetail, PlanInput, PlanSummary, PlanningDashboard, PmrReportingCompleteness, ProfilePhotoCompleteInput, ProfilePhotoResponse, ProfilePhotoUploadDescriptor, ProfilePhotoUploadRequest, Project, ProjectBudget, ProjectBudgetPerformanceEntry, ProjectDetail, ProjectDocument, ProjectDocumentInput, ProjectDonorCorrection, ProjectDonorCorrectionInput, ProjectInput, ProjectMergeInput, ProjectPerformanceScore, ProjectStateAllocation, ProjectSummary, Reaction, ReactionInput, ReopenPlanBody, Report, ReportAggregates, ReportAttachment, ReportAttachmentInput, ReportDuplicateCheck, ReportInput, ReportPage, ReportStats, ReportsSummary, RetireDevelopmentTestProjectBody, Risk, RiskInput, RiskListResponse, RiskUpdate, SectorBudgetResponse, SectorPerformance, StateConflictError, StateInput, StateLifecycleInput, StateNotFoundError, StatePerformance, StateProfile, StateRecord, StateSnapshot, StateValidationError, SwitcherUser, UpdateProfileInput, UploadUrlRequest, UploadUrlResponse, UpsertProjectStateAllocationsBody, UserCreateResponse, UserDetail, UserDirectoryPage, UserEffectiveAccess, UserInput, UserProfile, UserStatusInput, UserStatusResponse, UserUpdate, UsersSummary, ValidationErrorResponse, VerificationResendResponse, VoiceNote, VoiceNoteInput, WorkflowTransitionInput } from "./api.schemas";
+import type { Activity, ActivityEntry, ArchiveFileListResponse, AttachmentLifecycleResult, AttachmentReconciliationActionResult, AttachmentReconciliationDispositionInput, AttachmentReconciliationListResponse, AttachmentReconciliationRecoveryInput, AttachmentReconciliationReport, AttachmentUploadDescriptor, AttachmentUploadDescriptorRequest, AttachmentUploadFinalizationRequest, AuditLogPage, BeneficiariesBreakdown, Beneficiary, BeneficiaryInput, CanonicalAttachment, CanonicalAttachmentList, ChangePassword200, ChangePasswordInput, CheckProjectDuplicateParams, CheckReportDuplicateParams, ConsolidatedProjectReport, Conversation, ConversationInput, ConversationListPage, ConversationMedia, ConversationMemberInput, ConversationSummary, CurrentUser, DashboardAgenda, DashboardNotificationsSummary, DashboardSummary, DeleteUser200, Donor, DonorInput, DonorPortfolioEntry, DuplicateCheckResult, EvaluateMonthlyReportingDeadlines200, EvaluateMonthlyReportingDeadlinesBody, ExportReportsParams, FocusedProjectDonorScan, FollowUpProject, GetAttachmentReconciliationReportParams, GetBeneficiariesBreakdownParams, GetConsolidatedProjectReportParams, GetConversationsUnreadCount200, GetDashboardPerformanceProjectsParams, GetDashboardSummaryParams, GetLegacyStorageEvidenceInventoryParams, GetPmrReportingCompletenessParams, GetSectorBudgetParams, GetStatePerformanceParams, GetVoiceNoteUrl200, HealthStatus, Indicator, InvitationListPage, InviteActionResponse, InviteResendInput, LateReport, LegacyStorageEvidenceInventory, ListArchiveFilesParams, ListAttachmentReconciliationEntriesParams, ListAuditLog400, ListAuditLogParams, ListBeneficiariesParams, ListConversationMessagesParams, ListConversationsParams, ListLocalitiesParams, ListNotificationsParams, ListPlansParams, ListProjectsParams, ListReportAuthors200, ListReportAuthorsParams, ListReportsParams, ListRisksParams, ListStatesParams, ListUserInvitationsParams, ListUsersParams, ListVoiceNotesParams, LocalityWithState, LoginInput, Logout200, Message, MessageDeleteInput, MessageEditInput, MessageHistoryPage, MessageInput, NotificationListPage, NotificationMutationResponse, OkResponse, PasswordResetInput, PasswordResetResponse, PendingApprovals, PerformanceScore, PlanDetail, PlanInput, PlanSummary, PlanningDashboard, PmrReportingCompleteness, ProfilePhotoCompleteInput, ProfilePhotoResponse, ProfilePhotoUploadDescriptor, ProfilePhotoUploadRequest, Project, ProjectBudget, ProjectBudgetPerformanceEntry, ProjectDetail, ProjectDocument, ProjectDocumentInput, ProjectDonorCorrection, ProjectDonorCorrectionInput, ProjectInput, ProjectMergeInput, ProjectPerformanceScore, ProjectStateAllocation, ProjectSummary, Reaction, ReactionInput, ReopenPlanBody, Report, ReportAggregates, ReportAttachment, ReportAttachmentInput, ReportDuplicateCheck, ReportInput, ReportPage, ReportStats, ReportsSummary, RetireDevelopmentTestProjectBody, Risk, RiskInput, RiskListResponse, RiskUpdate, SectorBudgetResponse, SectorPerformance, StateConflictError, StateInput, StateLifecycleInput, StateNotFoundError, StatePerformance, StateProfile, StateRecord, StateSnapshot, StateValidationError, SwitcherUser, UpdateProfileInput, UpdateProjectReportingCoverage200, UpdateProjectReportingCoverageBody, UploadUrlRequest, UploadUrlResponse, UpsertProjectStateAllocationsBody, UserCreateResponse, UserDetail, UserDirectoryPage, UserEffectiveAccess, UserInput, UserProfile, UserStatusInput, UserStatusResponse, UserUpdate, UsersSummary, ValidationErrorResponse, VerificationResendResponse, VoiceNote, VoiceNoteInput, WorkflowTransitionInput } from "./api.schemas";
 import { customFetch } from "../custom-fetch";
 import type { ErrorType, BodyType } from "../custom-fetch";
 type AwaitedInput<T> = PromiseLike<T> | T;
@@ -1099,6 +1099,37 @@ export declare function useGetProject<TData = Awaited<ReturnType<typeof getProje
 }): UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
 };
+export declare const getUpdateProjectReportingCoverageUrl: (projectId: number) => string;
+/**
+ * @summary Update only the canonical reporting coverage of a non-draft Project
+ */
+export declare const updateProjectReportingCoverage: (projectId: number, updateProjectReportingCoverageBody: UpdateProjectReportingCoverageBody, options?: RequestInit) => Promise<UpdateProjectReportingCoverage200>;
+export declare const getUpdateProjectReportingCoverageMutationOptions: <TError = ErrorType<void>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof updateProjectReportingCoverage>>, TError, {
+        projectId: number;
+        data: BodyType<UpdateProjectReportingCoverageBody>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof updateProjectReportingCoverage>>, TError, {
+    projectId: number;
+    data: BodyType<UpdateProjectReportingCoverageBody>;
+}, TContext>;
+export type UpdateProjectReportingCoverageMutationResult = NonNullable<Awaited<ReturnType<typeof updateProjectReportingCoverage>>>;
+export type UpdateProjectReportingCoverageMutationBody = BodyType<UpdateProjectReportingCoverageBody>;
+export type UpdateProjectReportingCoverageMutationError = ErrorType<void>;
+/**
+ * @summary Update only the canonical reporting coverage of a non-draft Project
+ */
+export declare const useUpdateProjectReportingCoverage: <TError = ErrorType<void>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof updateProjectReportingCoverage>>, TError, {
+        projectId: number;
+        data: BodyType<UpdateProjectReportingCoverageBody>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof updateProjectReportingCoverage>>, TError, {
+    projectId: number;
+    data: BodyType<UpdateProjectReportingCoverageBody>;
+}, TContext>;
 export declare const getScanProjectDonorIntegrityUrl: () => string;
 /**
  * Read-only administrator scan. It reports only unlinked values classified as confirmed placeholders and separately identifies the explicit Unknown missing-donor marker; legitimate registered donor names are excluded.
@@ -1432,6 +1463,33 @@ export declare const useUpdateRisk: <TError = ErrorType<unknown>, TContext = unk
 }) => UseMutationResult<Awaited<ReturnType<typeof updateRisk>>, TError, {
     riskId: number;
     data: BodyType<RiskUpdate>;
+}, TContext>;
+export declare const getEvaluateMonthlyReportingDeadlinesUrl: () => string;
+/**
+ * @summary Run an idempotent monthly reporting evaluation or aggregate-only dry run
+ */
+export declare const evaluateMonthlyReportingDeadlines: (evaluateMonthlyReportingDeadlinesBody?: EvaluateMonthlyReportingDeadlinesBody, options?: RequestInit) => Promise<EvaluateMonthlyReportingDeadlines200>;
+export declare const getEvaluateMonthlyReportingDeadlinesMutationOptions: <TError = ErrorType<void>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>, TError, {
+        data?: BodyType<EvaluateMonthlyReportingDeadlinesBody>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationOptions<Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>, TError, {
+    data?: BodyType<EvaluateMonthlyReportingDeadlinesBody>;
+}, TContext>;
+export type EvaluateMonthlyReportingDeadlinesMutationResult = NonNullable<Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>>;
+export type EvaluateMonthlyReportingDeadlinesMutationBody = BodyType<EvaluateMonthlyReportingDeadlinesBody> | undefined;
+export type EvaluateMonthlyReportingDeadlinesMutationError = ErrorType<void>;
+/**
+ * @summary Run an idempotent monthly reporting evaluation or aggregate-only dry run
+ */
+export declare const useEvaluateMonthlyReportingDeadlines: <TError = ErrorType<void>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>, TError, {
+        data?: BodyType<EvaluateMonthlyReportingDeadlinesBody>;
+    }, TContext>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseMutationResult<Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>, TError, {
+    data?: BodyType<EvaluateMonthlyReportingDeadlinesBody>;
 }, TContext>;
 export declare const getListReportsUrl: (params?: ListReportsParams) => string;
 export declare const listReports: (params?: ListReportsParams, options?: RequestInit) => Promise<ReportPage>;

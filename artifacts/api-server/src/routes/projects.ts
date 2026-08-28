@@ -135,6 +135,29 @@ function assertEffectiveSectorAllowedForProject(
 
 const router: IRouter = Router();
 
+function resolveReportingCoverage(
+  raw: Record<string, unknown>,
+  startDate: string,
+  endDate: string,
+): { start: string; end: string } | null {
+  const start = raw.reportingStartDate === undefined ? startDate : raw.reportingStartDate;
+  const end = raw.reportingEndDate === undefined ? endDate : raw.reportingEndDate;
+  if (typeof start !== "string" || typeof end !== "string") return null;
+  const parse = (value: string): number | null => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const [year, month, day] = value.split("-").map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return parsed.getUTCFullYear() === year &&
+      parsed.getUTCMonth() === month - 1 &&
+      parsed.getUTCDate() === day
+      ? parsed.valueOf()
+      : null;
+  };
+  const startAt = parse(start);
+  const endAt = parse(end);
+  return startAt !== null && endAt !== null && startAt <= endAt ? { start, end } : null;
+}
+
 // ── Donors ────────────────────────────────────────────────────────────────────
 
 // PRJ-036: donor reference data requires an explicit project-domain read permission.
@@ -468,6 +491,7 @@ const projectSummarySelect = `
          p.classification, p.donor,
          p.donor_id AS "donorId",
          p.start_date AS "startDate", p.end_date AS "endDate",
+         p.reporting_start_date AS "reportingStartDate", p.reporting_end_date AS "reportingEndDate",
          p.budget_total::float AS "budgetTotal",
          COALESCE((SELECT SUM(a.budget_spent)::float FROM activities a WHERE a.project_id = p.id), 0) AS "budgetSpent",
          p.beneficiaries_target AS "beneficiariesTarget",
@@ -496,6 +520,7 @@ const projectReturning = `
             signed_date AS "signedDate",
             internal_notes AS "internalNotes",
             description, start_date AS "startDate", end_date AS "endDate",
+            reporting_start_date AS "reportingStartDate", reporting_end_date AS "reportingEndDate",
             budget_total::float AS "budgetTotal",
             COALESCE(direct_cost::float, 0) AS "directCost",
             COALESCE(indirect_cost::float, 0) AS "indirectCost",
@@ -730,6 +755,11 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
   const client = await pool.connect();
   try {
     const body = CreateProjectBody.parse(req.body);
+    const reportingCoverage = resolveReportingCoverage(req.body as Record<string, unknown>, body.startDate, body.endDate);
+    if (!reportingCoverage) {
+      res.status(422).json({ error: "invalid_reporting_coverage", message: "Reporting coverage must be a valid inclusive date range." });
+      return;
+    }
     const donorValidation = validateDonorName(body.donor);
     if (!donorValidation.ok) {
       res.status(422).json({
@@ -969,7 +999,7 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
          code, title, status, sector, sectors, sub_sectors, assistance_modality, classification,
          donor, donor_id, agreement_number,
          agreement_start, agreement_end, signed_date, internal_notes,
-         description, start_date, end_date,
+         description, start_date, end_date, reporting_start_date, reporting_end_date,
          budget_total, direct_cost, indirect_cost, cafa_contribution, budget_version, currency,
          beneficiaries_target, beneficiaries_male, beneficiaries_female, beneficiaries_boys, beneficiaries_girls,
          activity_target, indicator_target,
@@ -980,13 +1010,13 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
        VALUES ($1, $2, 'draft', $3, $4::jsonb, $5::jsonb, $6, $7,
                $8, $9, $10,
                $11, $12, $13, $14,
-               $15, $16, $17,
-               $18, $19, $20, $21, $22, $23,
-               $24, $25, $26, $27, $28,
-               $29, $30,
-               $32, $31,
-               $33,
-               $34)
+               $15, $16, $17, $18, $19,
+               $20, $21, $22, $23, $24, $25,
+               $26, $27, $28, $29, $30,
+               $31, $32,
+               $34, $33,
+               $35,
+               $36)
        ${projectReturning}`,
       [
         code,
@@ -1006,6 +1036,8 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
         body.description,
         body.startDate,
         body.endDate,
+        reportingCoverage.start,
+        reportingCoverage.end,
         body.budgetTotal ?? 0,
         body.directCost ?? 0,
         body.indirectCost ?? 0,
@@ -1530,7 +1562,9 @@ router.get("/projects/:projectId", async (req, res, next) => {
               p.signed_date AS "signedDate",
               p.internal_notes AS "internalNotes",
               p.description,
-              p.start_date AS "startDate", p.end_date AS "endDate",
+               p.start_date AS "startDate", p.end_date AS "endDate",
+               p.reporting_start_date AS "reportingStartDate",
+               p.reporting_end_date AS "reportingEndDate",
               p.budget_total::float AS "budgetTotal",
               COALESCE(p.direct_cost::float, 0) AS "directCost",
               COALESCE(p.indirect_cost::float, 0) AS "indirectCost",
@@ -1651,6 +1685,82 @@ router.get("/projects/:projectId", async (req, res, next) => {
 
 // ── Update draft project ────────────────────────────────────────────────────
 
+router.patch("/projects/:projectId/reporting-coverage", async (req, res, next) => {
+  if (!req.currentUser) {
+    res.status(401).json({ error: "authentication_required" });
+    return;
+  }
+  if (!["executive_director", "program_manager", "super_admin"].includes(req.currentUser.role)) {
+    res.status(403).json({ error: "reporting_coverage_management_required" });
+    return;
+  }
+  const client = await pool.connect();
+  let transactionOpen = false;
+  try {
+    const projectId = Number(req.params.projectId as string);
+    if (!Number.isInteger(projectId) || projectId < 1) { res.status(400).json({ error: "invalid_project_id" }); return; }
+    await client.query("BEGIN");
+    transactionOpen = true;
+    const current = await client.query<{
+      status: string; sector: string | null; sectors: string[];
+      reportingStartDate: string; reportingEndDate: string;
+    }>(
+      `SELECT status, sector, COALESCE(sectors,'[]'::jsonb)::jsonb AS sectors,
+              reporting_start_date::text AS "reportingStartDate",
+              reporting_end_date::text AS "reportingEndDate"
+         FROM projects WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`,
+      [projectId],
+    );
+    const project = current.rows[0];
+    if (!project) { res.status(404).json({ error: "project_not_found" }); return; }
+    if (project.status === "draft") { res.status(409).json({ error: "reporting_coverage_requires_non_draft_project" }); return; }
+    const sectorGuard = assertEffectiveSectorAllowedForProject(req, [...new Set([...(project.sector ? [project.sector] : []), ...(project.sectors ?? [])])]);
+    if (!sectorGuard.ok) { res.status(sectorGuard.status).json(sectorGuard.body); return; }
+    const isStateRole = ["state_program_officer", "state_office_manager"].includes(req.currentUser!.role);
+    if (isStateRole) {
+      const scope = await client.query(`SELECT 1 FROM project_states WHERE project_id=$1 AND state_id=$2 LIMIT 1`, [projectId, req.currentUser!.stateId]);
+      if (!req.currentUser!.stateId || !scope.rows.length) { res.status(403).json({ error: "state_scope_forbidden" }); return; }
+    }
+    const raw = req.body as Record<string, unknown>;
+    const coverage = resolveReportingCoverage(raw, "__missing__", "__missing__");
+    if (
+      !coverage ||
+      raw.reportingStartDate === undefined ||
+      raw.reportingEndDate === undefined ||
+      typeof raw.expectedReportingStartDate !== "string" ||
+      typeof raw.expectedReportingEndDate !== "string"
+    ) {
+      res.status(422).json({ error: "invalid_reporting_coverage" }); return;
+    }
+    if (
+      raw.expectedReportingStartDate !== project.reportingStartDate ||
+      raw.expectedReportingEndDate !== project.reportingEndDate
+    ) {
+      res.status(409).json({ error: "reporting_coverage_conflict" });
+      return;
+    }
+    await client.query(`UPDATE projects SET reporting_start_date=$1, reporting_end_date=$2, updated_at=NOW() WHERE id=$3`,
+      [coverage.start, coverage.end, projectId]);
+    await client.query(
+      `INSERT INTO audit_log (user_id, action, module, entity_id, old_value, new_value)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [req.currentUser!.id, "reporting_coverage_updated", "projects", projectId,
+        JSON.stringify({ reportingStartDate: project.reportingStartDate, reportingEndDate: project.reportingEndDate }),
+        JSON.stringify({ reportingStartDate: coverage.start, reportingEndDate: coverage.end })],
+    );
+    await client.query("COMMIT");
+    transactionOpen = false;
+    res.json({ projectId, reportingStartDate: coverage.start, reportingEndDate: coverage.end });
+  } catch (error) {
+    if (transactionOpen) await client.query("ROLLBACK").catch(() => undefined);
+    transactionOpen = false;
+    next(error);
+  } finally {
+    if (transactionOpen) await client.query("ROLLBACK").catch(() => undefined);
+    client.release();
+  }
+});
+
 router.patch("/projects/:projectId", requirePerm("projects.update"), async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -1674,6 +1784,11 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
     if (!guard.ok) { client.release(); res.status(guard.status).json(guard.body); return; }
 
     const body = CreateProjectBody.parse(req.body);
+    const reportingCoverage = resolveReportingCoverage(req.body as Record<string, unknown>, body.startDate, body.endDate);
+    if (!reportingCoverage) {
+      res.status(422).json({ error: "invalid_reporting_coverage", message: "Reporting coverage must be a valid inclusive date range." });
+      return;
+    }
     const donorValidation = validateDonorName(body.donor);
     if (!donorValidation.ok) {
       res.status(422).json({
@@ -1912,7 +2027,7 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
          sub_sectors=$6::jsonb, assistance_modality=$7,
          donor=$8, donor_id=$9, agreement_number=$10,
          agreement_start=$11, agreement_end=$12, signed_date=$13, internal_notes=$14,
-         start_date=$15, end_date=$16,
+         start_date=$15, end_date=$16, reporting_start_date=$34, reporting_end_date=$35,
          budget_total=$17, direct_cost=$18, indirect_cost=$19,
          cafa_contribution=$20, budget_version=$21, currency=$22,
          beneficiaries_target=$23, beneficiaries_male=$24, beneficiaries_female=$25,
@@ -1921,7 +2036,7 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
          has_hq_operations=COALESCE($31, has_hq_operations),
          reporting_frequency=CASE WHEN $32::boolean THEN $33 ELSE reporting_frequency END,
          updated_at=NOW()
-       WHERE id=$30${baseRevision ? " AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $34::timestamptz)" : ""}`,
+       WHERE id=$30${baseRevision ? " AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $36::timestamptz)" : ""}`,
       [
         body.title, body.description, body.classification ?? null,
         primarySector, JSON.stringify(uniquePatchSectors),
@@ -1939,6 +2054,8 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
         hasHqOpsUpdate ?? null,
         freqProvided,
         freqPatchValue,
+        reportingCoverage.start,
+        reportingCoverage.end,
         ...(baseRevision ? [baseRevision] : []),
       ],
     );

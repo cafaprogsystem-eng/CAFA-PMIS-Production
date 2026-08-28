@@ -10,6 +10,8 @@ export type OutboundEmail = {
   kind: string;
   userId?: number | null;
   meta?: Record<string, unknown>;
+  /** Stable logical delivery identity for providers/transports that support deduplication. */
+  idempotencyKey?: string;
 };
 
 const EMAIL_ENABLED =
@@ -25,6 +27,27 @@ const SMTP_PORT = parseInt(process.env.SMTP_PORT ?? "587", 10);
 const SMTP_USER = process.env.SMTP_USER ?? "";
 const SMTP_PASS = process.env.SMTP_PASS ?? "";
 const SMTP_SECURE = String(process.env.SMTP_SECURE ?? "").toLowerCase() === "true";
+
+/**
+ * Whether the active transport can suppress a repeated logical send after the
+ * provider accepted it but before the caller durably recorded success.
+ * Resend supports this through Idempotency-Key. Stub mode has no external side
+ * effect. SendGrid correlation fields and SMTP Message-ID are not sufficient.
+ */
+export function mailerSupportsIdempotentDelivery(env = process.env): boolean {
+  const enabled =
+    String(env.EMAIL_ENABLED ?? env.MAILER_ENABLED ?? "").toLowerCase() === "true";
+  const provider = (env.EMAIL_PROVIDER ?? "stub").toLowerCase();
+  return !enabled || provider === "resend";
+}
+
+export function assertMonthlyReminderMailerConfiguration(env = process.env): void {
+  if (!mailerSupportsIdempotentDelivery(env)) {
+    throw new Error(
+      "Monthly reporting reminders require EMAIL_PROVIDER=resend when email delivery is enabled; SendGrid and SMTP cannot guarantee crash-safe idempotency.",
+    );
+  }
+}
 
 type SendResult = { delivered: boolean; provider: string; messageId?: string; error?: string };
 export type EmailDeliveryStatus = "pending" | "sent" | "failed";
@@ -45,7 +68,11 @@ async function sendViaResend(email: OutboundEmail): Promise<SendResult> {
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${EMAIL_API_KEY}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${EMAIL_API_KEY}`,
+      ...(email.idempotencyKey ? { "Idempotency-Key": email.idempotencyKey } : {}),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -66,6 +93,10 @@ async function sendViaSendGrid(email: OutboundEmail): Promise<SendResult> {
       ...(email.text ? [{ type: "text/plain", value: email.text }] : []),
     ],
     ...(EMAIL_REPLY_TO ? { reply_to: { email: EMAIL_REPLY_TO } } : {}),
+    ...(email.idempotencyKey ? {
+      custom_args: { cafa_delivery_id: email.idempotencyKey },
+      headers: { "X-CAFA-Delivery-ID": email.idempotencyKey },
+    } : {}),
   };
   const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
@@ -93,6 +124,8 @@ async function sendViaSmtp(email: OutboundEmail): Promise<SendResult> {
     html: email.html,
     text: email.text,
     replyTo: EMAIL_REPLY_TO || undefined,
+    messageId: email.idempotencyKey ? `<${email.idempotencyKey}@cafa-pmis>` : undefined,
+    headers: email.idempotencyKey ? { "X-CAFA-Delivery-ID": email.idempotencyKey } : undefined,
   });
   transport.close();
   return { delivered: true, provider: "smtp", messageId: info.messageId };

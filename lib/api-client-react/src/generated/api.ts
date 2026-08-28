@@ -55,6 +55,8 @@ import type {
   DonorInput,
   DonorPortfolioEntry,
   DuplicateCheckResult,
+  EvaluateMonthlyReportingDeadlines200,
+  EvaluateMonthlyReportingDeadlinesBody,
   ExportReportsParams,
   FocusedProjectDonorScan,
   FollowUpProject,
@@ -162,6 +164,8 @@ import type {
   StateValidationError,
   SwitcherUser,
   UpdateProfileInput,
+  UpdateProjectReportingCoverage200,
+  UpdateProjectReportingCoverageBody,
   UploadUrlRequest,
   UploadUrlResponse,
   UpsertProjectStateAllocationsBody,
@@ -4005,6 +4009,97 @@ export function useGetProject<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
+export const getUpdateProjectReportingCoverageUrl = (projectId: number) => {
+  return `/api/projects/${projectId}/reporting-coverage`;
+};
+
+/**
+ * @summary Update only the canonical reporting coverage of a non-draft Project
+ */
+export const updateProjectReportingCoverage = async (
+  projectId: number,
+  updateProjectReportingCoverageBody: UpdateProjectReportingCoverageBody,
+  options?: RequestInit,
+): Promise<UpdateProjectReportingCoverage200> => {
+  return customFetch<UpdateProjectReportingCoverage200>(
+    getUpdateProjectReportingCoverageUrl(projectId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateProjectReportingCoverageBody),
+    },
+  );
+};
+
+export const getUpdateProjectReportingCoverageMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProjectReportingCoverage>>,
+    TError,
+    { projectId: number; data: BodyType<UpdateProjectReportingCoverageBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateProjectReportingCoverage>>,
+  TError,
+  { projectId: number; data: BodyType<UpdateProjectReportingCoverageBody> },
+  TContext
+> => {
+  const mutationKey = ["updateProjectReportingCoverage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateProjectReportingCoverage>>,
+    { projectId: number; data: BodyType<UpdateProjectReportingCoverageBody> }
+  > = (props) => {
+    const { projectId, data } = props ?? {};
+
+    return updateProjectReportingCoverage(projectId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateProjectReportingCoverageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateProjectReportingCoverage>>
+>;
+export type UpdateProjectReportingCoverageMutationBody =
+  BodyType<UpdateProjectReportingCoverageBody>;
+export type UpdateProjectReportingCoverageMutationError = ErrorType<void>;
+
+/**
+ * @summary Update only the canonical reporting coverage of a non-draft Project
+ */
+export const useUpdateProjectReportingCoverage = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProjectReportingCoverage>>,
+    TError,
+    { projectId: number; data: BodyType<UpdateProjectReportingCoverageBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateProjectReportingCoverage>>,
+  TError,
+  { projectId: number; data: BodyType<UpdateProjectReportingCoverageBody> },
+  TContext
+> => {
+  return useMutation(getUpdateProjectReportingCoverageMutationOptions(options));
+};
+
 export const getScanProjectDonorIntegrityUrl = () => {
   return `/api/projects/donor-integrity-scan`;
 };
@@ -5211,6 +5306,99 @@ export const useUpdateRisk = <
   TContext
 > => {
   return useMutation(getUpdateRiskMutationOptions(options));
+};
+
+export const getEvaluateMonthlyReportingDeadlinesUrl = () => {
+  return `/api/reports/monthly-reporting/evaluate`;
+};
+
+/**
+ * @summary Run an idempotent monthly reporting evaluation or aggregate-only dry run
+ */
+export const evaluateMonthlyReportingDeadlines = async (
+  evaluateMonthlyReportingDeadlinesBody?: EvaluateMonthlyReportingDeadlinesBody,
+  options?: RequestInit,
+): Promise<EvaluateMonthlyReportingDeadlines200> => {
+  return customFetch<EvaluateMonthlyReportingDeadlines200>(
+    getEvaluateMonthlyReportingDeadlinesUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(evaluateMonthlyReportingDeadlinesBody),
+    },
+  );
+};
+
+export const getEvaluateMonthlyReportingDeadlinesMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>,
+    TError,
+    { data?: BodyType<EvaluateMonthlyReportingDeadlinesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>,
+  TError,
+  { data?: BodyType<EvaluateMonthlyReportingDeadlinesBody> },
+  TContext
+> => {
+  const mutationKey = ["evaluateMonthlyReportingDeadlines"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>,
+    { data?: BodyType<EvaluateMonthlyReportingDeadlinesBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return evaluateMonthlyReportingDeadlines(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EvaluateMonthlyReportingDeadlinesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>
+>;
+export type EvaluateMonthlyReportingDeadlinesMutationBody =
+  | BodyType<EvaluateMonthlyReportingDeadlinesBody>
+  | undefined;
+export type EvaluateMonthlyReportingDeadlinesMutationError = ErrorType<void>;
+
+/**
+ * @summary Run an idempotent monthly reporting evaluation or aggregate-only dry run
+ */
+export const useEvaluateMonthlyReportingDeadlines = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>,
+    TError,
+    { data?: BodyType<EvaluateMonthlyReportingDeadlinesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof evaluateMonthlyReportingDeadlines>>,
+  TError,
+  { data?: BodyType<EvaluateMonthlyReportingDeadlinesBody> },
+  TContext
+> => {
+  return useMutation(
+    getEvaluateMonthlyReportingDeadlinesMutationOptions(options),
+  );
 };
 
 export const getListReportsUrl = (params?: ListReportsParams) => {

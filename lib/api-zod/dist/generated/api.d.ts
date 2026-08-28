@@ -2916,6 +2916,8 @@ export declare const ListProjectsResponseItem: zod.ZodObject<{
     stateNames: zod.ZodArray<zod.ZodString, "many">;
     stateNamesAr: zod.ZodOptional<zod.ZodArray<zod.ZodString, "many">>;
     reportingFrequency: zod.ZodOptional<zod.ZodUnion<[zod.ZodEnum<["monthly", "quarterly", "annual"]>, zod.ZodNull]>>;
+    reportingStartDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
+    reportingEndDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
 }, "strip", zod.ZodTypeAny, {
     status: string;
     code: string;
@@ -2937,6 +2939,8 @@ export declare const ListProjectsResponseItem: zod.ZodObject<{
     donorId?: number | null | undefined;
     stateNamesAr?: string[] | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | null | undefined;
+    reportingEndDate?: Date | null | undefined;
 }, {
     status: string;
     code: string;
@@ -2958,6 +2962,8 @@ export declare const ListProjectsResponseItem: zod.ZodObject<{
     donorId?: number | null | undefined;
     stateNamesAr?: string[] | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | null | undefined;
+    reportingEndDate?: Date | null | undefined;
 }>;
 export declare const ListProjectsResponse: zod.ZodArray<zod.ZodObject<{
     id: zod.ZodNumber;
@@ -2980,6 +2986,8 @@ export declare const ListProjectsResponse: zod.ZodArray<zod.ZodObject<{
     stateNames: zod.ZodArray<zod.ZodString, "many">;
     stateNamesAr: zod.ZodOptional<zod.ZodArray<zod.ZodString, "many">>;
     reportingFrequency: zod.ZodOptional<zod.ZodUnion<[zod.ZodEnum<["monthly", "quarterly", "annual"]>, zod.ZodNull]>>;
+    reportingStartDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
+    reportingEndDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
 }, "strip", zod.ZodTypeAny, {
     status: string;
     code: string;
@@ -3001,6 +3009,8 @@ export declare const ListProjectsResponse: zod.ZodArray<zod.ZodObject<{
     donorId?: number | null | undefined;
     stateNamesAr?: string[] | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | null | undefined;
+    reportingEndDate?: Date | null | undefined;
 }, {
     status: string;
     code: string;
@@ -3022,6 +3032,8 @@ export declare const ListProjectsResponse: zod.ZodArray<zod.ZodObject<{
     donorId?: number | null | undefined;
     stateNamesAr?: string[] | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | null | undefined;
+    reportingEndDate?: Date | null | undefined;
 }>, "many">;
 /**
  * @summary Create a new project draft
@@ -3059,6 +3071,8 @@ export declare const CreateProjectBody: zod.ZodObject<{
     indicatorTarget: zod.ZodOptional<zod.ZodNumber>;
     hasHqOperations: zod.ZodOptional<zod.ZodBoolean>;
     reportingFrequency: zod.ZodOptional<zod.ZodUnion<[zod.ZodEnum<["monthly", "quarterly", "annual"]>, zod.ZodNull]>>;
+    reportingStartDate: zod.ZodOptional<zod.ZodDate>;
+    reportingEndDate: zod.ZodOptional<zod.ZodDate>;
     stateIds: zod.ZodArray<zod.ZodNumber, "many">;
     localities: zod.ZodOptional<zod.ZodArray<zod.ZodString, "many">>;
     stateAllocations: zod.ZodOptional<zod.ZodArray<zod.ZodObject<{
@@ -3280,6 +3294,8 @@ export declare const CreateProjectBody: zod.ZodObject<{
     budgetTotal?: number | undefined;
     beneficiariesTarget?: number | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | undefined;
+    reportingEndDate?: Date | undefined;
     agreementStart?: Date | undefined;
     agreementEnd?: Date | undefined;
     signedDate?: Date | undefined;
@@ -3370,6 +3386,8 @@ export declare const CreateProjectBody: zod.ZodObject<{
     budgetTotal?: number | undefined;
     beneficiariesTarget?: number | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | undefined;
+    reportingEndDate?: Date | undefined;
     agreementStart?: Date | undefined;
     agreementEnd?: Date | undefined;
     signedDate?: Date | undefined;
@@ -3568,6 +3586,8 @@ export declare const MergeProjectDataResponse: zod.ZodObject<{
     stateNames: zod.ZodArray<zod.ZodString, "many">;
     stateNamesAr: zod.ZodOptional<zod.ZodArray<zod.ZodString, "many">>;
     reportingFrequency: zod.ZodOptional<zod.ZodUnion<[zod.ZodEnum<["monthly", "quarterly", "annual"]>, zod.ZodNull]>>;
+    reportingStartDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
+    reportingEndDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
 }, "strip", zod.ZodTypeAny, {
     status: string;
     code: string;
@@ -3589,6 +3609,8 @@ export declare const MergeProjectDataResponse: zod.ZodObject<{
     donorId?: number | null | undefined;
     stateNamesAr?: string[] | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | null | undefined;
+    reportingEndDate?: Date | null | undefined;
 }, {
     status: string;
     code: string;
@@ -3610,6 +3632,8 @@ export declare const MergeProjectDataResponse: zod.ZodObject<{
     donorId?: number | null | undefined;
     stateNamesAr?: string[] | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | null | undefined;
+    reportingEndDate?: Date | null | undefined;
 }>;
 export declare const GetProjectParams: zod.ZodObject<{
     projectId: zod.ZodNumber;
@@ -3657,6 +3681,8 @@ export declare const GetProjectResponse: zod.ZodObject<{
         managementLevel: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         hasHqOperations: zod.ZodOptional<zod.ZodBoolean>;
         reportingFrequency: zod.ZodOptional<zod.ZodUnion<[zod.ZodEnum<["monthly", "quarterly", "annual"]>, zod.ZodNull]>>;
+        reportingStartDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
+        reportingEndDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
         stateIds: zod.ZodOptional<zod.ZodArray<zod.ZodNumber, "many">>;
         stateNames: zod.ZodOptional<zod.ZodArray<zod.ZodString, "many">>;
         createdByName: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
@@ -3765,6 +3791,8 @@ export declare const GetProjectResponse: zod.ZodObject<{
         donorId?: number | null | undefined;
         stateIds?: number[] | undefined;
         reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+        reportingStartDate?: Date | null | undefined;
+        reportingEndDate?: Date | null | undefined;
         description?: string | null | undefined;
         agreementNumber?: string | null | undefined;
         agreementStart?: string | null | undefined;
@@ -3833,6 +3861,8 @@ export declare const GetProjectResponse: zod.ZodObject<{
         donorId?: number | null | undefined;
         stateIds?: number[] | undefined;
         reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+        reportingStartDate?: Date | null | undefined;
+        reportingEndDate?: Date | null | undefined;
         description?: string | null | undefined;
         agreementNumber?: string | null | undefined;
         agreementStart?: string | null | undefined;
@@ -4305,6 +4335,8 @@ export declare const GetProjectResponse: zod.ZodObject<{
         donorId?: number | null | undefined;
         stateIds?: number[] | undefined;
         reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+        reportingStartDate?: Date | null | undefined;
+        reportingEndDate?: Date | null | undefined;
         description?: string | null | undefined;
         agreementNumber?: string | null | undefined;
         agreementStart?: string | null | undefined;
@@ -4509,6 +4541,8 @@ export declare const GetProjectResponse: zod.ZodObject<{
         donorId?: number | null | undefined;
         stateIds?: number[] | undefined;
         reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+        reportingStartDate?: Date | null | undefined;
+        reportingEndDate?: Date | null | undefined;
         description?: string | null | undefined;
         agreementNumber?: string | null | undefined;
         agreementStart?: string | null | undefined;
@@ -4680,6 +4714,45 @@ export declare const GetProjectResponse: zod.ZodObject<{
         id: number;
         name: string;
     }[];
+}>;
+/**
+ * @summary Update only the canonical reporting coverage of a non-draft Project
+ */
+export declare const UpdateProjectReportingCoverageParams: zod.ZodObject<{
+    projectId: zod.ZodNumber;
+}, "strip", zod.ZodTypeAny, {
+    projectId: number;
+}, {
+    projectId: number;
+}>;
+export declare const UpdateProjectReportingCoverageBody: zod.ZodObject<{
+    reportingStartDate: zod.ZodDate;
+    reportingEndDate: zod.ZodDate;
+    expectedReportingStartDate: zod.ZodDate;
+    expectedReportingEndDate: zod.ZodDate;
+}, "strip", zod.ZodTypeAny, {
+    reportingStartDate: Date;
+    reportingEndDate: Date;
+    expectedReportingStartDate: Date;
+    expectedReportingEndDate: Date;
+}, {
+    reportingStartDate: Date;
+    reportingEndDate: Date;
+    expectedReportingStartDate: Date;
+    expectedReportingEndDate: Date;
+}>;
+export declare const UpdateProjectReportingCoverageResponse: zod.ZodObject<{
+    projectId: zod.ZodNumber;
+    reportingStartDate: zod.ZodDate;
+    reportingEndDate: zod.ZodDate;
+}, "strip", zod.ZodTypeAny, {
+    reportingStartDate: Date;
+    reportingEndDate: Date;
+    projectId: number;
+}, {
+    reportingStartDate: Date;
+    reportingEndDate: Date;
+    projectId: number;
 }>;
 /**
  * Read-only administrator scan. It reports only unlinked values classified as confirmed placeholders and separately identifies the explicit Unknown missing-donor marker; legitimate registered donor names are excluded.
@@ -5257,6 +5330,8 @@ export declare const TransitionProjectResponse: zod.ZodObject<{
     managementLevel: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     hasHqOperations: zod.ZodOptional<zod.ZodBoolean>;
     reportingFrequency: zod.ZodOptional<zod.ZodUnion<[zod.ZodEnum<["monthly", "quarterly", "annual"]>, zod.ZodNull]>>;
+    reportingStartDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
+    reportingEndDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
     stateIds: zod.ZodOptional<zod.ZodArray<zod.ZodNumber, "many">>;
     stateNames: zod.ZodOptional<zod.ZodArray<zod.ZodString, "many">>;
     createdByName: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
@@ -5365,6 +5440,8 @@ export declare const TransitionProjectResponse: zod.ZodObject<{
     donorId?: number | null | undefined;
     stateIds?: number[] | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | null | undefined;
+    reportingEndDate?: Date | null | undefined;
     description?: string | null | undefined;
     agreementNumber?: string | null | undefined;
     agreementStart?: string | null | undefined;
@@ -5433,6 +5510,8 @@ export declare const TransitionProjectResponse: zod.ZodObject<{
     donorId?: number | null | undefined;
     stateIds?: number[] | undefined;
     reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+    reportingStartDate?: Date | null | undefined;
+    reportingEndDate?: Date | null | undefined;
     description?: string | null | undefined;
     agreementNumber?: string | null | undefined;
     agreementStart?: string | null | undefined;
@@ -6267,6 +6346,44 @@ export declare const UpdateRiskResponse: zod.ZodObject<{
     dueDate?: string | null | undefined;
     followUpDate?: string | null | undefined;
     identifiedAt?: string | undefined;
+}>;
+/**
+ * @summary Run an idempotent monthly reporting evaluation or aggregate-only dry run
+ */
+export declare const evaluateMonthlyReportingDeadlinesBodyDryRunDefault = false;
+export declare const EvaluateMonthlyReportingDeadlinesBody: zod.ZodObject<{
+    dryRun: zod.ZodDefault<zod.ZodBoolean>;
+}, "strip", zod.ZodTypeAny, {
+    dryRun: boolean;
+}, {
+    dryRun?: boolean | undefined;
+}>;
+export declare const evaluateMonthlyReportingDeadlinesResponseEvaluatedMin = 0;
+export declare const evaluateMonthlyReportingDeadlinesResponseRecipientsMin = 0;
+export declare const evaluateMonthlyReportingDeadlinesResponseDeliveredMin = 0;
+export declare const evaluateMonthlyReportingDeadlinesResponseStageDayMax = 31;
+export declare const evaluateMonthlyReportingDeadlinesResponseByStatusMinOne = 0;
+export declare const EvaluateMonthlyReportingDeadlinesResponse: zod.ZodObject<{
+    evaluated: zod.ZodNumber;
+    recipients: zod.ZodOptional<zod.ZodNumber>;
+    delivered: zod.ZodNumber;
+    stageDay: zod.ZodOptional<zod.ZodNumber>;
+    byStatus: zod.ZodOptional<zod.ZodRecord<zod.ZodString, zod.ZodNumber>>;
+    skipped: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+}, "strip", zod.ZodTypeAny, {
+    delivered: number;
+    evaluated: number;
+    byStatus?: Record<string, number> | undefined;
+    recipients?: number | undefined;
+    stageDay?: number | undefined;
+    skipped?: string | null | undefined;
+}, {
+    delivered: number;
+    evaluated: number;
+    byStatus?: Record<string, number> | undefined;
+    recipients?: number | undefined;
+    stageDay?: number | undefined;
+    skipped?: string | null | undefined;
 }>;
 export declare const listReportsQueryPageSizeMax = 200;
 export declare const ListReportsQueryParams: zod.ZodObject<{
@@ -8447,6 +8564,8 @@ export declare const GetPendingApprovalsResponse: zod.ZodObject<{
         stateNames: zod.ZodArray<zod.ZodString, "many">;
         stateNamesAr: zod.ZodOptional<zod.ZodArray<zod.ZodString, "many">>;
         reportingFrequency: zod.ZodOptional<zod.ZodUnion<[zod.ZodEnum<["monthly", "quarterly", "annual"]>, zod.ZodNull]>>;
+        reportingStartDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
+        reportingEndDate: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
     }, "strip", zod.ZodTypeAny, {
         status: string;
         code: string;
@@ -8468,6 +8587,8 @@ export declare const GetPendingApprovalsResponse: zod.ZodObject<{
         donorId?: number | null | undefined;
         stateNamesAr?: string[] | undefined;
         reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+        reportingStartDate?: Date | null | undefined;
+        reportingEndDate?: Date | null | undefined;
     }, {
         status: string;
         code: string;
@@ -8489,6 +8610,8 @@ export declare const GetPendingApprovalsResponse: zod.ZodObject<{
         donorId?: number | null | undefined;
         stateNamesAr?: string[] | undefined;
         reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+        reportingStartDate?: Date | null | undefined;
+        reportingEndDate?: Date | null | undefined;
     }>, "many">;
     reports: zod.ZodArray<zod.ZodObject<{
         id: zod.ZodNumber;
@@ -8694,6 +8817,8 @@ export declare const GetPendingApprovalsResponse: zod.ZodObject<{
         donorId?: number | null | undefined;
         stateNamesAr?: string[] | undefined;
         reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+        reportingStartDate?: Date | null | undefined;
+        reportingEndDate?: Date | null | undefined;
     }[];
     reports: {
         status: string;
@@ -8771,6 +8896,8 @@ export declare const GetPendingApprovalsResponse: zod.ZodObject<{
         donorId?: number | null | undefined;
         stateNamesAr?: string[] | undefined;
         reportingFrequency?: "monthly" | "quarterly" | "annual" | null | undefined;
+        reportingStartDate?: Date | null | undefined;
+        reportingEndDate?: Date | null | undefined;
     }[];
     reports: {
         status: string;
