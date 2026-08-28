@@ -25,7 +25,6 @@ import {
   getGetDonorPortfolioQueryKey,
   getGetDashboardSummaryQueryKey,
   getGetSectorPerformanceQueryKey,
-  getGetBeneficiariesBreakdownQueryKey,
   type DonorPortfolioEntry,
   getGetProjectBudgetPerformanceQueryKey,
   type ProjectBudgetPerformanceEntry,
@@ -276,18 +275,20 @@ const DRAFT_ROWS = [
   { key: "projects",       href: "/projects?status=draft" },
   { key: "plans",          href: "/planning?status=draft" },
   { key: "projectReports", href: "/reports/project?status=draft" },
+  { key: "activityReports", href: "/reports/activity?status=draft" },
   { key: "hqReports",      href: "/reports/hq-sector?status=draft" },
   { key: "stateReports",   href: "/reports/program-state?status=draft" },
 ] as const;
 
-function MyDraftsWidget() {
+export function MyDraftsWidget() {
   const { t } = useTranslation("dashboard");
   const { data: draftProjects,       isLoading: dpLoad } = useListProjects({ status: "draft" });
   const { data: draftPlans,          isLoading: dplLoad } = useListPlans({ status: "draft" });
   const { data: draftProjectReports, isLoading: drLoad } = useListReports({ reportType: "project",      status: "draft" });
+  const { data: draftActivityReports,isLoading: daLoad } = useListReports({ reportType: "activity",     status: "draft" });
   const { data: draftHqReports,      isLoading: dhLoad } = useListReports({ reportType: "hq_sector",    status: "draft" });
   const { data: draftStateReports,   isLoading: dsLoad } = useListReports({ reportType: "program_state", status: "draft" });
-  const isLoading = dpLoad || dplLoad || drLoad || dhLoad || dsLoad;
+  const isLoading = dpLoad || dplLoad || drLoad || daLoad || dhLoad || dsLoad;
 
   // Counts parallel DRAFT_ROWS order — all hooks unconditional above
   // useListReports now returns ReportPage, so unwrap .items for count.
@@ -295,12 +296,11 @@ function MyDraftsWidget() {
     draftProjects?.length              ?? 0,
     draftPlans?.length                 ?? 0,
     draftProjectReports?.items?.length ?? 0,
+    draftActivityReports?.items?.length ?? 0,
     draftHqReports?.items?.length      ?? 0,
     draftStateReports?.items?.length   ?? 0,
   ];
   const total  = counts.reduce((s, c) => s + c, 0);
-  const noData = !isLoading && total === 0;
-
   return (
     <Card className="rounded-xl border-border shadow-sm">
       <CardHeader className="pb-3">
@@ -323,14 +323,9 @@ function MyDraftsWidget() {
       <CardContent className="pt-0 pb-4">
         {isLoading ? (
           <div className="space-y-1.5">
-            {[1, 2, 3, 4, 5].map(i => (
+            {[1, 2, 3, 4, 5, 6].map(i => (
               <div key={i} className="h-9 rounded bg-muted/50 animate-pulse" />
             ))}
-          </div>
-        ) : noData ? (
-          <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-            <Layers className="h-6 w-6 text-muted-foreground/30" />
-            <p className="text-xs text-muted-foreground">{t("drafts.none")}</p>
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -512,7 +507,7 @@ type OFUTile = {
   sub:             string;
   count:           number | undefined;
   isLoading:       boolean;
-  href:            string;
+  href?:           string;
   Icon:            React.ElementType;
   tileClass:       string;
   iconClass:       string;
@@ -521,7 +516,7 @@ type OFUTile = {
   neutralWhenZero?: boolean;
 };
 
-function OperationalFollowUp({
+export function OperationalFollowUp({
   draftProjectCount,   isDraftProjectsLoading,
   draftReportCount,    isDraftReportsLoading,
   lateReportCount,     isLateLoading,
@@ -547,7 +542,7 @@ function OperationalFollowUp({
     {
       label: t("operationalFollowUp.draftReports"), sub: t("drafts.savedDrafts"),
       count: draftReportCount, isLoading: isDraftReportsLoading,
-      href: "/reports/project?status=draft", Icon: FileText,
+      Icon: FileText,
       tileClass:  "bg-blue-50/60 border-blue-200 hover:bg-blue-50/90 dark:bg-blue-950/20 dark:border-blue-800",
       iconClass:  "text-blue-400",
       countClass: "text-blue-700 dark:text-blue-400",
@@ -555,7 +550,7 @@ function OperationalFollowUp({
     {
       label: t("operationalFollowUp.lateReports"), sub: t("sections.overdueReportsDesc"),
       count: lateReportCount, isLoading: isLateLoading,
-      href: "/reports/project", Icon: Clock,
+      Icon: Clock,
       tileClass:  "bg-red-50/60 border-red-200 hover:bg-red-50/90 dark:bg-red-950/20 dark:border-red-800",
       iconClass:  "text-red-400",
       countClass: "text-red-700 dark:text-red-400",
@@ -564,7 +559,7 @@ function OperationalFollowUp({
     {
       label: t("operationalFollowUp.criticalRisks"), sub: t("riskPanel.activeCriticalRisks"),
       count: criticalRiskCount, isLoading: isCriticalLoading,
-      href: "/risks?riskLevel=critical&activeOnly=1", Icon: AlertTriangle,
+      Icon: AlertTriangle,
       tileClass:  "bg-red-50/60 border-red-200 hover:bg-red-50/90 dark:bg-red-950/20 dark:border-red-800",
       iconClass:  "text-red-400",
       countClass: "text-red-700 dark:text-red-400",
@@ -573,7 +568,7 @@ function OperationalFollowUp({
     {
       label: t("operationalFollowUp.returnedReports"), sub: t("lateReports.returned"),
       count: returnedReportCount, isLoading: isReturnedLoading,
-      href: "/reports/project?status=returned", Icon: RotateCcw,
+      Icon: RotateCcw,
       tileClass:  "bg-amber-50/60 border-amber-200 hover:bg-amber-50/90 dark:bg-amber-950/20 dark:border-amber-800",
       iconClass:  "text-amber-500",
       countClass: "text-amber-700 dark:text-amber-500",
@@ -596,21 +591,8 @@ function OperationalFollowUp({
             const appliedTile  = useNeutral ? "bg-card border-border hover:bg-muted/30 dark:hover:bg-muted/10" : tileClass;
             const appliedIcon  = useNeutral ? "text-muted-foreground/35" : iconClass;
             const appliedCount = useNeutral ? "text-muted-foreground" : countClass;
-            return isLoading ? (
-              /* Per-tile loading skeleton */
-              <div key={label} className="animate-pulse rounded-xl border border-border p-3 space-y-2" aria-hidden="true">
-                <div className="h-3.5 w-3.5 rounded bg-muted/50" />
-                <div className="h-5 w-8 rounded bg-muted/50" />
-                <div className="h-2.5 w-20 rounded bg-muted/40" />
-                <div className="h-2.5 w-28 rounded bg-muted/30" />
-              </div>
-            ) : (
-              <Link
-                key={label}
-                href={href}
-                aria-label={`${label}: ${count ?? t("operationalFollowUp.insufficientData")}. ${sub}`}
-                className={`flex flex-col gap-1.5 rounded-xl border p-3 transition-colors ${appliedTile}`}
-              >
+            const content = (
+              <>
                 <Icon className={`h-4 w-4 shrink-0 ${appliedIcon}`} aria-hidden="true" />
                 {count === undefined ? (
                   <p className="text-xs text-muted-foreground italic">{t("operationalFollowUp.insufficientData")}</p>
@@ -623,7 +605,36 @@ function OperationalFollowUp({
                   <p className="text-xs font-medium leading-tight text-foreground">{label}</p>
                   <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{sub}</p>
                 </div>
-              </Link>
+              </>
+            );
+            return isLoading ? (
+              /* Per-tile loading skeleton */
+              <div key={label} className="animate-pulse rounded-xl border border-border p-3 space-y-2" aria-hidden="true">
+                <div className="h-3.5 w-3.5 rounded bg-muted/50" />
+                <div className="h-5 w-8 rounded bg-muted/50" />
+                <div className="h-2.5 w-20 rounded bg-muted/40" />
+                <div className="h-2.5 w-28 rounded bg-muted/30" />
+              </div>
+            ) : (
+              href ? (
+                <Link
+                  key={label}
+                  href={href}
+                  aria-label={`${label}: ${count ?? t("operationalFollowUp.insufficientData")}. ${sub}`}
+                  className={`flex flex-col gap-1.5 rounded-xl border p-3 transition-colors ${appliedTile}`}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div
+                  key={label}
+                  role="group"
+                  aria-label={`${label}: ${count ?? t("operationalFollowUp.insufficientData")}. ${sub}`}
+                  className={`flex flex-col gap-1.5 rounded-xl border p-3 ${appliedTile}`}
+                >
+                  {content}
+                </div>
+              )
             );
           })}
         </div>
@@ -1020,7 +1031,7 @@ function ApprovalQueueWidget({
   const visibleProjects = expanded ? approvalProjects : approvalProjects.slice(0, 4);
   const visibleReports  = expanded ? approvalReports  : approvalReports.slice(0, 4);
 
-  const titleKey = isSeniorCoord ? "coordinationQueue" : isTc ? "reviewQueue" : "approvalQueue";
+  const titleKey = isSeniorCoord ? "coordinationQueue" : isTc ? "reviewQueue" : "approvalQueue.title";
 
   return (
     <Card className="rounded-xl border-border shadow-sm">
@@ -1230,18 +1241,25 @@ const BREAKDOWN_LABEL_KEY: Record<FollowUpReasonCode, string> = {
 };
 
 /** Human-readable label for a report type code. */
-function lrTypeLabel(rt: string | undefined, t: TFn): string {
+function lrTypeLabel(rt: string | null | undefined, t: TFn): string {
   if (rt === "hq_sector")     return t("reportTypes.hqSector");
   if (rt === "program_state") return t("reportTypes.stateProgramme");
+  if (rt === "activity")      return "Activity Report";
+  if (rt === "project")       return "Project Report";
   if (!rt)                    return t("reportTypes.report");
   return rt.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 /** Route destination for a given report type. */
-function lrHref(rt: string | undefined): string {
-  if (rt === "hq_sector")     return "/reports/hq-sector";
-  if (rt === "program_state") return "/reports/program-state";
-  return "/reports/project";
+export function lrHref(rt: string | null | undefined, reportId?: number): string {
+  const base = rt === "hq_sector"
+    ? "/reports/hq-sector"
+    : rt === "program_state"
+      ? "/reports/program-state"
+      : rt === "activity"
+        ? "/reports/activity"
+        : "/reports/project";
+  return reportId === undefined ? base : `${base}?open=${reportId}`;
 }
 
 /** Readable workflow status label used in the report row tooltip. */
@@ -1532,7 +1550,7 @@ function LateReportsPanel({
                     <UITooltip key={r.id}>
                       <UITooltipTrigger asChild>
                         <Link
-                          href={lrHref(r.reportType)}
+                          href={lrHref(r.reportType, r.id)}
                           role="listitem"
                           className="flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 hover:bg-muted/30 hover:border-border transition-all duration-150 min-h-[48px]"
                         >
@@ -1590,6 +1608,9 @@ function LateReportsPanel({
         <div className="mt-3 pt-2.5 border-t border-border/50 flex flex-wrap gap-x-4 gap-y-1">
           <Link href="/reports/project" className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors">
             {t("queue.viewProjectReports")}
+          </Link>
+          <Link href="/reports/activity" className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors">
+            {t("queue.viewActivityReports")}
           </Link>
           <Link href="/reports/hq-sector" className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors">
             {t("queue.viewHqReports")}
@@ -1747,7 +1768,7 @@ function PriorityActionsPanel({
         meta: r.daysWaiting != null ? t("priorityActions.daysOverdue", { count: r.daysWaiting }) : (r.stateName ? getStateLabel({ name: r.stateName, nameAr: (r as unknown as { stateNameAr?: string | null }).stateNameAr }, i18n.language) : ""),
         statusLabel: t("priorityActions.statusOverdue"),
         statusCls: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400",
-        href: r.reportType === "hq_sector" ? "/reports/hq-sector" : r.reportType === "program_state" ? "/reports/program-state" : "/reports/project",
+        href: lrHref(r.reportType, r.id),
         urgency: 1,
       });
     }
@@ -1786,7 +1807,6 @@ function PriorityActionsPanel({
 
     // Reports awaiting review
     for (const r of (approvals?.reports ?? []).slice(0, 2)) {
-      const kind = ((r as unknown) as Record<string, unknown>).kind as string ?? "project";
       result.push({
         id: `ar-${r.id}`,
         title: r.title ?? t("fallbacks.untitledReport"),
@@ -1794,7 +1814,7 @@ function PriorityActionsPanel({
         meta: r.stateName ? getStateLabel({ name: r.stateName, nameAr: (r as unknown as { stateNameAr?: string | null }).stateNameAr }, i18n.language) : "",
         statusLabel: t("priorityActions.statusAwaitingReview"),
         statusCls: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
-        href: kind === "hq_sector" ? "/reports/hq-sector" : kind === "program_state" ? "/reports/program-state" : "/reports/project",
+        href: lrHref(r.reportType, r.id),
         urgency: 2,
       });
     }
@@ -3599,18 +3619,18 @@ export default function Dashboard() {
     queryFn: ({ signal }) => customFetch<ProjectBudgetPerformanceEntry[]>(projectBudgetPerfUrl, { signal }),
     enabled: canViewBudgetAndDonors(role),
   });
-  const { data: reportsSummary                                   } = useGetReportsSummary();
+  const { data: reportsSummary, isLoading: isReportsSummaryLoading } = useGetReportsSummary();
   const [benOpen, setBenOpen]                                      = useState(false);
   const [perfBenView, setPerfBenView]                              = useState<"sector" | "state" | "gender">("sector");
   const [expandedSector, setExpandedSector]                        = useState<string | null>(null);
-  const { data: benBreakdown,      isLoading: isBenLoading       } = useGetBeneficiariesBreakdown({ query: { queryKey: getGetBeneficiariesBreakdownQueryKey(), enabled: canViewBudgetAndDonors(role) } });
+  const { data: benBreakdown, isLoading: isBenLoading } =
+    useGetBeneficiariesBreakdown(summaryParams);
   const { data: hierarchicalData,  isLoading: isHierarchicalLoading } = useHierarchicalPerformance(summaryParams);
   const { data: attentionProjects, isLoading: isAttentionLoading  } = useGetDashboardAttentionProjects();
   const { data: lateReports,       isLoading: isLateLoading       } = useGetDashboardLateReports();
   // Draft data for OperationalFollowUp tile counts (React Query deduplicates network requests
   // with MyDraftsWidget's identical calls)
   const { data: psDraftProjects,   isLoading: isDraftProjectsLoading } = useListProjects({ status: "draft" });
-  const { data: psDraftReports,    isLoading: isDraftReportsLoading  } = useListReports({ reportType: "project", status: "draft" });
   const [, navigate] = useLocation();
 
   /* ── Projects & States tab — follow-up count & breakdown ────────────── *
@@ -3957,12 +3977,11 @@ export default function Dashboard() {
                     label={t("overviewTab.activeProjects")}
                     value={fmt(summary?.activeProjects ?? 0)}
                     sub={t("overviewTab.totalProjects", { count: summary?.totalProjects ?? 0 })}
-                    href="/projects?status=active"
                   />
                   <OvKpiCard
                     icon={Users} iconColor="text-emerald-500"
                     label={t("overviewTab.beneficiariesReached")}
-                    value={fmtCompact(summary?.beneficiariesTarget ?? 0)}
+                    value={fmtCompact(summary?.totalBeneficiaries ?? 0)}
                     sub={t("overviewTab.viewBreakdown")}
                     onClick={() => setBenOpen(true)}
                   />
@@ -3978,7 +3997,6 @@ export default function Dashboard() {
                     label={t("overviewTab.activitiesAttention")}
                     value={fmt(summary?.delayedActivities ?? 0)}
                     sub={t("overviewTab.delayedOrPastDeadline")}
-                    href="/projects"
                     alert={!!(summary?.delayedActivities && summary.delayedActivities > 0)}
                   />
                 </div>
@@ -4105,7 +4123,6 @@ export default function Dashboard() {
                       sub={hierarchicalData?.averageSectorAchievementRate != null
                         ? t("performanceTab.avgSectorAchievementSub")
                         : t("performanceTab.avgSectorAchievementNoData")}
-                      href="/projects"
                     />
                     {/* Beneficiaries Reached */}
                     <OvKpiCard
@@ -4131,7 +4148,6 @@ export default function Dashboard() {
                         : summary?.activitiesCompleted != null
                           ? t("performanceTab.activitiesCompletedNoPlanned")
                           : t("performanceTab.activitiesCompletedNoData")}
-                      href="/projects"
                     />
                     {/* Reporting Compliance */}
                     <OvKpiCard
@@ -4141,7 +4157,6 @@ export default function Dashboard() {
                       sub={reportsSummary
                         ? t("performanceTab.reportingComplianceSub", { count: fmt(reportsSummary.awaitingApproval) })
                         : t("performanceTab.reportingComplianceNoData")}
-                      href="/reports/project"
                     />
                   </>
                 )}
@@ -4810,7 +4825,6 @@ export default function Dashboard() {
                     label={t("projectsTab.activeProjects")}
                     value={summary !== undefined ? fmt(summary.activeProjects) : PS_INSUFFICIENT}
                     sub={t("projectsTab.inImplementation")}
-                    href="/projects?status=active"
                   />
                 )}
 
@@ -4820,9 +4834,8 @@ export default function Dashboard() {
                     icon={MapPin}
                     iconColor="text-sky-500"
                     label={t("projectsTab.statesCovered")}
-                    value={states !== undefined ? fmt(states.length) : PS_INSUFFICIENT}
+                    value={summary !== undefined ? fmt(summary.statesCount) : PS_INSUFFICIENT}
                     sub={t("projectsTab.statesWithCoverage")}
-                    href="/states"
                   />
                 )}
 
@@ -4840,7 +4853,6 @@ export default function Dashboard() {
                           ? psBreakdown
                           : t("projectsTab.basedOnIssues")
                       }
-                      href="/projects"
                     />
                   )
                 }
@@ -5070,17 +5082,14 @@ export default function Dashboard() {
                 <OperationalFollowUp
                   draftProjectCount={psDraftProjects?.length}
                   isDraftProjectsLoading={isDraftProjectsLoading}
-                  draftReportCount={psDraftReports?.items?.length}
-                  isDraftReportsLoading={isDraftReportsLoading}
-                  lateReportCount={lateReports?.length}
-                  isLateLoading={isLateLoading}
+                  draftReportCount={reportsSummary?.draft}
+                  isDraftReportsLoading={isReportsSummaryLoading}
+                  lateReportCount={reportsSummary?.awaitingApprovalOver14Days}
+                  isLateLoading={isReportsSummaryLoading}
                   criticalRiskCount={summary ? (summary.criticalRisks ?? 0) : undefined}
                   isCriticalLoading={isSummaryLoading}
-                  returnedReportCount={attentionProjects?.reduce(
-                    (acc, p) => acc + (p.followUpReasons.find(r => r.code === "returned_report")?.count ?? 0),
-                    0,
-                  )}
-                  isReturnedLoading={isAttentionLoading}
+                  returnedReportCount={reportsSummary?.returned}
+                  isReturnedLoading={isReportsSummaryLoading}
                 />
               )}
 

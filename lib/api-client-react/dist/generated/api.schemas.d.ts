@@ -2367,6 +2367,8 @@ export interface ReportsSummary {
     total: number;
     /** Reports with status = draft. */
     draft: number;
+    /** Current draft reports whose latest approval action is request_revision. */
+    returned: number;
     /** Reports in submitted | state_reviewed | technically_approved | coordination_approved. */
     awaitingApproval: number;
     /** Reports with status = approved. */
@@ -2505,7 +2507,7 @@ export interface ProjectPerformanceScore {
 export interface LateReport {
     id: number;
     title: string;
-    reportType?: string;
+    reportType: string;
     status: string;
     submittedAt?: string;
     daysWaiting?: number;
@@ -3754,6 +3756,13 @@ export type GetDashboardSummaryParams = {
 export type GetStatePerformanceParams = {
     sector?: string;
     donor?: string;
+};
+export type GetBeneficiariesBreakdownParams = {
+    stateId?: number;
+    sector?: string;
+    donor?: string;
+    dateFrom?: string;
+    dateTo?: string;
 };
 export type GetSectorBudgetParams = {
     donor?: string;

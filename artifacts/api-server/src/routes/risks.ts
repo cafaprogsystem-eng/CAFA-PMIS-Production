@@ -8,6 +8,7 @@ import { notifyByRole, createNotificationDeduped, notifyEntityActorsDeduped } fr
 import { checkAllDueDates } from "../lib/due-date-checker";
 import { realtime } from "../lib/realtime";
 import { assertActiveState } from "../lib/state-master";
+import { ACTIVE_RISK_STATUS_SQL } from "../lib/riskConstants";
 
 // Compute risk level from probability × impact
 function computeRiskLevel(likelihood: string, impact: string | null, severity: string): string {
@@ -88,7 +89,7 @@ const riskSelect = `
 const riskSummarySelect = `
   SELECT
     COUNT(*)::text AS total,
-    SUM(CASE WHEN r.status NOT IN ('closed','mitigated') THEN 1 ELSE 0 END)::int AS open,
+    SUM(CASE WHEN r.status ${ACTIVE_RISK_STATUS_SQL} THEN 1 ELSE 0 END)::int AS open,
     SUM(CASE WHEN ${riskLevelSQL} = 'critical' THEN 1 ELSE 0 END)::int AS critical,
     SUM(CASE WHEN ${riskLevelSQL} = 'high'     THEN 1 ELSE 0 END)::int AS high,
     SUM(CASE WHEN ${riskLevelSQL} = 'medium'   THEN 1 ELSE 0 END)::int AS medium,
@@ -233,7 +234,7 @@ router.get("/risks", riskReadGuard, async (req, res, next) => {
     // Active-only filter: excludes terminal statuses so KPI tiles that count
     // active risks can link to an identical list population.
     if (req.query.activeOnly === "1" || req.query.activeOnly === "true") {
-      filters.push(`r.status NOT IN ('closed','mitigated')`);
+      filters.push(`r.status ${ACTIVE_RISK_STATUS_SQL}`);
     }
 
     // Risk level filter (computed)

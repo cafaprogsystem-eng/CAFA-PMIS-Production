@@ -999,19 +999,19 @@ describe("SPR-CLOSE-11 — Evidence access: authorised download works; cross-Sta
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SPR-CLOSE-12 — Analytics: TC scope unconditionally uses LEFT JOIN + COALESCE
+// SPR-CLOSE-12 — Analytics: TC scope uses canonical type-aware sector authority
 // ─────────────────────────────────────────────────────────────────────────────
 // The dashboard/reports-summary endpoint builds its main KPI query with:
 //   LEFT JOIN projects p2 ON p2.id = r.project_id
-//   COALESCE(NULLIF(r.sector,''), p2.sector)
-// This lets program_state reports with project_id=NULL pass when r.sector
-// matches the TC's sector list.  An INNER JOIN would silently drop them.
+//   project/project-linked activity → project primary sector
+//   standalone activity → activity sector
+//   program_state/HQ sector → report sector or linked project sector
 //
 // We capture the actual SQL sent to pool.query and assert the required
 // structural predicates are present — this assertion fails if the
 // LEFT JOIN is changed to INNER JOIN or the COALESCE is removed.
 
-describe("SPR-CLOSE-12 — Analytics: TC scope uses LEFT JOIN + COALESCE (structural SQL verification)", () => {
+describe("SPR-CLOSE-12 — Analytics: TC scope uses canonical type-aware SQL", () => {
   /** Shared helper: build a minimal Express app wired to the dashboard router. */
   async function buildDashApp(user: Record<string, unknown>) {
     const app = express();
@@ -1028,9 +1028,9 @@ describe("SPR-CLOSE-12 — Analytics: TC scope uses LEFT JOIN + COALESCE (struct
     return app;
   }
 
-  it("SPR-CLOSE-12a: TC reports-summary SQL unconditionally contains LEFT JOIN projects + COALESCE (captures null-project_id SPR)", async () => {
+  it("SPR-CLOSE-12a: TC reports-summary preserves standalone SPR without widening project Reports", async () => {
     let capturedReportsSql: string | undefined;
-    const countsRow = { total: 1, draft: 0, awaiting_approval: 1, approved: 0, awaiting_over14: 0 };
+    const countsRow = { total: 1, draft: 0, returned: 0, awaiting_approval: 1, approved: 0, awaiting_over14: 0 };
 
     mockPoolQuery.mockImplementation((sql: string) => {
       if (typeof sql !== "string") return Promise.resolve({ rows: [] });
@@ -1051,8 +1051,11 @@ describe("SPR-CLOSE-12 — Analytics: TC scope uses LEFT JOIN + COALESCE (struct
     expect(capturedReportsSql).toBeDefined();
     // LEFT JOIN (not INNER JOIN) is required so project_id=NULL SPRs are included
     expect(capturedReportsSql).toMatch(/LEFT JOIN projects/i);
-    // COALESCE resolves sector for null-project_id SPRs using r.sector directly
-    expect(capturedReportsSql).toContain("COALESCE");
+    expect(capturedReportsSql).toContain("r.report_type = 'project' AND p2.sector = ANY");
+    expect(capturedReportsSql).toContain("r.report_type = 'activity' AND r.project_id IS NULL AND act.sector = ANY");
+    expect(capturedReportsSql).toContain("r.report_type NOT IN ('project', 'activity')");
+    expect(capturedReportsSql).toContain("r.sector = ANY");
+    expect(capturedReportsSql).not.toContain("COALESCE(NULLIF(r.sector,''), p2.sector)");
     // Sector restriction is parameterised (not hardcoded) via ANY($N::text[])
     expect(capturedReportsSql).toContain("ANY($");
     // The KPI count (1 pending SPR) is reflected in the response
@@ -1062,7 +1065,7 @@ describe("SPR-CLOSE-12 — Analytics: TC scope uses LEFT JOIN + COALESCE (struct
   it("SPR-CLOSE-12b: TC with empty sectors → AND FALSE predicate; counts are 0; no crash", async () => {
     const tcNoSector = { ...TC_USER, sector: null, sectors: [] as string[] };
     let capturedReportsSql: string | undefined;
-    const countsRow = { total: 0, draft: 0, awaiting_approval: 0, approved: 0, awaiting_over14: 0 };
+    const countsRow = { total: 0, draft: 0, returned: 0, awaiting_approval: 0, approved: 0, awaiting_over14: 0 };
 
     mockPoolQuery.mockImplementation((sql: string) => {
       if (typeof sql !== "string") return Promise.resolve({ rows: [] });
@@ -1087,12 +1090,14 @@ describe("SPR-CLOSE-12 — Analytics: TC scope uses LEFT JOIN + COALESCE (struct
   it("SPR-CLOSE-12c: TC in 'WASH' sector does not share SQL scope with 'Health' sector (sector isolation via parameterised ANY)", async () => {
     const tcWash = { ...TC_USER, sector: "WASH", sectors: ["WASH"] as string[] };
     let capturedReportsSql: string | undefined;
-    const countsRow = { total: 0, draft: 0, awaiting_approval: 0, approved: 0, awaiting_over14: 0 };
+    const countsRow = { total: 0, draft: 0, returned: 0, awaiting_approval: 0, approved: 0, awaiting_over14: 0 };
+    let capturedParams: unknown[] | undefined;
 
-    mockPoolQuery.mockImplementation((sql: string) => {
+    mockPoolQuery.mockImplementation((sql: string, params?: unknown[]) => {
       if (typeof sql !== "string") return Promise.resolve({ rows: [] });
       if (sql.includes("FROM reports r") && sql.includes("COUNT(*)") && sql.includes("FILTER")) {
         capturedReportsSql = sql;
+        capturedParams = params;
         return Promise.resolve({ rows: [countsRow] });
       }
       if (sql.includes("report_type IS NULL")) return Promise.resolve({ rows: [{ cnt: 0 }] });
@@ -1102,12 +1107,12 @@ describe("SPR-CLOSE-12 — Analytics: TC scope uses LEFT JOIN + COALESCE (struct
     const app = await buildDashApp(tcWash as unknown as Record<string, unknown>);
     const res = await request(app).get("/api/projects/dashboard/reports-summary");
     expect(res.status).toBe(200);
-    // The SQL must use parameterised COALESCE sector filter — different TC actors
-    // get different values bound at query time, not different SQL text.
-    // This guarantees WASH TC cannot see Health SPRs and vice-versa.
+    // Different TC actors bind different sector values to the same canonical
+    // type-aware SQL, so WASH cannot see Health reports.
     expect(capturedReportsSql).toBeDefined();
-    expect(capturedReportsSql).toContain("COALESCE");
+    expect(capturedReportsSql).toContain("r.report_type NOT IN ('project', 'activity')");
     expect(capturedReportsSql).toContain("ANY($"); // parameter → value is ["WASH"]
+    expect(capturedParams).toEqual([["WASH"]]);
     // Left-join ensures null-project_id SPRs in WASH scope would also be counted
     expect(capturedReportsSql).toMatch(/LEFT JOIN projects/i);
   });

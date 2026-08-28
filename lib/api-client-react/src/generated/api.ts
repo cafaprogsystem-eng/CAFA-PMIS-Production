@@ -59,6 +59,7 @@ import type {
   FocusedProjectDonorScan,
   FollowUpProject,
   GetAttachmentReconciliationReportParams,
+  GetBeneficiariesBreakdownParams,
   GetConsolidatedProjectReportParams,
   GetConversationsUnreadCount200,
   GetDashboardPerformanceProjectsParams,
@@ -6336,18 +6337,33 @@ export function useGetSectorPerformance<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
-export const getGetBeneficiariesBreakdownUrl = () => {
-  return `/api/dashboard/beneficiaries`;
+export const getGetBeneficiariesBreakdownUrl = (
+  params?: GetBeneficiariesBreakdownParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dashboard/beneficiaries?${stringifiedParams}`
+    : `/api/dashboard/beneficiaries`;
 };
 
 /**
  * @summary Beneficiary segregation aggregated from project forms
  */
 export const getBeneficiariesBreakdown = async (
+  params?: GetBeneficiariesBreakdownParams,
   options?: RequestInit,
 ): Promise<BeneficiariesBreakdown> => {
   return customFetch<BeneficiariesBreakdown>(
-    getGetBeneficiariesBreakdownUrl(),
+    getGetBeneficiariesBreakdownUrl(params),
     {
       ...options,
       method: "GET",
@@ -6355,29 +6371,35 @@ export const getBeneficiariesBreakdown = async (
   );
 };
 
-export const getGetBeneficiariesBreakdownQueryKey = () => {
-  return [`/api/dashboard/beneficiaries`] as const;
+export const getGetBeneficiariesBreakdownQueryKey = (
+  params?: GetBeneficiariesBreakdownParams,
+) => {
+  return [`/api/dashboard/beneficiaries`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetBeneficiariesBreakdownQueryOptions = <
   TData = Awaited<ReturnType<typeof getBeneficiariesBreakdown>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getBeneficiariesBreakdown>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetBeneficiariesBreakdownParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBeneficiariesBreakdown>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
   const queryKey =
-    queryOptions?.queryKey ?? getGetBeneficiariesBreakdownQueryKey();
+    queryOptions?.queryKey ?? getGetBeneficiariesBreakdownQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getBeneficiariesBreakdown>>
-  > = ({ signal }) => getBeneficiariesBreakdown({ signal, ...requestOptions });
+  > = ({ signal }) =>
+    getBeneficiariesBreakdown(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getBeneficiariesBreakdown>>,
@@ -6398,15 +6420,21 @@ export type GetBeneficiariesBreakdownQueryError = ErrorType<unknown>;
 export function useGetBeneficiariesBreakdown<
   TData = Awaited<ReturnType<typeof getBeneficiariesBreakdown>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getBeneficiariesBreakdown>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetBeneficiariesBreakdownQueryOptions(options);
+>(
+  params?: GetBeneficiariesBreakdownParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBeneficiariesBreakdown>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBeneficiariesBreakdownQueryOptions(
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

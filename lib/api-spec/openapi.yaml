@@ -1410,6 +1410,12 @@ paths:
       operationId: getBeneficiariesBreakdown
       tags: [dashboard]
       summary: Beneficiary segregation aggregated from project forms
+      parameters:
+        - { name: stateId, in: query, schema: { type: integer } }
+        - { name: sector, in: query, schema: { type: string } }
+        - { name: donor, in: query, schema: { type: string } }
+        - { name: dateFrom, in: query, schema: { type: string, format: date } }
+        - { name: dateTo, in: query, schema: { type: string, format: date } }
       responses:
         "200":
           description: OK
@@ -4406,10 +4412,11 @@ components:
 
     ReportsSummary:
       type: object
-      required: [total, draft, awaitingApproval, approved, awaitingApprovalOver14Days, unresolvedLegacyCount, byState, bySector, byType]
+      required: [total, draft, returned, awaitingApproval, approved, awaitingApprovalOver14Days, unresolvedLegacyCount, byState, bySector, byType]
       properties:
         total: { type: integer, description: "Canonical, non-archived reports in scope (includes draft, awaiting, approved, rejected)." }
         draft: { type: integer, description: "Reports with status = draft." }
+        returned: { type: integer, description: "Current draft reports whose latest approval action is request_revision." }
         awaitingApproval: { type: integer, description: "Reports in submitted | state_reviewed | technically_approved | coordination_approved." }
         approved: { type: integer, description: "Reports with status = approved." }
         awaitingApprovalOver14Days: { type: integer, description: "Awaiting-approval reports whose current review cycle has been open > 14 days." }
@@ -4585,7 +4592,7 @@ components:
 
     LateReport:
       type: object
-      required: [id, title, status]
+      required: [id, title, reportType, status]
       properties:
         id:              { type: integer }
         title:           { type: string }

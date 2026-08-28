@@ -347,7 +347,7 @@ export function CalendarGridCard() {
             <DropdownMenuItem onClick={() => navigate("/plans")} className="gap-2 text-sm">
               <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.allPlans")}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/reports/project")} className="gap-2 text-sm">
+            <DropdownMenuItem onClick={() => navigate("/reports")} className="gap-2 text-sm">
               <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.allReports")}
             </DropdownMenuItem>
           </DropdownMenuContent>

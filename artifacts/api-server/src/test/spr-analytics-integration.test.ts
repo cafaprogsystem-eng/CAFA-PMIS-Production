@@ -85,12 +85,17 @@ describe("SPR-AN-05 — /dashboard/reports-summary main KPI keeps SPR under TC s
   it("TC sector join to projects is a LEFT JOIN", () => {
     // joinProject builds the project join used by the main KPI and by-type
     // queries. An INNER JOIN here drops every project_id=NULL report (SPR, HQSR).
-    expect(reportsSummary).toMatch(/joinProject\s*=\s*sectorFilter\s*\?\s*"LEFT JOIN projects p2/);
-    expect(reportsSummary).not.toMatch(/joinProject\s*=\s*sectorFilter\s*\?\s*"JOIN projects p2/);
+    expect(reportsSummary).toContain("LEFT JOIN projects p2 ON p2.id = r.project_id");
+    expect(reportsSummary).toContain("LEFT JOIN activities act ON act.id = r.activity_id");
+    expect(reportsSummary).not.toMatch(/(?<!LEFT )JOIN projects p2 ON p2\.id = r\.project_id/);
   });
 
-  it("TC sector predicate uses report-level sector with project fallback", () => {
-    expect(reportsSummary).toMatch(/COALESCE\(NULLIF\(r\.sector,''\),\s*p2\.sector\)/);
+  it("TC sector predicate is canonical and type-aware", () => {
+    expect(reportsSummary).toContain("r.report_type = 'project' AND p2.sector = ANY");
+    expect(reportsSummary).toContain("r.report_type = 'activity' AND r.project_id IS NOT NULL AND p2.sector = ANY");
+    expect(reportsSummary).toContain("r.report_type = 'activity' AND r.project_id IS NULL AND act.sector = ANY");
+    expect(reportsSummary).toContain("r.report_type NOT IN ('project', 'activity')");
+    expect(reportsSummary).not.toContain("COALESCE(NULLIF(r.sector,''), p2.sector)");
   });
 
   it("preserves the operational-population filter (SPR-AN-10/11)", () => {
@@ -113,12 +118,13 @@ describe("SPR-AN-05 — /dashboard/reports-summary main KPI keeps SPR under TC s
 
 describe("SPR-AN-03 — by-sector breakdown retains project_id=NULL reports", () => {
   it("uses LEFT JOIN projects, never INNER JOIN", () => {
-    expect(reportsSummary).toMatch(/FROM reports r LEFT JOIN projects p ON p\.id = r\.project_id/);
+    expect(reportsSummary).toMatch(/FROM reports r\s+LEFT JOIN projects p ON p\.id = r\.project_id/);
     expect(reportsSummary).not.toMatch(/FROM reports r JOIN projects p ON p\.id = r\.project_id/);
   });
 
-  it("groups by report-level sector with project fallback", () => {
-    expect(reportsSummary).toMatch(/COALESCE\(NULLIF\(r\.sector,''\),\s*p\.sector,\s*'Unspecified'\)/);
+  it("groups standalone activity reports by activity sector", () => {
+    expect(reportsSummary).toContain("WHEN r.report_type = 'activity' THEN act.sector");
+    expect(reportsSummary).toContain("ELSE COALESCE(NULLIF(r.sector,''), p.sector)");
   });
 });
 
@@ -127,16 +133,16 @@ describe("SPR-AN-04 — by-state breakdown counts SPR via canonical r.state_id",
     expect(reportsSummary).toMatch(/LEFT JOIN reports r\s*\n\s*ON r\.state_id = s\.id/);
   });
 
-  it("applies the TC sector scope inside the LEFT JOIN ON clause (SEC: no cross-sector leak) while retaining SPR via r.sector", () => {
-    // Sector predicate must be report-level-first with project fallback, and it
-    // must live in the ON clause so LEFT JOIN state rows survive with count 0.
+  it("applies type-aware TC scope inside the LEFT JOIN ON clause", () => {
     const byState = reportsSummary.slice(
       reportsSummary.indexOf("LEFT JOIN reports r"),
       reportsSummary.indexOf("GROUP BY s.id"),
     );
     expect(byState).toContain("${byStateSectorFilter}");
     expect(reportsSummary).toContain("const byStateSectorFilter");
-    expect(reportsSummary).toContain("COALESCE(NULLIF(r.sector,''), (SELECT p.sector FROM projects p WHERE p.id = r.project_id)) = ANY($${sectorParam}::text[])");
+    expect(reportsSummary).toContain("r.report_type = 'project'");
+    expect(reportsSummary).toContain("SELECT a.sector FROM activities a WHERE a.id = r.activity_id");
+    expect(reportsSummary).toContain("r.report_type NOT IN ('project', 'activity')");
     expect(reportsSummary).toMatch(/tcSectors !== null && tcSectors\.length === 0\s*\n?\s*\?\s*"AND FALSE"/);
   });
 });
@@ -144,18 +150,21 @@ describe("SPR-AN-04 — by-state breakdown counts SPR via canonical r.state_id",
 describe("SPR-AN-01/02 — /dashboard/summary report counts keep SPR under TC scope", () => {
   const summary = routeSegment(dashboardSrc, "/dashboard/summary");
 
-  it("pending-approvals TC scope no longer filters via a project_id subquery", () => {
+  it("pending-approvals scope uses the canonical type-aware helper", () => {
     expect(summary).not.toMatch(/r\.project_id IN \(SELECT id FROM projects pf/);
-    expect(summary).toMatch(/COALESCE\(NULLIF\(r\.sector,''\),\s*\(SELECT pf\.sector FROM projects pf WHERE pf\.id = r\.project_id\)\)/);
+    expect(summary).toContain('reportScopeWhere(\n          reportEffectiveScope, "r", "rp", "ra"');
+    expect(summary).toContain("LEFT JOIN projects rp ON rp.id = r.project_id");
+    expect(summary).toContain("LEFT JOIN activities ra ON ra.id = r.activity_id");
   });
 
-  it("submitted/pending TC scope uses LEFT JOIN + COALESCE", () => {
-    expect(summary).toMatch(/FROM reports r LEFT JOIN projects p ON p\.id = r\.project_id\s*\n\s*WHERE COALESCE\(NULLIF\(r\.sector,''\),\s*p\.sector\) = ANY/);
-    expect(summary).not.toMatch(/FROM reports r JOIN projects p ON p\.id = r\.project_id/);
+  it("submitted/pending scope uses type-aware project and activity joins", () => {
+    expect(summary).toContain("LEFT JOIN projects rp ON rp.id = r.project_id");
+    expect(summary).toContain("LEFT JOIN activities ra ON ra.id = r.activity_id");
+    expect(dashboardSrc).toContain("function technicalCoordinatorReportSectorSQL");
   });
 
   it("state-scoped report counts still use canonical state_id (SEC-01/02)", () => {
-    expect(summary).toMatch(/FROM reports r WHERE r\.state_id = \$1/);
+    expect(dashboardSrc).toContain("parts.push(`${reportAlias}.state_id = $${idx++}`)");
   });
 
   it("report counts apply the operational-population filter (SPR-AN-10/11)", () => {
@@ -176,8 +185,9 @@ describe("SPR-AN-01 — /dashboard/pending-approvals approval queue keeps projec
     expect(seg).toMatch(/LEFT JOIN users u ON u\.id = r\.submitted_by_id/);
   });
 
-  it("TC sector predicate uses report-level sector with project fallback", () => {
-    expect(seg).toMatch(/COALESCE\(NULLIF\(r\.sector,''\),\s*p\.sector\)/);
+  it("TC sector predicate uses the canonical type-aware helper and activity join", () => {
+    expect(seg).toContain('reportScopeWhere(canonicalReportScope, "r", "p", "act", 1)');
+    expect(seg).toContain("LEFT JOIN activities act ON act.id = r.activity_id");
   });
 
   it("excludes migration duplicates/unverified rows from the queue", () => {
@@ -186,9 +196,10 @@ describe("SPR-AN-01 — /dashboard/pending-approvals approval queue keeps projec
 });
 
 describe("SPR-AN-01 — /dashboard/recent-activity TC scope keeps project_id=NULL reports", () => {
-  it("report activity filter uses LEFT JOIN + COALESCE, not a projects INNER JOIN", () => {
+  it("report activity filter uses type-aware project and activity LEFT JOINs", () => {
     const seg = routeSegment(dashboardSrc, "/dashboard/recent-activity");
-    expect(seg).toMatch(/FROM reports r2 LEFT JOIN projects p2 ON p2\.id = r2\.project_id WHERE COALESCE\(NULLIF\(r2\.sector,''\),\s*p2\.sector\) = ANY/);
+    expect(seg).toMatch(/FROM reports r2\s+LEFT JOIN projects p2 ON p2\.id = r2\.project_id\s+LEFT JOIN activities act2 ON act2\.id = r2\.activity_id/);
+    expect(seg).toContain('technicalCoordinatorReportSectorSQL("r2", "p2", "act2", 1)');
     expect(seg).not.toMatch(/reports r2 JOIN projects p2/);
   });
 
@@ -212,19 +223,22 @@ describe("SPR-AN-01 — /dashboard/recent-activity TC scope keeps project_id=NUL
     expect(lateralEnd).toBeGreaterThan(fromIdx);
     expect(whereIdx).toBeGreaterThan(lateralEnd);
     expect(orderIdx).toBeGreaterThan(whereIdx);
-    // TC scope predicate retains project-less reports via COALESCE on report sector
-    expect(sql).toContain("COALESCE(NULLIF(r2.sector,''), p2.sector)");
+    expect(sql).toContain("r2.report_type = 'project' AND p2.sector = ANY($1::text[])");
+    expect(sql).toContain("r2.report_type = 'activity' AND r2.project_id IS NULL AND act2.sector = ANY($1::text[])");
     expect(mockQuery.mock.calls.at(-1)?.[1]).toEqual([["Health"]]);
   });
 
-  it("SPO request executes after joins with assignment-scoped parent-record predicates", async () => {
+  it("SPO request keeps parent records assignment-scoped but reports state-scoped", async () => {
     mockQuery.mockClear();
     const app = await buildApp(SPO_USER);
     const res = await request(app).get("/api/dashboard/recent-activity");
     expect(res.status).toBe(200);
     const sql = String(mockQuery.mock.calls.find(c => String(c[0]).includes("FROM audit_log a"))?.[0]);
     expect(sql.indexOf("WHERE (a.module IN ('projects', 'project')")).toBeGreaterThan(sql.indexOf(") ps ON TRUE"));
-    expect(sql).toContain("SELECT id FROM reports WHERE project_id = ANY($1::int[])");
+    expect(sql).toContain("SELECT id FROM reports r2 WHERE r2.state_id = $2");
+    expect(sql).toContain("SELECT id FROM risks WHERE project_id = ANY($1::int[])");
+    expect(sql).toContain("SELECT id FROM beneficiaries WHERE project_id = ANY($1::int[])");
+    expect(mockQuery.mock.calls.at(-1)?.[1]).toEqual([[], 5]);
   });
 });
 

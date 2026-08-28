@@ -70,7 +70,7 @@ const mockQuery = vi.fn(async (sql: string, _params?: unknown[]) => {
     return { rows: mockRows.budgetByCurrency };
   }
   // state count
-  if (sql.includes("FROM states")) {
+  if (sql.includes("COUNT(DISTINCT ps.state_id)") || sql.includes("FROM states")) {
     return { rows: mockRows.stateCount };
   }
   // beneficiaries

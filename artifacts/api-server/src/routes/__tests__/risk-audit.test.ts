@@ -10,6 +10,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import supertest from "supertest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ACTIVE_RISK_STATUS_SQL } from "../../lib/riskConstants";
 
 const { mockPoolQuery, mockNotifyEntityActors, mockNotifyByRole, mockCreateNotificationDeduped } = vi.hoisted(() => ({
   mockPoolQuery: vi.fn(),
@@ -281,8 +282,8 @@ describe("RISK-AUD-16 — notification rollback safety", () => {
 });
 
 describe("RISK-AUD-17 — critical-risk analytics definition", () => {
-  it("dashboard critical KPI uses the computed score (>= 9) and excludes closed/mitigated", () => {
-    expect(dashboardSource).toMatch(/riskScoreSQL\((?:""|"rk\.")\)\} >= 9 AND (?:rk\.)?status NOT IN \('closed','mitigated'\)/);
+  it("dashboard critical KPI uses the computed score (>= 9) and canonical active statuses", () => {
+    expect(dashboardSource).toMatch(/riskScoreSQL\((?:""|"rk\.")\)\} >= 9[\s\S]{0,40}(?:rk\.)?status \$\{ACTIVE_RISK_STATUS_SQL\}/);
     expect(dashboardSource).not.toMatch(/severity IN \('critical','high'\)/);
   });
   it("high-risk-state KPI counts DISTINCT states (no duplicate counting per risk)", () => {
@@ -337,13 +338,26 @@ describe("Due-date job trigger is a privileged operation", () => {
 });
 
 describe("KPI/list parity — activeOnly filter", () => {
-  it("activeOnly=1 excludes closed and mitigated risks server-side", async () => {
+  it("activeOnly=1 excludes every terminal risk status server-side", async () => {
     await appAs(user()).get("/risks?riskLevel=critical&activeOnly=1");
     // Find the data query (contains ORDER BY) — summary query always has aggregate
     // NOT IN expressions so we must discriminate by the WHERE clause of the data query.
     const dataCall = mockPoolQuery.mock.calls.find((c) => String(c[0]).includes("ORDER BY r.identified_at DESC"));
     expect(dataCall).toBeDefined();
-    expect(String(dataCall![0])).toContain(`r.status NOT IN ('closed','mitigated')`);
+    expect(String(dataCall![0])).toContain(`r.status ${ACTIVE_RISK_STATUS_SQL}`);
+  });
+  it("activeOnly preserves active Risk history when its parent Project was deleted", async () => {
+    await appAs(user()).get("/risks?riskLevel=critical&activeOnly=1");
+    const dataCall = mockPoolQuery.mock.calls.find((c) =>
+      String(c[0]).includes("ORDER BY r.identified_at DESC"),
+    );
+    expect(dataCall).toBeDefined();
+    const sql = String(dataCall![0]);
+    expect(sql).toContain(
+      "LEFT JOIN projects p ON p.id = r.project_id AND p.deleted_at IS NULL",
+    );
+    expect(sql).not.toContain("active_parent");
+    expect(sql).not.toMatch(/WHERE[\s\S]*p\.id IS NOT NULL/);
   });
   it("without activeOnly the list applies no status exclusion to the WHERE clause", async () => {
     await appAs(user()).get("/risks?riskLevel=critical");
@@ -352,11 +366,14 @@ describe("KPI/list parity — activeOnly filter", () => {
     // only the data (SELECT r.id …) query.
     const dataCall = mockPoolQuery.mock.calls.find((c) => String(c[0]).includes("ORDER BY r.identified_at DESC"));
     expect(dataCall).toBeDefined();
-    expect(String(dataCall![0])).not.toContain(`NOT IN ('closed','mitigated')`);
+    expect(String(dataCall![0])).not.toContain(ACTIVE_RISK_STATUS_SQL);
   });
   it("dashboard critical KPI and activeOnly list use the same status exclusion", () => {
-    expect(dashboardSource).toContain(`status NOT IN ('closed','mitigated')`);
-    expect(risksSource).toContain(`r.status NOT IN ('closed','mitigated')`);
+    expect(ACTIVE_RISK_STATUS_SQL).toBe(
+      `NOT IN ('closed','mitigated','resolved','cancelled')`,
+    );
+    expect(dashboardSource).toContain("ACTIVE_RISK_STATUS_SQL");
+    expect(risksSource).toContain("ACTIVE_RISK_STATUS_SQL");
   });
 });
 
