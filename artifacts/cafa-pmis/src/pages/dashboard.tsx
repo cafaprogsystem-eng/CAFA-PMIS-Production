@@ -77,6 +77,8 @@ import { ViewModeSwitcher } from "@/components/view-modes/view-mode-switcher";
 import { useUrlViewMode, RECORD_REGISTRY_VIEWS, type RecordRegistryView } from "@/lib/view-modes";
 import { useRecordDetail } from "@/contexts/record-detail-context";
 import { Separator } from "@/components/ui/separator";
+import { ErrorState } from "@/components/ui/error-state";
+import type { ErrorVariant } from "@/components/ui/error-state";
 import {
   Tooltip as UITooltip,
   TooltipContent as UITooltipContent,
@@ -95,6 +97,19 @@ import { entityTypeTranslationKey } from "@/lib/notification-presentation";
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 const fmt = (n: number) => n?.toLocaleString() ?? "0";
+
+function dashboardErrorVariant(error: unknown): ErrorVariant {
+  const response = error as { status?: number; response?: { status?: number }; message?: string } | null;
+  const status = response?.status ?? response?.response?.status;
+  if (status === 400 && /dashboard_invalid_filter/i.test(response?.message ?? "")) return "warning";
+  if (status === 401 || status === 403) return "permission";
+  if (status != null && status >= 500) return "server";
+  if (
+    (typeof navigator !== "undefined" && navigator.onLine === false)
+    || /network|failed to fetch|connection/i.test(response?.message ?? "")
+  ) return "network";
+  return "generic";
+}
 
 /**
  * DEFECT-03 fix: adaptive percentage precision.
@@ -282,13 +297,18 @@ const DRAFT_ROWS = [
 
 export function MyDraftsWidget() {
   const { t } = useTranslation("dashboard");
-  const { data: draftProjects,       isLoading: dpLoad } = useListProjects({ status: "draft" });
-  const { data: draftPlans,          isLoading: dplLoad } = useListPlans({ status: "draft" });
-  const { data: draftProjectReports, isLoading: drLoad } = useListReports({ reportType: "project",      status: "draft" });
-  const { data: draftActivityReports,isLoading: daLoad } = useListReports({ reportType: "activity",     status: "draft" });
-  const { data: draftHqReports,      isLoading: dhLoad } = useListReports({ reportType: "hq_sector",    status: "draft" });
-  const { data: draftStateReports,   isLoading: dsLoad } = useListReports({ reportType: "program_state", status: "draft" });
+  const { data: draftProjects, isLoading: dpLoad, isError: dpError, error: dpFailure, refetch: refetchProjects } = useListProjects({ status: "draft" });
+  const { data: draftPlans, isLoading: dplLoad, isError: dplError, error: dplFailure, refetch: refetchPlans } = useListPlans({ status: "draft" });
+  const { data: draftProjectReports, isLoading: drLoad, isError: drError, error: drFailure, refetch: refetchProjectReports } = useListReports({ reportType: "project", status: "draft" });
+  const { data: draftActivityReports, isLoading: daLoad, isError: daError, error: daFailure, refetch: refetchActivityReports } = useListReports({ reportType: "activity", status: "draft" });
+  const { data: draftHqReports, isLoading: dhLoad, isError: dhError, error: dhFailure, refetch: refetchHqReports } = useListReports({ reportType: "hq_sector", status: "draft" });
+  const { data: draftStateReports, isLoading: dsLoad, isError: dsError, error: dsFailure, refetch: refetchStateReports } = useListReports({ reportType: "program_state", status: "draft" });
   const isLoading = dpLoad || dplLoad || drLoad || daLoad || dhLoad || dsLoad;
+  const draftFailure = [
+    [dpError, dpFailure, refetchProjects], [dplError, dplFailure, refetchPlans],
+    [drError, drFailure, refetchProjectReports], [daError, daFailure, refetchActivityReports],
+    [dhError, dhFailure, refetchHqReports], [dsError, dsFailure, refetchStateReports],
+  ].find(([failed]) => failed) as [boolean, unknown, () => unknown] | undefined;
 
   // Counts parallel DRAFT_ROWS order — all hooks unconditional above
   // useListReports now returns ReportPage, so unwrap .items for count.
@@ -321,7 +341,16 @@ export function MyDraftsWidget() {
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-0 pb-4">
-        {isLoading ? (
+        {draftFailure ? (
+          <ErrorState
+            compact
+            variant={dashboardErrorVariant(draftFailure[1])}
+            title={t("queryState.loadFailedTitle")}
+            description={t("queryState.partial")}
+            retryLabel={t("queryState.retry")}
+            onRetry={() => { void draftFailure[2](); }}
+          />
+        ) : isLoading ? (
           <div className="space-y-1.5">
             {[1, 2, 3, 4, 5, 6].map(i => (
               <div key={i} className="h-9 rounded bg-muted/50 animate-pulse" />
@@ -3585,18 +3614,22 @@ export default function Dashboard() {
   }), [filters, selectedStateId]);
 
   const stateParams = useMemo(() => ({
+    ...(selectedStateId ? { stateId: selectedStateId } : {}),
     ...(filters.sector ? { sector: filters.sector } : {}),
-    ...(filters.donor  ? { donor:  filters.donor  } : {}),
-  }), [filters.sector, filters.donor]);
+  }), [selectedStateId, filters.sector]);
 
   // Data hooks — top-level so tab switches never trigger refetches
   // Non-financial fields are returned to all authenticated roles by the server.
   // Financial fields are nulled/omitted server-side for non-Budget roles.
   // Frontend financial cards remain gated by canViewBudgetAndDonors(role) for render.
-  const { data: summary,          isLoading: isSummaryLoading   } = useGetDashboardSummary(summaryParams, { query: { queryKey: getGetDashboardSummaryQueryKey(summaryParams) } });
-  const { data: states,           isLoading: isStatesLoading    } = useGetStatePerformance(stateParams);
-  useGetSectorPerformance({ query: { queryKey: getGetSectorPerformanceQueryKey() } }); // pre-fetches for Overview-tab sector chart cache
-  const { data: approvals,        isLoading: isApprovalsLoading } = useGetPendingApprovals();
+  const {
+    data: summary, isLoading: isSummaryLoading, isFetching: isSummaryFetching,
+    isError: isSummaryError, error: summaryError, refetch: refetchSummary,
+  } = useGetDashboardSummary(summaryParams, { query: { queryKey: getGetDashboardSummaryQueryKey(summaryParams) } });
+  const { data: states, isLoading: isStatesLoading, isError: isStatesError, error: statesError, refetch: refetchStates } = useGetStatePerformance(stateParams);
+  const { isError: isSectorError, error: sectorError, refetch: refetchSector } =
+    useGetSectorPerformance({ query: { queryKey: getGetSectorPerformanceQueryKey() } });
+  const { data: approvals, isLoading: isApprovalsLoading, isError: isApprovalsError, error: approvalsError, refetch: refetchApprovals } = useGetPendingApprovals();
   // Custom query hooks that pass selectedStateId as a real ?stateId query param so
   // the backend actually filters projects to the selected location. The generated
   // hooks don't accept stateId params, so we use useQuery + customFetch directly.
@@ -3619,18 +3652,21 @@ export default function Dashboard() {
     queryFn: ({ signal }) => customFetch<ProjectBudgetPerformanceEntry[]>(projectBudgetPerfUrl, { signal }),
     enabled: canViewBudgetAndDonors(role),
   });
-  const { data: reportsSummary, isLoading: isReportsSummaryLoading } = useGetReportsSummary();
+  const { data: reportsSummary, isLoading: isReportsSummaryLoading, isError: isReportsSummaryError, error: reportsSummaryError, refetch: refetchReportsSummary } = useGetReportsSummary();
   const [benOpen, setBenOpen]                                      = useState(false);
   const [perfBenView, setPerfBenView]                              = useState<"sector" | "state" | "gender">("sector");
   const [expandedSector, setExpandedSector]                        = useState<string | null>(null);
-  const { data: benBreakdown, isLoading: isBenLoading } =
+  const { data: benBreakdown, isLoading: isBenLoading, isError: isBenError, error: benError, refetch: refetchBeneficiaries } =
     useGetBeneficiariesBreakdown(summaryParams);
-  const { data: hierarchicalData,  isLoading: isHierarchicalLoading } = useHierarchicalPerformance(summaryParams);
-  const { data: attentionProjects, isLoading: isAttentionLoading  } = useGetDashboardAttentionProjects();
-  const { data: lateReports,       isLoading: isLateLoading       } = useGetDashboardLateReports();
+  const {
+    data: hierarchicalData, isLoading: isHierarchicalLoading,
+    isError: isHierarchicalError, refetch: refetchHierarchical,
+  } = useHierarchicalPerformance(summaryParams);
+  const { data: attentionProjects, isLoading: isAttentionLoading, isError: isAttentionError, error: attentionError, refetch: refetchAttention } = useGetDashboardAttentionProjects();
+  const { data: lateReports, isLoading: isLateLoading, isError: isLateError, error: lateError, refetch: refetchLate } = useGetDashboardLateReports();
   // Draft data for OperationalFollowUp tile counts (React Query deduplicates network requests
   // with MyDraftsWidget's identical calls)
-  const { data: psDraftProjects,   isLoading: isDraftProjectsLoading } = useListProjects({ status: "draft" });
+  const { data: psDraftProjects, isLoading: isDraftProjectsLoading, isError: isDraftProjectsError, error: draftProjectsError, refetch: refetchDraftProjects } = useListProjects({ status: "draft" });
   const [, navigate] = useLocation();
 
   /* ── Projects & States tab — follow-up count & breakdown ────────────── *
@@ -3792,6 +3828,62 @@ export default function Dashboard() {
     );
   }
 
+  // Several secondary dashboard endpoints do not yet share the complete
+  // location/sector/donor/date filter contract. Any such narrowing must fail
+  // closed rather than mixing filtered primary facts with organisation-wide
+  // approvals, follow-up, reporting, or financial data.
+  // State-scoped roles are already RBAC-clamped by the server and remain valid.
+  const unsupportedSecondaryFilters = Boolean(
+    filters.sector
+    || filters.donor
+    || filters.dateFrom
+    || filters.dateTo
+    || (selectedStateId != null && !isState),
+  );
+  const failedQuery = [
+    [isSummaryError, summaryError, refetchSummary],
+    [isStatesError, statesError, refetchStates],
+    [isSectorError, sectorError, refetchSector],
+    [isApprovalsError, approvalsError, refetchApprovals],
+    [isReportsSummaryError, reportsSummaryError, refetchReportsSummary],
+    [isBenError, benError, refetchBeneficiaries],
+    [isHierarchicalError, undefined, refetchHierarchical],
+    [isAttentionError, attentionError, refetchAttention],
+    [isLateError, lateError, refetchLate],
+    [isDraftProjectsError, draftProjectsError, refetchDraftProjects],
+    ...(activeTab === "budget" && canViewBudgetAndDonors(role)
+      ? [[isDonorError, undefined, refetchDonor], [isProjBudgetError, undefined, refetchProjBudget]]
+      : []),
+  ].find(([failed]) => failed) as [boolean, unknown, () => unknown] | undefined;
+
+  // A dashboard-wide aggregate is never complete if a primary constituent
+  // failed. Fail closed rather than rendering a mix of current and stale/zero
+  // values. The filter bar remains available so the user can correct scope.
+  if (failedQuery || unsupportedSecondaryFilters) {
+    const variant = unsupportedSecondaryFilters ? "warning" : dashboardErrorVariant(failedQuery?.[1]);
+    const title = unsupportedSecondaryFilters
+      ? t("queryState.unsupported")
+      : variant === "permission"
+        ? t("queryState.restricted")
+        : variant === "network"
+          ? t("queryState.unavailable")
+          : t("queryState.loadFailedTitle");
+    return (
+      <div className="space-y-5">
+        <FilterBar filters={filters} onChange={setFilters} restrictedSectors={restrictedSectors} />
+        <div aria-live="assertive">
+          <ErrorState
+            variant={variant}
+            title={title}
+            description={unsupportedSecondaryFilters ? t("queryState.unsupportedDescription") : t("queryState.loadFailedDescription")}
+            retryLabel={t("queryState.retry")}
+            onRetry={failedQuery ? () => { void failedQuery[2](); } : undefined}
+          />
+        </div>
+      </div>
+    );
+  }
+
 
   /* ── Derived chart data (non-hook) ─────────────────────────────────── */
   // statusChartData useMemo was moved before the isSummaryLoading early return
@@ -3862,6 +3954,11 @@ export default function Dashboard() {
   /* MODULE-SCOPE CHART INFRASTRUCTURE section above the Dashboard function */
   return (
     <div className="space-y-5">
+      {isSummaryFetching && !isSummaryLoading && (
+        <p role="status" aria-live="polite" className="sr-only">
+          {t("queryState.refreshing")}
+        </p>
+      )}
 
       {/* ── Page Header ─────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">

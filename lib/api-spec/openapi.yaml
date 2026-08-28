@@ -1447,8 +1447,8 @@ paths:
       operationId: getStatePerformance
       tags: [dashboard]
       parameters:
-        - { in: query, name: sector,  schema: { type: string } }
-        - { in: query, name: donor,   schema: { type: string } }
+        - { in: query, name: stateId, schema: { type: integer, minimum: 1 } }
+        - { in: query, name: sector, schema: { type: string } }
       responses:
         "200":
           description: OK
@@ -1620,7 +1620,7 @@ paths:
       tags: [dashboard]
       summary: Per-project performance scores sorted by rank (descending)
       parameters:
-        - { in: query, name: limit, schema: { type: integer } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 10, maximum: 100, default: 50 } }
       responses:
         "200":
           description: OK

@@ -3813,8 +3813,11 @@ export type GetDashboardSummaryParams = {
     dateTo?: string;
 };
 export type GetStatePerformanceParams = {
+    /**
+     * @minimum 1
+     */
+    stateId?: number;
     sector?: string;
-    donor?: string;
 };
 export type GetBeneficiariesBreakdownParams = {
     stateId?: number;
@@ -3832,6 +3835,10 @@ export type GetSectorBudgetParams = {
     dateTo?: string;
 };
 export type GetDashboardPerformanceProjectsParams = {
+    /**
+     * @minimum 10
+     * @maximum 100
+     */
     limit?: number;
 };
 export type GetPmrReportingCompletenessParams = {

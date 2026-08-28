@@ -79,6 +79,9 @@ async function buildApp(user: FakeUser | null) {
   app.use(dashRouter);
   app.use(benefRouter);
   app.use(statesRouter);
+  app.use((err: Error & { status?: number; errorCode?: string }, _req: Request, res: Response, _next: NextFunction) => {
+    res.status(err.status ?? 500).json({ error: err.errorCode ?? "server_error" });
+  });
   return app;
 }
 
@@ -216,18 +219,14 @@ describe("LCTX-06 GET /dashboard/donor-portfolio — HQ role ?stateId narrows pr
 });
 
 describe("LCTX-07 GET /dashboard/donor-portfolio — SPO cannot widen scope via ?stateId", () => {
-  it("SPO ?stateId=99 is ignored; only own state scope is used", async () => {
+  it("SPO ?stateId=99 is explicitly rejected without leaking donor data", async () => {
     const app = await buildApp({ id: 5, role: "state_program_officer", stateId: 2, sectors: null });
     const res = await request(app).get("/dashboard/donor-portfolio?stateId=99");
-    expect(res.status).toBe(200);
-    // SQL params should contain stateId=2 (SPO's own state), NOT 99
-    const donorCall = mockQuery.mock.calls.find(
-      c => (c[0] as string).includes("LEFT JOIN donors d") && !(c[0] as string).includes("exp.project_id")
-    );
-    if (donorCall) {
-      expect(donorCall![1]).toContain(2);
-      expect(donorCall![1]).not.toContain(99);
-    }
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "dashboard_state_forbidden" });
+    expect(mockQuery.mock.calls.filter(
+      c => (c[0] as string).includes("LEFT JOIN donors d") && !(c[0] as string).includes("exp.project_id"),
+    )).toHaveLength(0);
   });
 });
 

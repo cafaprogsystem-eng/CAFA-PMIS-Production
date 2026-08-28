@@ -46,6 +46,7 @@ export function createApiErrorHandler(logger: ErrorLogger) {
     }
 
     const message = typeof anyErr?.message === "string" ? anyErr.message : "Request failed";
-    res.status(status).json({ error: "server_error", detail: message });
+    const error = typeof anyErr?.errorCode === "string" ? anyErr.errorCode : "server_error";
+    res.status(status).json({ error, detail: message });
   };
 }

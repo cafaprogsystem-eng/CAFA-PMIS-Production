@@ -58,7 +58,17 @@ export function useHierarchicalPerformance(params: HierarchicalPerfParams = {}) 
   const qStr = qs.toString();
 
   return useQuery<HierarchicalPerformance>({
-    queryKey: ["hierarchical-performance", params],
+    // Primitive key segments are stable and isolate every filter/location
+    // context. Do not use a mutable params object or retain previous results:
+    // a failed new context must not display another context's performance.
+    queryKey: [
+      "hierarchical-performance",
+      params.stateId ?? null,
+      params.sector ?? null,
+      params.donor ?? null,
+      params.dateFrom ?? null,
+      params.dateTo ?? null,
+    ],
     queryFn: async () => {
       const res = await fetch(
         `/api/dashboard/hierarchical-performance${qStr ? `?${qStr}` : ""}`,
@@ -68,5 +78,6 @@ export function useHierarchicalPerformance(params: HierarchicalPerfParams = {}) 
       return res.json() as Promise<HierarchicalPerformance>;
     },
     staleTime: 30_000,
+    placeholderData: undefined,
   });
 }

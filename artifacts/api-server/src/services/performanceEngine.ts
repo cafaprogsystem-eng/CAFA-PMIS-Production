@@ -1,3 +1,5 @@
+import { CANONICAL_TYPES_SQL, operationalPopulationSQL } from "../lib/reportConstants";
+
 export interface PgPool {
   query<T extends Record<string, unknown> = Record<string, unknown>>(
     text: string,
@@ -11,6 +13,36 @@ export interface ScopeFilter {
   stateId: number | null;
   sectors: string[] | null;
   projectIds?: number[];
+}
+
+/**
+ * Pure counterpart to the state-performance CTE population. Keeping this
+ * small contract alongside the SQL makes the non-mutating fixture suite able
+ * to exercise the same authorisation boundary without a PostgreSQL harness.
+ */
+export type StatePerformanceProjectFact = {
+  id: number;
+  deletedAt: unknown | null;
+  stateIds: number[];
+  sector: string;
+};
+
+export function isStatePerformanceProjectInScope(
+  project: StatePerformanceProjectFact,
+  scope: ScopeFilter,
+): boolean {
+  if (project.deletedAt !== null) return false;
+  if (scope.projectIds !== undefined && !scope.projectIds.includes(project.id)) return false;
+  if (scope.stateId !== null && !project.stateIds.includes(scope.stateId)) return false;
+  return scope.sectors === null || scope.sectors.includes(project.sector);
+}
+
+export function isStatePerformanceStandaloneRecordInScope(
+  scope: ScopeFilter,
+  sector: string | null,
+): boolean {
+  if (scope.projectIds !== undefined) return false;
+  return scope.sectors === null || (sector !== null && scope.sectors.includes(sector));
 }
 
 export interface ComponentScores {
@@ -387,80 +419,113 @@ export async function computeStateScores(
   // portfolio. A state-level aggregate cannot truthfully be presented without
   // mixing in unassigned projects, reports, risks, or indicators.
   if (scope.projectIds !== undefined) return [];
+  if (scope.sectors !== null && scope.sectors.length === 0) return [];
 
-  const { sql: sectorCond, params: sectorParams } = (() => {
-    if (scope.sectors !== null && scope.sectors.length > 0) {
-      return { sql: " AND p.sector = ANY($1::text[])", params: [scope.sectors] };
-    }
-    if (scope.sectors !== null && scope.sectors.length === 0) {
-      return { sql: " AND FALSE", params: [] };
-    }
-    return { sql: "", params: [] };
-  })();
-
-  const stateWhere = scope.stateId !== null ? `WHERE s.id = ${scope.stateId}` : "";
+  // One materialised parent population is used for *every* constituent fact.
+  // Child facts must not infer a TC sector from their own optional sector field:
+  // project-linked records are authorised by their canonical parent project.
+  // This also retains SPO assignment restrictions for every subaggregate.
+  const { sql: projectScopeSql, params: projectScopeParams, nextIdx } = projectWhere(scope, "p", 1);
+  const stateWhere = scope.stateId !== null ? `WHERE s.id = $${nextIdx}` : "";
+  const params = scope.stateId !== null
+    ? [...projectScopeParams, scope.stateId]
+    : projectScopeParams;
+  // Reports may legitimately be state-owned without a project. Preserve those
+  // only when their own canonical report sector is authorised; assignment
+  // scopes never authorise standalone records.
+  // projectIds has already returned above. When sectors are restricted they
+  // are the final parameter emitted by projectWhere, after the optional state.
+  const sectorParamIndex = nextIdx - 1;
+  const allowsUnsectorisedStandalone = isStatePerformanceStandaloneRecordInScope(scope, null);
+  const standaloneReportScope = allowsUnsectorisedStandalone
+    ? " OR r.project_id IS NULL"
+    : ` OR (r.project_id IS NULL AND (
+          (r.report_type = 'activity' AND ra.sector = ANY($${sectorParamIndex}::text[]))
+          OR (r.report_type <> 'activity' AND r.sector = ANY($${sectorParamIndex}::text[]))
+        ))`;
+  const standaloneActivityScope = allowsUnsectorisedStandalone
+    ? " OR a.project_id IS NULL"
+    : ` OR (a.project_id IS NULL AND a.sector = ANY($${sectorParamIndex}::text[]))`;
+  // Beneficiary and risk rows have no independent canonical sector. Retain
+  // their historical standalone behaviour only for an unrestricted sector
+  // scope; a TC can never receive an unscoped child fact.
+  const standaloneBeneficiaryScope = allowsUnsectorisedStandalone ? " OR b.project_id IS NULL" : "";
+  const standaloneRiskScope = allowsUnsectorisedStandalone ? " OR r.project_id IS NULL" : "";
 
   const { rows } = await pool.query(
-    `SELECT
+    `WITH scoped_projects AS (
+       SELECT DISTINCT p.id, p.sector
+       FROM projects p
+       WHERE 1=1${projectScopeSql}
+     ),
+     scoped_state_projects AS (
+       SELECT sp.id AS project_id, sp.sector, ps.state_id
+       FROM scoped_projects sp
+       JOIN project_states ps ON ps.project_id = sp.id
+     )
+     SELECT
       s.id AS "stateId",
       s.name AS "stateName",
       s.name_ar AS "stateNameAr",
       COALESCE((SELECT COUNT(DISTINCT ps.project_id)::int
-        FROM project_states ps JOIN projects p ON p.id = ps.project_id
-        WHERE p.deleted_at IS NULL AND ps.state_id = s.id AND p.status IN ('approved','coordination_approved','technically_approved','active')
-        ${sectorCond}), 0) AS "activeProjects",
-      COALESCE((SELECT COUNT(*)::int FROM beneficiaries b WHERE b.state_id = s.id AND ${activeProjectParentSQL("b.project_id")}), 0) AS beneficiaries,
+         FROM scoped_state_projects ps JOIN projects p ON p.id = ps.project_id
+        WHERE ps.state_id = s.id AND p.status IN ('approved','coordination_approved','technically_approved','active')), 0) AS "activeProjects",
+      COALESCE((SELECT COUNT(*)::int FROM beneficiaries b LEFT JOIN scoped_projects sp ON sp.id = b.project_id WHERE b.state_id = s.id AND (sp.id IS NOT NULL${standaloneBeneficiaryScope})), 0) AS beneficiaries,
       NULL::int AS "budgetUtilizationPct", -- BUD-004: no canonical State-level expenditure source; proxy removed
-      COALESCE((SELECT AVG(a.progress_pct)::int FROM activities a WHERE a.state_id = s.id AND ${activeProjectParentSQL("a.project_id")}), 0) AS "progressPct",
+      COALESCE((SELECT AVG(a.progress_pct)::int FROM activities a LEFT JOIN scoped_projects sp ON sp.id = a.project_id WHERE a.state_id = s.id AND (sp.id IS NOT NULL${standaloneActivityScope})), 0) AS "progressPct",
       CASE
-        WHEN (SELECT COUNT(*) FROM risks r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.severity IN ('high','critical') AND r.status NOT IN ('closed','mitigated','resolved','cancelled')) >= 2 THEN 'high'
-        WHEN (SELECT COUNT(*) FROM risks r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.severity IN ('high','critical') AND r.status NOT IN ('closed','mitigated','resolved','cancelled')) >= 1 THEN 'medium'
+        WHEN (SELECT COUNT(*) FROM risks r LEFT JOIN scoped_projects sp ON sp.id = r.project_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneRiskScope}) AND r.severity IN ('high','critical') AND r.status NOT IN ('closed','mitigated','resolved','cancelled')) >= 2 THEN 'high'
+        WHEN (SELECT COUNT(*) FROM risks r LEFT JOIN scoped_projects sp ON sp.id = r.project_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneRiskScope}) AND r.severity IN ('high','critical') AND r.status NOT IN ('closed','mitigated','resolved','cancelled')) >= 1 THEN 'medium'
         ELSE 'low'
       END AS "riskLevel",
-      COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "openRisks",
-      COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.severity IN ('critical','high') AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "criticalRisks",
-      COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.severity = 'critical' AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "critOnlyRisks",
-      COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.severity = 'high' AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "highOnlyRisks",
-      COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.severity IN ('medium','low') AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "medLowRisks",
-      COALESCE((SELECT COUNT(*)::int FROM reports r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.status NOT IN ('draft')), 0) AS "reportsSubmitted",
-      COALESCE((SELECT COUNT(*)::int FROM reports r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.status IN ('submitted','coordination_approved','technically_approved')), 0) AS "reportsPending",
-      COALESCE((SELECT COUNT(*)::int FROM reports r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.status = 'approved'), 0) AS "reportsApproved",
+      COALESCE((SELECT COUNT(*)::int FROM risks r LEFT JOIN scoped_projects sp ON sp.id = r.project_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneRiskScope}) AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "openRisks",
+      COALESCE((SELECT COUNT(*)::int FROM risks r LEFT JOIN scoped_projects sp ON sp.id = r.project_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneRiskScope}) AND r.severity IN ('critical','high') AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "criticalRisks",
+      COALESCE((SELECT COUNT(*)::int FROM risks r LEFT JOIN scoped_projects sp ON sp.id = r.project_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneRiskScope}) AND r.severity = 'critical' AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "critOnlyRisks",
+      COALESCE((SELECT COUNT(*)::int FROM risks r LEFT JOIN scoped_projects sp ON sp.id = r.project_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneRiskScope}) AND r.severity = 'high' AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "highOnlyRisks",
+      COALESCE((SELECT COUNT(*)::int FROM risks r LEFT JOIN scoped_projects sp ON sp.id = r.project_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneRiskScope}) AND r.severity IN ('medium','low') AND r.status NOT IN ('closed','mitigated','resolved','cancelled')), 0) AS "medLowRisks",
+      COALESCE((SELECT COUNT(*)::int FROM reports r LEFT JOIN scoped_projects sp ON sp.id = r.project_id LEFT JOIN activities ra ON ra.id = r.activity_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneReportScope}) AND r.status NOT IN ('draft') AND r.report_type = ANY(${CANONICAL_TYPES_SQL}) AND ${operationalPopulationSQL("r")}), 0) AS "reportsSubmitted",
+      COALESCE((SELECT COUNT(*)::int FROM reports r LEFT JOIN scoped_projects sp ON sp.id = r.project_id LEFT JOIN activities ra ON ra.id = r.activity_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneReportScope}) AND r.status IN ('submitted','coordination_approved','technically_approved') AND r.report_type = ANY(${CANONICAL_TYPES_SQL}) AND ${operationalPopulationSQL("r")}), 0) AS "reportsPending",
+      COALESCE((SELECT COUNT(*)::int FROM reports r LEFT JOIN scoped_projects sp ON sp.id = r.project_id LEFT JOIN activities ra ON ra.id = r.activity_id WHERE r.state_id = s.id AND (sp.id IS NOT NULL${standaloneReportScope}) AND r.status = 'approved' AND r.report_type = ANY(${CANONICAL_TYPES_SQL}) AND ${operationalPopulationSQL("r")}), 0) AS "reportsApproved",
       COALESCE((SELECT COUNT(*)::int FROM reports r
+        LEFT JOIN scoped_projects sp ON sp.id = r.project_id
+        LEFT JOIN activities ra ON ra.id = r.activity_id
         WHERE r.state_id = s.id
-          AND ${activeProjectParentSQL("r.project_id")}
+          AND (sp.id IS NOT NULL${standaloneReportScope})
           AND r.status IN ('submitted','coordination_approved','technically_approved')
+          AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
+          AND ${operationalPopulationSQL("r")}
           AND r.submitted_at < NOW() - INTERVAL '21 days'), 0) AS "lateReports",
       (SELECT
         CASE WHEN COUNT(*) > 0
           THEN (COUNT(*) FILTER (WHERE progress_pct >= 100) * 100 / COUNT(*))::int
           ELSE NULL END
-        FROM activities a WHERE a.state_id = s.id AND ${activeProjectParentSQL("a.project_id")}) AS "activityCompletionPct",
+        FROM activities a LEFT JOIN scoped_projects sp ON sp.id = a.project_id WHERE a.state_id = s.id AND (sp.id IS NOT NULL${standaloneActivityScope})) AS "activityCompletionPct",
       (SELECT
         CASE WHEN COUNT(*) > 0
           THEN (COUNT(*) FILTER (WHERE status = 'approved') * 100 / COUNT(*))::int
           ELSE NULL END
-        FROM reports r WHERE r.state_id = s.id AND ${activeProjectParentSQL("r.project_id")} AND r.status NOT IN ('draft')) AS "reportingCompliancePct",
+        FROM reports r LEFT JOIN scoped_projects sp ON sp.id = r.project_id
+        LEFT JOIN activities ra ON ra.id = r.activity_id
+        WHERE r.state_id = s.id AND r.status NOT IN ('draft')
+          AND (sp.id IS NOT NULL${standaloneReportScope})
+          AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
+          AND ${operationalPopulationSQL("r")}) AS "reportingCompliancePct",
       -- Indicator achievement for sectors active in this state
       COALESCE((SELECT
         CASE WHEN SUM(i.target) > 0 THEN LEAST(100, (SUM(i.achieved) / SUM(i.target) * 100))::int ELSE NULL END
         FROM indicators i
-        JOIN projects indicator_project ON indicator_project.id = i.project_id
-          AND indicator_project.deleted_at IS NULL
-        WHERE i.sector IN (
-          SELECT DISTINCT p.sector FROM projects p
-          JOIN project_states ps ON ps.project_id = p.id
-          WHERE p.deleted_at IS NULL AND ps.state_id = s.id${sectorCond}
-        )
+         JOIN scoped_state_projects sp ON sp.project_id = i.project_id
+        WHERE sp.state_id = s.id
       ), NULL) AS "indicatorAchievementPct",
       -- Data completeness for projects in this state
-      (SELECT COUNT(*)::int FROM projects p JOIN project_states ps ON ps.project_id = p.id WHERE p.deleted_at IS NULL AND ps.state_id = s.id${sectorCond}) AS "totalProjects",
-      (SELECT COUNT(*) FILTER (WHERE p.budget_total > 0)::int FROM projects p JOIN project_states ps ON ps.project_id = p.id WHERE p.deleted_at IS NULL AND ps.state_id = s.id${sectorCond}) AS "hasBudget",
-      (SELECT COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM activities a WHERE a.project_id = p.id))::int FROM projects p JOIN project_states ps ON ps.project_id = p.id WHERE p.deleted_at IS NULL AND ps.state_id = s.id${sectorCond}) AS "hasActivities",
-      (SELECT COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM reports r WHERE r.project_id = p.id AND r.status != 'draft'))::int FROM projects p JOIN project_states ps ON ps.project_id = p.id WHERE p.deleted_at IS NULL AND ps.state_id = s.id${sectorCond}) AS "hasReports",
-      (SELECT COUNT(*) FILTER (WHERE p.beneficiaries_target > 0)::int FROM projects p JOIN project_states ps ON ps.project_id = p.id WHERE p.deleted_at IS NULL AND ps.state_id = s.id${sectorCond}) AS "hasTargets"
+      (SELECT COUNT(*)::int FROM scoped_state_projects sp WHERE sp.state_id = s.id) AS "totalProjects",
+       (SELECT COUNT(*) FILTER (WHERE p.budget_total > 0)::int FROM scoped_state_projects sp JOIN projects p ON p.id = sp.project_id WHERE sp.state_id = s.id) AS "hasBudget",
+       (SELECT COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM activities a WHERE a.project_id = sp.project_id))::int FROM scoped_state_projects sp WHERE sp.state_id = s.id) AS "hasActivities",
+       (SELECT COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM reports r WHERE r.project_id = sp.project_id AND r.status != 'draft' AND r.report_type = ANY(${CANONICAL_TYPES_SQL}) AND ${operationalPopulationSQL("r")}))::int FROM scoped_state_projects sp WHERE sp.state_id = s.id) AS "hasReports",
+       (SELECT COUNT(*) FILTER (WHERE p.beneficiaries_target > 0)::int FROM scoped_state_projects sp JOIN projects p ON p.id = sp.project_id WHERE sp.state_id = s.id) AS "hasTargets"
     FROM states s ${stateWhere}
     ORDER BY beneficiaries DESC`,
-    sectorParams,
+    params,
   );
 
   return rows.map((row: Record<string, unknown>) => {

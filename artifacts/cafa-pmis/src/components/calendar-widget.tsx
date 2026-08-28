@@ -14,6 +14,7 @@ import {
   DropdownMenuRadioGroup, DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ErrorState, type ErrorVariant } from "@/components/ui/error-state";
 
 /* ─── constants ─────────────────────────────────────────────────────────── */
 type ExtItem = AgendaItem & { dueLabel?: string };
@@ -186,6 +187,9 @@ type CalCtx = {
   hasMoreReminders: boolean;
   reminderCounts: { overdue: number; today: number; upcoming: number };
   isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: unknown;
   isViewingCurrentMonth: boolean;
   todayStr: string;
   cells: (number | null)[];
@@ -207,6 +211,43 @@ function useCalendarCtx(): CalCtx {
   return ctx;
 }
 
+/** Keep an agenda failure distinct from a successful empty agenda. */
+function agendaErrorVariant(error: unknown): ErrorVariant {
+  const status = typeof error === "object" && error !== null
+    ? Number((error as { status?: unknown; response?: { status?: unknown } }).status
+      ?? (error as { response?: { status?: unknown } }).response?.status)
+    : NaN;
+  if (status === 401 || status === 403) return "permission";
+  if (status >= 500) return "server";
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return "network";
+  return "generic";
+}
+
+function AgendaErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const { t } = useTranslation("common");
+  const variant = agendaErrorVariant(error);
+  const titleKey = variant === "permission"
+    ? "calendarWidget.accessDeniedTitle"
+    : variant === "network"
+      ? "calendarWidget.unavailableTitle"
+      : "calendarWidget.loadFailedTitle";
+  const descriptionKey = variant === "permission"
+    ? "calendarWidget.accessDeniedDescription"
+    : variant === "network"
+      ? "calendarWidget.unavailableDescription"
+      : "calendarWidget.loadFailedDescription";
+  return (
+    <ErrorState
+      compact
+      variant={variant}
+      title={calendarText(t, titleKey)}
+      description={calendarText(t, descriptionKey)}
+      retryLabel={calendarText(t, "calendarWidget.retry")}
+      onRetry={onRetry}
+    />
+  );
+}
+
 /* ─── CalendarProvider ───────────────────────────────────────────────────── */
 export function CalendarProvider({ children }: { children: React.ReactNode }) {
   const today    = useMemo(() => new Date(), []);
@@ -219,8 +260,13 @@ export function CalendarProvider({ children }: { children: React.ReactNode }) {
   const [scheduleTypeFilter,  setScheduleTypeFilter]  = useState<ScheduleTypeFilter>("all");
   const [reminderFilter,      setReminderFilter]      = useState<ReminderFilter>("all");
 
-  const { data: agendaData, isLoading, refetch } = useGetDashboardAgenda();
-  const items = useMemo(() => (agendaData?.items ?? []) as ExtItem[], [agendaData?.items]);
+  const { data: agendaData, isLoading, isFetching, isError, error, refetch } = useGetDashboardAgenda();
+  // Never reinterpret retained/stale query data as the current agenda after a
+  // failed request. An empty list is only meaningful after a successful query.
+  const items = useMemo(
+    () => isError ? [] : (agendaData?.items ?? []) as ExtItem[],
+    [agendaData?.items, isError],
+  );
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, ExtItem[]>();
@@ -298,7 +344,7 @@ export function CalendarProvider({ children }: { children: React.ReactNode }) {
   const value: CalCtx = {
     viewYear, viewMonth, selectedDate, scheduleTypeFilter, reminderFilter,
     items, eventsByDate, selectedItems, reminders, hasMoreReminders, reminderCounts,
-    isLoading, isViewingCurrentMonth, todayStr, cells,
+    isLoading, isFetching, isError, error, isViewingCurrentMonth, todayStr, cells,
     setSelectedDate, setScheduleTypeFilter, setReminderFilter,
     goToToday, prevMonth, nextMonth,
     doRefetch: () => { void refetch(); },
@@ -314,7 +360,7 @@ export function CalendarGridCard() {
   const {
     viewYear, viewMonth, selectedDate, cells, eventsByDate,
     todayStr, isViewingCurrentMonth, goToToday, prevMonth, nextMonth,
-    setSelectedDate, navigate,
+    setSelectedDate, navigate, isError, error, doRefetch, isFetching,
   } = useCalendarCtx();
 
   return (
@@ -353,6 +399,16 @@ export function CalendarGridCard() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      {isError && (
+        <div className="border-b border-border/50" aria-live="assertive">
+          <AgendaErrorState error={error} onRetry={doRefetch} />
+        </div>
+      )}
+      {isFetching && !isError && (
+        <p role="status" aria-live="polite" className="px-4 py-1 text-xs text-muted-foreground">
+          {calendarText(t, "calendarWidget.refreshing")}
+        </p>
+      )}
 
       {/* Month navigation */}
       <div className="flex items-center justify-between px-4 py-2.5">
@@ -438,7 +494,7 @@ export function ScheduleCard() {
   const dateLocale = i18n.language === "ar" ? "ar" : "en-GB";
   const {
     isLoading, selectedDate, selectedItems, scheduleTypeFilter,
-    todayStr, setSelectedDate, setScheduleTypeFilter, navigate,
+    todayStr, setSelectedDate, setScheduleTypeFilter, navigate, isError, error, doRefetch,
   } = useCalendarCtx();
 
   return (
@@ -494,12 +550,14 @@ export function ScheduleCard() {
       </div>
 
       <div className="divide-y divide-border/40">
-        {isLoading ? (
+        {isError ? (
+          <AgendaErrorState error={error} onRetry={doRefetch} />
+        ) : isLoading ? (
           <div className="space-y-1 p-3 animate-pulse">
             {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-lg bg-muted/40" />)}
           </div>
         ) : selectedItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 text-center px-4 min-h-[130px]">
+          <div role="status" aria-live="polite" className="flex flex-col items-center justify-center gap-2 text-center px-4 min-h-[130px]">
             <CalendarDays className="h-5 w-5 text-muted-foreground/25" aria-hidden="true" />
             <p className="text-xs text-muted-foreground leading-relaxed max-w-[180px]">
               {!selectedDate
@@ -547,7 +605,7 @@ export function RemindersCard() {
   const dateLocale = i18n.language === "ar" ? "ar" : "en-GB";
   const {
     isLoading, reminders, reminderFilter, reminderCounts,
-    setReminderFilter, doRefetch, navigate,
+    setReminderFilter, doRefetch, navigate, isError, error,
   } = useCalendarCtx();
 
   return (
@@ -620,12 +678,14 @@ export function RemindersCard() {
       </div>
 
       <div className="divide-y divide-border/40">
-        {isLoading ? (
+        {isError ? (
+          <AgendaErrorState error={error} onRetry={doRefetch} />
+        ) : isLoading ? (
           <div className="space-y-1 p-3 animate-pulse">
             {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-lg bg-muted/40" />)}
           </div>
         ) : reminders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 text-center px-4 min-h-[130px]">
+          <div role="status" aria-live="polite" className="flex flex-col items-center justify-center gap-2 text-center px-4 min-h-[130px]">
             <Clock className="h-5 w-5 text-muted-foreground/25" aria-hidden="true" />
             <p className="text-xs text-muted-foreground leading-relaxed max-w-[180px]">
               {reminderFilter === "overdue"

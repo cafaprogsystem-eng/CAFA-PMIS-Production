@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { pool } from "@workspace/db";
 import { tcSectorRestriction, requirePerm } from "../middlewares/currentUser";
 import {
@@ -35,6 +35,78 @@ interface Scope {
   projectIds?: number[]; // defined = project-assignment-based scope (state_program_officer)
   /** A misconfigured state role must never fall back to organisation-wide data. */
   denyAll?: boolean;
+}
+
+const DASHBOARD_FILTER_KEYS = new Set(["stateId", "sector", "donor", "dateFrom", "dateTo"]);
+const DASHBOARD_FILTER_MATRIX: Record<string, ReadonlySet<string>> = {
+  summary: DASHBOARD_FILTER_KEYS,
+  statePerformance: new Set(["stateId", "sector"]),
+  notificationsSummary: new Set(),
+  sectorPerformance: new Set(),
+  pendingApprovals: new Set(),
+  recentActivity: new Set(),
+  sectorBudget: new Set(["stateId", "sector", "donor", "dateFrom", "dateTo", "status"]),
+  donorPortfolio: DASHBOARD_FILTER_KEYS,
+  projectBudgetPerformance: DASHBOARD_FILTER_KEYS,
+  beneficiaries: DASHBOARD_FILTER_KEYS,
+  agenda: new Set(),
+  sectorSnapshot: new Set(["sector"]),
+  performance: new Set(),
+  performanceStates: new Set(),
+  performanceProjects: new Set(["limit"]),
+  attentionProjects: new Set(),
+  hierarchicalPerformance: DASHBOARD_FILTER_KEYS,
+  lateReports: new Set(),
+  pmrReportingCompleteness: new Set(["kind", "reportingYear", "reportingMonth", "quarter", "projectId"]),
+};
+
+/**
+ * Dashboard cards are aggregates, so an empty aggregate row is never evidence
+ * of an empty population. PostgreSQL's aggregate queries return one row (with
+ * a numeric zero when appropriate); missing or malformed rows are an
+ * authoritative-evaluation failure and must not be rendered as zero.
+ */
+function aggregateRow(
+  result: { rows?: unknown[] },
+  queryName: string,
+  fields: string[],
+): Record<string, number> {
+  const row = result.rows?.[0];
+  if (!row || typeof row !== "object") {
+    const error = new Error(`Dashboard aggregate "${queryName}" returned no result row.`);
+    Object.assign(error, { status: 500 });
+    throw error;
+  }
+  const values = row as Record<string, unknown>;
+  const parsed: Record<string, number> = {};
+  for (const field of fields) {
+    if (typeof values[field] !== "number" || !Number.isFinite(values[field])) {
+      const error = new Error(`Dashboard aggregate "${queryName}" returned an invalid "${field}" value.`);
+      Object.assign(error, { status: 500 });
+      throw error;
+    }
+    parsed[field] = values[field] as number;
+  }
+  return parsed;
+}
+
+function dashboardScopeError(scope: Scope, query: Record<string, string | undefined>): string | null {
+  if (scope.denyAll || (scope.sectors !== null && scope.sectors.length === 0)) {
+    return "dashboard_scope_forbidden";
+  }
+  if (query.stateId !== undefined && scope.stateId !== null && Number(query.stateId) !== scope.stateId) {
+    return "dashboard_state_forbidden";
+  }
+  if (query.sector !== undefined && scope.sectors !== null && !scope.sectors.includes(query.sector)) {
+    return "dashboard_sector_forbidden";
+  }
+  return null;
+}
+
+function forbiddenDashboardScope(errorCode: string): Error {
+  const error = new Error("Dashboard filter is outside the caller's authorised scope.");
+  Object.assign(error, { status: 403, errorCode });
+  return error;
 }
 
 function userScope(req: Request): Scope {
@@ -76,6 +148,8 @@ function applyFilterParams(
   scope: Scope,
   query: Record<string, string | undefined>,
 ): { effectiveScope: Scope; donorCond: string; dateConds: string; extraParams: (string | null)[] } {
+  const scopeError = dashboardScopeError(scope, query);
+  if (scopeError) throw forbiddenDashboardScope(scopeError);
   const { stateId: qStateId, sector: qSector, donor: qDonor, dateFrom, dateTo } = query;
 
   // stateId — HQ roles may narrow to a specific state; state roles stay locked
@@ -116,7 +190,17 @@ function applyFilterParams(
 }
 
 /** Validate the URL-backed filters used by the Dashboard aggregate endpoints. */
-function dashboardFilterError(query: Record<string, string | undefined>): string | null {
+function dashboardFilterError(
+  query: Record<string, string | undefined>,
+  allowed: ReadonlySet<string> = DASHBOARD_FILTER_KEYS,
+): string | null {
+  for (const [key, value] of Object.entries(query)) {
+    if (!allowed.has(key)) return `unsupported Dashboard filter "${key}"`;
+    if (typeof value !== "string") return `Dashboard filter "${key}" must be specified once`;
+    if (key === "limit" && (!/^(?:[1-9]\d*)$/.test(value) || Number(value) < 10 || Number(value) > 100)) {
+      return 'Dashboard filter "limit" must be an integer from 10 to 100';
+    }
+  }
   const { stateId, sector, donor, dateFrom, dateTo } = query;
   if (stateId !== undefined && (!/^[1-9]\d*$/.test(stateId))) return "stateId must be a positive integer";
   if (sector !== undefined && !VALID_SECTOR_SET.has(sector)) return "sector must be a canonical sector";
@@ -131,6 +215,20 @@ function dashboardFilterError(query: Record<string, string | undefined>): string
   if (!isIsoDate(dateFrom) || !isIsoDate(dateTo)) return "date filters must use valid YYYY-MM-DD values";
   if (dateFrom && dateTo && dateFrom > dateTo) return "dateFrom must be on or before dateTo";
   return null;
+}
+
+function dashboardFilterGuard(endpoint: keyof typeof DASHBOARD_FILTER_MATRIX) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const filterError = dashboardFilterError(
+      req.query as Record<string, string | undefined>,
+      DASHBOARD_FILTER_MATRIX[endpoint],
+    );
+    if (filterError) {
+      res.status(400).json({ error: "dashboard_invalid_filter", detail: filterError });
+      return;
+    }
+    next();
+  };
 }
 
 /** Replace ? placeholders (left-to-right) with $N starting from startIdx.
@@ -228,7 +326,7 @@ function technicalCoordinatorReportSectorSQL(
   )`;
 }
 
-/** Report scope mirrors GET /reports, rather than SPO project assignments. */
+/** Report scope mirrors GET /reports, including SPO project assignments. */
 function reportScopeWhere(
   scope: Scope,
   reportAlias: string,
@@ -236,14 +334,21 @@ function reportScopeWhere(
   activityAlias: string,
   baseIdx: number,
   filters: Record<string, string | undefined> = {},
-): { sql: string; params: (number | string | string[])[] } {
+): { sql: string; params: (number | number[] | string | string[])[] } {
   const parts: string[] = [];
-  const params: (number | string | string[])[] = [];
+  const params: (number | number[] | string | string[])[] = [];
   let idx = baseIdx;
   if (scope.denyAll) parts.push("FALSE");
   if (scope.stateId !== null) {
     parts.push(`${reportAlias}.state_id = $${idx++}`);
     params.push(scope.stateId);
+  }
+  if (scope.projectIds !== undefined) {
+    if (scope.projectIds.length === 0) parts.push("FALSE");
+    else {
+      parts.push(`${reportAlias}.project_id = ANY($${idx++}::int[])`);
+      params.push(scope.projectIds);
+    }
   }
   if (scope.sectors !== null) {
     if (scope.sectors.length === 0) parts.push("FALSE");
@@ -307,16 +412,19 @@ function requireBudgetDonorsRole(req: Request, res: Response): boolean {
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 
-router.get("/dashboard/summary", async (req, res, next) => {
+router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, res, next) => {
   try {
     // Non-financial fields (project counts, risks, reports, activities, beneficiaries) are
     // returned to all authenticated roles scoped by userScope().
     // Financial fields (budget totals, spend, utilization) are gated to BUDGET_DONORS_ROLES only
     // via hasFinancialAccess further below (per-field gating, not upfront 403).
     // SPOs are restricted to state-valid projects explicitly assigned to them.
-    const filterError = dashboardFilterError(req.query as Record<string, string | undefined>);
-    if (filterError) { res.status(400).json({ error: filterError }); return; }
     const rawScope = await buildScope(req);
+    const scopeError = dashboardScopeError(rawScope, req.query as Record<string, string | undefined>);
+    if (scopeError) {
+      res.status(403).json({ error: scopeError });
+      return;
+    }
     const { effectiveScope, donorCond, dateConds, extraParams } = applyFilterParams(
       rawScope,
       req.query as Record<string, string | undefined>,
@@ -329,25 +437,38 @@ router.get("/dashboard/summary", async (req, res, next) => {
     const extraSql = (donorSql + " " + dateSql).trim();
     const scopeSql = baseScopeSql + (extraSql ? " " + extraSql : "");
     const scopeParams = [...baseScopeParams, ...extraParams];
-    // Report populations deliberately do not inherit SPO project assignments.
-    // They use the same state/TC scope as GET /reports, with Dashboard's
-    // optional filters applied to the linked project where applicable.
-    const reportEffectiveScope = applyFilterParams(
-      userScope(req),
-      req.query as Record<string, string | undefined>,
-    ).effectiveScope;
+    // Reports use the same state, sector, and SPO assignment population as the
+    // rest of the summary, with optional project filters applied where valid.
+    const reportEffectiveScope = effectiveScope;
     const reportFilters = req.query as Record<string, string | undefined>;
     const reportCountScope = reportScopeWhere(
       reportEffectiveScope, "r", "rp", "ra", 1, reportFilters,
     );
 
-    const zeroRisks = Promise.resolve({ rows: [{ high: 0, open: 0, critical: 0 }] });
+    // An empty assignment scope must still have an authoritative result rather
+    // than a process-local manufactured zero.
+    const zeroRisks = () => pool.query(
+      "SELECT 0::int AS high, 0::int AS open, 0::int AS critical",
+    );
 
     // Computed risk-level score (mirrors riskLevelSQL in routes/risks.ts) so the
     // "Active Critical Risks" KPI matches the /risks?riskLevel=critical filter.
     // score >= 9 → critical; >= 6 → high.
     // Determine effective state/sector for the conditional risk+report queries
     const es = effectiveScope;
+    const scopedChildStateSql = es.stateId !== null
+      ? ` AND a.state_id = $${es.projectIds !== undefined ? 2 : 1}`
+      : "";
+    const scopedAllocationStateSql = es.stateId !== null
+      ? ` AND psa.state_id = $${es.projectIds !== undefined ? 2 : 1}`
+      : "";
+    const hasRiskProjectNarrowing =
+      es.projectIds !== undefined
+      || es.sectors !== null
+      || Boolean(reportFilters.donor || reportFilters.dateFrom || reportFilters.dateTo);
+    const scopedRiskStateSql = es.stateId !== null
+      ? ` AND rk.state_id = $${es.projectIds !== undefined ? 2 : 1}`
+      : "";
 
     const [proj, budgetTotal, budgetSpent, risks, pending, delayed, byStatus, riskCounts, reportCounts, activityCounts] = await Promise.all([
       pool.query(
@@ -364,33 +485,31 @@ router.get("/dashboard/summary", async (req, res, next) => {
       ),
       pool.query(
         `SELECT COALESCE(SUM(a.budget_spent), 0)::float AS spent
-         FROM activities a JOIN projects p ON p.id = a.project_id WHERE p.deleted_at IS NULL${scopeSql}`,
+         FROM activities a JOIN projects p ON p.id = a.project_id
+         WHERE p.deleted_at IS NULL${scopeSql}${scopedChildStateSql}`,
         scopeParams,
       ),
       // 3: high-risk state count
-      es.stateId !== null && es.projectIds === undefined
+      es.projectIds !== undefined && es.projectIds.length === 0
+        ? zeroRisks()
+        : hasRiskProjectNarrowing
+          ? pool.query(
+              `SELECT COUNT(DISTINCT rk.state_id)::int AS high FROM risks rk
+               WHERE rk.project_id IN (
+                 SELECT p.id FROM projects p WHERE p.deleted_at IS NULL${scopeSql}
+               )${scopedRiskStateSql}
+                 AND ${riskScoreSQL("rk.")} >= 6
+                 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
+              scopeParams,
+            )
+          : es.stateId !== null
         ? pool.query(
             `SELECT COUNT(DISTINCT rk.state_id)::int AS high FROM risks rk
              WHERE rk.state_id = $1 AND ${activeProjectParentSQL("rk.project_id")}
                 AND ${riskScoreSQL("rk.")} >= 6 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
             [es.stateId],
           )
-        : es.projectIds !== undefined
-          ? (es.projectIds.length === 0 ? zeroRisks : pool.query(
-              `SELECT COUNT(DISTINCT rk.state_id)::int AS high FROM risks rk
-               WHERE rk.project_id = ANY($1::int[]) AND ${activeProjectParentSQL("rk.project_id")}
-                  AND ${riskScoreSQL("rk.")} >= 6 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
-              [es.projectIds],
-            ))
-          : es.sectors !== null
-            ? pool.query(
-                `SELECT COUNT(DISTINCT rk.state_id)::int AS high
-                 FROM risks rk JOIN projects p ON p.id = rk.project_id
-                 WHERE p.deleted_at IS NULL AND p.sector = ANY($1::text[])
-                    AND ${riskScoreSQL("rk.")} >= 6 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
-                [es.sectors],
-              )
-            : pool.query(
+        : pool.query(
                 `SELECT COUNT(DISTINCT rk.state_id)::int AS high
                  FROM risks rk WHERE ${activeProjectParentSQL("rk.project_id")}
                     AND ${riskScoreSQL("rk.")} >= 6 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
@@ -419,6 +538,7 @@ router.get("/dashboard/summary", async (req, res, next) => {
         `SELECT COUNT(*)::int AS cnt FROM activities a
          WHERE planned_end < NOW() AND progress_pct < 100
          AND ${activeProjectParentSQL("a.project_id")}
+          ${scopedChildStateSql}
          ${scopeSql ? " AND a.project_id IN (SELECT id FROM projects p WHERE 1=1" + scopeSql + ")" : ""}`,
         scopeParams,
       ),
@@ -428,7 +548,20 @@ router.get("/dashboard/summary", async (req, res, next) => {
         scopeParams,
       ),
       // 7: risk open/critical counts
-      es.stateId !== null && es.projectIds === undefined
+      es.projectIds !== undefined && es.projectIds.length === 0
+        ? zeroRisks()
+        : hasRiskProjectNarrowing
+          ? pool.query(
+              `SELECT
+                 COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
+                 COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS critical
+               FROM risks rk
+               WHERE rk.project_id IN (
+                 SELECT p.id FROM projects p WHERE p.deleted_at IS NULL${scopeSql}
+               )${scopedRiskStateSql}`,
+              scopeParams,
+            )
+          : es.stateId !== null
         ? pool.query(
             `SELECT
               COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
@@ -436,26 +569,7 @@ router.get("/dashboard/summary", async (req, res, next) => {
              FROM risks rk WHERE rk.state_id = $1 AND ${activeProjectParentSQL("rk.project_id")}`,
             [es.stateId],
           )
-        : es.projectIds !== undefined
-          ? (es.projectIds.length === 0 ? zeroRisks : pool.query(
-              `SELECT
-                COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
-                COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS critical
-               FROM risks rk WHERE rk.project_id = ANY($1::int[]) AND ${activeProjectParentSQL("rk.project_id")}`,
-              [es.projectIds],
-            ))
-          : es.sectors !== null && es.sectors.length > 0
-            ? pool.query(
-                `SELECT
-                  COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
-                  COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS critical
-                 FROM risks rk JOIN projects p ON p.id = rk.project_id
-                  WHERE p.deleted_at IS NULL AND p.sector = ANY($1::text[])`,
-                [es.sectors],
-              )
-            : es.sectors !== null && es.sectors.length === 0
-              ? zeroRisks
-              : pool.query(
+        : pool.query(
                   `SELECT
                    COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
                    COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS critical
@@ -480,6 +594,7 @@ router.get("/dashboard/summary", async (req, res, next) => {
                 COUNT(*) FILTER (WHERE progress_pct >= 100)::int AS completed
          FROM activities a
          WHERE ${activeProjectParentSQL("a.project_id")}
+          ${scopedChildStateSql}
          ${scopeSql ? "AND a.project_id IN (SELECT id FROM projects p WHERE 1=1" + scopeSql + ")" : ""}`,
         scopeParams,
       ),
@@ -496,7 +611,6 @@ router.get("/dashboard/summary", async (req, res, next) => {
         scopeParams,
       ),
     ]);
-    const ben = { rows: [{ reached: benReached.rows[0].reached, target: benTarget.rows[0].target }] };
     const stateCount = await pool.query(
       `SELECT COUNT(DISTINCT ps.state_id)::int AS c
        FROM project_states ps
@@ -505,8 +619,24 @@ router.get("/dashboard/summary", async (req, res, next) => {
       scopeParams,
     );
 
-    const totalBudget = budgetTotal.rows[0].total as number;
-    const totalSpent = budgetSpent.rows[0].spent as number;
+    // Do not use optional chaining/default values here. Every value reaches the
+    // response only after every authoritative subquery has completed and has
+    // produced its required aggregate row.
+    const projectTotals = aggregateRow(proj, "projects", ["active", "total", "closed"]);
+    const budgetTotals = aggregateRow(budgetTotal, "budget_total", ["total"]);
+    const spentTotals = aggregateRow(budgetSpent, "budget_spent", ["spent"]);
+    const riskStateTotals = aggregateRow(risks, "high_risk_states", ["high"]);
+    const pendingTotals = aggregateRow(pending, "pending_approvals", ["proj", "rep"]);
+    const delayedTotals = aggregateRow(delayed, "delayed_activities", ["cnt"]);
+    const riskTotals = aggregateRow(riskCounts, "risk_counts", ["open", "critical"]);
+    const reportTotals = aggregateRow(reportCounts, "report_counts", ["submitted", "pending"]);
+    const activityTotals = aggregateRow(activityCounts, "activity_counts", ["planned", "completed"]);
+    const reachedTotals = aggregateRow(benReached, "beneficiaries_reached", ["reached"]);
+    const targetTotals = aggregateRow(benTarget, "beneficiaries_target", ["target"]);
+    const stateTotals = aggregateRow(stateCount, "states_count", ["c"]);
+
+    const totalBudget = budgetTotals.total;
+    const totalSpent = spentTotals.spent;
     // Spec: return null when Allocated Budget is zero — null means "no valid budget",
     // which the frontend displays as "—". A genuine 0 % is only valid when totalBudget > 0
     // and totalSpent === 0.  Raw float passed through — no integer rounding on the server.
@@ -518,7 +648,7 @@ router.get("/dashboard/summary", async (req, res, next) => {
         `SELECT COALESCE(SUM(psa.budget_allocation), 0)::float AS allocated
          FROM project_state_allocations psa
          JOIN projects p ON p.id = psa.project_id
-         WHERE p.deleted_at IS NULL${scopeSql}`,
+         WHERE p.deleted_at IS NULL${scopeSql}${scopedAllocationStateSql}`,
         scopeParams,
       ),
       // DEFECT-05: per-currency grouped totals using a CTE so the scope is applied once
@@ -532,14 +662,16 @@ router.get("/dashboard/summary", async (req, res, next) => {
            s.currency,
            COALESCE(SUM(s.budget_total), 0)::float AS "totalBudget",
            (SELECT SUM(a.budget_spent)::float FROM activities a
-            WHERE a.project_id IN (SELECT id FROM scoped WHERE currency = s.currency)) AS "totalSpent"
+             WHERE a.project_id IN (SELECT id FROM scoped WHERE currency = s.currency)
+             ${scopedChildStateSql}) AS "totalSpent"
          FROM scoped s
          GROUP BY s.currency
          ORDER BY "totalBudget" DESC`,
         scopeParams,
       ),
     ]);
-    const budgetAllocated = allocatedRes.rows[0].allocated as number;
+    const allocatedTotals = aggregateRow(allocatedRes, "budget_allocated", ["allocated"]);
+    const budgetAllocated = allocatedTotals.allocated;
     // Same calculation as burn — unified; null when no budget so the frontend
     // can distinguish "no data" (null → "—") from "genuinely zero spend" (0 → "0%").
     const budgetUtilization: number | null = burn;
@@ -566,21 +698,21 @@ router.get("/dashboard/summary", async (req, res, next) => {
     // Non-financial fields (project counts, risks, reports, activities) are always returned.
     const hasFinancialAccess = BUDGET_DONORS_ROLES.has(req.currentUser?.role ?? "");
     const operationalSummary = {
-      activeProjects: proj.rows[0].active,
-      totalProjects: proj.rows[0].total,
-      completedProjects: proj.rows[0].closed ?? 0,
-      statesCount: stateCount.rows[0].c,
-      totalBeneficiaries: ben.rows[0].reached,
-      beneficiariesTarget: ben.rows[0].target,
-      highRiskStates: risks.rows[0].high,
-      openRisks: riskCounts.rows[0]?.open ?? 0,
-      criticalRisks: riskCounts.rows[0]?.critical ?? 0,
-      reportsSubmitted: reportCounts.rows[0]?.submitted ?? 0,
-      reportsPending: reportCounts.rows[0]?.pending ?? 0,
-      activitiesPlanned: activityCounts.rows[0]?.planned ?? 0,
-      activitiesCompleted: activityCounts.rows[0]?.completed ?? 0,
-      pendingApprovalsCount: pending.rows[0].proj + pending.rows[0].rep,
-      delayedActivities: delayed.rows[0].cnt,
+      activeProjects: projectTotals.active,
+      totalProjects: projectTotals.total,
+      completedProjects: projectTotals.closed,
+      statesCount: stateTotals.c,
+      totalBeneficiaries: reachedTotals.reached,
+      beneficiariesTarget: targetTotals.target,
+      highRiskStates: riskStateTotals.high,
+      openRisks: riskTotals.open,
+      criticalRisks: riskTotals.critical,
+      reportsSubmitted: reportTotals.submitted,
+      reportsPending: reportTotals.pending,
+      activitiesPlanned: activityTotals.planned,
+      activitiesCompleted: activityTotals.completed,
+      pendingApprovalsCount: pendingTotals.proj + pendingTotals.rep,
+      delayedActivities: delayedTotals.cnt,
       byStatus: byStatus.rows,
       monthlyAchievement: monthly,
     };
@@ -605,26 +737,23 @@ router.get("/dashboard/summary", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/state-performance", async (req, res, next) => {
+router.get("/dashboard/state-performance", dashboardFilterGuard("statePerformance"), async (req, res, next) => {
   try {
     const scope = await buildScope(req);
-    const { sector: qSector } = req.query as Record<string, string | undefined>;
-    if (scope.denyAll) {
-      res.json([]); return;
+    const query = req.query as Record<string, string | undefined>;
+    const scopeError = dashboardScopeError(scope, query);
+    if (scopeError) {
+      res.status(403).json({ error: scopeError });
+      return;
     }
-
-    // Resolve effective scope with optional sector narrowing
-    let effectiveScope = scope;
-    if (qSector) {
-      if (scope.sectors !== null && !scope.sectors.includes(qSector)) {
-        res.json([]); return;
-      }
-      effectiveScope = { ...scope, sectors: scope.sectors === null ? [qSector] : [qSector] };
+    if (scope.projectIds !== undefined) {
+      res.status(403).json({ error: "dashboard_scope_forbidden" });
+      return;
     }
-    if (scope.sectors !== null && scope.sectors.length === 0) {
-      res.json([]); return;
-    }
-
+    // The performance engine consumes ScopeFilter; use the same state/sector
+    // narrowing semantics as Dashboard aggregates rather than a local sector
+    // special case.
+    const { effectiveScope } = applyFilterParams(scope, query);
     const rows = await computeStateScores(pool, effectiveScope);
     res.json(rows);
   } catch (err) {
@@ -632,7 +761,7 @@ router.get("/dashboard/state-performance", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/notifications-summary", async (req, res, next) => {
+router.get("/dashboard/notifications-summary", dashboardFilterGuard("notificationsSummary"), async (req, res, next) => {
   try {
     const userId = req.currentUser?.id;
     if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -670,7 +799,7 @@ router.get("/dashboard/notifications-summary", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/sector-performance", async (req, res, next) => {
+router.get("/dashboard/sector-performance", dashboardFilterGuard("sectorPerformance"), async (req, res, next) => {
   try {
     // Non-financial fields (sector, projects, beneficiaries, indicatorAchievementPct,
     // mixedCurrencies) are returned to all authenticated roles scoped by userScope().
@@ -725,7 +854,7 @@ router.get("/dashboard/sector-performance", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/pending-approvals", async (req, res, next) => {
+router.get("/dashboard/pending-approvals", dashboardFilterGuard("pendingApprovals"), async (req, res, next) => {
   try {
     const u = req.currentUser;
     if (!u) { res.json({ projects: [], reports: [] }); return; }
@@ -830,7 +959,7 @@ router.get("/dashboard/pending-approvals", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/recent-activity", async (req, res, next) => {
+router.get("/dashboard/recent-activity", dashboardFilterGuard("recentActivity"), async (req, res, next) => {
   try {
     const scope = await buildScope(req);
     const activeAuditParentFilter = `(
@@ -924,12 +1053,21 @@ router.get("/dashboard/recent-activity", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/sector-budget", async (req, res, next) => {
+router.get("/dashboard/sector-budget", dashboardFilterGuard("sectorBudget"), async (req, res, next) => {
   try {
     // BUD-013: explicit upfront role gate — Budget & Donors approved roles only.
     if (!requireBudgetDonorsRole(req, res)) return;
     const { donor, stateId: qStateId, sector, status, dateFrom, dateTo } = req.query as Record<string, string | undefined>;
     const scope = await buildScope(req);
+    // This endpoint predates the shared aggregate helper because it also
+    // supports `status`; retain its response contract for an unconfigured TC,
+    // but never silently substitute the caller's scope for an explicitly
+    // requested state/sector outside that scope.
+    const scopeFilterError = dashboardScopeError(scope, { stateId: qStateId, sector });
+    if (scopeFilterError && (qStateId !== undefined || sector !== undefined)) {
+      res.status(403).json({ error: scopeFilterError });
+      return;
+    }
 
     // For state roles, force stateId to their assigned state.
     const effectiveStateId = scope.stateId ?? (qStateId ? Number(qStateId) : null);
@@ -1180,7 +1318,7 @@ router.get("/dashboard/sector-budget", async (req, res, next) => {
  * Frontend guard: canViewBudgetAndDonors(role) in dashboard.tsx.
  * Both must stay in sync with the BUDGET_DONORS_ROLES set above.
  */
-router.get("/dashboard/donor-portfolio", async (req, res, next) => {
+router.get("/dashboard/donor-portfolio", dashboardFilterGuard("donorPortfolio"), async (req, res, next) => {
   try {
     // Step 1: role gate — authentication alone is insufficient
     if (!requireBudgetDonorsRole(req, res)) return;
@@ -1209,8 +1347,6 @@ router.get("/dashboard/donor-portfolio", async (req, res, next) => {
     // HQ roles (PM, ED, SPC, super_admin) may narrow to a single state.
     // State-scoped roles (SPO) stay clamped to their own stateId — applyFilterParams
     // enforces this because scope.stateId !== null for SPO.
-    const filterError = dashboardFilterError(req.query as Record<string, string | undefined>);
-    if (filterError) { res.status(400).json({ error: filterError }); return; }
     const { effectiveScope } = applyFilterParams(scope, req.query as Record<string, string | undefined>);
     const { sql: scopeSql, params: scopeParams } = projectScopeWhere(effectiveScope, "p", 1);
 
@@ -1425,7 +1561,7 @@ router.get("/dashboard/donor-portfolio", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/project-budget-performance", async (req, res, next) => {
+router.get("/dashboard/project-budget-performance", dashboardFilterGuard("projectBudgetPerformance"), async (req, res, next) => {
   try {
     // Step 1: role gate
     if (!requireBudgetDonorsRole(req, res)) return;
@@ -1452,8 +1588,6 @@ router.get("/dashboard/project-budget-performance", async (req, res, next) => {
 
     // Step 3.5: validate and apply optional ?stateId location narrowing.
     // HQ roles may narrow to a specific state; state-scoped roles stay clamped.
-    const filterError2 = dashboardFilterError(req.query as Record<string, string | undefined>);
-    if (filterError2) { res.status(400).json({ error: filterError2 }); return; }
     const { effectiveScope: pbpScope } = applyFilterParams(scope, req.query as Record<string, string | undefined>);
 
     // isSpo and spoStateId are always derived from the raw user scope (not the effective
@@ -1686,10 +1820,8 @@ router.get("/dashboard/project-budget-performance", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/beneficiaries", async (req, res, next) => {
+router.get("/dashboard/beneficiaries", dashboardFilterGuard("beneficiaries"), async (req, res, next) => {
   try {
-    const filterError = dashboardFilterError(req.query as Record<string, string | undefined>);
-    if (filterError) { res.status(400).json({ error: filterError }); return; }
     const rawScope = await buildScope(req);
     const { effectiveScope, donorCond, dateConds, extraParams } = applyFilterParams(
       rawScope,
@@ -1795,7 +1927,7 @@ router.get("/dashboard/beneficiaries", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/agenda", async (req, res, next) => {
+router.get("/dashboard/agenda", dashboardFilterGuard("agenda"), async (req, res, next) => {
   try {
     const scope = await buildScope(req);
     const agendaReportScope = reportScopeWhere(userScope(req), "r", "rp", "ra", 1);
@@ -2144,7 +2276,7 @@ router.get(
 );
 
 // ── HQ Sector Snapshot (for HQ Sector Report form) ───────────────────────────
-router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), async (req, res, next) => {
+router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), dashboardFilterGuard("sectorSnapshot"), async (req, res, next) => {
   try {
     const sector = req.query.sector as string | undefined;
     if (!sector) { res.status(400).json({ error: "sector is required" }); return; }
@@ -2308,18 +2440,12 @@ router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), async (req
 
 // ── Performance Engine Routes ───────────────────────────────────────────────
 
-router.get("/dashboard/performance", async (req, res, next) => {
+router.get("/dashboard/performance", dashboardFilterGuard("performance"), async (req, res, next) => {
   try {
     const scope = await buildScope(req);
-    if (scope.denyAll) {
-      res.json({
-        overallScore: null, tier: "insufficient",
-        components: {
-          activityCompletion: null, reportSubmission: null, indicatorAchievement: null,
-          budgetUtilization: null, riskManagement: null, dataCompleteness: null,
-        },
-        dataAvailable: false,
-      });
+    const scopeError = dashboardScopeError(scope, {});
+    if (scopeError) {
+      res.status(403).json({ error: scopeError });
       return;
     }
     const score = await computeOrgScore(pool, scope);
@@ -2329,11 +2455,13 @@ router.get("/dashboard/performance", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/performance/states", async (req, res, next) => {
+router.get("/dashboard/performance/states", dashboardFilterGuard("performanceStates"), async (req, res, next) => {
   try {
     const scope = await buildScope(req);
-    if (scope.denyAll || (scope.sectors !== null && scope.sectors.length === 0)) {
-      res.json([]); return;
+    const scopeError = dashboardScopeError(scope, {});
+    if (scopeError) {
+      res.status(403).json({ error: scopeError });
+      return;
     }
     const rows = await computeStateScores(pool, scope);
     // Sort by performanceScore descending (nulls last)
@@ -2349,11 +2477,13 @@ router.get("/dashboard/performance/states", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/performance/projects", async (req, res, next) => {
+router.get("/dashboard/performance/projects", dashboardFilterGuard("performanceProjects"), async (req, res, next) => {
   try {
     const scope = await buildScope(req);
-    if (scope.denyAll) {
-      res.json([]); return;
+    const scopeError = dashboardScopeError(scope, {});
+    if (scopeError) {
+      res.status(403).json({ error: scopeError });
+      return;
     }
     const { limit: qLimit } = req.query as Record<string, string | undefined>;
     const limit = Math.min(100, Math.max(10, Number(qLimit ?? 50)));
@@ -2371,7 +2501,7 @@ router.get("/dashboard/performance/projects", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/attention-projects", async (req, res, next) => {
+router.get("/dashboard/attention-projects", dashboardFilterGuard("attentionProjects"), async (req, res, next) => {
   try {
     const scope = await buildScope(req);
     const { sql: scopeSql, params: scopeParams } = projectScopeWhere(scope, "p", 1);
@@ -2556,10 +2686,8 @@ router.get("/dashboard/attention-projects", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/hierarchical-performance", async (req, res, next) => {
+router.get("/dashboard/hierarchical-performance", dashboardFilterGuard("hierarchicalPerformance"), async (req, res, next) => {
   try {
-    const filterError = dashboardFilterError(req.query as Record<string, string | undefined>);
-    if (filterError) { res.status(400).json({ error: filterError }); return; }
     const rawScope = await buildScope(req);
     const { effectiveScope, donorCond, dateConds, extraParams } = applyFilterParams(
       rawScope,
@@ -2579,7 +2707,7 @@ router.get("/dashboard/hierarchical-performance", async (req, res, next) => {
   }
 });
 
-router.get("/dashboard/late-reports", async (req, res, next) => {
+router.get("/dashboard/late-reports", dashboardFilterGuard("lateReports"), async (req, res, next) => {
   try {
     const reportScope = reportScopeWhere(userScope(req), "r", "p", "act", 1);
 
@@ -2627,7 +2755,7 @@ router.get("/dashboard/late-reports", async (req, res, next) => {
 // See ../lib/pmrLocationHelper.ts for PMR_COMP_SUBMITTED_STATUSES,
 // pmrCompStatusRank and the expected-location query.
 
-router.get("/dashboard/pmr-reporting-completeness", requirePerm("reports.view"), async (req, res, next) => {
+router.get("/dashboard/pmr-reporting-completeness", requirePerm("reports.view"), dashboardFilterGuard("pmrReportingCompleteness"), async (req, res, next) => {
   try {
     const q = req.query as Record<string, string | undefined>;
     const kind = q.kind;
