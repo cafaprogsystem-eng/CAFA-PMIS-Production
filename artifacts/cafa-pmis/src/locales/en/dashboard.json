@@ -4,6 +4,7 @@
   "overview": "Programme Overview",
   "performanceOverview": "Performance Overview",
   "approvalQueue": {
+    "title": "Approval Queue",
     "noItems": "No Items Awaiting Your Action",
     "projects": "Projects",
     "reports": "Reports",
@@ -38,6 +39,7 @@
     "projects": "Draft Projects",
     "plans": "Draft Plans",
     "projectReports": "Draft Project Reports",
+    "activityReports": "Draft Activity Reports",
     "hqReports": "Draft HQ Sector Reports",
     "stateReports": "Draft State Programme Reports",
     "totalDrafts": "Total Drafts",
@@ -318,6 +320,7 @@
     "reports": "Reports",
     "reportBreakdown": "Report Breakdown",
     "viewProjectReports": "Project Reports",
+    "viewActivityReports": "Activity Reports",
     "viewHqReports": "HQ Sector Reports",
     "viewStateReports": "State Programme Reports",
     "viewAllReports": "View All Reports"

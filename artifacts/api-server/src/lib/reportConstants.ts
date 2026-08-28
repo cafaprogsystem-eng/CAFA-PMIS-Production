@@ -83,6 +83,20 @@ export const REPORT_DRAFT_STATUSES = ["draft"] as const;
 export const REPORT_APPROVED_STATUSES = ["approved"] as const;
 
 /**
+ * Reports that have entered the workflow at least once and remain in the
+ * operational KPI population. Rejected reports are included because they were
+ * submitted; archived reports remain excluded by REPORT_TOTAL_STATUSES.
+ */
+export const REPORT_SUBMITTED_STATUSES = [
+  "submitted",
+  "state_reviewed",
+  "technically_approved",
+  "coordination_approved",
+  "approved",
+  "rejected",
+] as const;
+
+/**
  * Statuses included in the operational Total Reports count.
  * Excludes "archived" — archived reports are readable but excluded from KPIs.
  * Includes "state_reviewed" because historical reports may legitimately carry
@@ -113,6 +127,7 @@ export const ACTIVE_AWAITING_APPROVAL_STATUSES_SQL = `ARRAY['submitted','technic
 export const AWAITING_APPROVAL_STATUSES_SQL = `ARRAY['submitted','state_reviewed','technically_approved','coordination_approved']`;
 
 export const TOTAL_STATUSES_SQL = `ARRAY['draft','submitted','state_reviewed','technically_approved','coordination_approved','approved','rejected']`;
+export const SUBMITTED_STATUSES_SQL = `ARRAY['submitted','state_reviewed','technically_approved','coordination_approved','approved','rejected']`;
 
 /**
  * Operational-population SQL predicate fragments.

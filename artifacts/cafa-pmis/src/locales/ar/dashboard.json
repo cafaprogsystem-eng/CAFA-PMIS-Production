@@ -4,6 +4,7 @@
   "overview": "نظرة عامة على البرنامج",
   "performanceOverview": "نظرة عامة على الأداء",
   "approvalQueue": {
+    "title": "قائمة الاعتماد",
     "noItems": "لا توجد عناصر تنتظر إجراءك",
     "projects": "المشاريع",
     "reports": "التقارير",
@@ -38,6 +39,7 @@
     "projects": "مسودات المشاريع",
     "plans": "مسودات الخطط",
     "projectReports": "مسودات تقارير المشاريع",
+    "activityReports": "مسودات تقارير الأنشطة",
     "hqReports": "مسودات تقارير قطاع المقر",
     "stateReports": "مسودات تقارير برنامج الولاية",
     "totalDrafts": "إجمالي المسودات",
@@ -318,6 +320,7 @@
     "reports": "التقارير",
     "reportBreakdown": "توزيع التقارير",
     "viewProjectReports": "تقارير المشاريع",
+    "viewActivityReports": "تقارير الأنشطة",
     "viewHqReports": "تقارير قطاع المقر",
     "viewStateReports": "تقارير برنامج الولاية",
     "viewAllReports": "عرض كل التقارير"

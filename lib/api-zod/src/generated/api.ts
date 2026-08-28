@@ -3796,6 +3796,11 @@ export const GetReportsSummaryResponse = zod.object({
       "Canonical, non-archived reports in scope (includes draft, awaiting, approved, rejected).",
     ),
   draft: zod.number().describe("Reports with status = draft."),
+  returned: zod
+    .number()
+    .describe(
+      "Current draft reports whose latest approval action is request_revision.",
+    ),
   awaitingApproval: zod
     .number()
     .describe(
@@ -4026,6 +4031,14 @@ export const GetSectorPerformanceResponse = zod.array(
 /**
  * @summary Beneficiary segregation aggregated from project forms
  */
+export const GetBeneficiariesBreakdownQueryParams = zod.object({
+  stateId: zod.coerce.number().optional(),
+  sector: zod.coerce.string().optional(),
+  donor: zod.coerce.string().optional(),
+  dateFrom: zod.date().optional(),
+  dateTo: zod.date().optional(),
+});
+
 export const GetBeneficiariesBreakdownResponse = zod.object({
   summary: zod.object({
     male: zod.number(),
@@ -4673,7 +4686,7 @@ export const GetDashboardAttentionProjectsResponse = zod.array(
 export const GetDashboardLateReportsResponseItem = zod.object({
   id: zod.number(),
   title: zod.string(),
-  reportType: zod.string().optional(),
+  reportType: zod.string(),
   status: zod.string(),
   submittedAt: zod.string().optional(),
   daysWaiting: zod.number().optional(),

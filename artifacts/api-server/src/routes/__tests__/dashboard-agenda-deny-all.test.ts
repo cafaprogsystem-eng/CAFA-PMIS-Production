@@ -37,6 +37,20 @@ function appForAssignedSpo() {
   return app;
 }
 
+function appForTechnicalCoordinator() {
+  const app = express();
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    req.currentUser = {
+      id: 21, name: "Health TC", email: "tc@example.test",
+      role: "technical_coordinator", roleLabel: "Technical Coordinator", scope: "sector",
+      stateId: null, stateName: null, sector: "Health", sectors: ["Health"], avatarUrl: null,
+    };
+    next();
+  });
+  app.use(dashboardRouter);
+  return app;
+}
+
 describe("dashboard agenda fail-closed state scope", () => {
   it("applies deny-all to all hand-built agenda and operational queue queries", async () => {
     mockQuery.mockResolvedValue({ rows: [] });
@@ -93,7 +107,7 @@ describe("dashboard agenda fail-closed state scope", () => {
     expect(projectSql).toContain("ps.state_id = $2");
   });
 
-  it("applies assigned-project and state scope to budget, beneficiary, and report aggregates", async () => {
+  it("applies assignment scope to project facts and canonical state scope to Report aggregates", async () => {
     mockQuery.mockReset();
     mockQuery.mockResolvedValue({ rows: [] });
     mockQuery.mockResolvedValueOnce({ rows: [{ project_id: 101 }] } as never);
@@ -114,26 +128,28 @@ describe("dashboard agenda fail-closed state scope", () => {
     const beneficiarySql = (mockQuery.mock.calls as unknown[][])
       .map((call) => String(call[0] ?? ""));
     const byState = beneficiarySql.find((sql) => sql.includes("FROM states s") && sql.includes("beneficiaries_male"));
-    expect(byState).toContain("p.id = ANY($2::int[])");
-    expect(byState).toContain("ps.state_id = $3");
+    expect(byState).toContain("p.id = ANY($1::int[])");
+    expect(byState).toContain("_ps.state_id = $2");
+    expect(byState).toContain("s.id = $3");
 
     mockQuery.mockReset();
-    mockQuery.mockResolvedValue({
-      rows: [{ total: 0, draft: 0, awaiting_approval: 0, approved: 0, awaiting_over14: 0 }],
+    mockQuery.mockResolvedValue({ rows: [] });
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ total: 2, draft: 2, returned: 2, awaiting_approval: 0, approved: 0, awaiting_over14: 0 }],
     } as never);
-    mockQuery.mockResolvedValueOnce({ rows: [{ project_id: 101 }] } as never);
-    await request(appForAssignedSpo()).get("/dashboard/reports-summary").expect(200);
+    const reportResponse = await request(appForAssignedSpo()).get("/dashboard/reports-summary").expect(200);
     const reportCalls = mockQuery.mock.calls as unknown[][];
     const scopedReportCalls = reportCalls.filter((call) => String(call[0] ?? "").includes("reports r"));
     expect(scopedReportCalls).not.toHaveLength(0);
     for (const call of scopedReportCalls) {
-      expect(String(call[0])).toContain("r.project_id = ANY($1::int[])");
-      expect(String(call[0])).toContain("r.state_id = $2");
-      expect(call[1]).toEqual([[101], 7]);
+      expect(String(call[0])).not.toContain("r.project_id = ANY");
+      expect(String(call[0])).toContain("r.state_id = $1");
+      expect(call[1]).toEqual([7]);
     }
+    expect(reportResponse.body.returned).toBe(2);
   });
 
-  it("fails closed when an SPO has a state but no assigned projects", async () => {
+  it("fails project facts closed without assignments but preserves authorised standalone Reports", async () => {
     mockQuery.mockReset();
     mockQuery.mockResolvedValue({ rows: [] });
     mockQuery.mockResolvedValueOnce({ rows: [] } as never);
@@ -151,15 +167,54 @@ describe("dashboard agenda fail-closed state scope", () => {
     ).toContain("AND FALSE");
 
     mockQuery.mockReset();
-    mockQuery.mockResolvedValue({
-      rows: [{ total: 0, draft: 0, awaiting_approval: 0, approved: 0, awaiting_over14: 0 }],
+    mockQuery.mockResolvedValue({ rows: [] });
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ total: 2, draft: 2, returned: 2, awaiting_approval: 0, approved: 0, awaiting_over14: 0 }],
     } as never);
-    mockQuery.mockResolvedValueOnce({ rows: [] } as never);
-    await request(appForAssignedSpo()).get("/dashboard/reports-summary").expect(200);
-    const reportSql = (mockQuery.mock.calls as unknown[][])
+    const reportResponse = await request(appForAssignedSpo()).get("/dashboard/reports-summary").expect(200);
+    expect(reportResponse.body.returned).toBe(2);
+    const reportCalls = (mockQuery.mock.calls as unknown[][]);
+    const reportSql = reportCalls
       .map((call) => String(call[0] ?? ""))
       .filter((sql) => sql.includes("reports r"));
     expect(reportSql).not.toHaveLength(0);
-    for (const sql of reportSql) expect(sql).toContain("AND FALSE");
+    for (const sql of reportSql) {
+      expect(sql).toContain("r.state_id = $1");
+      expect(sql).not.toContain("r.project_id = ANY");
+      expect(sql).not.toContain("AND FALSE");
+    }
+    for (const call of reportCalls.filter((call) => String(call[0] ?? "").includes("reports r"))) {
+      expect(call[1]).toEqual([7]);
+    }
+  });
+
+  it("uses canonical type-aware TC sector scope for mixed Report counts", async () => {
+    mockQuery.mockReset();
+    mockQuery.mockResolvedValue({ rows: [] });
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ total: 0, draft: 0, returned: 0, awaiting_approval: 0, approved: 0, awaiting_over14: 0 }],
+    } as never);
+
+    await request(appForTechnicalCoordinator()).get("/dashboard/reports-summary").expect(200);
+
+    const countCall = (mockQuery.mock.calls as unknown[][]).find((call) =>
+      String(call[0] ?? "").includes("AS returned"),
+    );
+    expect(countCall).toBeDefined();
+    const sql = String(countCall![0]);
+    expect(sql).toContain(
+      "r.report_type = 'project' AND p2.sector = ANY($1::text[])",
+    );
+    expect(sql).toContain(
+      "r.report_type = 'activity' AND r.project_id IS NOT NULL AND p2.sector = ANY($1::text[])",
+    );
+    expect(sql).toContain(
+      "r.report_type = 'activity' AND r.project_id IS NULL AND act.sector = ANY($1::text[])",
+    );
+    expect(sql).toContain(
+      "r.report_type NOT IN ('project', 'activity')",
+    );
+    expect(sql).not.toContain("COALESCE(NULLIF(r.sector,''), p2.sector)");
+    expect(countCall![1]).toEqual([["Health"]]);
   });
 });

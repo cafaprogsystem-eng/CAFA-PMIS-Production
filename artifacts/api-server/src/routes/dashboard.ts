@@ -4,9 +4,11 @@ import { tcSectorRestriction, requirePerm } from "../middlewares/currentUser";
 import {
   CANONICAL_TYPES_SQL,
   AWAITING_APPROVAL_STATUSES_SQL,
+  SUBMITTED_STATUSES_SQL,
   TOTAL_STATUSES_SQL,
   operationalPopulationSQL,
 } from "../lib/reportConstants";
+import { ACTIVE_RISK_STATUS_SQL } from "../lib/riskConstants";
 import { VALID_SECTOR_SET } from "../lib/sectors";
 import {
   PMR_COMP_SUBMITTED_STATUSES,
@@ -199,6 +201,68 @@ function activeProjectParentSQL(projectIdExpression: string): string {
   )`;
 }
 
+/**
+ * The Reports module's authoritative TC-sector predicate. Do not replace this
+ * with COALESCE: project reports and project-linked activity reports are
+ * governed only by their project's sector; standalone activity reports use
+ * only their activity sector.
+ */
+function technicalCoordinatorReportSectorSQL(
+  reportAlias: string,
+  projectAlias: string,
+  activityAlias: string,
+  parameterIndex: number,
+  parameterKind: "array" | "single" = "array",
+): string {
+  const matches = (column: string) =>
+    parameterKind === "array"
+      ? `${column} = ANY($${parameterIndex}::text[])`
+      : `${column} = $${parameterIndex}::text`;
+  return `(
+    (${reportAlias}.report_type = 'project' AND ${matches(`${projectAlias}.sector`)})
+    OR (${reportAlias}.report_type = 'activity' AND ${reportAlias}.project_id IS NOT NULL AND ${matches(`${projectAlias}.sector`)})
+    OR (${reportAlias}.report_type = 'activity' AND ${reportAlias}.project_id IS NULL AND ${matches(`${activityAlias}.sector`)})
+    OR (${reportAlias}.report_type NOT IN ('project', 'activity')
+      AND (${matches(`${reportAlias}.sector`)} OR ${matches(`${projectAlias}.sector`)}))
+  )`;
+}
+
+/** Report scope mirrors GET /reports, rather than SPO project assignments. */
+function reportScopeWhere(
+  scope: Scope,
+  reportAlias: string,
+  projectAlias: string,
+  activityAlias: string,
+  baseIdx: number,
+  filters: Record<string, string | undefined> = {},
+): { sql: string; params: (number | string | string[])[] } {
+  const parts: string[] = [];
+  const params: (number | string | string[])[] = [];
+  let idx = baseIdx;
+  if (scope.denyAll) parts.push("FALSE");
+  if (scope.stateId !== null) {
+    parts.push(`${reportAlias}.state_id = $${idx++}`);
+    params.push(scope.stateId);
+  }
+  if (scope.sectors !== null) {
+    if (scope.sectors.length === 0) parts.push("FALSE");
+    else {
+      parts.push(technicalCoordinatorReportSectorSQL(reportAlias, projectAlias, activityAlias, idx++));
+      params.push(scope.sectors);
+    }
+  }
+  if (filters.donor) { parts.push(`${projectAlias}.donor = $${idx++}`); params.push(filters.donor); }
+  if (filters.dateFrom) { parts.push(`${projectAlias}.end_date >= $${idx++}::date`); params.push(filters.dateFrom); }
+  if (filters.dateTo) { parts.push(`${projectAlias}.start_date <= $${idx++}::date`); params.push(filters.dateTo); }
+  return { sql: parts.length ? ` AND ${parts.join(" AND ")}` : "", params };
+}
+
+/** Computed 3×3 Risk score; must mirror routes/risks.ts. */
+const riskScoreSQL = (alias: string) => `(
+  CASE ${alias}likelihood WHEN 'high' THEN 3 WHEN 'likely' THEN 3 WHEN 'almost_certain' THEN 3 WHEN 'medium' THEN 2 WHEN 'possible' THEN 2 WHEN 'low' THEN 1 WHEN 'unlikely' THEN 1 ELSE 2 END *
+  CASE COALESCE(${alias}impact, ${alias}severity) WHEN 'critical' THEN 3 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 2 END
+)`;
+
 // ─── Budget & Donors — role gate ────────────────────────────────────────────
 /**
  * Approved roles for Budget & Donors tab and its protected endpoints.
@@ -264,18 +328,23 @@ router.get("/dashboard/summary", async (req, res, next) => {
     const extraSql = (donorSql + " " + dateSql).trim();
     const scopeSql = baseScopeSql + (extraSql ? " " + extraSql : "");
     const scopeParams = [...baseScopeParams, ...extraParams];
+    // Report populations deliberately do not inherit SPO project assignments.
+    // They use the same state/TC scope as GET /reports, with Dashboard's
+    // optional filters applied to the linked project where applicable.
+    const reportEffectiveScope = applyFilterParams(
+      userScope(req),
+      req.query as Record<string, string | undefined>,
+    ).effectiveScope;
+    const reportFilters = req.query as Record<string, string | undefined>;
+    const reportCountScope = reportScopeWhere(
+      reportEffectiveScope, "r", "rp", "ra", 1, reportFilters,
+    );
 
     const zeroRisks = Promise.resolve({ rows: [{ high: 0, open: 0, critical: 0 }] });
 
     // Computed risk-level score (mirrors riskLevelSQL in routes/risks.ts) so the
     // "Active Critical Risks" KPI matches the /risks?riskLevel=critical filter.
     // score >= 9 → critical; >= 6 → high.
-    const riskScoreSQL = (a: string) => `(
-      CASE ${a}likelihood WHEN 'high' THEN 3 WHEN 'likely' THEN 3 WHEN 'almost_certain' THEN 3 WHEN 'medium' THEN 2 WHEN 'possible' THEN 2 WHEN 'low' THEN 1 WHEN 'unlikely' THEN 1 ELSE 2 END *
-      CASE COALESCE(${a}impact, ${a}severity) WHEN 'critical' THEN 3 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 2 END
-    )`;
-    const zeroReports = Promise.resolve({ rows: [{ submitted: 0, pending: 0 }] });
-
     // Determine effective state/sector for the conditional risk+report queries
     const es = effectiveScope;
 
@@ -302,14 +371,14 @@ router.get("/dashboard/summary", async (req, res, next) => {
         ? pool.query(
             `SELECT COUNT(DISTINCT rk.state_id)::int AS high FROM risks rk
              WHERE rk.state_id = $1 AND ${activeProjectParentSQL("rk.project_id")}
-               AND ${riskScoreSQL("rk.")} >= 6 AND rk.status NOT IN ('closed','mitigated')`,
+                AND ${riskScoreSQL("rk.")} >= 6 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
             [es.stateId],
           )
         : es.projectIds !== undefined
           ? (es.projectIds.length === 0 ? zeroRisks : pool.query(
               `SELECT COUNT(DISTINCT rk.state_id)::int AS high FROM risks rk
                WHERE rk.project_id = ANY($1::int[]) AND ${activeProjectParentSQL("rk.project_id")}
-                 AND ${riskScoreSQL("rk.")} >= 6 AND rk.status NOT IN ('closed','mitigated')`,
+                  AND ${riskScoreSQL("rk.")} >= 6 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
               [es.projectIds],
             ))
           : es.sectors !== null
@@ -317,39 +386,31 @@ router.get("/dashboard/summary", async (req, res, next) => {
                 `SELECT COUNT(DISTINCT rk.state_id)::int AS high
                  FROM risks rk JOIN projects p ON p.id = rk.project_id
                  WHERE p.deleted_at IS NULL AND p.sector = ANY($1::text[])
-                   AND ${riskScoreSQL("rk.")} >= 6 AND rk.status NOT IN ('closed','mitigated')`,
+                    AND ${riskScoreSQL("rk.")} >= 6 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
                 [es.sectors],
               )
             : pool.query(
                 `SELECT COUNT(DISTINCT rk.state_id)::int AS high
                  FROM risks rk WHERE ${activeProjectParentSQL("rk.project_id")}
-                   AND ${riskScoreSQL("rk.")} >= 6 AND rk.status NOT IN ('closed','mitigated')`,
+                    AND ${riskScoreSQL("rk.")} >= 6 AND rk.status ${ACTIVE_RISK_STATUS_SQL}`,
               ),
       // 4: pending approvals
       (() => {
-        const repScopeFilter = es.projectIds !== undefined
-          ? ` AND r.project_id = ANY($${scopeParams.length + 1}::int[])`
-          : es.stateId !== null
-          ? ` AND r.state_id = $${scopeParams.length + 1}`
-          : es.sectors !== null && es.sectors.length > 0
-            ? ` AND COALESCE(NULLIF(r.sector,''), (SELECT pf.sector FROM projects pf WHERE pf.id = r.project_id)) = ANY($${scopeParams.length + 1}::text[])`
-            : es.sectors !== null && es.sectors.length === 0
-              ? " AND FALSE"
-              : "";
-        const repScopeExtra: (number | string[] | number[])[] =
-          es.projectIds !== undefined ? [es.projectIds] :
-          es.stateId !== null ? [es.stateId] :
-          es.sectors !== null && es.sectors.length > 0 ? [es.sectors] :
-          [];
+        const pendingReportScope = reportScopeWhere(
+          reportEffectiveScope, "r", "rp", "ra", scopeParams.length + 1, reportFilters,
+        );
         return pool.query(
           `SELECT
             (SELECT COUNT(*)::int FROM projects p WHERE status NOT IN ('approved','rejected','draft')${scopeSql}) AS proj,
             (SELECT COUNT(*)::int FROM reports r
-             WHERE status NOT IN ('approved','rejected','draft')${repScopeFilter}
-                AND ${activeProjectParentSQL("r.project_id")}
+             LEFT JOIN projects rp ON rp.id = r.project_id
+             LEFT JOIN activities ra ON ra.id = r.activity_id
+             WHERE status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})${pendingReportScope.sql}
+               AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
+               AND ${activeProjectParentSQL("r.project_id")}
                AND ${operationalPopulationSQL()}
             ) AS rep`,
-          [...scopeParams, ...repScopeExtra],
+          [...scopeParams, ...pendingReportScope.params],
         );
       })(),
       // 5: delayed activities
@@ -369,24 +430,24 @@ router.get("/dashboard/summary", async (req, res, next) => {
       es.stateId !== null && es.projectIds === undefined
         ? pool.query(
             `SELECT
-              COUNT(*) FILTER (WHERE rk.status NOT IN ('closed','mitigated'))::int AS open,
-              COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status NOT IN ('closed','mitigated'))::int AS critical
+              COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
+              COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS critical
              FROM risks rk WHERE rk.state_id = $1 AND ${activeProjectParentSQL("rk.project_id")}`,
             [es.stateId],
           )
         : es.projectIds !== undefined
           ? (es.projectIds.length === 0 ? zeroRisks : pool.query(
               `SELECT
-                COUNT(*) FILTER (WHERE rk.status NOT IN ('closed','mitigated'))::int AS open,
-                COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status NOT IN ('closed','mitigated'))::int AS critical
+                COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
+                COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS critical
                FROM risks rk WHERE rk.project_id = ANY($1::int[]) AND ${activeProjectParentSQL("rk.project_id")}`,
               [es.projectIds],
             ))
           : es.sectors !== null && es.sectors.length > 0
             ? pool.query(
                 `SELECT
-                  COUNT(*) FILTER (WHERE rk.status NOT IN ('closed','mitigated'))::int AS open,
-                  COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status NOT IN ('closed','mitigated'))::int AS critical
+                  COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
+                  COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS critical
                  FROM risks rk JOIN projects p ON p.id = rk.project_id
                   WHERE p.deleted_at IS NULL AND p.sector = ANY($1::text[])`,
                 [es.sectors],
@@ -395,49 +456,23 @@ router.get("/dashboard/summary", async (req, res, next) => {
               ? zeroRisks
               : pool.query(
                   `SELECT
-                   COUNT(*) FILTER (WHERE rk.status NOT IN ('closed','mitigated'))::int AS open,
-                   COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status NOT IN ('closed','mitigated'))::int AS critical
+                   COUNT(*) FILTER (WHERE rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS open,
+                   COUNT(*) FILTER (WHERE ${riskScoreSQL("rk.")} >= 9 AND rk.status ${ACTIVE_RISK_STATUS_SQL})::int AS critical
                     FROM risks rk WHERE ${activeProjectParentSQL("rk.project_id")}`,
                 ),
-      // 8: report submitted/pending counts
-      es.stateId !== null && es.projectIds === undefined
-        ? pool.query(
-            `SELECT
-              COUNT(*) FILTER (WHERE status NOT IN ('draft'))::int AS submitted,
-              COUNT(*) FILTER (WHERE status IN ('submitted','coordination_approved','technically_approved'))::int AS pending
-              FROM reports r WHERE r.state_id = $1 AND ${activeProjectParentSQL("r.project_id")}
-                AND ${operationalPopulationSQL()}`,
-            [es.stateId],
-          )
-        : es.projectIds !== undefined
-          ? (es.projectIds.length === 0 ? zeroReports : pool.query(
-              `SELECT
-                COUNT(*) FILTER (WHERE r.status NOT IN ('draft'))::int AS submitted,
-                COUNT(*) FILTER (WHERE r.status IN ('submitted','coordination_approved','technically_approved'))::int AS pending
-                FROM reports r WHERE r.project_id = ANY($1::int[]) AND ${activeProjectParentSQL("r.project_id")}
-                  AND ${operationalPopulationSQL()}`,
-              [es.projectIds],
-            ))
-          : es.sectors !== null && es.sectors.length > 0
-            ? pool.query(
-                `SELECT
-                  COUNT(*) FILTER (WHERE r.status NOT IN ('draft'))::int AS submitted,
-                  COUNT(*) FILTER (WHERE r.status IN ('submitted','coordination_approved','technically_approved'))::int AS pending
-                 FROM reports r LEFT JOIN projects p ON p.id = r.project_id
-                 WHERE COALESCE(NULLIF(r.sector,''), p.sector) = ANY($1::text[])
-                    AND ${activeProjectParentSQL("r.project_id")}
-                   AND ${operationalPopulationSQL()}`,
-                [es.sectors],
-              )
-            : es.sectors !== null && es.sectors.length === 0
-              ? zeroReports
-              : pool.query(
-                  `SELECT
-                    COUNT(*) FILTER (WHERE status NOT IN ('draft'))::int AS submitted,
-                    COUNT(*) FILTER (WHERE status IN ('submitted','coordination_approved','technically_approved'))::int AS pending
-                    FROM reports r WHERE ${activeProjectParentSQL("r.project_id")}
-                      AND ${operationalPopulationSQL()}`,
-                ),
+      // 8: report submitted/pending counts (canonical Reports-module scope)
+      pool.query(
+        `SELECT
+          COUNT(*) FILTER (WHERE r.status = ANY(${SUBMITTED_STATUSES_SQL}))::int AS submitted,
+          COUNT(*) FILTER (WHERE r.status = ANY(${AWAITING_APPROVAL_STATUSES_SQL}))::int AS pending
+         FROM reports r
+         LEFT JOIN projects rp ON rp.id = r.project_id
+         LEFT JOIN activities ra ON ra.id = r.activity_id
+         WHERE ${activeProjectParentSQL("r.project_id")}${reportCountScope.sql}
+           AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
+           AND ${operationalPopulationSQL()}`,
+        reportCountScope.params,
+      ),
       // 9: activity planned / completed counts
       pool.query(
         `SELECT COUNT(*)::int AS planned,
@@ -461,9 +496,13 @@ router.get("/dashboard/summary", async (req, res, next) => {
       ),
     ]);
     const ben = { rows: [{ reached: benReached.rows[0].reached, target: benTarget.rows[0].target }] };
-    const stateCount = es.stateId !== null
-      ? { rows: [{ c: 1 }] }
-      : await pool.query(`SELECT COUNT(*)::int AS c FROM states`);
+    const stateCount = await pool.query(
+      `SELECT COUNT(DISTINCT ps.state_id)::int AS c
+       FROM project_states ps
+       JOIN projects p ON p.id = ps.project_id
+       WHERE p.status IN ('approved','coordination_approved','technically_approved','active')${scopeSql}`,
+      scopeParams,
+    );
 
     const totalBudget = budgetTotal.rows[0].total as number;
     const totalSpent = budgetSpent.rows[0].spent as number;
@@ -691,25 +730,43 @@ router.get("/dashboard/pending-approvals", async (req, res, next) => {
     if (!u) { res.json({ projects: [], reports: [] }); return; }
 
     const scope = await buildScope(req);
+    const canonicalReportScope = userScope(req);
     const { sql: projScopeSql, params: projScopeParams } = projectScopeWhere(scope, "p", 1);
 
     // Determine which workflow steps this role can currently action.
     // Only items where the authenticated user is the designated next approver are returned.
     // Roles outside the approval workflow receive empty lists — they are not hidden,
     // they simply have no actionable items.
-    type RoleStep = { projStatuses: string[]; reportStatuses: string[] };
+    type RoleStep = { projStatuses: string[]; reportPredicate: string | null };
     const roleSteps: Record<string, RoleStep> = {
-      technical_coordinator:       { projStatuses: ["submitted"],             reportStatuses: []                          },
-      senior_program_coordinator:  { projStatuses: ["technically_approved"],  reportStatuses: ["submitted"]               },
-      program_manager:             { projStatuses: ["coordination_approved"], reportStatuses: ["coordination_approved"]   },
+      technical_coordinator: {
+        projStatuses: ["submitted"],
+        reportPredicate: `(r.report_type IN ('project','activity')
+          AND r.workflow_path = 'state_authored'
+          AND r.status IN ('submitted','state_reviewed'))`,
+      },
+      senior_program_coordinator: {
+        projStatuses: ["technically_approved"],
+        reportPredicate: `(
+          (r.report_type IN ('project','activity') AND (
+            (r.workflow_path = 'state_authored' AND r.status = 'technically_approved')
+            OR (r.workflow_path = 'technical_authored' AND r.status = 'submitted')
+          ))
+          OR (r.report_type IN ('program_state','hq_sector') AND r.status = 'submitted')
+        )`,
+      },
+      program_manager: {
+        projStatuses: ["coordination_approved"],
+        reportPredicate: `r.status = 'coordination_approved'`,
+      },
       super_admin:                 {
         projStatuses:   ["submitted", "technically_approved", "coordination_approved"],
-        reportStatuses: ["submitted", "coordination_approved"],
+        reportPredicate: `r.status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})`,
       },
     };
 
     const steps = roleSteps[u.role];
-    if (!steps || (steps.projStatuses.length === 0 && steps.reportStatuses.length === 0)) {
+    if (!steps || (steps.projStatuses.length === 0 && steps.reportPredicate === null)) {
       res.json({ projects: [], reports: [] }); return;
     }
 
@@ -723,7 +780,7 @@ router.get("/dashboard/pending-approvals", async (req, res, next) => {
              p.budget_total::float AS "budgetTotal",
              COALESCE((SELECT SUM(a.budget_spent)::float FROM activities a WHERE a.project_id = p.id), 0) AS "budgetSpent",
              p.beneficiaries_target AS "beneficiariesTarget",
-             COALESCE((SELECT COUNT(*)::int FROM beneficiaries b WHERE b.project_id = p.id), 0) AS "beneficiariesReached",
+              COALESCE(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls, 0)::int AS "beneficiariesReached",
              COALESCE((SELECT AVG(a.progress_pct)::int FROM activities a WHERE a.project_id = p.id), 0) AS "progressPct",
              ARRAY(SELECT ps.state_id FROM project_states ps WHERE ps.project_id = p.id ORDER BY ps.state_id) AS "stateIds",
              ARRAY(SELECT s.name FROM project_states ps JOIN states s ON s.id = ps.state_id WHERE ps.project_id = p.id ORDER BY ps.state_id) AS "stateNames",
@@ -735,39 +792,30 @@ router.get("/dashboard/pending-approvals", async (req, res, next) => {
 
     // Reports query — scoped to role's actionable report statuses
     let reportRows: Record<string, unknown>[] = [];
-    if (steps.reportStatuses.length > 0) {
-      const reportStateFilter = scope.stateId !== null
-        ? ` AND r.state_id = $2`
-        : "";
-      const reportSectorBase = scope.stateId !== null ? 3 : 2;
-      const reportSectorFilter = scope.sectors !== null && scope.sectors.length > 0
-        ? ` AND (COALESCE(NULLIF(r.sector,''), p.sector)) = ANY($${reportSectorBase}::text[])`
-        : scope.sectors !== null && scope.sectors.length === 0
-          ? " AND FALSE"
-          : "";
-      const rptStatusBase = scope.stateId !== null
-        ? (scope.sectors !== null && scope.sectors.length > 0 ? 4 : 3)
-        : (scope.sectors !== null && scope.sectors.length > 0 ? 3 : 2);
-
-      const rptExtraParams: (number | string[])[] = [];
-      if (scope.stateId !== null) rptExtraParams.push(scope.stateId);
-      if (scope.sectors !== null && scope.sectors.length > 0) rptExtraParams.push(scope.sectors);
+    if (steps.reportPredicate) {
+      const reportFilters: string[] = [steps.reportPredicate];
+      const rptExtraParams: (number | string | string[] | number[])[] = [];
+      const reportScope = reportScopeWhere(canonicalReportScope, "r", "p", "act", 1);
+      reportFilters.push(reportScope.sql.replace(/^ AND /, ""));
+      rptExtraParams.push(...reportScope.params);
 
       const reports = await pool.query(`
-        SELECT r.id, r.title, r.kind, r.status,
+        SELECT r.id, r.title, r.kind, r.report_type AS "reportType", r.status,
                r.project_id AS "projectId", p.title AS "projectTitle",
                r.state_id AS "stateId", s.name AS "stateName", s.name_ar AS "stateNameAr",
                r.period, r.narrative,
                u.name AS "submittedByName", r.submitted_at AS "submittedAt"
         FROM reports r
         LEFT JOIN projects p ON p.id = r.project_id
+        LEFT JOIN activities act ON act.id = r.activity_id
         LEFT JOIN states s ON s.id = r.state_id
         LEFT JOIN users u ON u.id = r.submitted_by_id
-        WHERE r.status = ANY($1::text[])${reportStateFilter}${reportSectorFilter}
+        WHERE ${reportFilters.join(" AND ")}
+          AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
           AND ${activeProjectParentSQL("r.project_id")}
           AND ${operationalPopulationSQL()}
         ORDER BY r.submitted_at DESC LIMIT 20
-      `, [steps.reportStatuses, ...rptExtraParams]);
+      `, rptExtraParams);
       reportRows = reports.rows as Record<string, unknown>[];
     }
 
@@ -800,7 +848,7 @@ router.get("/dashboard/recent-activity", async (req, res, next) => {
       ? "WHERE FALSE"
       : scope.projectIds !== undefined
       ? `WHERE (a.module IN ('projects', 'project') AND a.entity_id = ANY($1::int[]))
-           OR (a.module = 'reports' AND a.entity_id IN (SELECT id FROM reports WHERE project_id = ANY($1::int[])))
+           OR (a.module = 'reports' AND a.entity_id IN (SELECT id FROM reports r2 WHERE r2.state_id = $2))
            OR (a.module = 'risks' AND a.entity_id IN (SELECT id FROM risks WHERE project_id = ANY($1::int[])))
            OR (a.module = 'beneficiaries' AND a.entity_id IN (SELECT id FROM beneficiaries WHERE project_id = ANY($1::int[])))`
       : scope.stateId !== null
@@ -810,7 +858,12 @@ router.get("/dashboard/recent-activity", async (req, res, next) => {
            OR (a.module = 'risks' AND a.entity_id IN (SELECT id FROM risks WHERE state_id = ${scope.stateId}))`
       : scope.sectors !== null && scope.sectors.length > 0
         ? `WHERE (a.module IN ('projects', 'project') AND a.entity_id IN (SELECT id FROM projects WHERE sector = ANY($1::text[])))
-             OR (a.module = 'reports' AND a.entity_id IN (SELECT r2.id FROM reports r2 LEFT JOIN projects p2 ON p2.id = r2.project_id WHERE COALESCE(NULLIF(r2.sector,''), p2.sector) = ANY($1::text[])))
+              OR (a.module = 'reports' AND a.entity_id IN (
+                SELECT r2.id FROM reports r2
+                LEFT JOIN projects p2 ON p2.id = r2.project_id
+                LEFT JOIN activities act2 ON act2.id = r2.activity_id
+                WHERE ${technicalCoordinatorReportSectorSQL("r2", "p2", "act2", 1)}
+              ))
              OR (a.module NOT IN ('projects','reports','risks'))`
         : scope.sectors !== null && scope.sectors.length === 0
           ? "WHERE FALSE"
@@ -820,7 +873,7 @@ router.get("/dashboard/recent-activity", async (req, res, next) => {
       : `WHERE ${activeAuditParentFilter}`;
 
     const params: unknown[] = scope.projectIds !== undefined
-      ? [scope.projectIds]
+      ? [scope.projectIds, scope.stateId]
       : scope.sectors !== null && scope.sectors.length > 0 ? [scope.sectors] : [];
 
     const { rows } = await pool.query(`
@@ -1634,26 +1687,19 @@ router.get("/dashboard/project-budget-performance", async (req, res, next) => {
 
 router.get("/dashboard/beneficiaries", async (req, res, next) => {
   try {
-    // Role gate — both layers required (role check + userScope record restriction)
-    if (!requireBudgetDonorsRole(req, res)) return;
-
-    const scope = await buildScope(req);
-    // Fail-closed: TC without assigned Sectors
-    if (req.currentUser!.role === "technical_coordinator" &&
-        scope.sectors !== null && scope.sectors.length === 0) {
-      res.status(403).json({
-        error: "Budget & Donors access requires an assigned Sector. Contact your administrator.",
-      });
-      return;
-    }
-    // Fail-closed: SPO without an assigned State
-    if (req.currentUser!.role === "state_program_officer" && scope.stateId === null) {
-      res.status(403).json({
-        error: "Budget & Donors access requires an assigned State. Contact your administrator.",
-      });
-      return;
-    }
-    const { sql: scopeSql, params: scopeParams } = projectScopeWhere(scope, "p", 1);
+    const filterError = dashboardFilterError(req.query as Record<string, string | undefined>);
+    if (filterError) { res.status(400).json({ error: filterError }); return; }
+    const rawScope = await buildScope(req);
+    const { effectiveScope, donorCond, dateConds, extraParams } = applyFilterParams(
+      rawScope,
+      req.query as Record<string, string | undefined>,
+    );
+    const { sql: baseScopeSql, params: baseScopeParams, nextIdx } = projectScopeWhere(effectiveScope, "p", 1);
+    const { sql: donorSql, nextIdx: afterDonor } = reindex(donorCond, nextIdx);
+    const { sql: dateSql } = reindex(dateConds, afterDonor);
+    const scopeSql = baseScopeSql + (donorSql || dateSql ? ` ${donorSql} ${dateSql}` : "");
+    const scopeParams = [...baseScopeParams, ...extraParams];
+    const scope = effectiveScope;
 
     const [summary, byState, bySector, byProject] = await Promise.all([
       pool.query(`SELECT
@@ -1665,10 +1711,7 @@ router.get("/dashboard/beneficiaries", async (req, res, next) => {
         FROM projects p WHERE 1=1${scopeSql}`, scopeParams),
 
       scope.stateId !== null
-        ? (() => {
-          const { sql: stateProjectScopeSql, params: stateProjectScopeParams } =
-            projectScopeWhere(scope, "p", 2);
-          return pool.query(`
+        ? pool.query(`
           SELECT
             s.id   AS "stateId",
             s.name AS "stateName",
@@ -1680,10 +1723,9 @@ router.get("/dashboard/beneficiaries", async (req, res, next) => {
           FROM states s
           JOIN project_states pst ON pst.state_id = s.id
           JOIN projects p ON p.id = pst.project_id
-           WHERE s.id = $1${stateProjectScopeSql}
+           WHERE s.id = $${scopeParams.length + 1}${scopeSql}
            GROUP BY s.id, s.name ORDER BY total DESC`,
-          [scope.stateId, ...stateProjectScopeParams]);
-        })()
+          [...scopeParams, scope.stateId])
         : pool.query(`
           WITH project_share AS (
             SELECT p.id,
@@ -1755,6 +1797,7 @@ router.get("/dashboard/beneficiaries", async (req, res, next) => {
 router.get("/dashboard/agenda", async (req, res, next) => {
   try {
     const scope = await buildScope(req);
+    const agendaReportScope = reportScopeWhere(userScope(req), "r", "rp", "ra", 1);
     const { sql: projScopeSql, params: projScopeParams } = projectScopeWhere(scope, "p", 2);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1809,19 +1852,21 @@ router.get("/dashboard/agenda", async (req, res, next) => {
       pool.query(`
         SELECT r.id, r.title, r.report_type AS "reportType", r.status,
                r.submitted_at::date AS date,
-               COALESCE(r.sector, p.sector) AS sector
+               CASE
+                 WHEN r.report_type = 'project' THEN rp.sector
+                 WHEN r.report_type = 'activity' AND r.project_id IS NOT NULL THEN rp.sector
+                 WHEN r.report_type = 'activity' THEN ra.sector
+                 ELSE COALESCE(NULLIF(r.sector,''), rp.sector)
+               END AS sector
         FROM reports r
-        LEFT JOIN projects p ON p.id = r.project_id
+        LEFT JOIN projects rp ON rp.id = r.project_id
+        LEFT JOIN activities ra ON ra.id = r.activity_id
         WHERE r.status NOT IN ('draft','approved','rejected','archived')
           AND ${activeProjectParentSQL("r.project_id")}
           AND ${operationalPopulationSQL()}
-          ${scope.denyAll ? " AND FALSE" : ""}
-          ${scope.projectIds !== undefined ? " AND r.project_id = ANY($1::int[])" : ""}
-          ${scope.projectIds === undefined && scope.stateId !== null ? " AND r.state_id = $1" : ""}
-          ${scope.projectIds === undefined && scope.sectors !== null && scope.sectors.length > 0 ? " AND (COALESCE(NULLIF(r.sector,''), p.sector)) = ANY($1::text[])" : ""}
-          ${scope.sectors !== null && scope.sectors.length === 0 ? " AND FALSE" : ""}
+          ${agendaReportScope.sql}
         ORDER BY r.submitted_at DESC LIMIT 20
-      `, scope.projectIds !== undefined ? [scope.projectIds] : scope.stateId !== null ? [scope.stateId] : (scope.sectors && scope.sectors.length > 0 ? [scope.sectors] : [])),
+      `, agendaReportScope.params),
     ]);
 
     const todayStr = today.toISOString().slice(0, 10);
@@ -1877,14 +1922,17 @@ router.get(
       const isStateRole =
         req.currentUser?.role === "state_program_officer" ||
         req.currentUser?.role === "state_office_manager";
-      const scope = await buildScope(req);
+      // Reports follow the canonical Reports module scope: state roles are
+      // clamped to their State, including standalone State Programme Reports.
+      // Project assignment scope remains a Project-Dashboard concern and must
+      // not erase authorised project_id=NULL Report records here.
+      const scope = userScope(req);
       const effectiveStateId = scope.stateId;
       const denyAll = Boolean(scope.denyAll);
       const tcSectors = tcSectorRestriction(req);
       const isHqRole = !isStateRole && tcSectors === null;
 
-      // Keep assignment, state, and sector clauses in one parameterised scope.
-      // An SPO must satisfy both their assigned project set and their state.
+      // Keep state and sector clauses in one parameterised scope.
       const params: unknown[] = [];
       let nextParam = 1;
       const reportScope: string[] = [];
@@ -1892,14 +1940,6 @@ router.get(
       if (denyAll) {
         reportScope.push("AND FALSE");
       } else {
-        if (scope.projectIds !== undefined) {
-          if (scope.projectIds.length === 0) reportScope.push("AND FALSE");
-          else {
-            reportScope.push(`AND r.project_id = ANY($${nextParam}::int[])`);
-            params.push(scope.projectIds);
-            nextParam++;
-          }
-        }
         if (effectiveStateId !== null) {
           stateParam = nextParam;
           reportScope.push(`AND r.state_id = $${nextParam}`);
@@ -1911,15 +1951,48 @@ router.get(
       const sectorParam = nextParam;
       const sectorFilter =
         tcSectors !== null && tcSectors.length > 0
-          ? `AND (COALESCE(NULLIF(r.sector,''), p2.sector)) = ANY($${sectorParam}::text[])`
+          ? `AND (
+              (r.report_type = 'project' AND p2.sector = ANY($${sectorParam}::text[]))
+              OR (r.report_type = 'activity' AND r.project_id IS NOT NULL AND p2.sector = ANY($${sectorParam}::text[]))
+              OR (r.report_type = 'activity' AND r.project_id IS NULL AND act.sector = ANY($${sectorParam}::text[]))
+              OR (
+                r.report_type NOT IN ('project', 'activity')
+                AND (r.sector = ANY($${sectorParam}::text[]) OR p2.sector = ANY($${sectorParam}::text[]))
+              )
+            )`
           : tcSectors !== null && tcSectors.length === 0
             ? "AND FALSE"
             : "";
       if (tcSectors !== null && tcSectors.length > 0) params.push(tcSectors);
-      const joinProject = sectorFilter ? "LEFT JOIN projects p2 ON p2.id = r.project_id" : "";
+      const joinProject = sectorFilter
+        ? `LEFT JOIN projects p2 ON p2.id = r.project_id
+           LEFT JOIN activities act ON act.id = r.activity_id`
+        : "";
       const byStateSectorFilter =
         tcSectors !== null && tcSectors.length > 0
-          ? `AND COALESCE(NULLIF(r.sector,''), (SELECT p.sector FROM projects p WHERE p.id = r.project_id)) = ANY($${sectorParam}::text[])`
+          ? `AND (
+              (
+                r.report_type = 'project'
+                AND (SELECT p.sector FROM projects p WHERE p.id = r.project_id) = ANY($${sectorParam}::text[])
+              )
+              OR (
+                r.report_type = 'activity'
+                AND r.project_id IS NOT NULL
+                AND (SELECT p.sector FROM projects p WHERE p.id = r.project_id) = ANY($${sectorParam}::text[])
+              )
+              OR (
+                r.report_type = 'activity'
+                AND r.project_id IS NULL
+                AND (SELECT a.sector FROM activities a WHERE a.id = r.activity_id) = ANY($${sectorParam}::text[])
+              )
+              OR (
+                r.report_type NOT IN ('project', 'activity')
+                AND (
+                  r.sector = ANY($${sectorParam}::text[])
+                  OR (SELECT p.sector FROM projects p WHERE p.id = r.project_id) = ANY($${sectorParam}::text[])
+                )
+              )
+            )`
           : tcSectors !== null && tcSectors.length === 0
             ? "AND FALSE"
             : "";
@@ -1942,6 +2015,16 @@ router.get(
               WHERE r.status = ANY(${TOTAL_STATUSES_SQL})
             )::int AS total,
             COUNT(*) FILTER (WHERE r.status = 'draft')::int AS draft,
+            COUNT(*) FILTER (
+              WHERE r.status = 'draft'
+                AND (
+                  SELECT a.action
+                  FROM approvals a
+                  WHERE a.entity_type = 'report' AND a.entity_id = r.id
+                  ORDER BY a.timestamp DESC, a.id DESC
+                  LIMIT 1
+                ) = 'request_revision'
+            )::int AS returned,
             COUNT(*) FILTER (
               WHERE r.status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})
             )::int AS awaiting_approval,
@@ -1983,9 +2066,19 @@ router.get(
         `, params),
         // By sector — canonical types, non-archived, operational population
         pool.query(
-          `SELECT COALESCE(NULLIF(r.sector,''), p.sector, 'Unspecified') AS sector,
+          `SELECT COALESCE(
+                    CASE
+                      WHEN r.report_type = 'project' THEN p.sector
+                      WHEN r.report_type = 'activity' AND r.project_id IS NOT NULL THEN p.sector
+                      WHEN r.report_type = 'activity' THEN act.sector
+                      ELSE COALESCE(NULLIF(r.sector,''), p.sector)
+                    END,
+                    'Unspecified'
+                  ) AS sector,
                   COUNT(*)::int AS count
-           FROM reports r LEFT JOIN projects p ON p.id = r.project_id
+           FROM reports r
+           LEFT JOIN projects p ON p.id = r.project_id
+           LEFT JOIN activities act ON act.id = r.activity_id
            WHERE 1=1
              ${stateFilter}
              ${sectorFilter.replace("p2.", "p.")}
@@ -2028,6 +2121,7 @@ router.get(
       res.json({
         total: Number(c.total),
         draft: Number(c.draft),
+        returned: Number(c.returned),
         awaitingApproval: Number(c.awaiting_approval),
         approved: Number(c.approved),
         awaitingApprovalOver14Days: Number(c.awaiting_over14),
@@ -2069,11 +2163,18 @@ router.get("/dashboard/sector-snapshot", async (req, res, next) => {
           COALESCE((SELECT COUNT(DISTINCT ps.state_id)::int FROM project_states ps JOIN projects p ON p.id = ps.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status IN ('approved','active')), 0) AS "activeStates",
           COALESCE((SELECT COUNT(DISTINCT l.id)::int FROM project_localities pl JOIN localities l ON l.id = pl.locality_id JOIN project_states ps ON ps.project_id = pl.project_id JOIN projects p ON p.id = pl.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status IN ('approved','active')), 0) AS "activeLocalities",
           COALESCE((SELECT COUNT(*)::int FROM activities a JOIN projects p ON p.id = a.project_id WHERE p.deleted_at IS NULL AND p.sector = $1), 0) AS "activitiesImplemented",
-          COALESCE((SELECT COUNT(*)::int FROM beneficiaries b JOIN projects p ON p.id = b.project_id WHERE p.deleted_at IS NULL AND p.sector = $1), 0) AS "beneficiariesReached",
+          COALESCE((SELECT SUM(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls)::int FROM projects p WHERE p.deleted_at IS NULL AND p.sector = $1), 0) AS "beneficiariesReached",
           COALESCE((SELECT CASE WHEN SUM(i.target) > 0 THEN (SUM(i.achieved) / SUM(i.target) * 100)::int ELSE 0 END FROM indicators i JOIN projects p ON p.id = i.project_id WHERE p.deleted_at IS NULL AND i.sector = $1), 0) AS "indicatorProgressPct",
           COALESCE((SELECT COUNT(*)::int FROM activities a JOIN projects p ON p.id = a.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND a.status = 'delayed'), 0) AS "delayedActivities",
-          COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL AND sector = $1) AND r.status NOT IN ('closed','mitigated')), 0) AS "openRisks",
-          COALESCE((SELECT COUNT(*)::int FROM reports r2 WHERE r2.sector = $1 AND ${activeProjectParentSQL("r2.project_id")} AND r2.status IN ('submitted','technically_approved','coordination_approved')), 0) AS "pendingApprovals"
+          COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL AND sector = $1) AND r.status ${ACTIVE_RISK_STATUS_SQL}), 0) AS "openRisks",
+          COALESCE((SELECT COUNT(*)::int FROM reports r2
+            LEFT JOIN projects p2 ON p2.id = r2.project_id
+            LEFT JOIN activities act2 ON act2.id = r2.activity_id
+            WHERE ${technicalCoordinatorReportSectorSQL("r2", "p2", "act2", 1, "single")}
+              AND ${activeProjectParentSQL("r2.project_id")}
+              AND r2.report_type = ANY(${CANONICAL_TYPES_SQL})
+              AND r2.status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})
+              AND ${operationalPopulationSQL("r2")}), 0) AS "pendingApprovals"
       `, [sector]),
 
       // Per-state summary
@@ -2084,7 +2185,7 @@ router.get("/dashboard/sector-snapshot", async (req, res, next) => {
           COUNT(DISTINCT a.id)::int AS activities,
           COALESCE((SELECT COUNT(*)::int FROM beneficiaries b WHERE b.state_id = s.id AND b.project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL AND sector = $1)), 0) AS beneficiaries,
           COALESCE(AVG(a.progress_pct)::int, 0) AS "progressPct",
-          COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.state_id = s.id AND r.project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL AND sector = $1) AND r.status NOT IN ('closed','mitigated')), 0) AS "openRisks"
+          COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.state_id = s.id AND r.project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL AND sector = $1) AND r.status ${ACTIVE_RISK_STATUS_SQL}), 0) AS "openRisks"
         FROM states s
         JOIN project_states ps ON ps.state_id = s.id
         JOIN projects p ON p.id = ps.project_id AND p.deleted_at IS NULL AND p.sector = $1 AND p.status IN ('approved','active','coordination_approved','technically_approved')
@@ -2100,8 +2201,8 @@ router.get("/dashboard/sector-snapshot", async (req, res, next) => {
           COALESCE((SELECT COUNT(*)::int FROM beneficiaries b WHERE b.project_id = p.id), 0) AS beneficiaries,
           COALESCE((SELECT CASE WHEN p.budget_total > 0 THEN (SUM(a.budget_spent) / p.budget_total * 100)::int ELSE 0 END FROM activities a WHERE a.project_id = p.id), 0) AS "budgetUtilizationPct",
           CASE
-            WHEN (SELECT COUNT(*) FROM risks r WHERE r.project_id = p.id AND r.severity IN ('high','critical') AND r.status NOT IN ('closed','mitigated')) >= 2 THEN 'high'
-            WHEN (SELECT COUNT(*) FROM risks r WHERE r.project_id = p.id AND r.severity IN ('high','critical') AND r.status NOT IN ('closed','mitigated')) >= 1 THEN 'medium'
+            WHEN (SELECT COUNT(*) FROM risks r WHERE r.project_id = p.id AND r.severity IN ('high','critical') AND r.status ${ACTIVE_RISK_STATUS_SQL}) >= 2 THEN 'high'
+            WHEN (SELECT COUNT(*) FROM risks r WHERE r.project_id = p.id AND r.severity IN ('high','critical') AND r.status ${ACTIVE_RISK_STATUS_SQL}) >= 1 THEN 'medium'
             ELSE 'low'
           END AS "riskLevel"
         FROM projects p
@@ -2286,7 +2387,7 @@ router.get("/dashboard/attention-projects", async (req, res, next) => {
         `SELECT p.id, p.code, p.title, p.sector
          FROM projects p
          WHERE p.status = 'draft'${scopeSql}
-         ORDER BY p.id LIMIT 100`,
+         ORDER BY p.id`,
         scopeParams,
       ),
       // 2. Projects with draft project reports — count distinct draft report IDs
@@ -2295,9 +2396,12 @@ router.get("/dashboard/attention-projects", async (req, res, next) => {
                 COUNT(DISTINCT r.id)::text AS "draftRptCount"
          FROM projects p
          JOIN reports r ON r.project_id = p.id
-         WHERE r.status = 'draft' AND r.kind = 'project'${scopeSql}
+         WHERE r.status = 'draft'
+           AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
+           AND ${operationalPopulationSQL()}
+           ${scopeSql}
          GROUP BY p.id, p.code, p.title, p.sector
-         ORDER BY p.id LIMIT 100`,
+         ORDER BY p.id`,
         scopeParams,
       ),
       // 3. Projects with currently returned reports — count distinct returned report IDs
@@ -2306,9 +2410,19 @@ router.get("/dashboard/attention-projects", async (req, res, next) => {
                 COUNT(DISTINCT r.id)::text AS "returnedCount"
          FROM projects p
          JOIN reports r ON r.project_id = p.id
-         WHERE r.status = 'returned'${scopeSql}
+         WHERE r.status = 'draft'
+           AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
+           AND ${operationalPopulationSQL()}
+           AND (
+             SELECT a.action
+             FROM approvals a
+             WHERE a.entity_type = 'report' AND a.entity_id = r.id
+             ORDER BY a.timestamp DESC, a.id DESC
+             LIMIT 1
+           ) = 'request_revision'
+           ${scopeSql}
          GROUP BY p.id, p.code, p.title, p.sector
-         ORDER BY p.id LIMIT 100`,
+         ORDER BY p.id`,
         scopeParams,
       ),
       // 4. Projects with reports awaiting approval >14 days — count distinct report IDs
@@ -2317,11 +2431,13 @@ router.get("/dashboard/attention-projects", async (req, res, next) => {
                 COUNT(DISTINCT r.id)::text AS "awaitingCount"
          FROM projects p
          JOIN reports r ON r.project_id = p.id
-         WHERE r.status IN ('submitted','coordination_approved','technically_approved')
+         WHERE r.status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})
+           AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
+           AND ${operationalPopulationSQL()}
            AND r.submitted_at IS NOT NULL
            AND r.submitted_at < NOW() - INTERVAL '14 days'${scopeSql}
          GROUP BY p.id, p.code, p.title, p.sector
-         ORDER BY p.id LIMIT 100`,
+         ORDER BY p.id`,
         scopeParams,
       ),
       // 5. Projects with at least one active critical risk
@@ -2330,11 +2446,11 @@ router.get("/dashboard/attention-projects", async (req, res, next) => {
                 COUNT(rk.id)::text AS "critCount"
          FROM projects p
          JOIN risks rk ON rk.project_id = p.id
-         WHERE rk.severity = 'critical'
-           AND rk.status NOT IN ('closed','mitigated','resolved','cancelled')${scopeSql}
+         WHERE ${riskScoreSQL("rk.")} >= 9
+           AND rk.status ${ACTIVE_RISK_STATUS_SQL}${scopeSql}
          GROUP BY p.id, p.code, p.title, p.sector
          HAVING COUNT(rk.id) > 0
-         ORDER BY p.id LIMIT 100`,
+         ORDER BY p.id`,
         scopeParams,
       ),
       // 6. Projects with overdue risk mitigation actions — count distinct overdue risk IDs
@@ -2343,11 +2459,11 @@ router.get("/dashboard/attention-projects", async (req, res, next) => {
                 COUNT(DISTINCT rk.id)::text AS "overdueMitCount"
          FROM projects p
          JOIN risks rk ON rk.project_id = p.id
-         WHERE rk.status NOT IN ('closed','mitigated','resolved','cancelled')
+         WHERE rk.status ${ACTIVE_RISK_STATUS_SQL}
            AND rk.due_date IS NOT NULL
            AND rk.due_date < CURRENT_DATE${scopeSql}
          GROUP BY p.id, p.code, p.title, p.sector
-         ORDER BY p.id LIMIT 100`,
+         ORDER BY p.id`,
         scopeParams,
       ),
     ]);
@@ -2430,7 +2546,7 @@ router.get("/dashboard/attention-projects", async (req, res, next) => {
     }
 
     // Return deduplicated projects — each counted once regardless of how many reasons apply.
-    res.json(Array.from(map.values()).slice(0, 30));
+    res.json(Array.from(map.values()));
   } catch (err) {
     next(err);
   }
@@ -2461,26 +2577,13 @@ router.get("/dashboard/hierarchical-performance", async (req, res, next) => {
 
 router.get("/dashboard/late-reports", async (req, res, next) => {
   try {
-    const scope = await buildScope(req);
-    const denyAllFilter = scope.denyAll ? " AND FALSE" : "";
-    const stateFilter = scope.projectIds === undefined && scope.stateId !== null ? ` AND r.state_id = $1` : "";
-    const assignmentFilter = scope.projectIds !== undefined ? " AND r.project_id = ANY($1::int[])" : "";
-    const sectorFilter = scope.sectors !== null && scope.sectors.length > 0
-      ? ` AND (COALESCE(NULLIF(r.sector,''), p.sector)) = ANY($${scope.stateId !== null ? 2 : 1}::text[])`
-      : scope.sectors !== null && scope.sectors.length === 0
-        ? " AND FALSE"
-        : "";
-
-    const params: (number | string[] | number[])[] = [];
-    if (scope.projectIds !== undefined) params.push(scope.projectIds);
-    else if (scope.stateId !== null) params.push(scope.stateId);
-    if (scope.sectors !== null && scope.sectors.length > 0) params.push(scope.sectors);
+    const reportScope = reportScopeWhere(userScope(req), "r", "p", "act", 1);
 
     const { rows } = await pool.query(`
       SELECT
         r.id,
         r.title,
-        r.kind AS "reportType",
+        r.report_type AS "reportType",
         r.status,
         r.submitted_at AS "submittedAt",
         EXTRACT(day FROM NOW() - r.submitted_at)::int AS "daysWaiting",
@@ -2492,15 +2595,17 @@ router.get("/dashboard/late-reports", async (req, res, next) => {
         u.name AS "submittedByName"
       FROM reports r
       LEFT JOIN projects p ON p.id = r.project_id
+       LEFT JOIN activities act ON act.id = r.activity_id
       LEFT JOIN states s ON s.id = r.state_id
       LEFT JOIN users u ON u.id = r.submitted_by_id
-      WHERE r.status IN ('submitted','coordination_approved','technically_approved')
+      WHERE r.status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})
+        AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
         AND r.submitted_at < NOW() - INTERVAL '14 days'
         AND ${activeProjectParentSQL("r.project_id")}
-        AND ${operationalPopulationSQL()}${denyAllFilter}${assignmentFilter}${stateFilter}${sectorFilter}
+        AND ${operationalPopulationSQL()}${reportScope.sql}
       ORDER BY r.submitted_at ASC
       LIMIT 30
-    `, params);
+    `, reportScope.params);
 
     res.json(rows);
   } catch (err) {

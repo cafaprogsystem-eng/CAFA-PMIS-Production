@@ -7630,6 +7630,7 @@ export declare const GetReportAggregatesResponse: zod.ZodObject<{
 export declare const GetReportsSummaryResponse: zod.ZodObject<{
     total: zod.ZodNumber;
     draft: zod.ZodNumber;
+    returned: zod.ZodNumber;
     awaitingApproval: zod.ZodNumber;
     approved: zod.ZodNumber;
     awaitingApprovalOver14Days: zod.ZodNumber;
@@ -7682,6 +7683,7 @@ export declare const GetReportsSummaryResponse: zod.ZodObject<{
     awaitingApproval: number;
     approved: number;
     awaitingApprovalOver14Days: number;
+    returned: number;
     unresolvedLegacyCount: number;
     bySector: {
         sector: string;
@@ -7703,6 +7705,7 @@ export declare const GetReportsSummaryResponse: zod.ZodObject<{
     awaitingApproval: number;
     approved: number;
     awaitingApprovalOver14Days: number;
+    returned: number;
     unresolvedLegacyCount: number;
     bySector: {
         sector: string;
@@ -8224,6 +8227,25 @@ export declare const GetSectorPerformanceResponse: zod.ZodArray<zod.ZodObject<{
 /**
  * @summary Beneficiary segregation aggregated from project forms
  */
+export declare const GetBeneficiariesBreakdownQueryParams: zod.ZodObject<{
+    stateId: zod.ZodOptional<zod.ZodNumber>;
+    sector: zod.ZodOptional<zod.ZodString>;
+    donor: zod.ZodOptional<zod.ZodString>;
+    dateFrom: zod.ZodOptional<zod.ZodDate>;
+    dateTo: zod.ZodOptional<zod.ZodDate>;
+}, "strip", zod.ZodTypeAny, {
+    stateId?: number | undefined;
+    sector?: string | undefined;
+    donor?: string | undefined;
+    dateFrom?: Date | undefined;
+    dateTo?: Date | undefined;
+}, {
+    stateId?: number | undefined;
+    sector?: string | undefined;
+    donor?: string | undefined;
+    dateFrom?: Date | undefined;
+    dateTo?: Date | undefined;
+}>;
 export declare const GetBeneficiariesBreakdownResponse: zod.ZodObject<{
     summary: zod.ZodObject<{
         male: zod.ZodNumber;
@@ -9944,7 +9966,7 @@ export declare const GetDashboardAttentionProjectsResponse: zod.ZodArray<zod.Zod
 export declare const GetDashboardLateReportsResponseItem: zod.ZodObject<{
     id: zod.ZodNumber;
     title: zod.ZodString;
-    reportType: zod.ZodOptional<zod.ZodString>;
+    reportType: zod.ZodString;
     status: zod.ZodString;
     submittedAt: zod.ZodOptional<zod.ZodString>;
     daysWaiting: zod.ZodOptional<zod.ZodNumber>;
@@ -9958,11 +9980,11 @@ export declare const GetDashboardLateReportsResponseItem: zod.ZodObject<{
     status: string;
     id: number;
     title: string;
+    reportType: string;
     stateName?: string | null | undefined;
     stateNameAr?: string | null | undefined;
     projectId?: number | null | undefined;
     projectTitle?: string | null | undefined;
-    reportType?: string | undefined;
     submittedByName?: string | null | undefined;
     submittedAt?: string | undefined;
     projectCode?: string | null | undefined;
@@ -9971,11 +9993,11 @@ export declare const GetDashboardLateReportsResponseItem: zod.ZodObject<{
     status: string;
     id: number;
     title: string;
+    reportType: string;
     stateName?: string | null | undefined;
     stateNameAr?: string | null | undefined;
     projectId?: number | null | undefined;
     projectTitle?: string | null | undefined;
-    reportType?: string | undefined;
     submittedByName?: string | null | undefined;
     submittedAt?: string | undefined;
     projectCode?: string | null | undefined;
@@ -9984,7 +10006,7 @@ export declare const GetDashboardLateReportsResponseItem: zod.ZodObject<{
 export declare const GetDashboardLateReportsResponse: zod.ZodArray<zod.ZodObject<{
     id: zod.ZodNumber;
     title: zod.ZodString;
-    reportType: zod.ZodOptional<zod.ZodString>;
+    reportType: zod.ZodString;
     status: zod.ZodString;
     submittedAt: zod.ZodOptional<zod.ZodString>;
     daysWaiting: zod.ZodOptional<zod.ZodNumber>;
@@ -9998,11 +10020,11 @@ export declare const GetDashboardLateReportsResponse: zod.ZodArray<zod.ZodObject
     status: string;
     id: number;
     title: string;
+    reportType: string;
     stateName?: string | null | undefined;
     stateNameAr?: string | null | undefined;
     projectId?: number | null | undefined;
     projectTitle?: string | null | undefined;
-    reportType?: string | undefined;
     submittedByName?: string | null | undefined;
     submittedAt?: string | undefined;
     projectCode?: string | null | undefined;
@@ -10011,11 +10033,11 @@ export declare const GetDashboardLateReportsResponse: zod.ZodArray<zod.ZodObject
     status: string;
     id: number;
     title: string;
+    reportType: string;
     stateName?: string | null | undefined;
     stateNameAr?: string | null | undefined;
     projectId?: number | null | undefined;
     projectTitle?: string | null | undefined;
-    reportType?: string | undefined;
     submittedByName?: string | null | undefined;
     submittedAt?: string | undefined;
     projectCode?: string | null | undefined;
