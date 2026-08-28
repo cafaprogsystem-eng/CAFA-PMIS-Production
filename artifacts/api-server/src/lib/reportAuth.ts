@@ -20,7 +20,7 @@ import type { Request } from "express";
 import { pool } from "@workspace/db";
 import { hasFullOperationalAccess } from "./accessControl";
 import type { CurrentUser } from "../middlewares/currentUser";
-import { assertSectorAllowed } from "../middlewares/currentUser";
+import { assertSectorAllowed, isHqAuthorised } from "../middlewares/currentUser";
 
 export type ReportViewAccessUser = Pick<CurrentUser, "id" | "role" | "stateId" | "sectors">;
 
@@ -150,6 +150,29 @@ export async function assertCanViewReport(
     return { ok: false, status: 403, body: { error: "state_scope_forbidden" } };
   }
   if (!access.allowed) return { ok: false, status: 403, body: { error: "sector_forbidden" } };
+  return { ok: true };
+}
+
+/**
+ * Shared access check for the non-persisted HQ Sector Report snapshot.
+ *
+ * HQ Sector Reports are not linked to a State or Project. Therefore the
+ * canonical HQ record rule applies: state-scoped roles cannot view them at
+ * all, while Technical Coordinators may only view their assigned sectors.
+ * Other roles that already hold reports.view retain organisation-wide access.
+ */
+export function assertCanViewHqSectorSnapshot(
+  req: Request & { currentUser?: CurrentUser },
+  sector: string | null,
+): { ok: true } | { ok: false; status: number; body: object } {
+  if (!req.currentUser) {
+    return { ok: false, status: 401, body: { error: "unauthorized" } };
+  }
+  if (!isHqAuthorised(req)) {
+    return { ok: false, status: 403, body: { error: "state_scope_forbidden" } };
+  }
+  const sectorGuard = assertSectorAllowed(req, sector);
+  if (!sectorGuard.ok) return sectorGuard;
   return { ok: true };
 }
 

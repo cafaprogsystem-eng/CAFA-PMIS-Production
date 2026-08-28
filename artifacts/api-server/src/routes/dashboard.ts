@@ -21,6 +21,7 @@ import {
   computeProjectScores,
   computeHierarchicalPerformance,
 } from "../services/performanceEngine";
+import { assertCanViewHqSectorSnapshot } from "../lib/reportAuth";
 
 const router: IRouter = Router();
 
@@ -2143,15 +2144,18 @@ router.get(
 );
 
 // ── HQ Sector Snapshot (for HQ Sector Report form) ───────────────────────────
-router.get("/dashboard/sector-snapshot", async (req, res, next) => {
+router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), async (req, res, next) => {
   try {
     const sector = req.query.sector as string | undefined;
     if (!sector) { res.status(400).json({ error: "sector is required" }); return; }
+    if (!VALID_SECTOR_SET.has(sector)) { res.status(400).json({ error: "invalid_sector" }); return; }
 
-    // TC sector restriction — a TC can only snapshot their own assigned sectors
-    const tcSectors = tcSectorRestriction(req);
-    if (tcSectors && !tcSectors.includes(sector)) {
-      res.status(403).json({ error: "Access to this sector is not permitted" });
+    // HQ Sector Report snapshot access follows the canonical report author/view
+    // rules: state-scoped roles cannot access HQ records, and TCs are limited
+    // to their exact assigned sectors.
+    const access = assertCanViewHqSectorSnapshot(req, sector);
+    if (!access.ok) {
+      res.status(access.status).json(access.body);
       return;
     }
 

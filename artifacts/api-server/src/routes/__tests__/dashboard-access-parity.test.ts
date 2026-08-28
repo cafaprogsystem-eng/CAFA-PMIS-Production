@@ -141,6 +141,7 @@ let app: express.Express;
 let summaryPath: string;
 let sectorPerfPath: string;
 let sectorBudgetPath: string;
+let sectorSnapshotPath: string;
 
 beforeAll(async () => {
   // Import router after mocks are registered
@@ -154,6 +155,7 @@ beforeAll(async () => {
   summaryPath = "/dashboard/summary";
   sectorPerfPath = "/dashboard/sector-performance";
   sectorBudgetPath = "/dashboard/sector-budget";
+  sectorSnapshotPath = "/dashboard/sector-snapshot";
 });
 
 afterAll(() => {
@@ -417,6 +419,49 @@ describe("DASH-ACCESS-13: non-Budget role sector-performance budgetUtilizationPc
       expect((row as Record<string, unknown>).budgetUtilizationPct).toBeNull();
     }
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DASH-ACCESS-14: HQ Sector snapshot follows canonical HQSR view scope
+// ─────────────────────────────────────────────────────────────────────────────
+describe("DASH-ACCESS-14: HQ Sector snapshot access parity", () => {
+  it("denies SOM access to the HQ snapshot, even with an assigned state", async () => {
+    const res = await request(agentFor("state_office_manager", 1))
+      .get(`${sectorSnapshotPath}?sector=Health`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "state_scope_forbidden" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("denies SPO access to the HQ snapshot, even with an assigned state", async () => {
+    const res = await request(agentFor("state_program_officer", 1))
+      .get(`${sectorSnapshotPath}?sector=Health`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "state_scope_forbidden" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("allows a TC to open an assigned sector snapshot", async () => {
+    const res = await request(agentFor("technical_coordinator", null, "Health"))
+      .get(`${sectorSnapshotPath}?sector=Health`);
+    expect(res.status).toBe(200);
+  });
+
+  it("denies a TC an out-of-sector snapshot", async () => {
+    const res = await request(agentFor("technical_coordinator", null, "Health"))
+      .get(`${sectorSnapshotPath}?sector=Education`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "sector_forbidden" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it.each(["program_manager", "senior_program_coordinator", "executive_director", "viewer", "super_admin"])(
+    "keeps %s access to an HQ snapshot",
+    async (role) => {
+      const res = await request(agentFor(role)).get(`${sectorSnapshotPath}?sector=Health`);
+      expect(res.status).toBe(200);
+    },
+  );
 });
 
 describe("DASH-RETIREMENT: soft-deleted project population", () => {
