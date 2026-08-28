@@ -805,6 +805,16 @@ export interface ProjectSummary {
     stateNamesAr?: string[];
     /** Scheduled PMR reporting cycle — null when not configured (historical projects) */
     reportingFrequency?: ProjectReportingFrequency | null;
+    /**
+     * First day covered by the project's reporting configuration; null when not configured
+     * @nullable
+     */
+    reportingStartDate?: string | null;
+    /**
+     * Last day covered by the project's reporting configuration; null when not configured
+     * @nullable
+     */
+    reportingEndDate?: string | null;
 }
 export interface ProjectAssignmentInput {
     /** Omit or null for external/non-system persons */
@@ -953,6 +963,10 @@ export interface ProjectInput {
     hasHqOperations?: boolean;
     /** Scheduled PMR reporting cycle. Required for new projects (enforced at POST); nullable on update for historical projects. */
     reportingFrequency?: ProjectReportingFrequency | null;
+    /** First day covered by the reporting configuration. It may precede the implementation period. */
+    reportingStartDate?: string;
+    /** Last day covered by the reporting configuration. Must be on or after reportingStartDate. */
+    reportingEndDate?: string;
     stateIds: number[];
     /** Free-text locality names entered by the user */
     localities?: string[];
@@ -1107,6 +1121,16 @@ export interface Project {
     hasHqOperations?: boolean;
     /** Scheduled PMR reporting cycle — null when not configured (historical projects) */
     reportingFrequency?: ProjectReportingFrequency | null;
+    /**
+     * First day covered by the reporting configuration; null when not configured
+     * @nullable
+     */
+    reportingStartDate?: string | null;
+    /**
+     * Last day covered by the reporting configuration; null when not configured
+     * @nullable
+     */
+    reportingEndDate?: string | null;
     /** IDs of states linked to this project via project_states */
     stateIds?: number[];
     /** Names of states linked to this project via project_states */
@@ -3647,6 +3671,19 @@ export type CheckProjectDuplicateParams = {
      */
     excludeId?: number;
 };
+export type UpdateProjectReportingCoverageBody = {
+    reportingStartDate: string;
+    reportingEndDate: string;
+    /** Current persisted start date used as an optimistic-concurrency precondition. */
+    expectedReportingStartDate: string;
+    /** Current persisted end date used as an optimistic-concurrency precondition. */
+    expectedReportingEndDate: string;
+};
+export type UpdateProjectReportingCoverage200 = {
+    projectId: number;
+    reportingStartDate: string;
+    reportingEndDate: string;
+};
 export type RetireDevelopmentTestProjectBodyConfirmationCode = (typeof RetireDevelopmentTestProjectBodyConfirmationCode)[keyof typeof RetireDevelopmentTestProjectBodyConfirmationCode];
 export declare const RetireDevelopmentTestProjectBodyConfirmationCode: {
     readonly "CAFA-MPLQLM3M": "CAFA-MPLQLM3M";
@@ -3687,6 +3724,28 @@ export type ListRisksParams = {
      * @maximum 200
      */
     limit?: number;
+};
+export type EvaluateMonthlyReportingDeadlinesBody = {
+    dryRun?: boolean;
+};
+export type EvaluateMonthlyReportingDeadlines200ByStatus = {
+    [key: string]: number;
+};
+export type EvaluateMonthlyReportingDeadlines200 = {
+    /** @minimum 0 */
+    evaluated: number;
+    /** @minimum 0 */
+    recipients?: number;
+    /** @minimum 0 */
+    delivered: number;
+    /**
+     * @minimum 1
+     * @maximum 31
+     */
+    stageDay?: number;
+    byStatus?: EvaluateMonthlyReportingDeadlines200ByStatus;
+    /** @nullable */
+    skipped?: string | null;
 };
 export type ListReportsParams = {
     stateId?: number;

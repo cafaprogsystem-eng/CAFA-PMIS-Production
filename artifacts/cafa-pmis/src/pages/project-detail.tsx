@@ -3,6 +3,7 @@ import { uploadDocumentFile } from "@/lib/upload-document";
 import { Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  customFetch,
   useGetProject,
   useGetMe,
   useCorrectProjectDonor,
@@ -537,6 +538,9 @@ export default function ProjectDetailPage({
   const qc = useQueryClient();
   const [activeAction, setActiveAction] = useState<{ action: Action; label: string } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
+  const [coverageSaving, setCoverageSaving] = useState(false);
+  const [coverageDraft, setCoverageDraft] = useState({ start: "", end: "" });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const unresolvedRC = useUnresolvedRequiredCorrections("project", projectId);
   const {
@@ -564,6 +568,8 @@ export default function ProjectDetailPage({
   const canRetireDevelopmentFixture = isReviewedDevelopmentFixture && hasPerm(me?.permissions, "projects.delete");
   const canCorrectDonor = !isReviewedDevelopmentFixture
     && (donorIntegrityScan?.confirmedPlaceholders.some((finding) => finding.id === projectId) ?? false);
+  const canManageReportingCoverage = ["executive_director", "program_manager", "super_admin"]
+    .includes(me?.user.role ?? "");
 
   useEffect(() => {
     if (hasEditParam) setEditOpen(true);
@@ -654,6 +660,51 @@ export default function ProjectDetailPage({
   }
 
   const { project, outputs, activities, indicators, risks, reports, beneficiariesReached, beneficiariesTarget, budgetTotal, budgetSpent, states, approvalHistory } = data;
+
+  const openReportingConfigurationEditor = () => {
+    if (project.status === "draft") {
+      setEditOpen(true);
+      return;
+    }
+    setCoverageDraft({
+      start: String(project.reportingStartDate ?? "").slice(0, 10),
+      end: String(project.reportingEndDate ?? "").slice(0, 10),
+    });
+    setCoverageOpen(true);
+  };
+
+  async function saveReportingCoverage() {
+    if (!coverageDraft.start || !coverageDraft.end || coverageDraft.start > coverageDraft.end) {
+      toast({
+        title: t("detail.invalidReportingCoverage"),
+        description: t("detail.reportingCoverageOrder"),
+        variant: "destructive",
+      });
+      return;
+    }
+    setCoverageSaving(true);
+    try {
+      await customFetch(`/api/projects/${projectId}/reporting-coverage`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          reportingStartDate: coverageDraft.start,
+          reportingEndDate: coverageDraft.end,
+          expectedReportingStartDate: String(project.reportingStartDate ?? "").slice(0, 10),
+          expectedReportingEndDate: String(project.reportingEndDate ?? "").slice(0, 10),
+        }),
+      });
+      await Promise.all([
+        refetch(),
+        qc.invalidateQueries({ queryKey: ["/api/projects"] }),
+      ]);
+      setCoverageOpen(false);
+      toast({ title: t("detail.reportingCoverageSaved") });
+    } catch {
+      toast({ title: t("detail.reportingCoverageSaveFailed"), variant: "destructive" });
+    } finally {
+      setCoverageSaving(false);
+    }
+  }
 
   // BUD-006: project ISO currency threaded through every monetary display —
   // never rely on the USD fallback in formatCurrency.
@@ -961,6 +1012,35 @@ export default function ProjectDetailPage({
         open={editOpen}
         onClose={() => setEditOpen(false)}
       />
+
+      <Dialog open={coverageOpen} onOpenChange={setCoverageOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("detail.editReportingConfiguration")}</DialogTitle>
+            <DialogDescription>{t("detail.reportingConfigurationDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label htmlFor="reporting-coverage-start">{t("detail.reportingStartDate")}</Label>
+              <Input id="reporting-coverage-start" type="date" value={coverageDraft.start}
+                onChange={(event) => setCoverageDraft((current) => ({ ...current, start: event.target.value }))} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="reporting-coverage-end">{t("detail.reportingEndDate")}</Label>
+              <Input id="reporting-coverage-end" type="date" value={coverageDraft.end}
+                onChange={(event) => setCoverageDraft((current) => ({ ...current, end: event.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCoverageOpen(false)} disabled={coverageSaving}>
+              {tCommon("cancel")}
+            </Button>
+            <Button onClick={() => void saveReportingCoverage()} disabled={coverageSaving}>
+              {coverageSaving ? tCommon("savingData") : t("form.buttons.saveChanges")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DeleteProjectDialog
         projectId={projectId}
@@ -1422,6 +1502,33 @@ export default function ProjectDetailPage({
                 <div>
                   <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("detail.endDate")}</dt>
                   <dd className="font-medium">{formatDate(project.endDate)}</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-base">{t("detail.reportingConfiguration")}</CardTitle>
+                <CardDescription>{t("detail.reportingConfigurationDescription")}</CardDescription>
+              </div>
+              {canManageReportingCoverage && (
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={openReportingConfigurationEditor}>
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                  {t("detail.editReportingConfiguration")}
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("detail.reportingStartDate")}</dt>
+                  <dd className="font-medium">{project.reportingStartDate ? formatDate(project.reportingStartDate) : <span className="text-muted-foreground">{t("detail.notConfigured")}</span>}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("detail.reportingEndDate")}</dt>
+                  <dd className="font-medium">{project.reportingEndDate ? formatDate(project.reportingEndDate) : <span className="text-muted-foreground">{t("detail.notConfigured")}</span>}</dd>
                 </div>
               </dl>
             </CardContent>

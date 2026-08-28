@@ -274,6 +274,15 @@
     "developmentFixtureRetirementFailed": "تعذرت إحالة سجل الاختبار التنموي للتقاعد.",
     "cancel": "إلغاء",
     "scheduledReportingFrequency": "تكرار التقارير المجدولة",
+    "reportingConfiguration": "إعدادات التقارير",
+    "reportingConfigurationDescription": "تحدد تواريخ التقارير الفترة التي تغطيها التقارير المجدولة لهذا المشروع.",
+    "reportingStartDate": "تاريخ بدء التقارير",
+    "reportingEndDate": "تاريخ انتهاء التقارير",
+    "invalidReportingCoverage": "تحقق من تواريخ تغطية التقارير",
+    "reportingCoverageOrder": "يجب أن يكون تاريخ انتهاء التقارير في تاريخ بدء التقارير أو بعده.",
+    "reportingCoverageSaved": "تم تحديث إعدادات التقارير.",
+    "reportingCoverageSaveFailed": "تعذر تحديث إعدادات التقارير.",
+    "editReportingConfiguration": "تعديل إعدادات التقارير",
     "notConfigured": "غير مُهيأ",
     "documentLockedAria": "المستند مقفل",
     "overrideReasonPlaceholder": "أدخل سبب حذف هذا المستند…"
@@ -289,6 +298,9 @@
       "review": "المراجعة"
     },
     "loading": "جارٍ تحميل المشروع…",
+    "validation": {
+      "reportingCoverageOrder": "يجب أن يكون تاريخ انتهاء التقارير في تاريخ بدء التقارير أو بعده."
+    },
     "tabErrorAriaLabel": "يحتوي هذا القسم على أخطاء في التحقق",
     "navAriaLabel": "أقسام تسجيل المشروع",
     "buttons": {
@@ -398,6 +410,10 @@
       "implementationPeriod": "فترة التنفيذ",
       "startDate": "تاريخ البداية",
       "endDate": "تاريخ النهاية",
+      "reportingConfiguration": "إعدادات التقارير",
+      "reportingConfigurationDescription": "تكون افتراضياً فترة التنفيذ. عدّلها عندما تبدأ تغطية التقارير مبكراً أو تنتهي لاحقاً.",
+      "reportingStartDate": "تاريخ بدء التقارير",
+      "reportingEndDate": "تاريخ انتهاء التقارير",
       "funding": "التمويل",
       "totalBudget": "إجمالي الميزانية",
       "currency": "العملة",
@@ -502,6 +518,7 @@
       "signedDate": "تاريخ التوقيع",
       "timelineBudget": "الجدول الزمني والميزانية",
       "implementationPeriod": "فترة التنفيذ",
+      "reportingPeriod": "فترة التقارير",
       "totalBudget": "إجمالي الميزانية",
       "outputsDefined": "المخرجات المحددة",
       "projectTeam": "فريق المشروع",

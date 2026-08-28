@@ -241,6 +241,7 @@ export const NOTIFICATION_KIND_REGISTRY = {
   plan_due_3d: { inApp: "dueDates", email: "dueDateReminders" },
   plan_due_1d: { inApp: "dueDates", email: "dueDateReminders" },
   plan_overdue: { inApp: "overdueItems", email: "dueDateReminders" },
+  monthly_report_reminder: { inApp: "dueDates", email: "dueDateReminders" },
   activity_due_7d: { inApp: "dueDates", email: "dueDateReminders" },
   activity_due_3d: { inApp: "dueDates", email: "dueDateReminders" },
   activity_due_1d: { inApp: "dueDates", email: "dueDateReminders" },
@@ -440,6 +441,41 @@ export type CreateNotificationOpts = {
    */
   dedupeKey?: string;
 };
+
+export type NotificationDeliveryEligibility = {
+  active: boolean;
+  inApp: boolean;
+  email: boolean;
+  emailAddress: string | null;
+};
+
+/**
+ * Shared policy boundary for specialised workers that keep their own
+ * per-channel delivery ledger.
+ */
+export async function getNotificationDeliveryEligibility(
+  userId: number,
+  requestedKind: string,
+): Promise<NotificationDeliveryEligibility> {
+  const recipient = await resolveActiveRecipient(userId);
+  if (!recipient) return { active: false, inApp: false, email: false, emailAddress: null };
+  const kind = canonicalNotificationKind(requestedKind);
+  const definition = kindDefinition(kind);
+  const isMandatory = MANDATORY_KINDS.has(kind);
+  const basePrefs = isMandatory
+    ? DEFAULT_NOTIFICATION_PREFERENCES
+    : normaliseNotificationPreferences(recipient.notification_preferences);
+  const prefs: NotificationPreferences = recipient.timezone
+    ? { ...basePrefs, quietHours: { ...basePrefs.quietHours, timezone: recipient.timezone } }
+    : basePrefs;
+  return {
+    active: true,
+    inApp: shouldCreateInApp(prefs, definition.inApp, isMandatory),
+    email: Boolean(recipient.email) &&
+      shouldSendEmail(prefs, definition.email, isMandatory, recipient.email_verified !== false),
+    emailAddress: recipient.email,
+  };
+}
 
 export async function createNotification(opts: CreateNotificationOpts): Promise<number> {
   const recipient = await resolveActiveRecipient(opts.userId);

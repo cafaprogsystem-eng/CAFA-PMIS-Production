@@ -274,6 +274,15 @@
     "developmentFixtureRetirementFailed": "Could not retire the development test record.",
     "cancel": "Cancel",
     "scheduledReportingFrequency": "Scheduled Reporting Frequency",
+    "reportingConfiguration": "Reporting Configuration",
+    "reportingConfigurationDescription": "Reporting dates determine the period covered by this project's scheduled reports.",
+    "reportingStartDate": "Reporting start date",
+    "reportingEndDate": "Reporting end date",
+    "invalidReportingCoverage": "Check the reporting coverage dates",
+    "reportingCoverageOrder": "The reporting end date must be on or after the reporting start date.",
+    "reportingCoverageSaved": "Reporting configuration updated.",
+    "reportingCoverageSaveFailed": "Reporting configuration could not be updated.",
+    "editReportingConfiguration": "Edit reporting configuration",
     "notConfigured": "Not Configured",
     "documentLockedAria": "Document locked",
     "overrideReasonPlaceholder": "Enter the reason for deleting this document…"
@@ -289,6 +298,9 @@
       "review": "Review"
     },
     "loading": "Loading project…",
+    "validation": {
+      "reportingCoverageOrder": "Reporting end date must be on or after reporting start date."
+    },
     "tabErrorAriaLabel": "This section has validation errors",
     "navAriaLabel": "Project registration sections",
     "buttons": {
@@ -398,6 +410,10 @@
       "implementationPeriod": "Implementation period",
       "startDate": "Start date",
       "endDate": "End date",
+      "reportingConfiguration": "Reporting configuration",
+      "reportingConfigurationDescription": "Defaults to the implementation period. Adjust it when reporting coverage begins earlier or ends later.",
+      "reportingStartDate": "Reporting start date",
+      "reportingEndDate": "Reporting end date",
       "funding": "Funding",
       "totalBudget": "Total budget",
       "currency": "Currency",
@@ -502,6 +518,7 @@
       "signedDate": "Signed date",
       "timelineBudget": "Timeline & budget",
       "implementationPeriod": "Implementation period",
+      "reportingPeriod": "Reporting period",
       "totalBudget": "Total budget",
       "outputsDefined": "Outputs defined",
       "projectTeam": "Project team",

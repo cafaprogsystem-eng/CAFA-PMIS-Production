@@ -78,11 +78,13 @@ const SPO_USER = {
   stateId: 5, stateName: "South Kordofan", sector: null, avatarUrl: null,
 };
 
-async function buildProjectsApp(user: Record<string, unknown>) {
+async function buildProjectsApp(user?: Record<string, unknown>) {
   const app = express();
   app.use(express.json());
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    (req as unknown as { currentUser: typeof user }).currentUser = user;
+    if (user) {
+      (req as unknown as { currentUser: typeof user }).currentUser = user;
+    }
     next();
   });
   const { default: projectsRouter } = await import("../routes/projects.js");
@@ -191,6 +193,55 @@ describe("RFREQ-01..06 — POST /projects reportingFrequency validation", () => 
     const res = await request(app).post("/api/projects").send({ ...BASE_PROJECT_BODY });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_reporting_frequency");
+  });
+});
+
+describe("Reporting coverage management concurrency", () => {
+  beforeEach(() => {
+    mockClientQuery.mockReset();
+  });
+
+  it("rejects anonymous mutation before opening a transaction", async () => {
+    const app = await buildProjectsApp();
+    const res = await request(app)
+      .patch("/api/projects/7/reporting-coverage")
+      .send({
+        reportingStartDate: "2026-01-01",
+        reportingEndDate: "2026-12-31",
+        expectedReportingStartDate: "2026-01-01",
+        expectedReportingEndDate: "2026-11-30",
+      });
+    expect(res.status).toBe(401);
+    expect(mockClientQuery).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 instead of overwriting a concurrently changed coverage range", async () => {
+    mockClientQuery.mockImplementation((sql: string) => {
+      if (/FROM projects[\s\S]*FOR UPDATE/i.test(sql)) {
+        return Promise.resolve({
+          rows: [{
+            status: "active",
+            sector: "Health",
+            sectors: [],
+            reportingStartDate: "2026-01-01",
+            reportingEndDate: "2026-12-31",
+          }],
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    const app = await buildProjectsApp(HQ_USER);
+    const res = await request(app)
+      .patch("/api/projects/7/reporting-coverage")
+      .send({
+        reportingStartDate: "2026-01-01",
+        reportingEndDate: "2027-01-31",
+        expectedReportingStartDate: "2026-01-01",
+        expectedReportingEndDate: "2026-11-30",
+      });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("reporting_coverage_conflict");
+    expect(mockClientQuery.mock.calls.some(([sql]) => /UPDATE projects SET reporting_start_date/i.test(String(sql)))).toBe(false);
   });
 });
 
