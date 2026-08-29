@@ -445,6 +445,7 @@
     "viewBreakdown": "View breakdown by gender & state",
     "budgetUtilisation": "Budget Utilisation",
     "spentToDate": "{{amount}} spent to date",
+    "mixedCurrencyUnavailable": "Multiple currencies — combined utilisation and spend are unavailable",
     "activitiesAttention": "Activities Requiring Attention",
     "delayedOrPastDeadline": "Delayed or past deadline",
     "projectImplementationStatus": "Project Implementation Status",

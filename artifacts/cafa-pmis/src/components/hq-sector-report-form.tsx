@@ -150,7 +150,7 @@ type SectorSnapshot = {
   activeLocalities: number;
   activitiesImplemented: number;
   beneficiariesReached: number;
-  indicatorProgressPct: number;
+  indicatorProgressPct: number | null;
   delayedActivities: number;
   openRisks: number;
   pendingApprovals: number;
@@ -174,7 +174,7 @@ type ProjectSummaryRow = {
   donor: string;
   progressPct: number;
   beneficiaries: number;
-  budgetUtilizationPct: number;
+  budgetUtilizationPct: number | null;
   riskLevel: string;
 };
 
@@ -185,10 +185,10 @@ type BenByDonor = BenRow & { donor: string };
 
 type IndicatorRow = {
   name: string;
-  target: number;
-  achieved: number;
-  progressPct: number;
-  status: string;
+  target: number | null;
+  achieved: number | null;
+  progressPct: number | null;
+  status: string | null;
 };
 
 type BenBreakdown = { men: number; women: number; boys: number; girls: number };
@@ -340,7 +340,7 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
     { label: t("hqForm.snapshotActiveLocalities"), value: snap.activeLocalities, icon: MapPin, color: "text-indigo-600" },
     { label: t("hqForm.snapshotActivitiesDone"), value: snap.activitiesImplemented, icon: Activity, color: "text-green-600" },
     { label: t("hqForm.snapshotBeneficiaries"), value: snap.beneficiariesReached.toLocaleString(), icon: Users, color: "text-teal-600" },
-    { label: t("hqForm.snapshotIndicatorProgress"), value: `${snap.indicatorProgressPct}%`, icon: BarChart3, color: "text-cyan-600" },
+    { label: t("hqForm.snapshotIndicatorProgress"), value: snap.indicatorProgressPct == null ? t("hqForm.unavailable") : `${snap.indicatorProgressPct}%`, icon: BarChart3, color: "text-cyan-600" },
     { label: t("hqForm.snapshotDelayedActivities"), value: snap.delayedActivities, icon: AlertTriangle, color: "text-amber-600" },
     { label: t("hqForm.snapshotOpenRisks"), value: snap.openRisks, icon: ShieldAlert, color: "text-red-600" },
     { label: t("hqForm.snapshotPendingReviews"), value: snap.pendingApprovals, icon: Clock, color: "text-orange-600" },
@@ -417,7 +417,7 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
                     <td className="px-2 py-1.5 text-muted-foreground">{p.donor || "—"}</td>
                     <td className="px-2 py-1.5"><bdi dir="ltr">{p.progressPct}%</bdi></td>
                     <td className="px-2 py-1.5"><bdi dir="ltr">{p.beneficiaries.toLocaleString()}</bdi></td>
-                    <td className="px-2 py-1.5"><bdi dir="ltr">{p.budgetUtilizationPct}%</bdi></td>
+                    <td className="px-2 py-1.5"><bdi dir="ltr">{p.budgetUtilizationPct == null ? t("hqForm.unavailable") : `${p.budgetUtilizationPct}%`}</bdi></td>
                     <td className="px-2 py-1.5">
                       <Badge variant={p.riskLevel === "high" ? "destructive" : "secondary"} className="text-xs">{p.riskLevel}</Badge>
                     </td>
@@ -478,19 +478,25 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
                 {data.indicators.map((ind, i) => (
                   <tr key={i} className="hover:bg-muted/20">
                     <td className="px-2 py-1.5 font-medium max-w-xs truncate">{ind.name}</td>
-                    <td className="px-2 py-1.5"><bdi dir="ltr">{ind.target?.toLocaleString() ?? "—"}</bdi></td>
-                    <td className="px-2 py-1.5"><bdi dir="ltr">{ind.achieved?.toLocaleString() ?? "—"}</bdi></td>
+                    <td className="px-2 py-1.5">{ind.target == null ? t("hqForm.unavailable") : <bdi dir="ltr">{ind.target.toLocaleString()}</bdi>}</td>
+                    <td className="px-2 py-1.5">{ind.achieved == null ? t("hqForm.unavailable") : <bdi dir="ltr">{ind.achieved.toLocaleString()}</bdi>}</td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-1">
-                        <div className="h-1.5 w-14 rounded bg-muted overflow-hidden">
-                          <div className={`h-full ${ind.progressPct >= 100 ? "bg-green-500" : ind.progressPct >= 75 ? "bg-blue-500" : ind.progressPct >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.min(ind.progressPct, 100)}%` }} />
-                        </div>
-                        <span><bdi dir="ltr">{ind.progressPct}%</bdi></span>
+                        {ind.progressPct == null ? (
+                          <span>{t("hqForm.unavailable")}</span>
+                        ) : (
+                          <>
+                            <div className="h-1.5 w-14 rounded bg-muted overflow-hidden">
+                              <div className={`h-full ${ind.progressPct >= 100 ? "bg-green-500" : ind.progressPct >= 75 ? "bg-blue-500" : ind.progressPct >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.min(ind.progressPct, 100)}%` }} />
+                            </div>
+                            <span><bdi dir="ltr">{ind.progressPct}%</bdi></span>
+                          </>
+                        )}
                       </div>
                     </td>
                     <td className="px-2 py-1.5">
-                      <Badge className={`text-xs ${ind.status === "Achieved" ? "bg-green-100 text-green-800" : ind.status === "On Track" ? "bg-blue-100 text-blue-800" : ind.status === "At Risk" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
-                        {ind.status}
+                      <Badge className={`text-xs ${ind.status == null ? "bg-muted text-muted-foreground" : ind.status === "Achieved" ? "bg-green-100 text-green-800" : ind.status === "On Track" ? "bg-blue-100 text-blue-800" : ind.status === "At Risk" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
+                        {ind.status ?? t("hqForm.unavailable")}
                       </Badge>
                     </td>
                   </tr>

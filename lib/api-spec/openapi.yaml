@@ -4556,8 +4556,8 @@ components:
         totalBeneficiaries: { type: integer }
         beneficiariesTarget: { type: integer }
         totalBudget: { type: number }
-        totalSpent: { type: number }
-        budgetRemaining: { type: number }
+        totalSpent: { type: ["number", "null"], description: "Unavailable when in-scope projects span multiple currencies or spend evidence is unavailable" }
+        budgetRemaining: { type: ["number", "null"], description: "Unavailable when in-scope projects span multiple currencies or spend evidence is unavailable" }
         budgetAllocated: { type: number }
         budgetUtilization:
           type: ["number", "null"]
@@ -4902,7 +4902,7 @@ components:
             activeLocalities: { type: integer }
             activitiesImplemented: { type: integer }
             beneficiariesReached: { type: integer }
-            indicatorProgressPct: { type: number }
+            indicatorProgressPct: { type: ["number", "null"], description: "Target-weighted progress for indicators with a positive target and recorded achievement; null when no valid evidence exists" }
             delayedActivities: { type: integer }
             openRisks: { type: integer }
             pendingApprovals: { type: integer }
@@ -4933,7 +4933,7 @@ components:
               donor: { type: ["string", "null"] }
               progressPct: { type: integer }
               beneficiaries: { type: integer }
-              budgetUtilizationPct: { type: integer }
+              budgetUtilizationPct: { type: ["integer", "null"], description: "null when budget is non-positive or no recorded spend evidence exists" }
               riskLevel: { type: string }
         beneficiaryBreakdown:
           $ref: "#/components/schemas/DashboardBeneficiaryBreakdown"
@@ -4978,10 +4978,10 @@ components:
             required: [name, target, achieved, progressPct, status]
             properties:
               name: { type: string }
-              target: { type: number }
-              achieved: { type: number }
-              progressPct: { type: integer }
-              status: { type: string }
+              target: { type: ["number", "null"], description: "Recorded target; null when unavailable" }
+              achieved: { type: ["number", "null"], description: "Recorded achievement; null when unavailable" }
+              progressPct: { type: ["integer", "null"], description: "null unless the target is positive and achievement is recorded" }
+              status: { type: ["string", "null"], description: "Performance category; null unless progress has valid evidence" }
 
     DashboardBeneficiaryBreakdown:
       type: object
@@ -5216,8 +5216,8 @@ components:
         # ── Legacy backward-compatible fields ──────────────────────────────
         donor: { type: string }
         projects: { type: integer }
-        budgetTotal: { type: number, description: "Raw sum — may span multiple currencies when currencyMixed is true; use allocatedBudget per currency for display" }
-        budgetSpent: { type: ["number", "null"], description: "Sum of all known activity spend; null when no activity records exist for this donor's projects" }
+        budgetTotal: { type: ["number", "null"], description: "Single-currency compatibility alias; null when currencyMixed is true" }
+        budgetSpent: { type: ["number", "null"], description: "Single-currency compatibility alias; null when currencyMixed is true or no activity records exist" }
         beneficiaries: { type: integer }
         currency:
           type: ["string", "null"]
@@ -5259,8 +5259,8 @@ components:
               code: { type: string }
               title: { type: string }
         allocatedBudget:
-          type: number
-          description: "Total allocated budget (may span currencies when currencyMixed is true)"
+          type: ["number", "null"]
+          description: "Single-currency compatibility alias; null when currencyMixed is true"
 
     DonorPortfolioBudgetByCurrencyItem:
       type: object

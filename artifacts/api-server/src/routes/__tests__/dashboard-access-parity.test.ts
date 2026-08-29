@@ -26,7 +26,7 @@ const mockRows = {
   budgetTotal: [{ total: 500_000 }],
   budgetSpent: [{ spent: 200_000 }],
   allocated: [{ allocated: 100_000 }],
-  budgetByCurrency: [],
+  budgetByCurrency: [] as Array<{ currency: string; totalBudget: number; totalSpent: number | null }>,
   risks: [{ high: 1 }],
   riskCounts: [{ open: 4, critical: 2 }],
   reportCounts: [{ submitted: 3, pending: 1 }],
@@ -493,6 +493,32 @@ describe("DASH-861 summary aggregate authority", () => {
       }));
     } finally {
       Object.assign(mockRows, saved);
+    }
+  });
+
+  it("keeps mixed-currency facts in buckets and nulls combined spend and utilisation claims", async () => {
+    const saved = structuredClone(mockRows.budgetByCurrency);
+    try {
+      mockRows.budgetByCurrency = [
+        { currency: "USD", totalBudget: 100, totalSpent: 0 },
+        { currency: "EUR", totalBudget: 200, totalSpent: 50 },
+      ];
+      const res = await request(agentFor("program_manager")).get(summaryPath);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(expect.objectContaining({
+        currency: null,
+        currencyMixed: true,
+        totalSpent: null,
+        budgetRemaining: null,
+        budgetUtilization: null,
+        burnRatePct: null,
+      }));
+      expect(res.body.budgetByCurrency).toEqual([
+        expect.objectContaining({ currency: "USD", totalSpent: 0, utilisationRate: 0 }),
+        expect.objectContaining({ currency: "EUR", totalSpent: 50, utilisationRate: 25 }),
+      ]);
+    } finally {
+      mockRows.budgetByCurrency = saved;
     }
   });
 

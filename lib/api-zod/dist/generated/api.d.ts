@@ -7863,8 +7863,8 @@ export declare const GetDashboardSummaryResponse: zod.ZodObject<{
     totalBeneficiaries: zod.ZodNumber;
     beneficiariesTarget: zod.ZodNumber;
     totalBudget: zod.ZodOptional<zod.ZodNumber>;
-    totalSpent: zod.ZodOptional<zod.ZodNumber>;
-    budgetRemaining: zod.ZodOptional<zod.ZodNumber>;
+    totalSpent: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
+    budgetRemaining: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
     budgetAllocated: zod.ZodOptional<zod.ZodNumber>;
     budgetUtilization: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
     burnRatePct: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
@@ -7946,8 +7946,8 @@ export declare const GetDashboardSummaryResponse: zod.ZodObject<{
     burnRatePct?: number | null | undefined;
     completedProjects?: number | undefined;
     totalBudget?: number | undefined;
-    totalSpent?: number | undefined;
-    budgetRemaining?: number | undefined;
+    totalSpent?: number | null | undefined;
+    budgetRemaining?: number | null | undefined;
     budgetAllocated?: number | undefined;
     budgetUtilization?: number | null | undefined;
     currencyMixed?: boolean | undefined;
@@ -7986,8 +7986,8 @@ export declare const GetDashboardSummaryResponse: zod.ZodObject<{
     burnRatePct?: number | null | undefined;
     completedProjects?: number | undefined;
     totalBudget?: number | undefined;
-    totalSpent?: number | undefined;
-    budgetRemaining?: number | undefined;
+    totalSpent?: number | null | undefined;
+    budgetRemaining?: number | null | undefined;
     budgetAllocated?: number | undefined;
     budgetUtilization?: number | null | undefined;
     currencyMixed?: boolean | undefined;
@@ -8919,7 +8919,7 @@ export declare const GetRecentActivityResponse: zod.ZodArray<zod.ZodObject<{
 export declare const GetDonorPortfolioResponseItem: zod.ZodObject<{
     donor: zod.ZodString;
     projects: zod.ZodNumber;
-    budgetTotal: zod.ZodNumber;
+    budgetTotal: zod.ZodNullable<zod.ZodNumber>;
     budgetSpent: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
     beneficiaries: zod.ZodNumber;
     currency: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
@@ -8959,16 +8959,16 @@ export declare const GetDonorPortfolioResponseItem: zod.ZodObject<{
         id: number;
         title: string;
     }>, "many">>;
-    allocatedBudget: zod.ZodNumber;
+    allocatedBudget: zod.ZodNullable<zod.ZodNumber>;
 }, "strip", zod.ZodTypeAny, {
     projectCount: number;
     projects: number;
     donor: string;
-    budgetTotal: number;
+    budgetTotal: number | null;
     donorName: string;
     beneficiaries: number;
     currencyMixed: boolean;
-    allocatedBudget: number;
+    allocatedBudget: number | null;
     dataStatus: string;
     donorId?: number | null | undefined;
     budgetSpent?: number | null | undefined;
@@ -8990,11 +8990,11 @@ export declare const GetDonorPortfolioResponseItem: zod.ZodObject<{
     projectCount: number;
     projects: number;
     donor: string;
-    budgetTotal: number;
+    budgetTotal: number | null;
     donorName: string;
     beneficiaries: number;
     currencyMixed: boolean;
-    allocatedBudget: number;
+    allocatedBudget: number | null;
     dataStatus: string;
     donorId?: number | null | undefined;
     budgetSpent?: number | null | undefined;
@@ -9016,7 +9016,7 @@ export declare const GetDonorPortfolioResponseItem: zod.ZodObject<{
 export declare const GetDonorPortfolioResponse: zod.ZodArray<zod.ZodObject<{
     donor: zod.ZodString;
     projects: zod.ZodNumber;
-    budgetTotal: zod.ZodNumber;
+    budgetTotal: zod.ZodNullable<zod.ZodNumber>;
     budgetSpent: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
     beneficiaries: zod.ZodNumber;
     currency: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
@@ -9056,16 +9056,16 @@ export declare const GetDonorPortfolioResponse: zod.ZodArray<zod.ZodObject<{
         id: number;
         title: string;
     }>, "many">>;
-    allocatedBudget: zod.ZodNumber;
+    allocatedBudget: zod.ZodNullable<zod.ZodNumber>;
 }, "strip", zod.ZodTypeAny, {
     projectCount: number;
     projects: number;
     donor: string;
-    budgetTotal: number;
+    budgetTotal: number | null;
     donorName: string;
     beneficiaries: number;
     currencyMixed: boolean;
-    allocatedBudget: number;
+    allocatedBudget: number | null;
     dataStatus: string;
     donorId?: number | null | undefined;
     budgetSpent?: number | null | undefined;
@@ -9087,11 +9087,11 @@ export declare const GetDonorPortfolioResponse: zod.ZodArray<zod.ZodObject<{
     projectCount: number;
     projects: number;
     donor: string;
-    budgetTotal: number;
+    budgetTotal: number | null;
     donorName: string;
     beneficiaries: number;
     currencyMixed: boolean;
-    allocatedBudget: number;
+    allocatedBudget: number | null;
     dataStatus: string;
     donorId?: number | null | undefined;
     budgetSpent?: number | null | undefined;
@@ -9504,7 +9504,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         activeLocalities: zod.ZodNumber;
         activitiesImplemented: zod.ZodNumber;
         beneficiariesReached: zod.ZodNumber;
-        indicatorProgressPct: zod.ZodNumber;
+        indicatorProgressPct: zod.ZodNullable<zod.ZodNumber>;
         delayedActivities: zod.ZodNumber;
         openRisks: zod.ZodNumber;
         pendingApprovals: zod.ZodNumber;
@@ -9517,7 +9517,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         activeStates: number;
         activeLocalities: number;
         activitiesImplemented: number;
-        indicatorProgressPct: number;
+        indicatorProgressPct: number | null;
     }, {
         activeProjects: number;
         beneficiariesReached: number;
@@ -9527,7 +9527,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         activeStates: number;
         activeLocalities: number;
         activitiesImplemented: number;
-        indicatorProgressPct: number;
+        indicatorProgressPct: number | null;
     }>;
     stateSummaries: zod.ZodArray<zod.ZodObject<{
         stateId: zod.ZodNumber;
@@ -9564,7 +9564,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         donor: zod.ZodNullable<zod.ZodString>;
         progressPct: zod.ZodNumber;
         beneficiaries: zod.ZodNumber;
-        budgetUtilizationPct: zod.ZodNumber;
+        budgetUtilizationPct: zod.ZodNullable<zod.ZodNumber>;
         riskLevel: zod.ZodString;
     }, "strip", zod.ZodTypeAny, {
         code: string;
@@ -9574,7 +9574,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         progressPct: number;
         riskLevel: string;
         beneficiaries: number;
-        budgetUtilizationPct: number;
+        budgetUtilizationPct: number | null;
     }, {
         code: string;
         id: number;
@@ -9583,7 +9583,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         progressPct: number;
         riskLevel: string;
         beneficiaries: number;
-        budgetUtilizationPct: number;
+        budgetUtilizationPct: number | null;
     }>, "many">;
     beneficiaryBreakdown: zod.ZodObject<{
         men: zod.ZodNumber;
@@ -9687,30 +9687,30 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
     }>>, "many">;
     indicators: zod.ZodArray<zod.ZodObject<{
         name: zod.ZodString;
-        target: zod.ZodNumber;
-        achieved: zod.ZodNumber;
-        progressPct: zod.ZodNumber;
-        status: zod.ZodString;
+        target: zod.ZodNullable<zod.ZodNumber>;
+        achieved: zod.ZodNullable<zod.ZodNumber>;
+        progressPct: zod.ZodNullable<zod.ZodNumber>;
+        status: zod.ZodNullable<zod.ZodString>;
     }, "strip", zod.ZodTypeAny, {
-        status: string;
+        status: string | null;
         name: string;
-        progressPct: number;
-        target: number;
-        achieved: number;
+        progressPct: number | null;
+        target: number | null;
+        achieved: number | null;
     }, {
-        status: string;
+        status: string | null;
         name: string;
-        progressPct: number;
-        target: number;
-        achieved: number;
+        progressPct: number | null;
+        target: number | null;
+        achieved: number | null;
     }>, "many">;
 }, "strip", zod.ZodTypeAny, {
     indicators: {
-        status: string;
+        status: string | null;
         name: string;
-        progressPct: number;
-        target: number;
-        achieved: number;
+        progressPct: number | null;
+        target: number | null;
+        achieved: number | null;
     }[];
     snapshot: {
         activeProjects: number;
@@ -9721,7 +9721,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         activeStates: number;
         activeLocalities: number;
         activitiesImplemented: number;
-        indicatorProgressPct: number;
+        indicatorProgressPct: number | null;
     };
     stateSummaries: {
         stateId: number;
@@ -9741,7 +9741,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         progressPct: number;
         riskLevel: string;
         beneficiaries: number;
-        budgetUtilizationPct: number;
+        budgetUtilizationPct: number | null;
     }[];
     beneficiaryBreakdown: {
         boys: number;
@@ -9781,11 +9781,11 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
     })[];
 }, {
     indicators: {
-        status: string;
+        status: string | null;
         name: string;
-        progressPct: number;
-        target: number;
-        achieved: number;
+        progressPct: number | null;
+        target: number | null;
+        achieved: number | null;
     }[];
     snapshot: {
         activeProjects: number;
@@ -9796,7 +9796,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         activeStates: number;
         activeLocalities: number;
         activitiesImplemented: number;
-        indicatorProgressPct: number;
+        indicatorProgressPct: number | null;
     };
     stateSummaries: {
         stateId: number;
@@ -9816,7 +9816,7 @@ export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
         progressPct: number;
         riskLevel: string;
         beneficiaries: number;
-        budgetUtilizationPct: number;
+        budgetUtilizationPct: number | null;
     }[];
     beneficiaryBreakdown: {
         boys: number;

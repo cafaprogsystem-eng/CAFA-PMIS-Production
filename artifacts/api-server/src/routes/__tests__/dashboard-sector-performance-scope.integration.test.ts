@@ -212,4 +212,81 @@ integration("sector-performance authorised achievement population", () => {
     ]);
   });
 
+  it("keeps the PostgreSQL snapshot aggregate on positive-target, recorded-achievement evidence", async () => {
+    const aggregate = async () => {
+      const result = await client.query(`
+        SELECT (
+          SUM(i.achieved) FILTER (WHERE i.target > 0 AND i.achieved IS NOT NULL)
+          / NULLIF(SUM(i.target) FILTER (WHERE i.target > 0 AND i.achieved IS NOT NULL), 0)
+          * 100
+        )::int AS "indicatorProgressPct"
+        FROM indicators i
+        WHERE i.project_id = 1
+      `);
+      return result.rows[0]?.indicatorProgressPct;
+    };
+
+    await client.query("DELETE FROM indicators WHERE project_id = 1");
+    expect(await aggregate()).toBeNull();
+
+    await client.query(`
+      INSERT INTO indicators VALUES
+        (1, 100, 50, 'Health'),
+        (1, 100, NULL, 'Health'),
+        (1, NULL, 25, 'Health'),
+        (1, 0, 0, 'Health'),
+        (1, -10, 5, 'Health');
+    `);
+    expect(await aggregate()).toBe(50);
+
+    await client.query("UPDATE indicators SET achieved = NULL WHERE project_id = 1 AND target = 100");
+    expect(await aggregate()).toBeNull();
+
+    await client.query(`
+      DELETE FROM indicators WHERE project_id = 1;
+      INSERT INTO indicators VALUES (1, 100, 0, 'Health');
+    `);
+    expect(await aggregate()).toBe(0);
+  });
+
+  it("keeps PostgreSQL row progress and status unavailable until both target and achievement are valid", async () => {
+    await client.query(`
+      DELETE FROM indicators WHERE project_id = 1;
+      INSERT INTO indicators VALUES
+        (1, 100, 0, 'Health'),
+        (1, 100, NULL, 'Health'),
+        (1, NULL, 25, 'Health'),
+        (1, 0, 0, 'Health'),
+        (1, -10, 5, 'Health');
+    `);
+
+    const result = await client.query(`
+      SELECT
+        i.target::float AS target,
+        i.achieved::float AS achieved,
+        CASE
+          WHEN i.target > 0 AND i.achieved IS NOT NULL
+            THEN (i.achieved / i.target * 100)::int
+          ELSE NULL
+        END AS "progressPct",
+        CASE
+          WHEN i.target > 0 AND (i.achieved / i.target) >= 1 THEN 'Achieved'
+          WHEN i.target > 0 AND (i.achieved / i.target) >= 0.75 THEN 'On Track'
+          WHEN i.target > 0 AND (i.achieved / i.target) >= 0.5 THEN 'At Risk'
+          WHEN i.target > 0 AND i.achieved IS NOT NULL THEN 'Off Track'
+          ELSE NULL
+        END AS status
+      FROM indicators i
+      WHERE i.project_id = 1
+    `);
+
+    expect(result.rows).toEqual(expect.arrayContaining([
+      { target: 100, achieved: 0, progressPct: 0, status: "Off Track" },
+      { target: 100, achieved: null, progressPct: null, status: null },
+      { target: null, achieved: 25, progressPct: null, status: null },
+      { target: 0, achieved: 0, progressPct: null, status: null },
+      { target: -10, achieved: 5, progressPct: null, status: null },
+    ]));
+  });
+
 });

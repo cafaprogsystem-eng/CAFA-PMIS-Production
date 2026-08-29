@@ -4073,7 +4073,9 @@ export default function Dashboard() {
                     icon={DollarSign} iconColor="text-amber-500"
                     label={t("overviewTab.budgetUtilisation")}
                     value={pct(summary?.burnRatePct)}
-                    sub={t("overviewTab.spentToDate", { amount: fmtMoney(summary?.totalSpent, summary?.currency) })}
+                    sub={summary?.currencyMixed
+                      ? t("overviewTab.mixedCurrencyUnavailable")
+                      : t("overviewTab.spentToDate", { amount: fmtMoney(summary?.totalSpent, summary?.currency) })}
                     href="/budget"
                   />
                   <OvKpiCard

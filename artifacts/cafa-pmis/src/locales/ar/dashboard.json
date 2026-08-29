@@ -445,6 +445,7 @@
     "viewBreakdown": "عرض التوزيع حسب الجنس والولاية",
     "budgetUtilisation": "معدل استهلاك الميزانية",
     "spentToDate": "{{amount}} منفق حتى الآن",
+    "mixedCurrencyUnavailable": "عملات متعددة — لا يتوفر معدل استهلاك أو إنفاق موحد",
     "activitiesAttention": "الأنشطة التي تحتاج اهتماماً",
     "delayedOrPastDeadline": "متأخرة أو تجاوزت الموعد النهائي",
     "projectImplementationStatus": "حالة تنفيذ المشروع",
