@@ -4073,8 +4073,8 @@ export const GetDashboardSummaryResponse = zod
   );
 
 export const GetStatePerformanceQueryParams = zod.object({
+  stateId: zod.coerce.number().min(1).optional(),
   sector: zod.coerce.string().optional(),
-  donor: zod.coerce.string().optional(),
 });
 
 export const GetStatePerformanceResponseItem = zod.object({
@@ -4760,8 +4760,16 @@ export const GetDashboardPerformanceStatesResponse = zod.array(
 /**
  * @summary Per-project performance scores sorted by rank (descending)
  */
+export const getDashboardPerformanceProjectsQueryLimitDefault = 50;
+export const getDashboardPerformanceProjectsQueryLimitMin = 10;
+export const getDashboardPerformanceProjectsQueryLimitMax = 100;
+
 export const GetDashboardPerformanceProjectsQueryParams = zod.object({
-  limit: zod.coerce.number().optional(),
+  limit: zod.coerce
+    .number()
+    .min(getDashboardPerformanceProjectsQueryLimitMin)
+    .max(getDashboardPerformanceProjectsQueryLimitMax)
+    .default(getDashboardPerformanceProjectsQueryLimitDefault),
 });
 
 export const GetDashboardPerformanceProjectsResponseItem = zod.object({

@@ -2,7 +2,11 @@ import React from "react";
 import { readFileSync } from "node:fs";
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const queryState = vi.hoisted(() => ({
+  draftFailure: false,
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -28,21 +32,27 @@ vi.mock("react-i18next", () => ({
       "sections.overdueReportsDesc": "Awaiting approval",
       "riskPanel.activeCriticalRisks": "Active critical risks",
       "lateReports.returned": "Returned for revision",
+      "queryState.loadFailedTitle": "Some dashboard data is unavailable",
+      "queryState.partial": "Some dashboard data is unavailable; totals are not complete.",
+      "queryState.retry": "Try again",
     } as Record<string, string>)[key] ?? key,
     i18n: { language: "en", dir: () => "ltr" },
   }),
 }));
 
 vi.mock("@workspace/api-client-react", () => ({
-  useListProjects: () => ({ data: [], isLoading: false }),
-  useListPlans: () => ({ data: [], isLoading: false }),
+  useListProjects: () => ({
+    data: [], isLoading: false, isError: queryState.draftFailure,
+    error: queryState.draftFailure ? { status: 500 } : undefined, refetch: vi.fn(),
+  }),
+  useListPlans: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useListReports: ({ reportType }: { reportType: string }) => ({
     data: {
       items: reportType === "activity"
         ? [{ id: 42, title: "Activity draft" }]
         : [],
     },
-    isLoading: false,
+    isLoading: false, isError: false, refetch: vi.fn(),
   }),
 }));
 
@@ -55,6 +65,19 @@ import {
 const dashboardSource = readFileSync("src/pages/dashboard.tsx", "utf8");
 
 describe("rendered Dashboard fact destinations", () => {
+  afterEach(() => { queryState.draftFailure = false; });
+
+  it("withholds successful draft subsets when one member request fails", () => {
+    queryState.draftFailure = true;
+    render(<MyDraftsWidget />);
+
+    expect(screen.getByText("Some dashboard data is unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Some dashboard data is unavailable").closest("[role=alert]")).toBeInTheDocument();
+    // The activity-report response is successful, but its count must not be
+    // rendered as a trustworthy partial total while project drafts failed.
+    expect(screen.queryByRole("link", { name: /Activity Reports/ })).not.toBeInTheDocument();
+  });
+
   it("renders Activity Reports in the all-Report draft population", () => {
     render(<MyDraftsWidget />);
 

@@ -88,6 +88,17 @@
     "clear": "Clear",
     "active": "Active"
   },
+  "queryState": {
+    "refreshing": "Dashboard data is refreshing",
+    "retry": "Try again",
+    "loadFailedTitle": "Some dashboard data is unavailable",
+    "loadFailedDescription": "Current results could not be loaded. Values are not shown as zero.",
+    "unavailable": "Dashboard data is unavailable",
+    "partial": "Some dashboard data is unavailable; totals are not complete.",
+    "unsupported": "This metric does not support the current filters.",
+    "unsupportedDescription": "Clear the selected location, sector, donor, or date filters before viewing this dashboard panel.",
+    "restricted": "You do not have access to this metric."
+  },
   "roles": {
     "super_admin": "System Administrator",
     "executive_director": "Executive Director",

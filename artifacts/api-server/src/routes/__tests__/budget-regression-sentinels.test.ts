@@ -72,8 +72,8 @@ async function buildApp(currentUser: FakeUser | null) {
   const { requireAuth } = await import("../../middlewares/currentUser.js");
   const { default: dashboardRouter } = await import("../dashboard.js");
   app.use("/api", requireAuth, dashboardRouter);
-  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    res.status(500).json({ error: "internal", message: err.message });
+  app.use((err: Error & { status?: number; errorCode?: string }, _req: Request, res: Response, _next: NextFunction) => {
+    res.status(err.status ?? 500).json({ error: err.errorCode ?? "internal", message: err.message });
   });
   return app;
 }
@@ -306,28 +306,19 @@ describe("BUD-REG-07 TC sector clamp is bound in SQL; empty-sector TC fails clos
 
 // ── BUD-REG-08 ───────────────────────────────────────────────────────────────
 describe("BUD-REG-08 state roles cannot widen their state via query parameters", () => {
-  it("SOM summary with ?stateId=999 binds only the assigned state 7", async () => {
+  it("SOM summary with ?stateId=999 returns an explicit out-of-scope error", async () => {
     const app = await buildApp(user("state_office_manager", { stateId: 7 }));
     const res = await request(app).get("/api/dashboard/summary?stateId=999");
-    expect(res.status).toBe(200);
-    const projectCountCall = mockQuery.mock.calls.find((c) =>
-      String(c[0]).includes("AS active") && String(c[0]).includes("AS closed"));
-    expect(projectCountCall).toBeDefined();
-    expect(String(projectCountCall![0])).toContain("_ps.state_id = $1");
-    expect(projectCountCall![1]).toEqual([7]);
-    // The attacker-supplied state must never be bound anywhere.
-    expect(JSON.stringify(mockQuery.mock.calls)).not.toContain("999");
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "dashboard_state_forbidden" });
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it("SPO sector-budget with ?stateId=999 binds only the assigned state 7", async () => {
+  it("SPO sector-budget with ?stateId=999 returns an explicit out-of-scope error", async () => {
     const app = await buildApp(user("state_program_officer", { stateId: 7 }));
     const res = await request(app).get("/api/dashboard/sector-budget?stateId=999");
-    expect(res.status).toBe(200);
-    const sectorQuery = mockQuery.mock.calls.find((c) =>
-      String(c[0]).includes("GROUP BY sector, currency"));
-    expect(sectorQuery).toBeDefined();
-    expect(sectorQuery![1]).toEqual([null, null, null, 7, null, null, [101], 7]);
-    expect(JSON.stringify(mockQuery.mock.calls)).not.toContain("999");
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "dashboard_state_forbidden" });
   });
 });
 

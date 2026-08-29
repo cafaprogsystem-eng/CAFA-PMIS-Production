@@ -4281,8 +4281,11 @@ export type GetDashboardSummaryParams = {
 };
 
 export type GetStatePerformanceParams = {
+  /**
+   * @minimum 1
+   */
+  stateId?: number;
   sector?: string;
-  donor?: string;
 };
 
 export type GetBeneficiariesBreakdownParams = {
@@ -4303,6 +4306,10 @@ export type GetSectorBudgetParams = {
 };
 
 export type GetDashboardPerformanceProjectsParams = {
+  /**
+   * @minimum 10
+   * @maximum 100
+   */
   limit?: number;
 };
 

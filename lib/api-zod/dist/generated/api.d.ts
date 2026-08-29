@@ -8003,14 +8003,14 @@ export declare const GetDashboardSummaryResponse: zod.ZodObject<{
     activitiesPlanned?: number | undefined;
 }>;
 export declare const GetStatePerformanceQueryParams: zod.ZodObject<{
+    stateId: zod.ZodOptional<zod.ZodNumber>;
     sector: zod.ZodOptional<zod.ZodString>;
-    donor: zod.ZodOptional<zod.ZodString>;
 }, "strip", zod.ZodTypeAny, {
+    stateId?: number | undefined;
     sector?: string | undefined;
-    donor?: string | undefined;
 }, {
+    stateId?: number | undefined;
     sector?: string | undefined;
-    donor?: string | undefined;
 }>;
 export declare const GetStatePerformanceResponseItem: zod.ZodObject<{
     stateId: zod.ZodNumber;
@@ -9843,10 +9843,13 @@ export declare const GetDashboardPerformanceStatesResponse: zod.ZodArray<zod.Zod
 /**
  * @summary Per-project performance scores sorted by rank (descending)
  */
+export declare const getDashboardPerformanceProjectsQueryLimitDefault = 50;
+export declare const getDashboardPerformanceProjectsQueryLimitMin = 10;
+export declare const getDashboardPerformanceProjectsQueryLimitMax = 100;
 export declare const GetDashboardPerformanceProjectsQueryParams: zod.ZodObject<{
-    limit: zod.ZodOptional<zod.ZodNumber>;
+    limit: zod.ZodDefault<zod.ZodNumber>;
 }, "strip", zod.ZodTypeAny, {
-    limit?: number | undefined;
+    limit: number;
 }, {
     limit?: number | undefined;
 }>;

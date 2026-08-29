@@ -86,7 +86,8 @@ describe("Dashboard source-population reconciliation", () => {
     expect(routeSource).toContain('LEFT JOIN activities ra ON ra.id = r.activity_id');
     expect(routeSource).toContain('LEFT JOIN activities act ON act.id = r.activity_id');
     expect(routeSource).toContain('LEFT JOIN activities act2 ON act2.id = r2.activity_id');
-    expect(routeSource).toContain("const reportEffectiveScope = applyFilterParams(");
+    expect(routeSource).toContain("const reportEffectiveScope = effectiveScope");
+    expect(routeSource).toContain("reportAlias}.project_id = ANY");
     expect(routeSource).toContain("userScope(req)");
     expect(routeSource).toContain("const agendaReportScope = reportScopeWhere(userScope(req)");
     expect(routeSource).toContain('const reportScope = reportScopeWhere(userScope(req), "r", "p", "act", 1)');

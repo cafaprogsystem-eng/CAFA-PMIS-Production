@@ -378,35 +378,22 @@ describe("BUD-GATE-06 every approved role retains the complete financial contrac
 });
 
 describe("BUD-GATE-07 state roles cannot widen their state scope", () => {
-  it("SOM ignores a conflicting stateId filter on operational summary queries", async () => {
+  it("SOM rejects a conflicting stateId filter before operational summary queries run", async () => {
     const app = await buildApp(user("state_office_manager", { stateId: 7 }));
     const res = await request(app).get("/api/dashboard/summary?stateId=999");
-    expect(res.status).toBe(200);
-
-    const projectCountCall = mockQuery.mock.calls.find(c =>
-      String(c[0]).includes("AS active") && String(c[0]).includes("AS closed"),
-    );
-    expect(projectCountCall).toBeDefined();
-    expect(String(projectCountCall![0])).toContain("_ps.state_id = $1");
-    expect(projectCountCall![1]).toEqual([7]);
-
-    const riskCall = mockQuery.mock.calls.find(c =>
-      String(c[0]).includes("FROM risks rk") && String(c[0]).includes("rk.state_id = $1"),
-    );
-    expect(riskCall).toBeDefined();
-    expect(riskCall![1]).toEqual([7]);
-    expect(JSON.stringify(mockQuery.mock.calls)).not.toContain("999");
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "dashboard_state_forbidden" });
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it("SPO financial sector-budget query is clamped to the assigned state", async () => {
+  it("SPO financial sector-budget rejects a conflicting state filter before data queries run", async () => {
     const app = await buildApp(user("state_program_officer", { stateId: 7 }));
     const res = await request(app).get("/api/dashboard/sector-budget?stateId=999");
-    expect(res.status).toBe(200);
-    const sectorQuery = mockQuery.mock.calls.find(c =>
-      String(c[0]).includes("GROUP BY sector, currency"),
-    );
-    expect(sectorQuery).toBeDefined();
-    expect(sectorQuery![1]).toEqual([null, null, null, 7, null, null, [101], 7]);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "dashboard_state_forbidden" });
+    // SPO assignment lookup is necessary to establish scope; no project facts
+    // or aggregate data may be queried after the out-of-scope request.
+    expect(mockQuery.mock.calls.filter(c => !String(c[0]).includes("project_assignments"))).toHaveLength(0);
   });
 
   it("TC donor and project financial queries bind only the assigned sector", async () => {

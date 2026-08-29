@@ -47,7 +47,10 @@ const mockRows = {
   ],
 };
 
-const mockQuery = vi.fn(async (sql: string, _params?: unknown[]) => {
+const mockQuery = vi.fn(async (
+  sql: string,
+  _params?: unknown[],
+): Promise<{ rows: Record<string, unknown>[] }> => {
   // sector-performance query
   if (sql.includes("p.sector AS sector") && sql.includes('"currencyCount"')) {
     return { rows: mockRows.sectorPerf };
@@ -313,16 +316,210 @@ describe("DASH-ACCESS-08: TC → sector-performance 200 with sector fields", () 
 // DASH-ACCESS-09: SOM → project/risk counts are state-scoped (not org-wide)
 // ─────────────────────────────────────────────────────────────────────────────
 describe("DASH-ACCESS-09: SOM response is state-scoped", () => {
-  it("SOM state filter cannot widen beyond assigned state", async () => {
+  it("rejects an out-of-scope state filter rather than presenting it as an empty population", async () => {
     const res = await request(agentFor("state_office_manager", 1)).get(`${summaryPath}?stateId=99`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "dashboard_state_forbidden" });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+});
+
+describe("DASH-861 state-performance filters and scope parity", () => {
+  it("applies an HQ stateId filter through the performance Scope", async () => {
+    const res = await request(agentFor("program_manager")).get("/dashboard/state-performance?stateId=2");
     expect(res.status).toBe(200);
-    const projectCall = mockQuery.mock.calls.find(([sql]) =>
-      String(sql).includes("AS active") && String(sql).includes("AS closed"),
+    const call = mockQuery.mock.calls.find(([sql]) => String(sql).includes('s.id AS "stateId"'));
+    expect(call).toBeDefined();
+    expect(String(call![0])).toContain("FROM states s WHERE s.id = $2");
+    expect(call![1]).toEqual([2, 2]);
+  });
+
+  it("applies a sector filter through the performance Scope", async () => {
+    const res = await request(agentFor("program_manager")).get("/dashboard/state-performance?sector=Health");
+    expect(res.status).toBe(200);
+    const call = mockQuery.mock.calls.find(([sql]) => String(sql).includes('s.id AS "stateId"'));
+    expect(call).toBeDefined();
+    expect(String(call![0])).toContain("p.sector = ANY($1::text[])");
+    expect(call![1]).toEqual([["Health"]]);
+  });
+
+  it("keeps state and sector parameters distinct for combined state-performance filters", async () => {
+    const res = await request(agentFor("program_manager"))
+      .get("/dashboard/state-performance?stateId=2&sector=Health");
+    expect(res.status).toBe(200);
+    const call = mockQuery.mock.calls.find(([sql]) => String(sql).includes('s.id AS "stateId"'));
+    expect(call).toBeDefined();
+    expect(String(call![0])).toContain("p.sector = ANY($2::text[])");
+    expect(String(call![0])).toContain("ra.sector = ANY($2::text[])");
+    expect(String(call![0])).toContain("FROM states s WHERE s.id = $3");
+    expect(call![1]).toEqual([2, ["Health"], 2]);
+  });
+
+  it("uses explicit 403 rather than an empty array for a denied state-performance scope", async () => {
+    const res = await request(agentFor("state_office_manager")).get("/dashboard/state-performance");
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "dashboard_scope_forbidden" });
+  });
+
+  it("uses explicit 403 rather than an empty state-performance result for an SPO assignment scope", async () => {
+    mockQuery.mockImplementationOnce(async () => ({ rows: [{ project_id: 101 }] }));
+    const res = await request(agentFor("state_program_officer", 7))
+      .get("/dashboard/state-performance");
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "dashboard_scope_forbidden" });
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["donor=UNICEF", "dateFrom=2025-01-01", "dateTo=2025-12-31"])(
+    "rejects unsupported state-performance filter %s",
+    async (filter) => {
+      const res = await request(agentFor("program_manager"))
+        .get(`/dashboard/state-performance?${filter}`);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual(expect.objectContaining({ error: "dashboard_invalid_filter" }));
+      expect(mockQuery).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("DASH-861 project-performance limit validation", () => {
+  it.each(["limit=9", "limit=101", "limit=abc", "limit=10&limit=20"])(
+    "rejects invalid or repeated project-performance %s before querying",
+    async (filter) => {
+      const res = await request(agentFor("program_manager"))
+        .get(`/dashboard/performance/projects?${filter}`);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual(expect.objectContaining({ error: "dashboard_invalid_filter" }));
+      expect(mockQuery).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("DASH-861 summary aggregate authority", () => {
+  it("applies an SPO state and assignment clamp to reports, risks, and activities", async () => {
+    mockQuery.mockImplementationOnce(async () => ({ rows: [{ project_id: 101 }] }));
+    const res = await request(agentFor("state_program_officer", 7)).get(summaryPath);
+    expect(res.status).toBe(200);
+
+    const reportCall = mockQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("FROM reports r") && String(sql).includes(" AS submitted"),
     );
-    expect(projectCall).toBeDefined();
-    expect(String(projectCall![0])).toContain("_ps.state_id = $1");
-    expect(projectCall![1]).toEqual([1]);
-    expect(JSON.stringify(mockQuery.mock.calls)).not.toContain("99");
+    expect(String(reportCall?.[0])).toContain("r.state_id = $1");
+    expect(String(reportCall?.[0])).toContain("r.project_id = ANY($2::int[])");
+    expect(reportCall?.[1]).toEqual([7, [101]]);
+
+    const riskCalls = mockQuery.mock.calls.filter(([sql]) =>
+      String(sql).includes("FROM risks rk") && String(sql).includes("SELECT p.id FROM projects p"),
+    );
+    expect(riskCalls).not.toHaveLength(0);
+    for (const call of riskCalls) {
+      expect(String(call[0])).toContain("rk.state_id = $2");
+      expect(call[1]).toEqual([[101], 7]);
+    }
+
+    const activityCalls = mockQuery.mock.calls.filter(([sql]) =>
+      String(sql).includes("FROM activities a")
+      && String(sql).includes("a.project_id IN")
+      && (String(sql).includes("planned_end") || String(sql).includes(" AS planned")),
+    );
+    expect(activityCalls).not.toHaveLength(0);
+    for (const call of activityCalls) {
+      expect(String(call[0])).toContain("a.state_id = $2");
+      expect(call[1]).toEqual([[101], 7]);
+    }
+
+    const spentCall = mockQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("SUM(a.budget_spent)") && String(sql).includes(" AS spent"),
+    );
+    expect(String(spentCall?.[0])).toContain("a.state_id = $2");
+    expect(spentCall?.[1]).toEqual([[101], 7]);
+
+    const allocationCall = mockQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("FROM project_state_allocations psa"),
+    );
+    expect(String(allocationCall?.[0])).toContain("psa.state_id = $2");
+    expect(allocationCall?.[1]).toEqual([[101], 7]);
+
+    const currencyCall = mockQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("WITH scoped AS") && String(sql).includes('"totalSpent"'),
+    );
+    expect(String(currencyCall?.[0])).toContain("a.state_id = $2");
+    expect(currencyCall?.[1]).toEqual([[101], 7]);
+  });
+
+  it("applies combined state and sector filters to every risk aggregate", async () => {
+    const res = await request(agentFor("program_manager"))
+      .get(`${summaryPath}?stateId=2&sector=Health`);
+    expect(res.status).toBe(200);
+
+    const riskCalls = mockQuery.mock.calls.filter(([sql]) =>
+      String(sql).includes("FROM risks rk"),
+    );
+    expect(riskCalls).toHaveLength(2);
+    for (const call of riskCalls) {
+      expect(String(call[0])).toContain("SELECT p.id FROM projects p");
+      expect(String(call[0])).toContain("p.sector = ANY($2::text[])");
+      expect(String(call[0])).toContain("rk.state_id = $1");
+      expect(call[1]).toEqual([2, ["Health"]]);
+    }
+  });
+
+  it("applies donor and date filters to every risk aggregate", async () => {
+    const res = await request(agentFor("program_manager"))
+      .get(`${summaryPath}?donor=UNICEF&dateFrom=2025-01-01&dateTo=2025-12-31`);
+    expect(res.status).toBe(200);
+
+    const riskCalls = mockQuery.mock.calls.filter(([sql]) =>
+      String(sql).includes("FROM risks rk"),
+    );
+    expect(riskCalls).toHaveLength(2);
+    for (const call of riskCalls) {
+      expect(String(call[0])).toContain("SELECT p.id FROM projects p");
+      expect(String(call[0])).toContain("p.donor = $1");
+      expect(String(call[0])).toContain("p.end_date >= $2::date");
+      expect(String(call[0])).toContain("p.start_date <= $3::date");
+      expect(call[1]).toEqual(["UNICEF", "2025-01-01", "2025-12-31"]);
+    }
+  });
+
+  it("returns genuine numeric zeroes after every aggregate query succeeds", async () => {
+    const saved = structuredClone(mockRows);
+    try {
+      mockRows.proj[0] = { active: 0, total: 0, closed: 0 };
+      mockRows.stateCount[0] = { c: 0 };
+      mockRows.ben[0] = { reached: 0, target: 0 };
+      mockRows.budgetTotal[0] = { total: 0 };
+      mockRows.budgetSpent[0] = { spent: 0 };
+      mockRows.allocated[0] = { allocated: 0 };
+      mockRows.risks[0] = { high: 0 };
+      mockRows.riskCounts[0] = { open: 0, critical: 0 };
+      mockRows.reportCounts[0] = { submitted: 0, pending: 0 };
+      mockRows.activityCounts[0] = { planned: 0, completed: 0 };
+      mockRows.pending[0] = { proj: 0, rep: 0 };
+      mockRows.delayed[0] = { cnt: 0 };
+
+      const res = await request(agentFor("program_manager")).get(summaryPath);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(expect.objectContaining({
+        activeProjects: 0, totalProjects: 0, completedProjects: 0,
+        totalBeneficiaries: 0, criticalRisks: 0, reportsSubmitted: 0,
+      }));
+    } finally {
+      Object.assign(mockRows, saved);
+    }
+  });
+
+  it("fails the entire summary when an authoritative aggregate has no row", async () => {
+    mockQuery.mockImplementationOnce(async () => ({ rows: [] }));
+    const res = await request(agentFor("program_manager")).get(summaryPath);
+    expect(res.status).toBe(500);
+  });
+
+  it("returns a canonical client-usable error for unsupported filters", async () => {
+    const res = await request(agentFor("program_manager")).get(`${summaryPath}?region=north`);
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(expect.objectContaining({ error: "dashboard_invalid_filter" }));
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });
 
