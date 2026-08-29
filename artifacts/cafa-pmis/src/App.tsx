@@ -16,6 +16,11 @@ import { LanguageProvider, useLanguage } from "@/contexts/language-context";
 import { LocationProvider } from "@/contexts/location-context";
 import { isOfflineQueuedError, isOfflineBlockedError } from "@/lib/offline/fetch-interceptor";
 import { SocketProvider } from "@/lib/socket";
+import {
+  establishAuthenticatedSession,
+  getAuthenticatedSessionSnapshot,
+  invalidateAuthenticatedSession,
+} from "@/lib/authenticated-session";
 import { FILE_ARCHIVE_PATH, legacyFileArchiveRedirect } from "@/lib/file-archive-route";
 
 /* ── Lazy-loaded pages (code splitting) ─────────────────────────────── */
@@ -55,7 +60,7 @@ const AiPage           = lazy(() => import("@/pages/ai"));
 const NotificationPreferencesPage = lazy(() => import("@/pages/notification-preferences"));
 const LandingPage          = lazy(() => import("@/pages/landing"));
 
-const queryClient = new QueryClient({
+export const appQueryClient = new QueryClient({
   mutationCache: new MutationCache({
     onError: (error) => {
       if (isOfflineQueuedError(error)) {
@@ -194,13 +199,23 @@ function Router() {
 
 function AuthGate() {
   const [location] = useLocation();
+  const qc = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["auth", "me"],
     queryFn: async () => {
       const res = await fetch("/api/me", { credentials: "include" });
-      if (res.status === 401) return null;
+      if (res.status === 401) {
+        invalidateAuthenticatedSession();
+        qc.setQueryData(["/api/me"], null);
+        return null;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+      const next = await res.json();
+      establishAuthenticatedSession(next.user.id);
+      // Seed generated identity consumers from the authoritative session
+      // decision so mounting the staff shell does not issue a duplicate guard.
+      qc.setQueryData(["/api/me"], next);
+      return next;
     },
     retry: false,
     staleTime: 60_000,
@@ -228,9 +243,15 @@ function AuthGate() {
   // Remounting the socket provider by authenticated user ensures a logout or
   // development role switch cannot retain another recipient's realtime room.
   return (
-    <SocketProvider key={data.user.id} userId={data.user.id}>
+    <SocketProvider
+      key={`${data.user.id}:${getAuthenticatedSessionSnapshot().generation}`}
+      userId={data.user.id}
+    >
       <LocationProvider>
-        <Router />
+        <SyncProvider userId={data.user.id}>
+          <Router />
+          <OfflineIndicator />
+        </SyncProvider>
       </LocationProvider>
     </SocketProvider>
   );
@@ -248,31 +269,28 @@ function RadixDirectionBridge({ children }: { children: ReactNode }) {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={appQueryClient}>
       <LanguageProvider>
         <RadixDirectionBridge>
           <TooltipProvider>
-            <SyncProvider>
-              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-                <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-                  <Switch>
-                    <Route path="/login" component={LoginPage} />
-                    <Route path="/invite/:token" component={InviteAcceptPage} />
-                    <Route path="/accept-invitation" component={InviteAcceptPage} />
-                    <Route path="/forgot-password" component={ForgotPasswordPage} />
-                    <Route path="/reset-password" component={ResetPasswordPage} />
-                    <Route path="/password-reset-sent" component={PasswordResetSentPage} />
-                    <Route path="/verify-email" component={VerifyEmailPage} />
-                    <Route path="/email-verification-sent" component={EmailVerificationSentPage} />
-                    <Route><AuthGate /></Route>
-                  </Switch>
-                </Suspense>
-              </WouterRouter>
-              <OfflineIndicator />
-              <PwaUpdatePrompt />
-              <Toaster />
-              <SonnerToaster />
-            </SyncProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                <Switch>
+                  <Route path="/login" component={LoginPage} />
+                  <Route path="/invite/:token" component={InviteAcceptPage} />
+                  <Route path="/accept-invitation" component={InviteAcceptPage} />
+                  <Route path="/forgot-password" component={ForgotPasswordPage} />
+                  <Route path="/reset-password" component={ResetPasswordPage} />
+                  <Route path="/password-reset-sent" component={PasswordResetSentPage} />
+                  <Route path="/verify-email" component={VerifyEmailPage} />
+                  <Route path="/email-verification-sent" component={EmailVerificationSentPage} />
+                  <Route><AuthGate /></Route>
+                </Switch>
+              </Suspense>
+            </WouterRouter>
+            <PwaUpdatePrompt />
+            <Toaster />
+            <SonnerToaster />
           </TooltipProvider>
         </RadixDirectionBridge>
       </LanguageProvider>

@@ -102,9 +102,15 @@ async function settleDraftOperation(
 export class SyncService extends EventTarget {
   private _running = false;
   private activeUserId: number | null = null;
+  private replayGeneration = 0;
+  private replayAbortController: AbortController | null = null;
 
   setUserId(userId: number | null): void {
+    if (this.activeUserId === userId) return;
     this.activeUserId = userId;
+    this.replayGeneration += 1;
+    this.replayAbortController?.abort();
+    this.replayAbortController = null;
   }
 
   async queue(opts: QueueMutationOpts): Promise<string> {
@@ -187,6 +193,9 @@ export class SyncService extends EventTarget {
   private async processQueueLocked(): Promise<SyncResult> {
     if (this._running) return { synced: 0, failed: 0, conflicts: 0 };
     this._running = true;
+    const replayGeneration = this.replayGeneration;
+    const replayAbortController = new AbortController();
+    this.replayAbortController = replayAbortController;
     let synced = 0, failed = 0, conflicts = 0;
     const operations: SyncOperationOutcome["operations"] = [];
     try {
@@ -202,7 +211,7 @@ export class SyncService extends EventTarget {
       );
 
       for (const item of eligible) {
-        if (!this.ownsCurrentBrowserSession(item.userId)) {
+        if (!this.isReplayCurrent(item.userId, replayGeneration, replayAbortController.signal)) {
           // A shared browser changed accounts since this run started. Do not
           // ever send the previous user's work under the new session.
           continue;
@@ -238,12 +247,8 @@ export class SyncService extends EventTarget {
         if (!claimed) continue;
         this.dispatchEvent(new CustomEvent("change"));
         try {
-          if (!this.ownsCurrentBrowserSession(item.userId)) {
-            await db.syncQueue.update(item.id!, {
-              syncStatus: "pending",
-              lastError: "Sync paused because the active account changed.",
-              nextAttemptAt: Date.now() + BASE_BACKOFF_MS,
-            });
+          if (!this.isReplayCurrent(item.userId, replayGeneration, replayAbortController.signal)) {
+            await this.restoreCancelledClaim(item);
             continue;
           }
           const headers: Record<string, string> = {
@@ -252,12 +257,21 @@ export class SyncService extends EventTarget {
           };
           if (item.baseRevision) headers["x-base-revision"] = item.baseRevision;
           const replayBody = await this.resolveReplayBody(item);
+          if (!this.isReplayCurrent(item.userId, replayGeneration, replayAbortController.signal)) {
+            await this.restoreCancelledClaim(item);
+            continue;
+          }
           const res = await fetch(item.url, {
             method: item.method,
             headers,
             body: replayBody ?? undefined,
             credentials: "include",
+            signal: replayAbortController.signal,
           });
+          if (!this.isReplayCurrent(item.userId, replayGeneration, replayAbortController.signal)) {
+            await this.restoreCancelledClaim(item);
+            continue;
+          }
           if (res.status === 409) {
             await db.syncQueue.update(item.id!, {
               syncStatus: "conflict",
@@ -306,6 +320,11 @@ export class SyncService extends EventTarget {
             operations.push({ operationId: item.operationId, status: terminal ? "failed" : "pending", failureCode });
           }
         } catch (err) {
+          if (!this.isReplayCurrent(item.userId, replayGeneration, replayAbortController.signal)) {
+            await this.restoreCancelledClaim(item);
+            this.dispatchEvent(new CustomEvent("change"));
+            continue;
+          }
           if (err instanceof OfflineDependencyError) {
             const message = err.message.slice(0, 300);
             await db.syncQueue.update(item.id!, {
@@ -338,6 +357,9 @@ export class SyncService extends EventTarget {
       }
     } finally {
       this._running = false;
+      if (this.replayAbortController === replayAbortController) {
+        this.replayAbortController = null;
+      }
     }
     this.dispatchEvent(new CustomEvent("sync-complete", { detail: { synced, failed, conflicts, operations } }));
     return { synced, failed, conflicts };
@@ -407,6 +429,25 @@ export class SyncService extends EventTarget {
     if (this.activeUserId !== userId) return false;
     const stored = Number(localStorage.getItem("cafa.userId"));
     return Number.isInteger(stored) && stored === userId;
+  }
+
+  private isReplayCurrent(
+    userId: number,
+    generation: number,
+    signal: AbortSignal,
+  ): boolean {
+    return !signal.aborted
+      && generation === this.replayGeneration
+      && this.ownsCurrentBrowserSession(userId);
+  }
+
+  private async restoreCancelledClaim(item: SyncQueueItem): Promise<void> {
+    await db.syncQueue.update(item.id!, {
+      syncStatus: "pending",
+      outcome: null,
+      lastError: "Sync paused because the authenticated session ended.",
+      nextAttemptAt: Date.now() + BASE_BACKOFF_MS,
+    });
   }
 
   /**

@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, us
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, setOfflineUser } from "@/lib/offline/db";
 import { syncService, type SyncResult } from "@/lib/offline/sync-service";
-import { prefetchCriticalData } from "@/lib/offline/prefetch";
+import { cancelCriticalPrefetch, prefetchCriticalData } from "@/lib/offline/prefetch";
 import { checkStorageQuota } from "@/lib/offline/storage-quota";
 import { processAllPendingAttachments } from "@/lib/offline/attachment-store";
 import { toast } from "sonner";
@@ -14,6 +14,17 @@ import {
   type ConnectivitySnapshot,
   type ConnectivityStatus,
 } from "@/lib/connectivity-state";
+
+let activeStopBackgroundWork: (() => void) | null = null;
+
+/**
+ * The authenticated shell owns this provider. Logout uses this hook to stop
+ * timers, probes, and queued warmups before it clears the query client.
+ * Unmounting the provider performs the same stop for session expiry.
+ */
+export function stopAuthenticatedBackgroundWork(): void {
+  activeStopBackgroundWork?.();
+}
 
 interface SyncContextValue {
   isOnline: boolean;
@@ -51,8 +62,10 @@ type ProbeResult =
 
 /** Probe only the same-origin CAFA service. A probe timeout is transport
  * evidence, but it needs a second independent confirmation before Offline. */
-async function probeConnectivity(): Promise<ProbeResult> {
+async function probeConnectivity(parentSignal?: AbortSignal): Promise<ProbeResult> {
   const ac = new AbortController();
+  const abortFromParent = () => ac.abort();
+  parentSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timer = setTimeout(() => ac.abort(), 2500);
   try {
     const res = await fetch("/api/healthz", {
@@ -67,6 +80,7 @@ async function probeConnectivity(): Promise<ProbeResult> {
     return { kind: "transport" };
   } finally {
     clearTimeout(timer);
+    parentSignal?.removeEventListener("abort", abortFromParent);
   }
 }
 
@@ -75,7 +89,7 @@ const ONLINE_PROBE_MS = 60_000;
 const CHECKING_PROBE_MS = 5_000;
 const CONFIRMATION_DELAY_MS = 400;
 
-export function SyncProvider({ children }: { children: React.ReactNode }) {
+export function SyncProvider({ children, userId }: { children: React.ReactNode; userId: number }) {
   const connectivity = useSyncExternalStore(
     subscribeConnectivity,
     getConnectivitySnapshot,
@@ -88,11 +102,30 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const syncingRef = useRef(false);
   const probeInFlightRef = useRef(false);
-  const storedUserId = (() => {
-    const value = window.localStorage.getItem("cafa.userId");
-    const parsed = value ? Number(value) : NaN;
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-  })();
+  const mountedRef = useRef(true);
+  const probeControllersRef = useRef(new Set<AbortController>());
+  const probeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const storedUserId = userId;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const stop = () => {
+      mountedRef.current = false;
+      cancelCriticalPrefetch();
+      for (const controller of probeControllersRef.current) controller.abort();
+      probeControllersRef.current.clear();
+      if (probeIntervalRef.current !== null) {
+        clearInterval(probeIntervalRef.current);
+        probeIntervalRef.current = null;
+      }
+      syncService.setUserId(null);
+    };
+    activeStopBackgroundWork = stop;
+    return () => {
+      stop();
+      if (activeStopBackgroundWork === stop) activeStopBackgroundWork = null;
+    };
+  }, []);
 
   useEffect(() => {
     syncService.setUserId(storedUserId);
@@ -158,13 +191,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   ) ?? 0;
 
   const triggerSync = useCallback(async () => {
-    if (syncingRef.current) return;
+    if (!mountedRef.current || syncingRef.current) return;
     const connectivity = getConnectivitySnapshot();
     if (connectivity.status !== "online" || connectivity.accessOutcome !== null) return;
     syncingRef.current = true;
     setIsSyncing(true);
     try {
       const result: SyncResult = await syncService.processQueue();
+      if (!mountedRef.current) return;
       if (result.synced > 0 && result.failed === 0 && result.conflicts === 0) {
         toast.success(
           `${result.synced} offline change${result.synced > 1 ? "s" : ""} synced successfully`,
@@ -181,7 +215,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       processAllPendingAttachments().catch(() => {});
     } finally {
       syncingRef.current = false;
-      setIsSyncing(false);
+      if (mountedRef.current) setIsSyncing(false);
     }
   }, []);
 
@@ -190,10 +224,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const confirmConnectivity = useCallback(async (): Promise<boolean> => {
+    if (!mountedRef.current) return false;
     if (probeInFlightRef.current) return getConnectivitySnapshot().status === "online";
     probeInFlightRef.current = true;
+    const controller = new AbortController();
+    probeControllersRef.current.add(controller);
     try {
-      let result = await probeConnectivity();
+      let result = await probeConnectivity(controller.signal);
+      if (!mountedRef.current || controller.signal.aborted) return false;
       const record = (probe: ProbeResult) => {
         if (probe.kind === "success") {
           recordConnectivityEvidence({ kind: "probe-success" });
@@ -213,11 +251,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         getConnectivitySnapshot().status !== "offline"
       ) {
         await new Promise((resolve) => setTimeout(resolve, CONFIRMATION_DELAY_MS));
-        result = await probeConnectivity();
+        if (!mountedRef.current || controller.signal.aborted) return false;
+        result = await probeConnectivity(controller.signal);
+        if (!mountedRef.current || controller.signal.aborted) return false;
         record(result);
       }
       return result.kind === "success";
     } finally {
+      probeControllersRef.current.delete(controller);
       probeInFlightRef.current = false;
     }
   }, []);
@@ -232,7 +273,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // check storage quota so the user is alerted before the cache fills up.
   useEffect(() => {
     confirmConnectivity().then((online) => {
-      if (online && getConnectivitySnapshot().status === "online" && getConnectivitySnapshot().accessOutcome === null) {
+      if (mountedRef.current && online && getConnectivitySnapshot().status === "online" && getConnectivitySnapshot().accessOutcome === null) {
         prefetchCriticalData();
         checkStorageQuota();
       }
@@ -245,7 +286,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const wasOffline = getConnectivitySnapshot().status === "offline";
       recordConnectivityEvidence({ kind: "browser-online" });
       confirmConnectivity().then((online) => {
-        if (online && getConnectivitySnapshot().status === "online" && getConnectivitySnapshot().accessOutcome === null) {
+        if (mountedRef.current && online && getConnectivitySnapshot().status === "online" && getConnectivitySnapshot().accessOutcome === null) {
           if (wasOffline) triggerSync().then(() => prefetchCriticalData());
           else prefetchCriticalData();
         }
@@ -275,6 +316,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     const interval = setInterval(async () => {
       const wasOffline = getConnectivitySnapshot().status === "offline";
       const online = await confirmConnectivity();
+      if (!mountedRef.current) return;
       if (online && getConnectivitySnapshot().status === "online" && getConnectivitySnapshot().accessOutcome === null && wasOffline) {
         triggerSync().then(() => prefetchCriticalData());
         return;
@@ -292,8 +334,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }, connectivity.status === "online"
       ? ONLINE_PROBE_MS
       : connectivity.status === "offline" ? PROBE_INTERVAL_MS : CHECKING_PROBE_MS);
+    probeIntervalRef.current = interval;
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (probeIntervalRef.current === interval) probeIntervalRef.current = null;
+    };
   }, [connectivity.status, confirmConnectivity, triggerSync, storedUserId]);
 
   return (
