@@ -24,6 +24,40 @@ import {
 } from "../lib/projectDataIntegrity";
 import { isExactDevelopmentTestRetirementTarget } from "../lib/developmentTestRetirement";
 
+/**
+ * A State-scoped project write must remain wholly within the caller's assigned
+ * State. This intentionally applies independently of record-level access:
+ * being assigned to an existing project must never permit an SPO/SOM to add a
+ * second State or HQ operations while editing its draft.
+ */
+function violatesStateScopedProjectWrite(
+  req: Request,
+  body: {
+    stateIds?: number[];
+    stateAllocations?: Array<{ stateId: number }>;
+    outputs?: Array<{ activities?: Array<{ stateId?: number | null }> }>;
+  },
+  hasHqOperations: boolean,
+): boolean {
+  const user = req.currentUser;
+  if (!user || !["state_program_officer", "state_office_manager"].includes(user.role)) return false;
+
+  // Bad legacy user data must not turn a State role into an unscoped writer.
+  if (user.stateId === null) return true;
+  if (hasHqOperations) return true;
+
+  const requestedStateIds = [
+    ...(body.stateIds ?? []),
+    ...(body.stateAllocations ?? []).map((allocation) => allocation.stateId),
+    ...(body.outputs ?? []).flatMap((output) =>
+      (output.activities ?? [])
+        .map((activity) => activity.stateId)
+        .filter((stateId): stateId is number => stateId != null),
+    ),
+  ];
+  return requestedStateIds.some((stateId) => stateId !== user.stateId);
+}
+
 // Returns the project's primary sector (for TC guards). Undefined = not found.
 
 // NOTE: Schema additions and data migration for sector unification are handled
@@ -755,6 +789,14 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
   const client = await pool.connect();
   try {
     const body = CreateProjectBody.parse(req.body);
+    if (violatesStateScopedProjectWrite(
+      req,
+      body,
+      (req.body as Record<string, unknown>).hasHqOperations === true,
+    )) {
+      res.status(403).json({ error: "state_forbidden" });
+      return;
+    }
     const reportingCoverage = resolveReportingCoverage(req.body as Record<string, unknown>, body.startDate, body.endDate);
     if (!reportingCoverage) {
       res.status(422).json({ error: "invalid_reporting_coverage", message: "Reporting coverage must be a valid inclusive date range." });
@@ -894,7 +936,6 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
     ]) {
       const activeState = await assertActiveState(Number(stateId));
       if (!activeState.ok) {
-        client.release();
         res.status(422).json({ error: activeState.error, message: "Projects can only be assigned to active States." });
         return;
       }
@@ -1766,11 +1807,24 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
   try {
     const projectId = Number(req.params.projectId as string);
 
-    const check = await client.query<{ status: string; sector: string | null; sectors: string[] }>(
-      `SELECT status, sector, COALESCE(sectors, '[]'::jsonb)::jsonb AS sectors FROM projects WHERE id = $1`,
+    const check = await client.query<{
+      status: string;
+      sector: string | null;
+      sectors: string[];
+      has_hq_operations: boolean;
+      state_ids: number[];
+    }>(
+      `SELECT status, sector, has_hq_operations,
+              ARRAY(SELECT ps.state_id FROM project_states ps WHERE ps.project_id = projects.id) AS state_ids,
+              COALESCE(sectors, '[]'::jsonb)::jsonb AS sectors FROM projects WHERE id = $1`,
       [projectId],
     );
     if (check.rows.length === 0) { client.release(); res.status(404).json({ error: "Not found" }); return; }
+    const stateGuard = await assertStateAllowed(req, projectId);
+    if (!stateGuard.ok) {
+      res.status(stateGuard.status).json(stateGuard.body);
+      return;
+    }
     if (check.rows[0].status !== "draft") {
       client.release();
       res.status(409).json({ error: "Only draft projects can be updated" });
@@ -1784,6 +1838,20 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
     if (!guard.ok) { client.release(); res.status(guard.status).json(guard.body); return; }
 
     const body = CreateProjectBody.parse(req.body);
+    const isStateRole = ["state_program_officer", "state_office_manager"].includes(req.currentUser!.role);
+    const existingScopeOutsideCaller = isStateRole && (
+      check.rows[0].has_hq_operations === true
+      || (check.rows[0].state_ids ?? []).some((stateId) => stateId !== req.currentUser!.stateId)
+    );
+    const rawPatchHqOperations = (req.body as Record<string, unknown>).hasHqOperations;
+    // PATCH normally preserves an omitted HQ flag. State callers must therefore
+    // explicitly clear it before they can edit a historical draft that claims HQ.
+    const effectivePatchHqOperations = rawPatchHqOperations === true ||
+      (rawPatchHqOperations !== false && check.rows[0].has_hq_operations === true);
+    if (existingScopeOutsideCaller || violatesStateScopedProjectWrite(req, body, effectivePatchHqOperations)) {
+      res.status(403).json({ error: "state_forbidden" });
+      return;
+    }
     const reportingCoverage = resolveReportingCoverage(req.body as Record<string, unknown>, body.startDate, body.endDate);
     if (!reportingCoverage) {
       res.status(422).json({ error: "invalid_reporting_coverage", message: "Reporting coverage must be a valid inclusive date range." });
@@ -1807,7 +1875,6 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
     ]) {
       const activeState = await assertActiveState(Number(stateId));
       if (!activeState.ok) {
-        client.release();
         res.status(422).json({
           error: activeState.error,
           message: "Projects can only be assigned to active States.",

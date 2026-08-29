@@ -76,6 +76,8 @@ import { cn } from "@/lib/utils";
 import { OfflineDraftNotice } from "@/components/offline-draft-notice";
 import { useDurableFormDraft } from "@/hooks/use-durable-form-draft";
 import { useSyncContext } from "@/contexts/sync-context";
+import { StateReferenceStatus } from "@/components/state-reference-status";
+import { deriveStateReferenceData } from "@/lib/state-reference-data";
 
 // ── Local helpers ──────────────────────────────────────────────────────────────
 
@@ -1505,7 +1507,9 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   const authorisedStateId = typeof currentUser?.stateId === "number" ? currentUser.stateId : null;
   const authorisedSector = typeof currentUser?.sector === "string" ? currentUser.sector : null;
 
-  const { data: statesData, isSuccess: statesLoaded } = useListStates();
+  const statesQuery = useListStates();
+  const stateReference = deriveStateReferenceData(statesQuery);
+  const statesLoaded = stateReference.status === "ready" || stateReference.status === "empty";
   const { data: usersData, isSuccess: usersLoaded } = useListUsers({ status: "active" });
   const { data: donorsData } = useListDonors();
   const createDonor = useCreateDonor();
@@ -1535,7 +1539,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   const reportingCoverageCustomisedRef = useRef(false);
   const patchProject = usePatchProject();
 
-  const states = statesData ?? [];
+  const states = stateReference.states;
   const users = usersData?.items ?? [];
   const donors = donorsData ?? [];
 
@@ -1685,6 +1689,16 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   const sectors = watch("sectors");
   const donorId = watch("donorId");
 
+  useEffect(() => {
+    if (!isStateScopedAuthor || editProjectId) return;
+    form.setValue("hasHqOperations", false, { shouldValidate: true });
+    form.setValue(
+      "stateIds",
+      authorisedStateId && stateReference.isReady ? [authorisedStateId] : [],
+      { shouldValidate: true },
+    );
+  }, [authorisedStateId, editProjectId, form, isStateScopedAuthor, stateReference.isReady]);
+
   // ── Duplicate detection debounce ───────────────────────────────────────────
   const watchedAgreement = watch("agreementNumber");
   const watchedDonor = watch("donor");
@@ -1833,7 +1847,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
           </div>
         </div>
         {/* Footer skeleton */}
-        <div className="sticky bottom-0 -mx-6 -mb-6 mt-6 border-t bg-background z-10">
+        <div className="mt-6 border-t bg-background">
           <div className="px-6 py-3">
             <div className="flex items-center justify-between">
               <Skeleton className="h-9 w-20 rounded-md" />
@@ -1884,6 +1898,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   };
 
   const toggleState = (id: number) => {
+    if (isStateScopedAuthor) return;
     const current = form.getValues("stateIds");
     if (current.includes(id)) {
       form.setValue("stateIds", current.filter(s => s !== id), { shouldValidate: true });
@@ -1900,6 +1915,14 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
         description: commonT("sync.projectDraftOperationalOnly"),
       });
       onClose();
+      return;
+    }
+    if (!stateReference.isReady) {
+      form.setError("root" as never, {
+        type: "manual",
+        message: t("form.location.statesUnavailable"),
+      });
+      setActiveTab("location");
       return;
     }
     // In edit mode: skip duplicate detection
@@ -2166,6 +2189,14 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
 
   // ── Save As Draft (bypasses validation) ──────────────────────────────────
   const handleSaveAsDraft = async () => {
+    if (!stateReference.isReady) {
+      form.setError("root" as never, {
+        type: "manual",
+        message: t("form.location.statesUnavailable"),
+      });
+      setActiveTab("location");
+      return;
+    }
     if (isSavingDraft || createProject.isPending || patchProject.isPending) return;
     const values = form.getValues();
     setIsSavingDraft(true);
@@ -2287,7 +2318,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   return (
     <>
     <Form {...form}>
-      <form onSubmit={handleFormSubmit} noValidate>
+      <form onSubmit={handleFormSubmit} noValidate className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
             <OfflineDraftNotice status={projectDraft.status} error={projectDraft.error} />
 
             {/* ── Tab navigation bar ── */}
@@ -2501,21 +2533,41 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
                     {selectedStateIds.length > 1 && <Badge className="text-xs bg-violet-100 text-violet-800 border-violet-300 hover:bg-violet-100 cursor-default">{t("form.location.multiState", { count: selectedStateIds.length })}</Badge>}
                   </div>
                   <p className="text-xs text-muted-foreground mb-2">Select all locations where this project has operational implementation or reporting responsibility.</p>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 border rounded-md max-h-60 overflow-y-auto">
-                    {/* HQ checkbox at the top */}
-                    <FormField control={control} name="hasHqOperations" render={({ field }) => (
-                      <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-primary font-medium col-span-full border-b pb-2 mb-1">
-                        <Checkbox checked={!!field.value} onCheckedChange={field.onChange} />
-                        HQ
-                      </label>
-                    )} />
-                    {states.map(state => (
-                      <label key={state.id} className="flex items-center gap-2 cursor-pointer text-sm hover:text-primary">
-                        <Checkbox checked={selectedStateIds.includes(state.id)} onCheckedChange={() => toggleState(state.id)} />
-                        <StateLabel state={state} />
-                      </label>
-                    ))}
-                  </div>
+                  {stateReference.status !== "ready" ? (
+                    <StateReferenceStatus
+                      status={stateReference.status}
+                      loadingText={t("form.location.statesLoading")}
+                      errorText={t("form.location.statesError")}
+                      emptyText={t("form.location.statesEmpty")}
+                      retryText={t("form.location.statesRetry")}
+                      onRetry={() => { void stateReference.retry(); }}
+                    />
+                  ) : isStateScopedAuthor ? (
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Lock className="h-4 w-4" aria-hidden="true" />
+                        {states.find((state) => state.id === authorisedStateId)
+                          ? <StateLabel state={states.find((state) => state.id === authorisedStateId)!} />
+                          : t("form.location.statesEmpty")}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{t("form.location.assignedStateLocked")}</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 border rounded-md max-h-60 overflow-y-auto">
+                      <FormField control={control} name="hasHqOperations" render={({ field }) => (
+                        <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-primary font-medium col-span-full border-b pb-2 mb-1">
+                          <Checkbox checked={!!field.value} onCheckedChange={field.onChange} />
+                          HQ
+                        </label>
+                      )} />
+                      {states.map(state => (
+                        <label key={state.id} className="flex items-center gap-2 cursor-pointer text-sm hover:text-primary">
+                          <Checkbox checked={selectedStateIds.includes(state.id)} onCheckedChange={() => toggleState(state.id)} />
+                          <StateLabel state={state} />
+                        </label>
+                      ))}
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )} />
@@ -3008,8 +3060,9 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
               )}
             </section>
 
+        </div>
             {/* ── Persistent footer ── */}
-            <div className="sticky bottom-0 -mx-6 -mb-6 mt-6 border-t border-border bg-background z-10">
+            <div className="shrink-0 border-t border-border bg-background">
               <div className="px-6 py-3">
                 {/* Mobile: stacked (col-reverse keeps primary action at top); Desktop: single row */}
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -3032,7 +3085,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={isActioning}
+                      disabled={isActioning || !stateReference.isReady}
                       aria-busy={isSavingDraft}
                       onClick={handleSaveAsDraft}
                       className="w-full sm:w-auto"
@@ -3050,7 +3103,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
                         type="button"
                         variant="ghost"
                         onClick={goToPrevTab}
-                        disabled={isActioning}
+                        disabled={isActioning || !stateReference.isReady}
                         className="w-full sm:w-auto"
                       >
                         {t("form.buttons.previous")}
@@ -3070,7 +3123,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
                     ) : (
                       <Button
                         type="submit"
-                        disabled={isActioning}
+                        disabled={isActioning || !stateReference.isReady}
                         aria-busy={createProject.isPending || patchProject.isPending}
                         className="w-full sm:w-auto"
                       >
@@ -3093,11 +3146,11 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
     {/* ── Duplicate detection modal ── */}
     {showDuplicateModal && duplicateResult?.existingProject && (() => {
       const existing = duplicateResult.existingProject!;
-      const newStateNames = selectedStateIds.map(id => statesData?.find(s => s.id === id)?.name ?? "").filter(Boolean);
+      const newStateNames = selectedStateIds.map(id => states.find(s => s.id === id)?.name ?? "").filter(Boolean);
       const handleMerge = async (kind: "states" | "sectors" | "both") => {
         const existingSectors = existing.sectors.length > 0 ? existing.sectors : (existing.sector ? [existing.sector] : []);
         const addedStateIds = selectedStateIds.filter(id => {
-          const name = statesData?.find(s => s.id === id)?.name ?? "";
+          const name = states.find(s => s.id === id)?.name ?? "";
           return !existing.stateNames.includes(name);
         });
         const addedSectors = sectors.filter(s => !existingSectors.includes(s));
@@ -3162,7 +3215,7 @@ export function EditProjectDialog({
             </DialogDescription>
           </DialogHeader>
         </div>
-        <div className="overflow-y-auto flex-1 px-6 py-6">
+        <div className="flex min-h-0 flex-1 flex-col">
           <ProjectRegistrationForm editProjectId={projectId} onClose={onClose} />
         </div>
       </DialogContent>

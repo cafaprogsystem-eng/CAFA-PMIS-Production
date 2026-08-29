@@ -45,7 +45,10 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
   });
 
   it("uses the States array and generated invitation paging contract", () => {
-    expect(page).toContain("Array.isArray(statesData) ? statesData : []");
+    expect(page).toContain("deriveStateReferenceData(statesQuery)");
+    expect(page).toContain('status={stateReference.status}');
+    expect(page).not.toContain('value="none">{t("userForm.noneHQ")}');
+    expect(page).not.toContain('<Field label="Office Location">');
     expect(page).toContain("useListUserInvitations(params)");
     expect(page).toContain("limit: 25, offset");
     expect(page).toContain("data.nextOffset");

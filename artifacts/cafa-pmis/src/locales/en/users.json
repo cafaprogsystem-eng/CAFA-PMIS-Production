@@ -352,6 +352,13 @@
     "confirmPasswordLabel": "Confirm Password *",
     "passwordMin": "Min 8 characters",
     "noneHQ": "— None (HQ) —",
+    "selectState": "Select a State…",
+    "stateRequired": "A State is required for this role.",
+    "statesUnavailable": "State reference data is unavailable. Retry before submitting.",
+    "statesLoading": "Loading active States…",
+    "statesError": "Active States could not be loaded.",
+    "statesEmpty": "No active States are available for assignment.",
+    "statesRetry": "Retry",
     "inviteNote": "An invitation will be created for this user. During UAT, email delivery is in simulation mode, so the invitation link will be available for admin testing. After launch, the system will send the invitation email automatically when EMAIL_ENABLED=true. The account becomes Active only after the user accepts the invitation and sets a password."
   },
   "resetPasswordDialog": {
