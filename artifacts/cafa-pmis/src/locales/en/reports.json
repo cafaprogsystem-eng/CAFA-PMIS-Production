@@ -742,6 +742,7 @@
     "addCommentAriaLabel": "Add comment on {{section}}"
   },
   "hqForm": {
+    "unavailable": "Unavailable",
     "formTitle": "HQ Sector Report",
     "titleRevise": "Revise HQ Sector Report",
     "formDesc": "Comprehensive sector-wide consolidated report for headquarter-level review.",

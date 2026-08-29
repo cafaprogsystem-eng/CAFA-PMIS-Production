@@ -3997,8 +3997,18 @@ export const GetDashboardSummaryResponse = zod
     totalBeneficiaries: zod.number(),
     beneficiariesTarget: zod.number(),
     totalBudget: zod.number().optional(),
-    totalSpent: zod.number().optional(),
-    budgetRemaining: zod.number().optional(),
+    totalSpent: zod
+      .number()
+      .nullish()
+      .describe(
+        "Unavailable when in-scope projects span multiple currencies or spend evidence is unavailable",
+      ),
+    budgetRemaining: zod
+      .number()
+      .nullish()
+      .describe(
+        "Unavailable when in-scope projects span multiple currencies or spend evidence is unavailable",
+      ),
     budgetAllocated: zod.number().optional(),
     budgetUtilization: zod
       .number()
@@ -4425,14 +4435,15 @@ export const GetDonorPortfolioResponseItem = zod.object({
   projects: zod.number(),
   budgetTotal: zod
     .number()
+    .nullable()
     .describe(
-      "Raw sum — may span multiple currencies when currencyMixed is true; use allocatedBudget per currency for display",
+      "Single-currency compatibility alias; null when currencyMixed is true",
     ),
   budgetSpent: zod
     .number()
     .nullish()
     .describe(
-      "Sum of all known activity spend; null when no activity records exist for this donor's projects",
+      "Single-currency compatibility alias; null when currencyMixed is true or no activity records exist",
     ),
   beneficiaries: zod.number(),
   currency: zod
@@ -4502,8 +4513,9 @@ export const GetDonorPortfolioResponseItem = zod.object({
     .describe("Project details for this donor group"),
   allocatedBudget: zod
     .number()
+    .nullable()
     .describe(
-      "Total allocated budget (may span currencies when currencyMixed is true)",
+      "Single-currency compatibility alias; null when currencyMixed is true",
     ),
 });
 export const GetDonorPortfolioResponse = zod.array(
@@ -4713,7 +4725,12 @@ export const GetDashboardSectorSnapshotResponse = zod.object({
     activeLocalities: zod.number(),
     activitiesImplemented: zod.number(),
     beneficiariesReached: zod.number(),
-    indicatorProgressPct: zod.number(),
+    indicatorProgressPct: zod
+      .number()
+      .nullable()
+      .describe(
+        "Target-weighted progress for indicators with a positive target and recorded achievement; null when no valid evidence exists",
+      ),
     delayedActivities: zod.number(),
     openRisks: zod.number(),
     pendingApprovals: zod.number(),
@@ -4739,7 +4756,12 @@ export const GetDashboardSectorSnapshotResponse = zod.object({
         donor: zod.string().nullable(),
         progressPct: zod.number(),
         beneficiaries: zod.number(),
-        budgetUtilizationPct: zod.number(),
+        budgetUtilizationPct: zod
+          .number()
+          .nullable()
+          .describe(
+            "null when budget is non-positive or no recorded spend evidence exists",
+          ),
         riskLevel: zod.string(),
       }),
     )
@@ -4802,10 +4824,26 @@ export const GetDashboardSectorSnapshotResponse = zod.object({
     .array(
       zod.object({
         name: zod.string(),
-        target: zod.number(),
-        achieved: zod.number(),
-        progressPct: zod.number(),
-        status: zod.string(),
+        target: zod
+          .number()
+          .nullable()
+          .describe("Recorded target; null when unavailable"),
+        achieved: zod
+          .number()
+          .nullable()
+          .describe("Recorded achievement; null when unavailable"),
+        progressPct: zod
+          .number()
+          .nullable()
+          .describe(
+            "null unless the target is positive and achievement is recorded",
+          ),
+        status: zod
+          .string()
+          .nullable()
+          .describe(
+            "Performance category; null unless progress has valid evidence",
+          ),
       }),
     )
     .max(getDashboardSectorSnapshotResponseIndicatorsMax),

@@ -85,6 +85,27 @@ function aggregateRow(
   return parsed;
 }
 
+function nullableAggregateNumber(
+  result: { rows?: unknown[] },
+  queryName: string,
+  field: string,
+): number | null {
+  const row = result.rows?.[0];
+  if (!row || typeof row !== "object") {
+    const error = new Error(`Dashboard aggregate "${queryName}" returned no result row.`);
+    Object.assign(error, { status: 500 });
+    throw error;
+  }
+  const value = (row as Record<string, unknown>)[field];
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    const error = new Error(`Dashboard aggregate "${queryName}" returned an invalid "${field}" value.`);
+    Object.assign(error, { status: 500 });
+    throw error;
+  }
+  return value;
+}
+
 function dashboardScopeError(scope: Scope, query: Record<string, string | undefined>): string | null {
   if (scope.denyAll || (scope.sectors !== null && scope.sectors.length === 0)) {
     return "dashboard_scope_forbidden";
@@ -479,7 +500,7 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
         scopeParams,
       ),
       pool.query(
-        `SELECT COALESCE(SUM(a.budget_spent), 0)::float AS spent
+        `SELECT SUM(a.budget_spent)::float AS spent
          FROM activities a JOIN projects p ON p.id = a.project_id
          WHERE p.deleted_at IS NULL${scopeSql}${scopedChildStateSql}`,
         scopeParams,
@@ -619,7 +640,7 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
     // produced its required aggregate row.
     const projectTotals = aggregateRow(proj, "projects", ["active", "total", "closed"]);
     const budgetTotals = aggregateRow(budgetTotal, "budget_total", ["total"]);
-    const spentTotals = aggregateRow(budgetSpent, "budget_spent", ["spent"]);
+    const totalSpent = nullableAggregateNumber(budgetSpent, "budget_spent", "spent");
     const riskStateTotals = aggregateRow(risks, "high_risk_states", ["high"]);
     const pendingTotals = aggregateRow(pending, "pending_approvals", ["proj", "rep"]);
     const delayedTotals = aggregateRow(delayed, "delayed_activities", ["cnt"]);
@@ -631,11 +652,10 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
     const stateTotals = aggregateRow(stateCount, "states_count", ["c"]);
 
     const totalBudget = budgetTotals.total;
-    const totalSpent = spentTotals.spent;
     // Spec: return null when Allocated Budget is zero — null means "no valid budget",
     // which the frontend displays as "—". A genuine 0 % is only valid when totalBudget > 0
     // and totalSpent === 0.  Raw float passed through — no integer rounding on the server.
-    const burn: number | null = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : null;
+    const burn: number | null = totalBudget > 0 && totalSpent !== null ? (totalSpent / totalBudget) * 100 : null;
 
     // budgetAllocated = sum of state-level allocations (or activity planned budget as fallback)
     const [allocatedRes, currencyBreakdownRes] = await Promise.all([
@@ -667,9 +687,6 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
     ]);
     const allocatedTotals = aggregateRow(allocatedRes, "budget_allocated", ["allocated"]);
     const budgetAllocated = allocatedTotals.allocated;
-    // Same calculation as burn — unified; null when no budget so the frontend
-    // can distinguish "no data" (null → "—") from "genuinely zero spend" (0 → "0%").
-    const budgetUtilization: number | null = burn;
     const budgetByCurrency: { currency: string; totalBudget: number; totalSpent: number | null; budgetRemaining: number | null; utilisationRate: number | null }[] =
       currencyBreakdownRes.rows.map(r => {
         const tb = r.totalBudget as number;
@@ -685,6 +702,9 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
     const currencies = budgetByCurrency.map(r => r.currency);
     const currencyMixed = currencies.length > 1;
     const currency: string | null = currencies.length === 1 ? currencies[0] : null;
+    const combinedSpent = currencyMixed ? null : totalSpent;
+    const combinedRemaining = currencyMixed || totalSpent === null ? null : totalBudget - totalSpent;
+    const combinedBurn = currencyMixed ? null : burn;
     // CAFA does not store dated beneficiary snapshots or another verified
     // monthly achievement series. Return no series rather than imply that
     // current cumulative project values happened evenly over time.
@@ -713,11 +733,11 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
     };
     const financialSummary = {
       totalBudget,
-      totalSpent,
-      budgetRemaining: totalBudget - totalSpent,
+      totalSpent: combinedSpent,
+      budgetRemaining: combinedRemaining,
       budgetAllocated,
-      budgetUtilization,
-      burnRatePct: burn,
+      budgetUtilization: combinedBurn,
+      burnRatePct: combinedBurn,
       // DEFECT-05: currency metadata + per-currency grouped totals for multi-currency portfolios
       currency,
       currencyMixed,
@@ -1505,7 +1525,8 @@ router.get("/dashboard/donor-portfolio", dashboardFilterGuard("donorPortfolio"),
       const currencies    = Array.from(g.currencyBudget.keys());
       const currencyMixed = currencies.length > 1;
       const currency: string | null = currencies.length === 1 ? currencies[0] : null;
-      const allocatedBudget = Array.from(g.currencyBudget.values()).reduce((s, v) => s + v, 0);
+      const combinedAllocatedBudget = Array.from(g.currencyBudget.values()).reduce((s, v) => s + v, 0);
+      const allocatedBudget = currencyMixed ? null : combinedAllocatedBudget;
 
       // Most severe status wins
       let dataStatus: string;
@@ -1535,7 +1556,9 @@ router.get("/dashboard/donor-portfolio", dashboardFilterGuard("donorPortfolio"),
 
       // Top-level budgetSpent: sum of all known per-currency spend (null when nothing known)
       const hasAnySpenData = g.spentByCurrency.size > 0;
-      const totalBudgetSpent: number | null = hasAnySpenData
+      const totalBudgetSpent: number | null = currencyMixed
+        ? null
+        : hasAnySpenData
         ? Array.from(g.spentByCurrency.values()).reduce((s, v) => s + (v ?? 0), 0)
         : null;
 
@@ -1564,7 +1587,7 @@ router.get("/dashboard/donor-portfolio", dashboardFilterGuard("donorPortfolio"),
     // Default: allocated budget desc, then donor name asc as tie-breaker
     entries.sort((a, b) =>
       b.allocatedBudget !== a.allocatedBudget
-        ? b.allocatedBudget - a.allocatedBudget
+        ? (b.allocatedBudget ?? 0) - (a.allocatedBudget ?? 0)
         : a.donorName.localeCompare(b.donorName),
     );
 
@@ -2313,7 +2336,11 @@ router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), dashboardF
           COALESCE((SELECT COUNT(DISTINCT l.id)::int FROM project_localities pl JOIN localities l ON l.id = pl.locality_id JOIN project_states ps ON ps.project_id = pl.project_id JOIN projects p ON p.id = pl.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status IN ('approved','active')), 0) AS "activeLocalities",
           COALESCE((SELECT COUNT(*)::int FROM activities a JOIN projects p ON p.id = a.project_id WHERE p.deleted_at IS NULL AND p.sector = $1), 0) AS "activitiesImplemented",
           COALESCE((SELECT SUM(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls)::int FROM projects p WHERE p.deleted_at IS NULL AND p.sector = $1), 0) AS "beneficiariesReached",
-          COALESCE((SELECT CASE WHEN SUM(i.target) > 0 THEN (SUM(i.achieved) / SUM(i.target) * 100)::int ELSE 0 END FROM indicators i JOIN projects p ON p.id = i.project_id WHERE p.deleted_at IS NULL AND i.sector = $1), 0) AS "indicatorProgressPct",
+          (SELECT (
+            SUM(i.achieved) FILTER (WHERE i.target > 0 AND i.achieved IS NOT NULL)
+            / NULLIF(SUM(i.target) FILTER (WHERE i.target > 0 AND i.achieved IS NOT NULL), 0)
+            * 100
+          )::int FROM indicators i JOIN projects p ON p.id = i.project_id WHERE p.deleted_at IS NULL AND i.sector = $1) AS "indicatorProgressPct",
           COALESCE((SELECT COUNT(*)::int FROM activities a JOIN projects p ON p.id = a.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND a.status = 'delayed'), 0) AS "delayedActivities",
           COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL AND sector = $1) AND r.status ${ACTIVE_RISK_STATUS_SQL}), 0) AS "openRisks",
           COALESCE((SELECT COUNT(*)::int FROM reports r2
@@ -2348,7 +2375,11 @@ router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), dashboardF
           p.id, p.code, p.title, p.donor,
           COALESCE((SELECT AVG(a.progress_pct)::int FROM activities a WHERE a.project_id = p.id), 0) AS "progressPct",
           COALESCE((SELECT COUNT(*)::int FROM beneficiaries b WHERE b.project_id = p.id), 0) AS beneficiaries,
-          COALESCE((SELECT CASE WHEN p.budget_total > 0 THEN (SUM(a.budget_spent) / p.budget_total * 100)::int ELSE 0 END FROM activities a WHERE a.project_id = p.id), 0) AS "budgetUtilizationPct",
+          (SELECT CASE
+            WHEN p.budget_total > 0 AND COUNT(a.budget_spent) > 0
+              THEN (SUM(a.budget_spent) / p.budget_total * 100)::int
+            ELSE NULL
+          END FROM activities a WHERE a.project_id = p.id) AS "budgetUtilizationPct",
           CASE
             WHEN (SELECT COUNT(*) FROM risks r WHERE r.project_id = p.id AND r.severity IN ('high','critical') AND r.status ${ACTIVE_RISK_STATUS_SQL}) >= 2 THEN 'high'
             WHEN (SELECT COUNT(*) FROM risks r WHERE r.project_id = p.id AND r.severity IN ('high','critical') AND r.status ${ACTIVE_RISK_STATUS_SQL}) >= 1 THEN 'medium'
@@ -2422,12 +2453,13 @@ router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), dashboardF
       pool.query(`
         SELECT
           i.title AS name, i.target::float AS target, i.achieved::float AS achieved,
-          CASE WHEN i.target > 0 THEN (i.achieved / i.target * 100)::int ELSE 0 END AS "progressPct",
+          CASE WHEN i.target > 0 AND i.achieved IS NOT NULL THEN (i.achieved / i.target * 100)::int ELSE NULL END AS "progressPct",
           CASE
             WHEN i.target > 0 AND (i.achieved / i.target) >= 1 THEN 'Achieved'
             WHEN i.target > 0 AND (i.achieved / i.target) >= 0.75 THEN 'On Track'
             WHEN i.target > 0 AND (i.achieved / i.target) >= 0.5 THEN 'At Risk'
-            ELSE 'Off Track'
+            WHEN i.target > 0 AND i.achieved IS NOT NULL THEN 'Off Track'
+            ELSE NULL
           END AS status
         FROM indicators i
         JOIN projects p ON p.id = i.project_id AND p.deleted_at IS NULL

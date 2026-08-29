@@ -120,6 +120,19 @@ describe("Dashboard source-population reconciliation", () => {
     expect(snapshot).toContain('${operationalPopulationSQL("r2")}');
   });
 
+  it("keeps sector-snapshot achievement aggregates and rows on the same valid evidence population", () => {
+    const snapshotStart = routeSource.indexOf('router.get("/dashboard/sector-snapshot"');
+    const snapshot = routeSource.slice(snapshotStart, routeSource.indexOf('router.get("/dashboard/', snapshotStart + 1));
+    const validEvidence = "i.target > 0 AND i.achieved IS NOT NULL";
+
+    expect(snapshot).toContain(`SUM(i.achieved) FILTER (WHERE ${validEvidence})`);
+    expect(snapshot).toContain(`SUM(i.target) FILTER (WHERE ${validEvidence})`);
+    expect(snapshot).toContain(`CASE WHEN ${validEvidence} THEN (i.achieved / i.target * 100)::int ELSE NULL END`);
+    expect(snapshot).toContain(`WHEN ${validEvidence} THEN 'Off Track'`);
+    expect(snapshot).toContain("ELSE NULL");
+    expect(snapshot).not.toContain("COALESCE(i.achieved, 0)");
+  });
+
   it("keeps sector-performance indicator evidence inside the authorised Project population and preserves unavailable as null", () => {
     const start = routeSource.indexOf('router.get("/dashboard/sector-performance"');
     const end = routeSource.indexOf('router.get("/dashboard/', start + 1);

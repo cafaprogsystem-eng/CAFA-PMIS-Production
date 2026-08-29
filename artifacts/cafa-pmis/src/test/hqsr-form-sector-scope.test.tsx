@@ -15,6 +15,8 @@ import "@testing-library/jest-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SECTORS } from "../lib/sectors";
 
+const i18nState = vi.hoisted(() => ({ language: "en" }));
+
 // ── Environment shims for Radix in jsdom ────────────────────────────────────
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
@@ -34,8 +36,17 @@ beforeAll(() => {
 // ── i18n mock ────────────────────────────────────────────────────────────────
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, def?: unknown) => (typeof def === "string" ? def : key),
-    i18n: { language: "en", dir: () => "ltr", changeLanguage: vi.fn() },
+    t: (key: string, def?: unknown) => {
+      if (key === "hqForm.unavailable") {
+        return i18nState.language === "ar" ? "غير متاح" : "Unavailable";
+      }
+      return typeof def === "string" ? def : key;
+    },
+    i18n: {
+      language: i18nState.language,
+      dir: () => i18nState.language === "ar" ? "rtl" : "ltr",
+      changeLanguage: vi.fn(),
+    },
   }),
   initReactI18next: { type: "3rdParty", init: vi.fn() },
   Trans: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
@@ -61,10 +72,40 @@ vi.mock("@workspace/api-client-react", () => {
   };
 });
 
-global.fetch = vi.fn().mockResolvedValue({
+const unavailableSnapshot = {
+  snapshot: {
+    activeProjects: 1,
+    activeStates: 1,
+    activeLocalities: 1,
+    activitiesImplemented: 1,
+    beneficiariesReached: 1,
+    indicatorProgressPct: null,
+    delayedActivities: 0,
+    openRisks: 0,
+    pendingApprovals: 0,
+  },
+  stateSummaries: [],
+  projectSummaries: [],
+  beneficiaryBreakdown: { men: 0, women: 0, boys: 0, girls: 0 },
+  beneficiaryByState: [],
+  beneficiaryByProject: [],
+  beneficiaryByDonor: [],
+  indicators: [{
+    name: "Evidence unavailable",
+    target: null,
+    achieved: null,
+    progressPct: null,
+    status: null,
+  }],
+};
+
+const fetchMock = vi.fn(async (input: RequestInfo | URL) => ({
   ok: true,
-  json: async () => [],
-}) as never;
+  json: async () => String(input).includes("/dashboard/sector-snapshot")
+    ? unavailableSnapshot
+    : [],
+}));
+global.fetch = fetchMock as never;
 
 import { HqSectorReportForm } from "../components/hq-sector-report-form";
 
@@ -83,7 +124,11 @@ function openSectorOptions(): string[] {
   return screen.queryAllByRole("option").map((o) => o.textContent ?? "");
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  fetchMock.mockClear();
+  i18nState.language = "en";
+});
 
 describe("HQ Sector form — sector options scoping (HQSR-AUTH-FE-02)", () => {
   it("TC with a single assigned sector sees only that sector", () => {
@@ -130,5 +175,31 @@ describe("HQ Sector form — sector options scoping (HQSR-AUTH-FE-02)", () => {
     });
     await waitFor(() => expect(screen.queryByText("987654")).not.toBeInTheDocument());
     expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("sector-snapshot"), expect.anything());
+  });
+
+  it.each([
+    ["en", "Unavailable"],
+    ["ar", "غير متاح"],
+  ])("renders unavailable snapshot evidence in %s without inventing 0%% or Off Track", async (language, unavailable) => {
+    i18nState.language = language;
+    meHolder.user = { id: 16, name: "TC", role: "technical_coordinator", sector: "WASH" };
+    meHolder.permissions = ["reports.create", "reports.view"];
+
+    renderForm(undefined, {
+      id: 89,
+      title: "WASH report",
+      status: "draft",
+      reportType: "hq_sector",
+      sector: "WASH",
+      kind: "monthly",
+      period: "2026-08",
+      reportingMonth: 8,
+      reportingYear: 2026,
+      sections: {},
+    });
+
+    await waitFor(() => expect(screen.getAllByText(unavailable)).toHaveLength(5));
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+    expect(screen.queryByText("Off Track")).not.toBeInTheDocument();
   });
 });

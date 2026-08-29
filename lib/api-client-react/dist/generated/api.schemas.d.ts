@@ -2438,8 +2438,16 @@ export interface DashboardSummary {
     totalBeneficiaries: number;
     beneficiariesTarget: number;
     totalBudget?: number;
-    totalSpent?: number;
-    budgetRemaining?: number;
+    /**
+     * Unavailable when in-scope projects span multiple currencies or spend evidence is unavailable
+     * @nullable
+     */
+    totalSpent?: number | null;
+    /**
+     * Unavailable when in-scope projects span multiple currencies or spend evidence is unavailable
+     * @nullable
+     */
+    budgetRemaining?: number | null;
     budgetAllocated?: number;
     /**
      * Raw utilisation rate (Spent ÷ Allocated × 100); null when Allocated Budget is zero or unavailable
@@ -2694,7 +2702,11 @@ export type DashboardSectorSnapshotSnapshot = {
     activeLocalities: number;
     activitiesImplemented: number;
     beneficiariesReached: number;
-    indicatorProgressPct: number;
+    /**
+     * Target-weighted progress for indicators with a positive target and recorded achievement; null when no valid evidence exists
+     * @nullable
+     */
+    indicatorProgressPct: number | null;
     delayedActivities: number;
     openRisks: number;
     pendingApprovals: number;
@@ -2718,7 +2730,11 @@ export type DashboardSectorSnapshotProjectSummariesItem = {
     donor: string | null;
     progressPct: number;
     beneficiaries: number;
-    budgetUtilizationPct: number;
+    /**
+     * null when budget is non-positive or no recorded spend evidence exists
+     * @nullable
+     */
+    budgetUtilizationPct: number | null;
     riskLevel: string;
 };
 export interface DashboardBeneficiaryBreakdown {
@@ -2745,10 +2761,26 @@ export type DashboardSectorSnapshotBeneficiaryByDonorItem = DashboardBeneficiary
 };
 export type DashboardSectorSnapshotIndicatorsItem = {
     name: string;
-    target: number;
-    achieved: number;
-    progressPct: number;
-    status: string;
+    /**
+     * Recorded target; null when unavailable
+     * @nullable
+     */
+    target: number | null;
+    /**
+     * Recorded achievement; null when unavailable
+     * @nullable
+     */
+    achieved: number | null;
+    /**
+     * null unless the target is positive and achievement is recorded
+     * @nullable
+     */
+    progressPct: number | null;
+    /**
+     * Performance category; null unless progress has valid evidence
+     * @nullable
+     */
+    status: string | null;
 };
 export interface DashboardSectorSnapshot {
     snapshot: DashboardSectorSnapshotSnapshot;
@@ -3007,10 +3039,13 @@ export interface DonorPortfolioBudgetByCurrencyItem {
 export interface DonorPortfolioEntry {
     donor: string;
     projects: number;
-    /** Raw sum — may span multiple currencies when currencyMixed is true; use allocatedBudget per currency for display */
-    budgetTotal: number;
     /**
-     * Sum of all known activity spend; null when no activity records exist for this donor's projects
+     * Single-currency compatibility alias; null when currencyMixed is true
+     * @nullable
+     */
+    budgetTotal: number | null;
+    /**
+     * Single-currency compatibility alias; null when currencyMixed is true or no activity records exist
      * @nullable
      */
     budgetSpent?: number | null;
@@ -3044,8 +3079,11 @@ export interface DonorPortfolioEntry {
     projectCount: number;
     /** Project details for this donor group */
     projectList?: DonorPortfolioEntryProjectListItem[];
-    /** Total allocated budget (may span currencies when currencyMixed is true) */
-    allocatedBudget: number;
+    /**
+     * Single-currency compatibility alias; null when currencyMixed is true
+     * @nullable
+     */
+    allocatedBudget: number | null;
 }
 export interface PlanObjective {
     title: string;

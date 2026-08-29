@@ -350,6 +350,9 @@ describe("BUD-DONOR-09: no cross-currency total when currencyMixed=true", () => 
     const entry = res.body[0];
     expect(entry.currencyMixed).toBe(true);
     expect(entry.currency).toBeNull();
+    expect(entry.allocatedBudget).toBeNull();
+    expect(entry.budgetTotal).toBeNull();
+    expect(entry.budgetSpent).toBeNull();
     const byCurrency: { currency: string }[] = entry.budgetByCurrency ?? [];
     expect(byCurrency.some((b) => b.currency === "EUR")).toBe(true);
     expect(byCurrency.some((b) => b.currency === "USD")).toBe(true);

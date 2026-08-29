@@ -651,7 +651,7 @@ describe("Business-module RTL production guardrails", () => {
     expect(budget).toContain('<bdi dir="ltr">{formatPercent(burnRate)}</bdi>');
     expect(budget).toContain('<bdi dir="ltr">{fmtMoney(activeCurrEntry.activitySpent, activeCurrEntry.currency)}</bdi>');
     expect(source("pages/dashboard.tsx")).toContain('<bdi dir="ltr">{fmtMoney(row.spent, row.currency)}</bdi>');
-    expect(source("components/hq-sector-report-form.tsx")).toContain('<bdi dir="ltr">{p.budgetUtilizationPct}%</bdi>');
+    expect(source("components/hq-sector-report-form.tsx")).toContain('p.budgetUtilizationPct == null ? t("hqForm.unavailable")');
     expect(source("components/consolidated-report-view.tsx")).toContain('<bdi dir="ltr">{formatDateTime(r.submittedAt)}</bdi>');
   });
 
