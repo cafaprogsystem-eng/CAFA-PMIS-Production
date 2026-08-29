@@ -804,22 +804,40 @@ router.get("/dashboard/sector-performance", dashboardFilterGuard("sectorPerforma
     const scope = await buildScope(req);
     const { sql: scopeSql, params: scopeParams } = projectScopeWhere(scope, "p", 1);
     const { rows } = await pool.query(`
+      WITH scoped_projects AS (
+        SELECT p.*
+        FROM projects p
+        WHERE p.deleted_at IS NULL${scopeSql}
+      ),
+      indicator_achievement AS (
+        SELECT
+          sp.sector,
+          CASE
+            WHEN SUM(i.target) FILTER (WHERE i.target > 0) > 0
+              THEN (
+                SUM(i.achieved) FILTER (WHERE i.target > 0)
+                / SUM(i.target) FILTER (WHERE i.target > 0)
+                * 100
+              )::int
+            ELSE NULL
+          END AS "indicatorAchievementPct"
+        FROM scoped_projects sp
+        LEFT JOIN indicators i ON i.project_id = sp.id
+        GROUP BY sp.sector
+      )
       SELECT
         p.sector AS sector,
         COUNT(DISTINCT p.id)::int AS projects,
         COALESCE(SUM(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls), 0)::int AS beneficiaries,
-        COALESCE((SELECT
-          CASE WHEN SUM(i.target) > 0 THEN (SUM(i.achieved) / SUM(i.target) * 100)::int ELSE 0 END
-          FROM indicators i
-          JOIN projects indicator_project ON indicator_project.id = i.project_id
-            AND indicator_project.deleted_at IS NULL
-          WHERE i.sector = p.sector), 0) AS "indicatorAchievementPct",
+        ia."indicatorAchievementPct",
         COUNT(DISTINCT NULLIF(p.currency, ''))::int AS "currencyCount",
         SUM(p.budget_total)::float AS "totalBudget",
         SUM(a_agg.spent)::float AS "totalSpent"
-      FROM projects p
+      FROM scoped_projects p
       LEFT JOIN (SELECT project_id, SUM(budget_spent) AS spent FROM activities GROUP BY project_id) a_agg ON a_agg.project_id = p.id
-      WHERE p.deleted_at IS NULL${scopeSql} GROUP BY p.sector ORDER BY projects DESC
+      LEFT JOIN indicator_achievement ia ON ia.sector IS NOT DISTINCT FROM p.sector
+      GROUP BY p.sector, ia."indicatorAchievementPct"
+      ORDER BY projects DESC
     `, scopeParams);
     // BUD-007: never mix currencies into a single utilisation ratio.
     //  - mixed-currency sector → budgetUtilizationPct = null + mixedCurrencies flag

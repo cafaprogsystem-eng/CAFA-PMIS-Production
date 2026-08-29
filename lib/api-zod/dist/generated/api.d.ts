@@ -8207,7 +8207,7 @@ export declare const GetSectorPerformanceResponseItem: zod.ZodObject<{
     sector: zod.ZodString;
     projects: zod.ZodNumber;
     beneficiaries: zod.ZodNumber;
-    indicatorAchievementPct: zod.ZodNumber;
+    indicatorAchievementPct: zod.ZodNullable<zod.ZodNumber>;
     budgetUtilizationPct: zod.ZodNullable<zod.ZodNumber>;
     mixedCurrencies: zod.ZodBoolean;
 }, "strip", zod.ZodTypeAny, {
@@ -8215,21 +8215,21 @@ export declare const GetSectorPerformanceResponseItem: zod.ZodObject<{
     projects: number;
     beneficiaries: number;
     budgetUtilizationPct: number | null;
-    indicatorAchievementPct: number;
+    indicatorAchievementPct: number | null;
     mixedCurrencies: boolean;
 }, {
     sector: string;
     projects: number;
     beneficiaries: number;
     budgetUtilizationPct: number | null;
-    indicatorAchievementPct: number;
+    indicatorAchievementPct: number | null;
     mixedCurrencies: boolean;
 }>;
 export declare const GetSectorPerformanceResponse: zod.ZodArray<zod.ZodObject<{
     sector: zod.ZodString;
     projects: zod.ZodNumber;
     beneficiaries: zod.ZodNumber;
-    indicatorAchievementPct: zod.ZodNumber;
+    indicatorAchievementPct: zod.ZodNullable<zod.ZodNumber>;
     budgetUtilizationPct: zod.ZodNullable<zod.ZodNumber>;
     mixedCurrencies: zod.ZodBoolean;
 }, "strip", zod.ZodTypeAny, {
@@ -8237,14 +8237,14 @@ export declare const GetSectorPerformanceResponse: zod.ZodArray<zod.ZodObject<{
     projects: number;
     beneficiaries: number;
     budgetUtilizationPct: number | null;
-    indicatorAchievementPct: number;
+    indicatorAchievementPct: number | null;
     mixedCurrencies: boolean;
 }, {
     sector: string;
     projects: number;
     beneficiaries: number;
     budgetUtilizationPct: number | null;
-    indicatorAchievementPct: number;
+    indicatorAchievementPct: number | null;
     mixedCurrencies: boolean;
 }>, "many">;
 /**

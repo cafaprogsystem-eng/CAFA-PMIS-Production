@@ -4138,7 +4138,12 @@ export const GetSectorPerformanceResponseItem = zod.object({
   sector: zod.string(),
   projects: zod.number(),
   beneficiaries: zod.number(),
-  indicatorAchievementPct: zod.number(),
+  indicatorAchievementPct: zod
+    .number()
+    .nullable()
+    .describe(
+      "Achievement across valid positive-target indicators in the authorised scoped Project population; null when no valid indicator evidence exists",
+    ),
   budgetUtilizationPct: zod
     .number()
     .nullable()

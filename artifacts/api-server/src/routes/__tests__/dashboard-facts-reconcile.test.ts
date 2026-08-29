@@ -119,4 +119,21 @@ describe("Dashboard source-population reconciliation", () => {
     expect(snapshot).toContain("r2.status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})");
     expect(snapshot).toContain('${operationalPopulationSQL("r2")}');
   });
+
+  it("keeps sector-performance indicator evidence inside the authorised Project population and preserves unavailable as null", () => {
+    const start = routeSource.indexOf('router.get("/dashboard/sector-performance"');
+    const end = routeSource.indexOf('router.get("/dashboard/', start + 1);
+    const sectorPerformance = routeSource.slice(start, end);
+
+    expect(sectorPerformance).toContain("WITH scoped_projects AS");
+    expect(sectorPerformance).toContain("FROM scoped_projects sp");
+    expect(sectorPerformance).toContain("LEFT JOIN indicators i ON i.project_id = sp.id");
+    expect(sectorPerformance).toContain("FROM scoped_projects p");
+    expect(sectorPerformance).toContain('ia."indicatorAchievementPct"');
+    expect(sectorPerformance).toContain("FILTER (WHERE i.target > 0)");
+    expect(sectorPerformance).toContain("ELSE NULL");
+    expect(sectorPerformance).not.toContain("WHERE i.sector = p.sector");
+    expect(sectorPerformance).not.toContain("COALESCE((SELECT");
+  });
+
 });
