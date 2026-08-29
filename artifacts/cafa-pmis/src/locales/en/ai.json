@@ -59,7 +59,7 @@
     "budgetSummary": "Give me a budget utilisation summary.",
     "riskOverview": "What are the top risks this month?",
     "reportingCompliance": "Which states have overdue reports?",
-    "performanceScore": "Which sectors have the highest performance scores?"
+    "sectorAchievement": "Which sectors have the highest indicator achievement rates?"
   },
   "settings": {
     "title": "AI Assistant Settings",

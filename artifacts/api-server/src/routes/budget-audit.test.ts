@@ -70,7 +70,7 @@ describe("BUD-AUD-05 state expenditure unavailable ≠ zero (baseline D)", () =>
     expect(dashboardSrc).toMatch(/utilisationRate\s*=\s*null/);
   });
   it("OpenAPI marks state budgetUtilizationPct as nullable", () => {
-    expect(openapiSrc).toMatch(/budgetUtilizationPct: \{ type: integer, nullable: true \}/);
+    expect(openapiSrc).toMatch(/budgetUtilizationPct: \{ type: \["integer", "null"\]/);
   });
 });
 

@@ -8015,206 +8015,112 @@ export declare const GetStatePerformanceQueryParams: zod.ZodObject<{
 export declare const GetStatePerformanceResponseItem: zod.ZodObject<{
     stateId: zod.ZodNumber;
     stateName: zod.ZodString;
-    stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    stateNameAr: zod.ZodNullable<zod.ZodString>;
+    totalProjects: zod.ZodNumber;
     activeProjects: zod.ZodNumber;
     beneficiaries: zod.ZodNumber;
-    budgetUtilizationPct: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
+    budgetUtilizationPct: zod.ZodNullable<zod.ZodNumber>;
     progressPct: zod.ZodNumber;
     riskLevel: zod.ZodString;
-    openRisks: zod.ZodOptional<zod.ZodNumber>;
-    criticalRisks: zod.ZodOptional<zod.ZodNumber>;
-    reportsSubmitted: zod.ZodOptional<zod.ZodNumber>;
-    reportsPending: zod.ZodOptional<zod.ZodNumber>;
-    activityCompletionPct: zod.ZodOptional<zod.ZodNumber>;
-    reportingCompliancePct: zod.ZodOptional<zod.ZodNumber>;
-    performanceScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    performanceTier: zod.ZodOptional<zod.ZodString>;
-    components: zod.ZodOptional<zod.ZodObject<{
-        activityCompletion: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        reportSubmission: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        indicatorAchievement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        budgetUtilization: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        riskManagement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        dataCompleteness: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    }, "strip", zod.ZodTypeAny, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }>>;
-    currentScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    previousScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    scoreDifference: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    trendDirection: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    openRisks: zod.ZodNumber;
+    criticalRisks: zod.ZodNumber;
+    critOnlyRisks: zod.ZodNumber;
+    highOnlyRisks: zod.ZodNumber;
+    reportsSubmitted: zod.ZodNumber;
+    reportsPending: zod.ZodNumber;
+    activityCompletionPct: zod.ZodNullable<zod.ZodNumber>;
+    reportingCompliancePct: zod.ZodNullable<zod.ZodNumber>;
 }, "strip", zod.ZodTypeAny, {
     stateId: number;
     stateName: string;
+    stateNameAr: string | null;
+    criticalRisks: number;
     activeProjects: number;
+    openRisks: number;
     progressPct: number;
     riskLevel: string;
     beneficiaries: number;
-    stateNameAr?: string | null | undefined;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    reportsSubmitted?: number | undefined;
-    reportsPending?: number | undefined;
-    budgetUtilizationPct?: number | null | undefined;
-    activityCompletionPct?: number | undefined;
-    reportingCompliancePct?: number | undefined;
-    performanceScore?: number | null | undefined;
-    performanceTier?: string | undefined;
-    components?: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    } | undefined;
-    currentScore?: number | null | undefined;
-    previousScore?: number | null | undefined;
-    scoreDifference?: number | null | undefined;
-    trendDirection?: string | null | undefined;
+    totalProjects: number;
+    reportsSubmitted: number;
+    reportsPending: number;
+    budgetUtilizationPct: number | null;
+    critOnlyRisks: number;
+    highOnlyRisks: number;
+    activityCompletionPct: number | null;
+    reportingCompliancePct: number | null;
 }, {
     stateId: number;
     stateName: string;
+    stateNameAr: string | null;
+    criticalRisks: number;
     activeProjects: number;
+    openRisks: number;
     progressPct: number;
     riskLevel: string;
     beneficiaries: number;
-    stateNameAr?: string | null | undefined;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    reportsSubmitted?: number | undefined;
-    reportsPending?: number | undefined;
-    budgetUtilizationPct?: number | null | undefined;
-    activityCompletionPct?: number | undefined;
-    reportingCompliancePct?: number | undefined;
-    performanceScore?: number | null | undefined;
-    performanceTier?: string | undefined;
-    components?: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    } | undefined;
-    currentScore?: number | null | undefined;
-    previousScore?: number | null | undefined;
-    scoreDifference?: number | null | undefined;
-    trendDirection?: string | null | undefined;
+    totalProjects: number;
+    reportsSubmitted: number;
+    reportsPending: number;
+    budgetUtilizationPct: number | null;
+    critOnlyRisks: number;
+    highOnlyRisks: number;
+    activityCompletionPct: number | null;
+    reportingCompliancePct: number | null;
 }>;
 export declare const GetStatePerformanceResponse: zod.ZodArray<zod.ZodObject<{
     stateId: zod.ZodNumber;
     stateName: zod.ZodString;
-    stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    stateNameAr: zod.ZodNullable<zod.ZodString>;
+    totalProjects: zod.ZodNumber;
     activeProjects: zod.ZodNumber;
     beneficiaries: zod.ZodNumber;
-    budgetUtilizationPct: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
+    budgetUtilizationPct: zod.ZodNullable<zod.ZodNumber>;
     progressPct: zod.ZodNumber;
     riskLevel: zod.ZodString;
-    openRisks: zod.ZodOptional<zod.ZodNumber>;
-    criticalRisks: zod.ZodOptional<zod.ZodNumber>;
-    reportsSubmitted: zod.ZodOptional<zod.ZodNumber>;
-    reportsPending: zod.ZodOptional<zod.ZodNumber>;
-    activityCompletionPct: zod.ZodOptional<zod.ZodNumber>;
-    reportingCompliancePct: zod.ZodOptional<zod.ZodNumber>;
-    performanceScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    performanceTier: zod.ZodOptional<zod.ZodString>;
-    components: zod.ZodOptional<zod.ZodObject<{
-        activityCompletion: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        reportSubmission: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        indicatorAchievement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        budgetUtilization: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        riskManagement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        dataCompleteness: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    }, "strip", zod.ZodTypeAny, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }>>;
-    currentScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    previousScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    scoreDifference: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    trendDirection: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    openRisks: zod.ZodNumber;
+    criticalRisks: zod.ZodNumber;
+    critOnlyRisks: zod.ZodNumber;
+    highOnlyRisks: zod.ZodNumber;
+    reportsSubmitted: zod.ZodNumber;
+    reportsPending: zod.ZodNumber;
+    activityCompletionPct: zod.ZodNullable<zod.ZodNumber>;
+    reportingCompliancePct: zod.ZodNullable<zod.ZodNumber>;
 }, "strip", zod.ZodTypeAny, {
     stateId: number;
     stateName: string;
+    stateNameAr: string | null;
+    criticalRisks: number;
     activeProjects: number;
+    openRisks: number;
     progressPct: number;
     riskLevel: string;
     beneficiaries: number;
-    stateNameAr?: string | null | undefined;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    reportsSubmitted?: number | undefined;
-    reportsPending?: number | undefined;
-    budgetUtilizationPct?: number | null | undefined;
-    activityCompletionPct?: number | undefined;
-    reportingCompliancePct?: number | undefined;
-    performanceScore?: number | null | undefined;
-    performanceTier?: string | undefined;
-    components?: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    } | undefined;
-    currentScore?: number | null | undefined;
-    previousScore?: number | null | undefined;
-    scoreDifference?: number | null | undefined;
-    trendDirection?: string | null | undefined;
+    totalProjects: number;
+    reportsSubmitted: number;
+    reportsPending: number;
+    budgetUtilizationPct: number | null;
+    critOnlyRisks: number;
+    highOnlyRisks: number;
+    activityCompletionPct: number | null;
+    reportingCompliancePct: number | null;
 }, {
     stateId: number;
     stateName: string;
+    stateNameAr: string | null;
+    criticalRisks: number;
     activeProjects: number;
+    openRisks: number;
     progressPct: number;
     riskLevel: string;
     beneficiaries: number;
-    stateNameAr?: string | null | undefined;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    reportsSubmitted?: number | undefined;
-    reportsPending?: number | undefined;
-    budgetUtilizationPct?: number | null | undefined;
-    activityCompletionPct?: number | undefined;
-    reportingCompliancePct?: number | undefined;
-    performanceScore?: number | null | undefined;
-    performanceTier?: string | undefined;
-    components?: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    } | undefined;
-    currentScore?: number | null | undefined;
-    previousScore?: number | null | undefined;
-    scoreDifference?: number | null | undefined;
-    trendDirection?: string | null | undefined;
+    totalProjects: number;
+    reportsSubmitted: number;
+    reportsPending: number;
+    budgetUtilizationPct: number | null;
+    critOnlyRisks: number;
+    highOnlyRisks: number;
+    activityCompletionPct: number | null;
+    reportingCompliancePct: number | null;
 }>, "many">;
 /**
  * @summary Unread notification counts by module for dashboard widget
@@ -9580,435 +9486,375 @@ export declare const GetDashboardAgendaResponse: zod.ZodObject<{
     }[];
 }>;
 /**
- * @summary Organization-wide (or scoped) 6-component weighted performance score
+ * @summary Authorised HQ Sector Report snapshot for one canonical sector
  */
-export declare const GetDashboardPerformanceResponse: zod.ZodObject<{
-    overallScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    tier: zod.ZodString;
-    dataAvailable: zod.ZodBoolean;
-    components: zod.ZodObject<{
-        activityCompletion: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        reportSubmission: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        indicatorAchievement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        budgetUtilization: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        riskManagement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        dataCompleteness: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    }, "strip", zod.ZodTypeAny, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }>;
-}, "strip", zod.ZodTypeAny, {
-    components: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    };
-    tier: string;
-    dataAvailable: boolean;
-    overallScore?: number | null | undefined;
-}, {
-    components: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    };
-    tier: string;
-    dataAvailable: boolean;
-    overallScore?: number | null | undefined;
-}>;
-/**
- * @summary Per-state performance scores sorted by rank (descending)
- */
-export declare const GetDashboardPerformanceStatesResponseItem: zod.ZodObject<{
-    stateId: zod.ZodNumber;
-    stateName: zod.ZodString;
-    stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
-    activeProjects: zod.ZodNumber;
-    beneficiaries: zod.ZodNumber;
-    budgetUtilizationPct: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    progressPct: zod.ZodNumber;
-    riskLevel: zod.ZodString;
-    openRisks: zod.ZodOptional<zod.ZodNumber>;
-    criticalRisks: zod.ZodOptional<zod.ZodNumber>;
-    reportsSubmitted: zod.ZodOptional<zod.ZodNumber>;
-    reportsPending: zod.ZodOptional<zod.ZodNumber>;
-    activityCompletionPct: zod.ZodOptional<zod.ZodNumber>;
-    reportingCompliancePct: zod.ZodOptional<zod.ZodNumber>;
-    performanceScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    performanceTier: zod.ZodOptional<zod.ZodString>;
-    components: zod.ZodOptional<zod.ZodObject<{
-        activityCompletion: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        reportSubmission: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        indicatorAchievement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        budgetUtilization: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        riskManagement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        dataCompleteness: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    }, "strip", zod.ZodTypeAny, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }>>;
-    currentScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    previousScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    scoreDifference: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    trendDirection: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
-}, "strip", zod.ZodTypeAny, {
-    stateId: number;
-    stateName: string;
-    activeProjects: number;
-    progressPct: number;
-    riskLevel: string;
-    beneficiaries: number;
-    stateNameAr?: string | null | undefined;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    reportsSubmitted?: number | undefined;
-    reportsPending?: number | undefined;
-    budgetUtilizationPct?: number | null | undefined;
-    activityCompletionPct?: number | undefined;
-    reportingCompliancePct?: number | undefined;
-    performanceScore?: number | null | undefined;
-    performanceTier?: string | undefined;
-    components?: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    } | undefined;
-    currentScore?: number | null | undefined;
-    previousScore?: number | null | undefined;
-    scoreDifference?: number | null | undefined;
-    trendDirection?: string | null | undefined;
-}, {
-    stateId: number;
-    stateName: string;
-    activeProjects: number;
-    progressPct: number;
-    riskLevel: string;
-    beneficiaries: number;
-    stateNameAr?: string | null | undefined;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    reportsSubmitted?: number | undefined;
-    reportsPending?: number | undefined;
-    budgetUtilizationPct?: number | null | undefined;
-    activityCompletionPct?: number | undefined;
-    reportingCompliancePct?: number | undefined;
-    performanceScore?: number | null | undefined;
-    performanceTier?: string | undefined;
-    components?: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    } | undefined;
-    currentScore?: number | null | undefined;
-    previousScore?: number | null | undefined;
-    scoreDifference?: number | null | undefined;
-    trendDirection?: string | null | undefined;
-}>;
-export declare const GetDashboardPerformanceStatesResponse: zod.ZodArray<zod.ZodObject<{
-    stateId: zod.ZodNumber;
-    stateName: zod.ZodString;
-    stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
-    activeProjects: zod.ZodNumber;
-    beneficiaries: zod.ZodNumber;
-    budgetUtilizationPct: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    progressPct: zod.ZodNumber;
-    riskLevel: zod.ZodString;
-    openRisks: zod.ZodOptional<zod.ZodNumber>;
-    criticalRisks: zod.ZodOptional<zod.ZodNumber>;
-    reportsSubmitted: zod.ZodOptional<zod.ZodNumber>;
-    reportsPending: zod.ZodOptional<zod.ZodNumber>;
-    activityCompletionPct: zod.ZodOptional<zod.ZodNumber>;
-    reportingCompliancePct: zod.ZodOptional<zod.ZodNumber>;
-    performanceScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    performanceTier: zod.ZodOptional<zod.ZodString>;
-    components: zod.ZodOptional<zod.ZodObject<{
-        activityCompletion: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        reportSubmission: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        indicatorAchievement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        budgetUtilization: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        riskManagement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        dataCompleteness: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    }, "strip", zod.ZodTypeAny, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }>>;
-    currentScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    previousScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    scoreDifference: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    trendDirection: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
-}, "strip", zod.ZodTypeAny, {
-    stateId: number;
-    stateName: string;
-    activeProjects: number;
-    progressPct: number;
-    riskLevel: string;
-    beneficiaries: number;
-    stateNameAr?: string | null | undefined;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    reportsSubmitted?: number | undefined;
-    reportsPending?: number | undefined;
-    budgetUtilizationPct?: number | null | undefined;
-    activityCompletionPct?: number | undefined;
-    reportingCompliancePct?: number | undefined;
-    performanceScore?: number | null | undefined;
-    performanceTier?: string | undefined;
-    components?: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    } | undefined;
-    currentScore?: number | null | undefined;
-    previousScore?: number | null | undefined;
-    scoreDifference?: number | null | undefined;
-    trendDirection?: string | null | undefined;
-}, {
-    stateId: number;
-    stateName: string;
-    activeProjects: number;
-    progressPct: number;
-    riskLevel: string;
-    beneficiaries: number;
-    stateNameAr?: string | null | undefined;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    reportsSubmitted?: number | undefined;
-    reportsPending?: number | undefined;
-    budgetUtilizationPct?: number | null | undefined;
-    activityCompletionPct?: number | undefined;
-    reportingCompliancePct?: number | undefined;
-    performanceScore?: number | null | undefined;
-    performanceTier?: string | undefined;
-    components?: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    } | undefined;
-    currentScore?: number | null | undefined;
-    previousScore?: number | null | undefined;
-    scoreDifference?: number | null | undefined;
-    trendDirection?: string | null | undefined;
-}>, "many">;
-/**
- * @summary Per-project performance scores sorted by rank (descending)
- */
-export declare const getDashboardPerformanceProjectsQueryLimitDefault = 50;
-export declare const getDashboardPerformanceProjectsQueryLimitMin = 10;
-export declare const getDashboardPerformanceProjectsQueryLimitMax = 100;
-export declare const GetDashboardPerformanceProjectsQueryParams: zod.ZodObject<{
-    limit: zod.ZodDefault<zod.ZodNumber>;
-}, "strip", zod.ZodTypeAny, {
-    limit: number;
-}, {
-    limit?: number | undefined;
-}>;
-export declare const GetDashboardPerformanceProjectsResponseItem: zod.ZodObject<{
-    projectId: zod.ZodNumber;
-    projectCode: zod.ZodString;
-    projectTitle: zod.ZodString;
+export declare const GetDashboardSectorSnapshotQueryParams: zod.ZodObject<{
     sector: zod.ZodString;
-    stateNames: zod.ZodArray<zod.ZodString, "many">;
-    status: zod.ZodString;
-    overallScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    tier: zod.ZodString;
-    components: zod.ZodObject<{
-        activityCompletion: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        reportSubmission: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        indicatorAchievement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        budgetUtilization: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        riskManagement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        dataCompleteness: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    }, "strip", zod.ZodTypeAny, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    }>;
-    activityCount: zod.ZodOptional<zod.ZodNumber>;
-    openRisks: zod.ZodOptional<zod.ZodNumber>;
-    criticalRisks: zod.ZodOptional<zod.ZodNumber>;
-    recentReportStatus: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
 }, "strip", zod.ZodTypeAny, {
-    status: string;
     sector: string;
-    stateNames: string[];
-    projectId: number;
-    projectTitle: string;
-    projectCode: string;
-    components: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    };
-    tier: string;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    overallScore?: number | null | undefined;
-    activityCount?: number | undefined;
-    recentReportStatus?: string | null | undefined;
 }, {
-    status: string;
     sector: string;
-    stateNames: string[];
-    projectId: number;
-    projectTitle: string;
-    projectCode: string;
-    components: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
-    };
-    tier: string;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    overallScore?: number | null | undefined;
-    activityCount?: number | undefined;
-    recentReportStatus?: string | null | undefined;
 }>;
-export declare const GetDashboardPerformanceProjectsResponse: zod.ZodArray<zod.ZodObject<{
-    projectId: zod.ZodNumber;
-    projectCode: zod.ZodString;
-    projectTitle: zod.ZodString;
-    sector: zod.ZodString;
-    stateNames: zod.ZodArray<zod.ZodString, "many">;
-    status: zod.ZodString;
-    overallScore: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-    tier: zod.ZodString;
-    components: zod.ZodObject<{
-        activityCompletion: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        reportSubmission: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        indicatorAchievement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        budgetUtilization: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        riskManagement: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
-        dataCompleteness: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
+export declare const getDashboardSectorSnapshotResponseProjectSummariesMax = 20;
+export declare const getDashboardSectorSnapshotResponseIndicatorsMax = 20;
+export declare const GetDashboardSectorSnapshotResponse: zod.ZodObject<{
+    snapshot: zod.ZodObject<{
+        activeProjects: zod.ZodNumber;
+        activeStates: zod.ZodNumber;
+        activeLocalities: zod.ZodNumber;
+        activitiesImplemented: zod.ZodNumber;
+        beneficiariesReached: zod.ZodNumber;
+        indicatorProgressPct: zod.ZodNumber;
+        delayedActivities: zod.ZodNumber;
+        openRisks: zod.ZodNumber;
+        pendingApprovals: zod.ZodNumber;
     }, "strip", zod.ZodTypeAny, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
+        activeProjects: number;
+        beneficiariesReached: number;
+        delayedActivities: number;
+        openRisks: number;
+        pendingApprovals: number;
+        activeStates: number;
+        activeLocalities: number;
+        activitiesImplemented: number;
+        indicatorProgressPct: number;
     }, {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
+        activeProjects: number;
+        beneficiariesReached: number;
+        delayedActivities: number;
+        openRisks: number;
+        pendingApprovals: number;
+        activeStates: number;
+        activeLocalities: number;
+        activitiesImplemented: number;
+        indicatorProgressPct: number;
     }>;
-    activityCount: zod.ZodOptional<zod.ZodNumber>;
-    openRisks: zod.ZodOptional<zod.ZodNumber>;
-    criticalRisks: zod.ZodOptional<zod.ZodNumber>;
-    recentReportStatus: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    stateSummaries: zod.ZodArray<zod.ZodObject<{
+        stateId: zod.ZodNumber;
+        stateName: zod.ZodString;
+        stateNameAr: zod.ZodNullable<zod.ZodString>;
+        projects: zod.ZodNumber;
+        activities: zod.ZodNumber;
+        beneficiaries: zod.ZodNumber;
+        progressPct: zod.ZodNumber;
+        openRisks: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        stateId: number;
+        stateName: string;
+        stateNameAr: string | null;
+        projects: number;
+        openRisks: number;
+        progressPct: number;
+        activities: number;
+        beneficiaries: number;
+    }, {
+        stateId: number;
+        stateName: string;
+        stateNameAr: string | null;
+        projects: number;
+        openRisks: number;
+        progressPct: number;
+        activities: number;
+        beneficiaries: number;
+    }>, "many">;
+    projectSummaries: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodNumber;
+        code: zod.ZodString;
+        title: zod.ZodString;
+        donor: zod.ZodNullable<zod.ZodString>;
+        progressPct: zod.ZodNumber;
+        beneficiaries: zod.ZodNumber;
+        budgetUtilizationPct: zod.ZodNumber;
+        riskLevel: zod.ZodString;
+    }, "strip", zod.ZodTypeAny, {
+        code: string;
+        id: number;
+        title: string;
+        donor: string | null;
+        progressPct: number;
+        riskLevel: string;
+        beneficiaries: number;
+        budgetUtilizationPct: number;
+    }, {
+        code: string;
+        id: number;
+        title: string;
+        donor: string | null;
+        progressPct: number;
+        riskLevel: string;
+        beneficiaries: number;
+        budgetUtilizationPct: number;
+    }>, "many">;
+    beneficiaryBreakdown: zod.ZodObject<{
+        men: zod.ZodNumber;
+        women: zod.ZodNumber;
+        boys: zod.ZodNumber;
+        girls: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    }, {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    }>;
+    beneficiaryByState: zod.ZodArray<zod.ZodIntersection<zod.ZodObject<{
+        men: zod.ZodNumber;
+        women: zod.ZodNumber;
+        boys: zod.ZodNumber;
+        girls: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    }, {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    }>, zod.ZodObject<{
+        stateId: zod.ZodNumber;
+        stateName: zod.ZodString;
+        stateNameAr: zod.ZodNullable<zod.ZodString>;
+        total: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        stateId: number;
+        stateName: string;
+        stateNameAr: string | null;
+        total: number;
+    }, {
+        stateId: number;
+        stateName: string;
+        stateNameAr: string | null;
+        total: number;
+    }>>, "many">;
+    beneficiaryByProject: zod.ZodArray<zod.ZodIntersection<zod.ZodObject<{
+        men: zod.ZodNumber;
+        women: zod.ZodNumber;
+        boys: zod.ZodNumber;
+        girls: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    }, {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    }>, zod.ZodObject<{
+        code: zod.ZodString;
+        title: zod.ZodString;
+        total: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        code: string;
+        total: number;
+        title: string;
+    }, {
+        code: string;
+        total: number;
+        title: string;
+    }>>, "many">;
+    beneficiaryByDonor: zod.ZodArray<zod.ZodIntersection<zod.ZodObject<{
+        men: zod.ZodNumber;
+        women: zod.ZodNumber;
+        boys: zod.ZodNumber;
+        girls: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    }, {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    }>, zod.ZodObject<{
+        donor: zod.ZodString;
+        total: zod.ZodNumber;
+    }, "strip", zod.ZodTypeAny, {
+        total: number;
+        donor: string;
+    }, {
+        total: number;
+        donor: string;
+    }>>, "many">;
+    indicators: zod.ZodArray<zod.ZodObject<{
+        name: zod.ZodString;
+        target: zod.ZodNumber;
+        achieved: zod.ZodNumber;
+        progressPct: zod.ZodNumber;
+        status: zod.ZodString;
+    }, "strip", zod.ZodTypeAny, {
+        status: string;
+        name: string;
+        progressPct: number;
+        target: number;
+        achieved: number;
+    }, {
+        status: string;
+        name: string;
+        progressPct: number;
+        target: number;
+        achieved: number;
+    }>, "many">;
 }, "strip", zod.ZodTypeAny, {
-    status: string;
-    sector: string;
-    stateNames: string[];
-    projectId: number;
-    projectTitle: string;
-    projectCode: string;
-    components: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
+    indicators: {
+        status: string;
+        name: string;
+        progressPct: number;
+        target: number;
+        achieved: number;
+    }[];
+    snapshot: {
+        activeProjects: number;
+        beneficiariesReached: number;
+        delayedActivities: number;
+        openRisks: number;
+        pendingApprovals: number;
+        activeStates: number;
+        activeLocalities: number;
+        activitiesImplemented: number;
+        indicatorProgressPct: number;
     };
-    tier: string;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    overallScore?: number | null | undefined;
-    activityCount?: number | undefined;
-    recentReportStatus?: string | null | undefined;
+    stateSummaries: {
+        stateId: number;
+        stateName: string;
+        stateNameAr: string | null;
+        projects: number;
+        openRisks: number;
+        progressPct: number;
+        activities: number;
+        beneficiaries: number;
+    }[];
+    projectSummaries: {
+        code: string;
+        id: number;
+        title: string;
+        donor: string | null;
+        progressPct: number;
+        riskLevel: string;
+        beneficiaries: number;
+        budgetUtilizationPct: number;
+    }[];
+    beneficiaryBreakdown: {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    };
+    beneficiaryByState: ({
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    } & {
+        stateId: number;
+        stateName: string;
+        stateNameAr: string | null;
+        total: number;
+    })[];
+    beneficiaryByProject: ({
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    } & {
+        code: string;
+        total: number;
+        title: string;
+    })[];
+    beneficiaryByDonor: ({
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    } & {
+        total: number;
+        donor: string;
+    })[];
 }, {
-    status: string;
-    sector: string;
-    stateNames: string[];
-    projectId: number;
-    projectTitle: string;
-    projectCode: string;
-    components: {
-        budgetUtilization?: number | null | undefined;
-        activityCompletion?: number | null | undefined;
-        reportSubmission?: number | null | undefined;
-        indicatorAchievement?: number | null | undefined;
-        riskManagement?: number | null | undefined;
-        dataCompleteness?: number | null | undefined;
+    indicators: {
+        status: string;
+        name: string;
+        progressPct: number;
+        target: number;
+        achieved: number;
+    }[];
+    snapshot: {
+        activeProjects: number;
+        beneficiariesReached: number;
+        delayedActivities: number;
+        openRisks: number;
+        pendingApprovals: number;
+        activeStates: number;
+        activeLocalities: number;
+        activitiesImplemented: number;
+        indicatorProgressPct: number;
     };
-    tier: string;
-    criticalRisks?: number | undefined;
-    openRisks?: number | undefined;
-    overallScore?: number | null | undefined;
-    activityCount?: number | undefined;
-    recentReportStatus?: string | null | undefined;
-}>, "many">;
+    stateSummaries: {
+        stateId: number;
+        stateName: string;
+        stateNameAr: string | null;
+        projects: number;
+        openRisks: number;
+        progressPct: number;
+        activities: number;
+        beneficiaries: number;
+    }[];
+    projectSummaries: {
+        code: string;
+        id: number;
+        title: string;
+        donor: string | null;
+        progressPct: number;
+        riskLevel: string;
+        beneficiaries: number;
+        budgetUtilizationPct: number;
+    }[];
+    beneficiaryBreakdown: {
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    };
+    beneficiaryByState: ({
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    } & {
+        stateId: number;
+        stateName: string;
+        stateNameAr: string | null;
+        total: number;
+    })[];
+    beneficiaryByProject: ({
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    } & {
+        code: string;
+        total: number;
+        title: string;
+    })[];
+    beneficiaryByDonor: ({
+        boys: number;
+        girls: number;
+        men: number;
+        women: number;
+    } & {
+        total: number;
+        donor: string;
+    })[];
+}>;
 /**
  * @summary Projects requiring follow-up (draft, returned, awaiting approval, critical risks, overdue mitigations)
  */
@@ -10090,6 +9936,142 @@ export declare const GetDashboardAttentionProjectsResponse: zod.ZodArray<zod.Zod
         count: number;
     }[];
 }>, "many">;
+/**
+ * @summary Equal-weight Indicator to Project to Sector achievement hierarchy
+ */
+export declare const GetDashboardHierarchicalPerformanceQueryParams: zod.ZodObject<{
+    stateId: zod.ZodOptional<zod.ZodNumber>;
+    sector: zod.ZodOptional<zod.ZodString>;
+    donor: zod.ZodOptional<zod.ZodString>;
+    dateFrom: zod.ZodOptional<zod.ZodDate>;
+    dateTo: zod.ZodOptional<zod.ZodDate>;
+}, "strip", zod.ZodTypeAny, {
+    stateId?: number | undefined;
+    sector?: string | undefined;
+    donor?: string | undefined;
+    dateFrom?: Date | undefined;
+    dateTo?: Date | undefined;
+}, {
+    stateId?: number | undefined;
+    sector?: string | undefined;
+    donor?: string | undefined;
+    dateFrom?: Date | undefined;
+    dateTo?: Date | undefined;
+}>;
+export declare const GetDashboardHierarchicalPerformanceResponse: zod.ZodObject<{
+    averageSectorAchievementRate: zod.ZodNullable<zod.ZodNumber>;
+    validSectorCount: zod.ZodNumber;
+    validProjectCount: zod.ZodNumber;
+    sectors: zod.ZodArray<zod.ZodObject<{
+        sector: zod.ZodNullable<zod.ZodString>;
+        projectCount: zod.ZodNumber;
+        validProjectCount: zod.ZodNumber;
+        insufficientProjectCount: zod.ZodNumber;
+        sectorAchievementRate: zod.ZodNullable<zod.ZodNumber>;
+        projects: zod.ZodArray<zod.ZodObject<{
+            projectId: zod.ZodNumber;
+            projectCode: zod.ZodString;
+            projectTitle: zod.ZodString;
+            sector: zod.ZodNullable<zod.ZodString>;
+            stateNames: zod.ZodArray<zod.ZodString, "many">;
+            validIndicatorCount: zod.ZodNumber;
+            missingIndicatorCount: zod.ZodNumber;
+            projectAchievementRate: zod.ZodNullable<zod.ZodNumber>;
+        }, "strip", zod.ZodTypeAny, {
+            sector: string | null;
+            stateNames: string[];
+            projectId: number;
+            projectTitle: string;
+            projectCode: string;
+            validIndicatorCount: number;
+            missingIndicatorCount: number;
+            projectAchievementRate: number | null;
+        }, {
+            sector: string | null;
+            stateNames: string[];
+            projectId: number;
+            projectTitle: string;
+            projectCode: string;
+            validIndicatorCount: number;
+            missingIndicatorCount: number;
+            projectAchievementRate: number | null;
+        }>, "many">;
+    }, "strip", zod.ZodTypeAny, {
+        sector: string | null;
+        projectCount: number;
+        projects: {
+            sector: string | null;
+            stateNames: string[];
+            projectId: number;
+            projectTitle: string;
+            projectCode: string;
+            validIndicatorCount: number;
+            missingIndicatorCount: number;
+            projectAchievementRate: number | null;
+        }[];
+        validProjectCount: number;
+        insufficientProjectCount: number;
+        sectorAchievementRate: number | null;
+    }, {
+        sector: string | null;
+        projectCount: number;
+        projects: {
+            sector: string | null;
+            stateNames: string[];
+            projectId: number;
+            projectTitle: string;
+            projectCode: string;
+            validIndicatorCount: number;
+            missingIndicatorCount: number;
+            projectAchievementRate: number | null;
+        }[];
+        validProjectCount: number;
+        insufficientProjectCount: number;
+        sectorAchievementRate: number | null;
+    }>, "many">;
+}, "strip", zod.ZodTypeAny, {
+    sectors: {
+        sector: string | null;
+        projectCount: number;
+        projects: {
+            sector: string | null;
+            stateNames: string[];
+            projectId: number;
+            projectTitle: string;
+            projectCode: string;
+            validIndicatorCount: number;
+            missingIndicatorCount: number;
+            projectAchievementRate: number | null;
+        }[];
+        validProjectCount: number;
+        insufficientProjectCount: number;
+        sectorAchievementRate: number | null;
+    }[];
+    averageSectorAchievementRate: number | null;
+    validSectorCount: number;
+    validProjectCount: number;
+}, {
+    sectors: {
+        sector: string | null;
+        projectCount: number;
+        projects: {
+            sector: string | null;
+            stateNames: string[];
+            projectId: number;
+            projectTitle: string;
+            projectCode: string;
+            validIndicatorCount: number;
+            missingIndicatorCount: number;
+            projectAchievementRate: number | null;
+        }[];
+        validProjectCount: number;
+        insufficientProjectCount: number;
+        sectorAchievementRate: number | null;
+    }[];
+    averageSectorAchievementRate: number | null;
+    validSectorCount: number;
+    validProjectCount: number;
+}>;
 /**
  * @summary Reports pending more than 14 days without approval
  */

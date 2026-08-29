@@ -4082,35 +4082,27 @@ export const GetStatePerformanceResponseItem = zod.object({
   stateName: zod.string(),
   stateNameAr: zod
     .string()
-    .nullish()
+    .nullable()
     .describe("Canonical Arabic State label for locale-aware display."),
+  totalProjects: zod.number(),
   activeProjects: zod.number(),
   beneficiaries: zod.number(),
-  budgetUtilizationPct: zod.number().nullish(),
+  budgetUtilizationPct: zod
+    .number()
+    .nullable()
+    .describe(
+      "Always null until an approved State-level expenditure source exists.",
+    ),
   progressPct: zod.number(),
   riskLevel: zod.string(),
-  openRisks: zod.number().optional(),
-  criticalRisks: zod.number().optional(),
-  reportsSubmitted: zod.number().optional(),
-  reportsPending: zod.number().optional(),
-  activityCompletionPct: zod.number().optional(),
-  reportingCompliancePct: zod.number().optional(),
-  performanceScore: zod.number().nullish(),
-  performanceTier: zod.string().optional(),
-  components: zod
-    .object({
-      activityCompletion: zod.number().nullish(),
-      reportSubmission: zod.number().nullish(),
-      indicatorAchievement: zod.number().nullish(),
-      budgetUtilization: zod.number().nullish(),
-      riskManagement: zod.number().nullish(),
-      dataCompleteness: zod.number().nullish(),
-    })
-    .optional(),
-  currentScore: zod.number().nullish(),
-  previousScore: zod.number().nullish(),
-  scoreDifference: zod.number().nullish(),
-  trendDirection: zod.string().nullish(),
+  openRisks: zod.number(),
+  criticalRisks: zod.number(),
+  critOnlyRisks: zod.number(),
+  highOnlyRisks: zod.number(),
+  reportsSubmitted: zod.number(),
+  reportsPending: zod.number(),
+  activityCompletionPct: zod.number().nullable(),
+  reportingCompliancePct: zod.number().nullable(),
 });
 export const GetStatePerformanceResponse = zod.array(
   GetStatePerformanceResponseItem,
@@ -4699,104 +4691,120 @@ export const GetDashboardAgendaResponse = zod.object({
 });
 
 /**
- * @summary Organization-wide (or scoped) 6-component weighted performance score
+ * @summary Authorised HQ Sector Report snapshot for one canonical sector
  */
-export const GetDashboardPerformanceResponse = zod.object({
-  overallScore: zod.number().nullish(),
-  tier: zod.string(),
-  dataAvailable: zod.boolean(),
-  components: zod.object({
-    activityCompletion: zod.number().nullish(),
-    reportSubmission: zod.number().nullish(),
-    indicatorAchievement: zod.number().nullish(),
-    budgetUtilization: zod.number().nullish(),
-    riskManagement: zod.number().nullish(),
-    dataCompleteness: zod.number().nullish(),
+export const GetDashboardSectorSnapshotQueryParams = zod.object({
+  sector: zod.coerce.string(),
+});
+
+export const getDashboardSectorSnapshotResponseProjectSummariesMax = 20;
+
+export const getDashboardSectorSnapshotResponseIndicatorsMax = 20;
+
+export const GetDashboardSectorSnapshotResponse = zod.object({
+  snapshot: zod.object({
+    activeProjects: zod.number(),
+    activeStates: zod.number(),
+    activeLocalities: zod.number(),
+    activitiesImplemented: zod.number(),
+    beneficiariesReached: zod.number(),
+    indicatorProgressPct: zod.number(),
+    delayedActivities: zod.number(),
+    openRisks: zod.number(),
+    pendingApprovals: zod.number(),
   }),
-});
-
-/**
- * @summary Per-state performance scores sorted by rank (descending)
- */
-export const GetDashboardPerformanceStatesResponseItem = zod.object({
-  stateId: zod.number(),
-  stateName: zod.string(),
-  stateNameAr: zod
-    .string()
-    .nullish()
-    .describe("Canonical Arabic State label for locale-aware display."),
-  activeProjects: zod.number(),
-  beneficiaries: zod.number(),
-  budgetUtilizationPct: zod.number().nullish(),
-  progressPct: zod.number(),
-  riskLevel: zod.string(),
-  openRisks: zod.number().optional(),
-  criticalRisks: zod.number().optional(),
-  reportsSubmitted: zod.number().optional(),
-  reportsPending: zod.number().optional(),
-  activityCompletionPct: zod.number().optional(),
-  reportingCompliancePct: zod.number().optional(),
-  performanceScore: zod.number().nullish(),
-  performanceTier: zod.string().optional(),
-  components: zod
-    .object({
-      activityCompletion: zod.number().nullish(),
-      reportSubmission: zod.number().nullish(),
-      indicatorAchievement: zod.number().nullish(),
-      budgetUtilization: zod.number().nullish(),
-      riskManagement: zod.number().nullish(),
-      dataCompleteness: zod.number().nullish(),
-    })
-    .optional(),
-  currentScore: zod.number().nullish(),
-  previousScore: zod.number().nullish(),
-  scoreDifference: zod.number().nullish(),
-  trendDirection: zod.string().nullish(),
-});
-export const GetDashboardPerformanceStatesResponse = zod.array(
-  GetDashboardPerformanceStatesResponseItem,
-);
-
-/**
- * @summary Per-project performance scores sorted by rank (descending)
- */
-export const getDashboardPerformanceProjectsQueryLimitDefault = 50;
-export const getDashboardPerformanceProjectsQueryLimitMin = 10;
-export const getDashboardPerformanceProjectsQueryLimitMax = 100;
-
-export const GetDashboardPerformanceProjectsQueryParams = zod.object({
-  limit: zod.coerce
-    .number()
-    .min(getDashboardPerformanceProjectsQueryLimitMin)
-    .max(getDashboardPerformanceProjectsQueryLimitMax)
-    .default(getDashboardPerformanceProjectsQueryLimitDefault),
-});
-
-export const GetDashboardPerformanceProjectsResponseItem = zod.object({
-  projectId: zod.number(),
-  projectCode: zod.string(),
-  projectTitle: zod.string(),
-  sector: zod.string(),
-  stateNames: zod.array(zod.string()),
-  status: zod.string(),
-  overallScore: zod.number().nullish(),
-  tier: zod.string(),
-  components: zod.object({
-    activityCompletion: zod.number().nullish(),
-    reportSubmission: zod.number().nullish(),
-    indicatorAchievement: zod.number().nullish(),
-    budgetUtilization: zod.number().nullish(),
-    riskManagement: zod.number().nullish(),
-    dataCompleteness: zod.number().nullish(),
+  stateSummaries: zod.array(
+    zod.object({
+      stateId: zod.number(),
+      stateName: zod.string(),
+      stateNameAr: zod.string().nullable(),
+      projects: zod.number(),
+      activities: zod.number(),
+      beneficiaries: zod.number(),
+      progressPct: zod.number(),
+      openRisks: zod.number(),
+    }),
+  ),
+  projectSummaries: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        code: zod.string(),
+        title: zod.string(),
+        donor: zod.string().nullable(),
+        progressPct: zod.number(),
+        beneficiaries: zod.number(),
+        budgetUtilizationPct: zod.number(),
+        riskLevel: zod.string(),
+      }),
+    )
+    .max(getDashboardSectorSnapshotResponseProjectSummariesMax),
+  beneficiaryBreakdown: zod.object({
+    men: zod.number(),
+    women: zod.number(),
+    boys: zod.number(),
+    girls: zod.number(),
   }),
-  activityCount: zod.number().optional(),
-  openRisks: zod.number().optional(),
-  criticalRisks: zod.number().optional(),
-  recentReportStatus: zod.string().nullish(),
+  beneficiaryByState: zod.array(
+    zod
+      .object({
+        men: zod.number(),
+        women: zod.number(),
+        boys: zod.number(),
+        girls: zod.number(),
+      })
+      .and(
+        zod.object({
+          stateId: zod.number(),
+          stateName: zod.string(),
+          stateNameAr: zod.string().nullable(),
+          total: zod.number(),
+        }),
+      ),
+  ),
+  beneficiaryByProject: zod.array(
+    zod
+      .object({
+        men: zod.number(),
+        women: zod.number(),
+        boys: zod.number(),
+        girls: zod.number(),
+      })
+      .and(
+        zod.object({
+          code: zod.string(),
+          title: zod.string(),
+          total: zod.number(),
+        }),
+      ),
+  ),
+  beneficiaryByDonor: zod.array(
+    zod
+      .object({
+        men: zod.number(),
+        women: zod.number(),
+        boys: zod.number(),
+        girls: zod.number(),
+      })
+      .and(
+        zod.object({
+          donor: zod.string(),
+          total: zod.number(),
+        }),
+      ),
+  ),
+  indicators: zod
+    .array(
+      zod.object({
+        name: zod.string(),
+        target: zod.number(),
+        achieved: zod.number(),
+        progressPct: zod.number(),
+        status: zod.string(),
+      }),
+    )
+    .max(getDashboardSectorSnapshotResponseIndicatorsMax),
 });
-export const GetDashboardPerformanceProjectsResponse = zod.array(
-  GetDashboardPerformanceProjectsResponseItem,
-);
 
 /**
  * @summary Projects requiring follow-up (draft, returned, awaiting approval, critical risks, overdue mitigations)
@@ -4834,6 +4842,55 @@ export const GetDashboardAttentionProjectsResponseItem = zod.object({
 export const GetDashboardAttentionProjectsResponse = zod.array(
   GetDashboardAttentionProjectsResponseItem,
 );
+
+/**
+ * @summary Equal-weight Indicator to Project to Sector achievement hierarchy
+ */
+export const GetDashboardHierarchicalPerformanceQueryParams = zod.object({
+  stateId: zod.coerce.number().optional(),
+  sector: zod.coerce.string().optional(),
+  donor: zod.coerce.string().optional(),
+  dateFrom: zod.date().optional(),
+  dateTo: zod.date().optional(),
+});
+
+export const GetDashboardHierarchicalPerformanceResponse = zod.object({
+  averageSectorAchievementRate: zod
+    .number()
+    .nullable()
+    .describe("Equal-weight average of valid Sector achievement rates."),
+  validSectorCount: zod.number(),
+  validProjectCount: zod.number(),
+  sectors: zod.array(
+    zod.object({
+      sector: zod.string().nullable(),
+      projectCount: zod.number(),
+      validProjectCount: zod.number(),
+      insufficientProjectCount: zod.number(),
+      sectorAchievementRate: zod
+        .number()
+        .nullable()
+        .describe("Equal-weight average of valid Project achievement rates."),
+      projects: zod.array(
+        zod.object({
+          projectId: zod.number(),
+          projectCode: zod.string(),
+          projectTitle: zod.string(),
+          sector: zod.string().nullable(),
+          stateNames: zod.array(zod.string()),
+          validIndicatorCount: zod.number(),
+          missingIndicatorCount: zod.number(),
+          projectAchievementRate: zod
+            .number()
+            .nullable()
+            .describe(
+              "Equal-weight average of valid indicator achievement rates; overachievement is preserved.",
+            ),
+        }),
+      ),
+    }),
+  ),
+});
 
 /**
  * @summary Reports pending more than 14 days without approval

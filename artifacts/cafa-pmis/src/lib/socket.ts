@@ -158,9 +158,6 @@ const dashboardKeys = (): QueryKey[] => [
   ["hierarchical-performance"],
   ["/api/dashboard/recent-activity"],
   ["/api/dashboard/agenda"],
-  ["/api/dashboard/performance"],
-  ["/api/dashboard/performance/states"],
-  ["/api/dashboard/performance/projects"],
   ["/api/dashboard/pmr-reporting-completeness"],
 ];
 

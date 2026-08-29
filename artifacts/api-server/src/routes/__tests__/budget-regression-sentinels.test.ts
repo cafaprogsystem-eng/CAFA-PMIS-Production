@@ -384,8 +384,8 @@ describe("BUD-REG-10 zero-budget, null-spend and overspend semantics (BUD-SECTOR
 
 // ── BUD-REG-11 ───────────────────────────────────────────────────────────────
 describe("BUD-REG-11 State budget-utilisation proxy is permanently null (BUD-004 / BUD-BD-04)", () => {
-  it("computeStateScores returns budgetUtilizationPct === null and a null budget component", async () => {
-    const { computeStateScores } = await import("../../services/performanceEngine.js");
+  it("computeStateImplementation returns budgetUtilizationPct === null without score components", async () => {
+    const { computeStateImplementation } = await import("../../services/performanceEngine.js");
     const capturedQueries: string[] = [];
     const capturingPool = {
       query: async (sql: string) => {
@@ -404,10 +404,11 @@ describe("BUD-REG-11 State budget-utilisation proxy is permanently null (BUD-004
       },
     } as unknown as import("../../services/performanceEngine.js").PgPool;
 
-    const rows = await computeStateScores(capturingPool, { stateId: null, sectors: null });
+    const rows = await computeStateImplementation(capturingPool, { stateId: null, sectors: null });
     // Exact null — not undefined, not 0, not a proxy value.
     expect(rows[0]?.budgetUtilizationPct).toBeNull();
-    expect(rows[0]?.components.budgetUtilization).toBeNull();
+    expect(rows[0]).not.toHaveProperty("components");
+    expect(rows[0]).not.toHaveProperty("performanceScore");
     // No proxy SQL may reappear.
     const allSql = capturedQueries.join("\n");
     expect(allSql).not.toContain("SUM(p.budget_total)");

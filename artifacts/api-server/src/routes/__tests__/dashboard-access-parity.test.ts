@@ -382,19 +382,6 @@ describe("DASH-861 state-performance filters and scope parity", () => {
   );
 });
 
-describe("DASH-861 project-performance limit validation", () => {
-  it.each(["limit=9", "limit=101", "limit=abc", "limit=10&limit=20"])(
-    "rejects invalid or repeated project-performance %s before querying",
-    async (filter) => {
-      const res = await request(agentFor("program_manager"))
-        .get(`/dashboard/performance/projects?${filter}`);
-      expect(res.status).toBe(400);
-      expect(res.body).toEqual(expect.objectContaining({ error: "dashboard_invalid_filter" }));
-      expect(mockQuery).not.toHaveBeenCalled();
-    },
-  );
-});
-
 describe("DASH-861 summary aggregate authority", () => {
   it("applies an SPO state and assignment clamp to reports, risks, and activities", async () => {
     mockQuery.mockImplementationOnce(async () => ({ rows: [{ project_id: 101 }] }));

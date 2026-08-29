@@ -1,5 +1,5 @@
 import type { QueryKey, UseMutationOptions, UseMutationResult, UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
-import type { Activity, ActivityEntry, ArchiveFileListResponse, AttachmentLifecycleResult, AttachmentReconciliationActionResult, AttachmentReconciliationDispositionInput, AttachmentReconciliationListResponse, AttachmentReconciliationRecoveryInput, AttachmentReconciliationReport, AttachmentUploadDescriptor, AttachmentUploadDescriptorRequest, AttachmentUploadFinalizationRequest, AuditLogPage, BeneficiariesBreakdown, Beneficiary, BeneficiaryInput, CanonicalAttachment, CanonicalAttachmentList, ChangePassword200, ChangePasswordInput, CheckProjectDuplicateParams, CheckReportDuplicateParams, ConsolidatedProjectReport, Conversation, ConversationInput, ConversationListPage, ConversationMedia, ConversationMemberInput, ConversationSummary, CurrentUser, DashboardAgenda, DashboardNotificationsSummary, DashboardSummary, DeleteUser200, Donor, DonorInput, DonorPortfolioEntry, DuplicateCheckResult, EvaluateMonthlyReportingDeadlines200, EvaluateMonthlyReportingDeadlinesBody, ExportReportsParams, FocusedProjectDonorScan, FollowUpProject, GetAttachmentReconciliationReportParams, GetBeneficiariesBreakdownParams, GetConsolidatedProjectReportParams, GetConversationsUnreadCount200, GetDashboardPerformanceProjectsParams, GetDashboardSummaryParams, GetLegacyStorageEvidenceInventoryParams, GetPmrReportingCompletenessParams, GetSectorBudgetParams, GetStatePerformanceParams, GetVoiceNoteUrl200, HealthStatus, Indicator, InvitationListPage, InviteActionResponse, InviteResendInput, LateReport, LegacyStorageEvidenceInventory, ListArchiveFilesParams, ListAttachmentReconciliationEntriesParams, ListAuditLog400, ListAuditLogParams, ListBeneficiariesParams, ListConversationMessagesParams, ListConversationsParams, ListLocalitiesParams, ListNotificationsParams, ListPlansParams, ListProjectsParams, ListReportAuthors200, ListReportAuthorsParams, ListReportsParams, ListRisksParams, ListStatesParams, ListUserInvitationsParams, ListUsersParams, ListVoiceNotesParams, LocalityWithState, LoginInput, Logout200, Message, MessageDeleteInput, MessageEditInput, MessageHistoryPage, MessageInput, NotificationListPage, NotificationMutationResponse, OkResponse, PasswordResetInput, PasswordResetResponse, PendingApprovals, PerformanceScore, PlanDetail, PlanInput, PlanSummary, PlanningDashboard, PmrReportingCompleteness, ProfilePhotoCompleteInput, ProfilePhotoResponse, ProfilePhotoUploadDescriptor, ProfilePhotoUploadRequest, Project, ProjectBudget, ProjectBudgetPerformanceEntry, ProjectDetail, ProjectDocument, ProjectDocumentInput, ProjectDonorCorrection, ProjectDonorCorrectionInput, ProjectInput, ProjectMergeInput, ProjectPerformanceScore, ProjectStateAllocation, ProjectSummary, Reaction, ReactionInput, ReopenPlanBody, Report, ReportAggregates, ReportAttachment, ReportAttachmentInput, ReportDuplicateCheck, ReportInput, ReportPage, ReportStats, ReportsSummary, RetireDevelopmentTestProjectBody, Risk, RiskInput, RiskListResponse, RiskUpdate, SectorBudgetResponse, SectorPerformance, StateConflictError, StateInput, StateLifecycleInput, StateNotFoundError, StatePerformance, StateProfile, StateRecord, StateSnapshot, StateValidationError, SwitcherUser, UpdateProfileInput, UpdateProjectReportingCoverage200, UpdateProjectReportingCoverageBody, UploadUrlRequest, UploadUrlResponse, UpsertProjectStateAllocationsBody, UserCreateResponse, UserDetail, UserDirectoryPage, UserEffectiveAccess, UserInput, UserProfile, UserStatusInput, UserStatusResponse, UserUpdate, UsersSummary, ValidationErrorResponse, VerificationResendResponse, VoiceNote, VoiceNoteInput, WorkflowTransitionInput } from "./api.schemas";
+import type { Activity, ActivityEntry, ArchiveFileListResponse, AttachmentLifecycleResult, AttachmentReconciliationActionResult, AttachmentReconciliationDispositionInput, AttachmentReconciliationListResponse, AttachmentReconciliationRecoveryInput, AttachmentReconciliationReport, AttachmentUploadDescriptor, AttachmentUploadDescriptorRequest, AttachmentUploadFinalizationRequest, AuditLogPage, BeneficiariesBreakdown, Beneficiary, BeneficiaryInput, CanonicalAttachment, CanonicalAttachmentList, ChangePassword200, ChangePasswordInput, CheckProjectDuplicateParams, CheckReportDuplicateParams, ConsolidatedProjectReport, Conversation, ConversationInput, ConversationListPage, ConversationMedia, ConversationMemberInput, ConversationSummary, CurrentUser, DashboardAgenda, DashboardNotificationsSummary, DashboardSectorSnapshot, DashboardSummary, DeleteUser200, Donor, DonorInput, DonorPortfolioEntry, DuplicateCheckResult, EvaluateMonthlyReportingDeadlines200, EvaluateMonthlyReportingDeadlinesBody, ExportReportsParams, FocusedProjectDonorScan, FollowUpProject, GetAttachmentReconciliationReportParams, GetBeneficiariesBreakdownParams, GetConsolidatedProjectReportParams, GetConversationsUnreadCount200, GetDashboardHierarchicalPerformanceParams, GetDashboardSectorSnapshotParams, GetDashboardSummaryParams, GetLegacyStorageEvidenceInventoryParams, GetPmrReportingCompletenessParams, GetSectorBudgetParams, GetStatePerformanceParams, GetVoiceNoteUrl200, HealthStatus, HierarchicalPerformance, Indicator, InvitationListPage, InviteActionResponse, InviteResendInput, LateReport, LegacyStorageEvidenceInventory, ListArchiveFilesParams, ListAttachmentReconciliationEntriesParams, ListAuditLog400, ListAuditLogParams, ListBeneficiariesParams, ListConversationMessagesParams, ListConversationsParams, ListLocalitiesParams, ListNotificationsParams, ListPlansParams, ListProjectsParams, ListReportAuthors200, ListReportAuthorsParams, ListReportsParams, ListRisksParams, ListStatesParams, ListUserInvitationsParams, ListUsersParams, ListVoiceNotesParams, LocalityWithState, LoginInput, Logout200, Message, MessageDeleteInput, MessageEditInput, MessageHistoryPage, MessageInput, NotificationListPage, NotificationMutationResponse, OkResponse, PasswordResetInput, PasswordResetResponse, PendingApprovals, PlanDetail, PlanInput, PlanSummary, PlanningDashboard, PmrReportingCompleteness, ProfilePhotoCompleteInput, ProfilePhotoResponse, ProfilePhotoUploadDescriptor, ProfilePhotoUploadRequest, Project, ProjectBudget, ProjectBudgetPerformanceEntry, ProjectDetail, ProjectDocument, ProjectDocumentInput, ProjectDonorCorrection, ProjectDonorCorrectionInput, ProjectInput, ProjectMergeInput, ProjectStateAllocation, ProjectSummary, Reaction, ReactionInput, ReopenPlanBody, Report, ReportAggregates, ReportAttachment, ReportAttachmentInput, ReportDuplicateCheck, ReportInput, ReportPage, ReportStats, ReportsSummary, RetireDevelopmentTestProjectBody, Risk, RiskInput, RiskListResponse, RiskUpdate, SectorBudgetResponse, SectorPerformance, StateConflictError, StateInput, StateLifecycleInput, StateNotFoundError, StatePerformance, StateProfile, StateRecord, StateSnapshot, StateValidationError, SwitcherUser, UpdateProfileInput, UpdateProjectReportingCoverage200, UpdateProjectReportingCoverageBody, UploadUrlRequest, UploadUrlResponse, UpsertProjectStateAllocationsBody, UserCreateResponse, UserDetail, UserDirectoryPage, UserEffectiveAccess, UserInput, UserProfile, UserStatusInput, UserStatusResponse, UserUpdate, UsersSummary, ValidationErrorResponse, VerificationResendResponse, VoiceNote, VoiceNoteInput, WorkflowTransitionInput } from "./api.schemas";
 import { customFetch } from "../custom-fetch";
 import type { ErrorType, BodyType } from "../custom-fetch";
 type AwaitedInput<T> = PromiseLike<T> | T;
@@ -1923,71 +1923,25 @@ export declare function useGetDashboardAgenda<TData = Awaited<ReturnType<typeof 
 }): UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
 };
-export declare const getGetDashboardPerformanceUrl: () => string;
+export declare const getGetDashboardSectorSnapshotUrl: (params: GetDashboardSectorSnapshotParams) => string;
 /**
- * @summary Organization-wide (or scoped) 6-component weighted performance score
+ * @summary Authorised HQ Sector Report snapshot for one canonical sector
  */
-export declare const getDashboardPerformance: (options?: RequestInit) => Promise<PerformanceScore>;
-export declare const getGetDashboardPerformanceQueryKey: () => readonly ["/api/dashboard/performance"];
-export declare const getGetDashboardPerformanceQueryOptions: <TData = Awaited<ReturnType<typeof getDashboardPerformance>>, TError = ErrorType<unknown>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformance>>, TError, TData>;
+export declare const getDashboardSectorSnapshot: (params: GetDashboardSectorSnapshotParams, options?: RequestInit) => Promise<DashboardSectorSnapshot>;
+export declare const getGetDashboardSectorSnapshotQueryKey: (params?: GetDashboardSectorSnapshotParams) => readonly ["/api/dashboard/sector-snapshot", ...GetDashboardSectorSnapshotParams[]];
+export declare const getGetDashboardSectorSnapshotQueryOptions: <TData = Awaited<ReturnType<typeof getDashboardSectorSnapshot>>, TError = ErrorType<void>>(params: GetDashboardSectorSnapshotParams, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardSectorSnapshot>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
-}) => UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformance>>, TError, TData> & {
+}) => UseQueryOptions<Awaited<ReturnType<typeof getDashboardSectorSnapshot>>, TError, TData> & {
     queryKey: QueryKey;
 };
-export type GetDashboardPerformanceQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardPerformance>>>;
-export type GetDashboardPerformanceQueryError = ErrorType<unknown>;
+export type GetDashboardSectorSnapshotQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardSectorSnapshot>>>;
+export type GetDashboardSectorSnapshotQueryError = ErrorType<void>;
 /**
- * @summary Organization-wide (or scoped) 6-component weighted performance score
+ * @summary Authorised HQ Sector Report snapshot for one canonical sector
  */
-export declare function useGetDashboardPerformance<TData = Awaited<ReturnType<typeof getDashboardPerformance>>, TError = ErrorType<unknown>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformance>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-};
-export declare const getGetDashboardPerformanceStatesUrl: () => string;
-/**
- * @summary Per-state performance scores sorted by rank (descending)
- */
-export declare const getDashboardPerformanceStates: (options?: RequestInit) => Promise<StatePerformance[]>;
-export declare const getGetDashboardPerformanceStatesQueryKey: () => readonly ["/api/dashboard/performance/states"];
-export declare const getGetDashboardPerformanceStatesQueryOptions: <TData = Awaited<ReturnType<typeof getDashboardPerformanceStates>>, TError = ErrorType<unknown>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformanceStates>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformanceStates>>, TError, TData> & {
-    queryKey: QueryKey;
-};
-export type GetDashboardPerformanceStatesQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardPerformanceStates>>>;
-export type GetDashboardPerformanceStatesQueryError = ErrorType<unknown>;
-/**
- * @summary Per-state performance scores sorted by rank (descending)
- */
-export declare function useGetDashboardPerformanceStates<TData = Awaited<ReturnType<typeof getDashboardPerformanceStates>>, TError = ErrorType<unknown>>(options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformanceStates>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-};
-export declare const getGetDashboardPerformanceProjectsUrl: (params?: GetDashboardPerformanceProjectsParams) => string;
-/**
- * @summary Per-project performance scores sorted by rank (descending)
- */
-export declare const getDashboardPerformanceProjects: (params?: GetDashboardPerformanceProjectsParams, options?: RequestInit) => Promise<ProjectPerformanceScore[]>;
-export declare const getGetDashboardPerformanceProjectsQueryKey: (params?: GetDashboardPerformanceProjectsParams) => readonly ["/api/dashboard/performance/projects", ...GetDashboardPerformanceProjectsParams[]];
-export declare const getGetDashboardPerformanceProjectsQueryOptions: <TData = Awaited<ReturnType<typeof getDashboardPerformanceProjects>>, TError = ErrorType<unknown>>(params?: GetDashboardPerformanceProjectsParams, options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformanceProjects>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-}) => UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformanceProjects>>, TError, TData> & {
-    queryKey: QueryKey;
-};
-export type GetDashboardPerformanceProjectsQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardPerformanceProjects>>>;
-export type GetDashboardPerformanceProjectsQueryError = ErrorType<unknown>;
-/**
- * @summary Per-project performance scores sorted by rank (descending)
- */
-export declare function useGetDashboardPerformanceProjects<TData = Awaited<ReturnType<typeof getDashboardPerformanceProjects>>, TError = ErrorType<unknown>>(params?: GetDashboardPerformanceProjectsParams, options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardPerformanceProjects>>, TError, TData>;
+export declare function useGetDashboardSectorSnapshot<TData = Awaited<ReturnType<typeof getDashboardSectorSnapshot>>, TError = ErrorType<void>>(params: GetDashboardSectorSnapshotParams, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardSectorSnapshot>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -2011,6 +1965,29 @@ export type GetDashboardAttentionProjectsQueryError = ErrorType<unknown>;
  */
 export declare function useGetDashboardAttentionProjects<TData = Awaited<ReturnType<typeof getDashboardAttentionProjects>>, TError = ErrorType<unknown>>(options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardAttentionProjects>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+export declare const getGetDashboardHierarchicalPerformanceUrl: (params?: GetDashboardHierarchicalPerformanceParams) => string;
+/**
+ * @summary Equal-weight Indicator to Project to Sector achievement hierarchy
+ */
+export declare const getDashboardHierarchicalPerformance: (params?: GetDashboardHierarchicalPerformanceParams, options?: RequestInit) => Promise<HierarchicalPerformance>;
+export declare const getGetDashboardHierarchicalPerformanceQueryKey: (params?: GetDashboardHierarchicalPerformanceParams) => readonly ["/api/dashboard/hierarchical-performance", ...GetDashboardHierarchicalPerformanceParams[]];
+export declare const getGetDashboardHierarchicalPerformanceQueryOptions: <TData = Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>, TError = ErrorType<unknown>>(params?: GetDashboardHierarchicalPerformanceParams, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type GetDashboardHierarchicalPerformanceQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>>;
+export type GetDashboardHierarchicalPerformanceQueryError = ErrorType<unknown>;
+/**
+ * @summary Equal-weight Indicator to Project to Sector achievement hierarchy
+ */
+export declare function useGetDashboardHierarchicalPerformance<TData = Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>, TError = ErrorType<unknown>>(params?: GetDashboardHierarchicalPerformanceParams, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

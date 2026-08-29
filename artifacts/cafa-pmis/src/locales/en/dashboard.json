@@ -556,16 +556,6 @@
     "projs": "Projs"
   },
   "noData": "No data to display yet",
-  "noSufficientData": "No sufficient performance data available yet.",
-  "addActiveProjects": "Add active projects, activities, and reports to generate state rankings.",
-  "addProjectsScore": "Add projects, activities, and reports to generate a score.",
-  "noSufficientDataShort": "No sufficient data",
-  "weightedDimensions": "Weighted across 6 operational dimensions. Each component contributes real calculated values — no estimates.",
-  "allReportsOnTime": "All reports on time, no critical risks.",
-  "strongPerformance": "Strong performance across all dimensions.",
-  "goodPerformance": "Good overall performance.",
-  "someMetrics": "Some metrics require closer follow-up.",
-  "belowThreshold": "Performance below minimum threshold.",
   "noItems": "No items awaiting your action",
   "viewAll": "View all",
   "immediateAction": "Immediate action",
@@ -576,21 +566,6 @@
   "allStates": "All States",
   "viewAllNotifications": "View All Notifications",
   "complianceRate": "Compliance rate",
-  "performanceScore": {
-    "label": "Programme performance score",
-    "strategic": "Organisation-wide score across all states, sectors, and projects.",
-    "operational": "Operational portfolio performance across managed projects.",
-    "sector": "Sector-scoped performance for your assigned projects.",
-    "statePrefix": "State-level performance for",
-    "assigned": "Performance across your assigned projects.",
-    "yourState": "your state"
-  },
-  "legend": {
-    "excellent": "Excellent ≥80",
-    "good": "Good ≥60",
-    "needsFollowUp": "Needs Follow-up ≥40",
-    "critical": "Critical <40"
-  },
   "aria": {
     "dataUnavailable": "data unavailable",
     "percent": "{{value}} percent",
@@ -702,6 +677,8 @@
     "insufficientSuffix": "insufficient data",
     "validSectorsSummary": "{{valid}} of {{total}} sectors with valid data",
     "unresolvedSector": "Sector unavailable",
+    "sectorAriaExpand": "Expand {{sector}}, achievement {{rate}}",
+    "sectorAriaCollapse": "Collapse {{sector}}, achievement {{rate}}",
     "onTarget": "On target"
   },
   "benView": {

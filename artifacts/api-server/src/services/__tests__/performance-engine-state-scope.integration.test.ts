@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { computeStateScores, type PgPool } from "../performanceEngine";
+import { computeStateImplementation, type PgPool } from "../performanceEngine";
 
 const integration = process.env.DATABASE_URL ? describe : describe.skip;
 
-integration("computeStateScores disposable PostgreSQL scope integration", () => {
+integration("computeStateImplementation disposable PostgreSQL scope integration", () => {
   let client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>; release: () => void };
 
   beforeAll(async () => {
@@ -48,7 +48,7 @@ integration("computeStateScores disposable PostgreSQL scope integration", () => 
   });
 
   it("returns Health-only state facts while retaining authorised standalone Health activity/report records", async () => {
-    const [row] = await computeStateScores(client as unknown as PgPool, {
+    const [row] = await computeStateImplementation(client as unknown as PgPool, {
       stateId: 7,
       sectors: ["Health"],
     });
