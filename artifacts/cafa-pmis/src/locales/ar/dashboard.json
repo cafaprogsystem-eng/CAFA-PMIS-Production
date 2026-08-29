@@ -556,16 +556,6 @@
     "projs": "المشاريع"
   },
   "noData": "لا توجد بيانات لعرضها بعد",
-  "noSufficientData": "لا تتوفر بيانات أداء كافية بعد.",
-  "addActiveProjects": "أضف مشاريع نشطة وأنشطة وتقارير لإنشاء تصنيفات الولايات.",
-  "addProjectsScore": "أضف مشاريع وأنشطة وتقارير لإنشاء نتيجة.",
-  "noSufficientDataShort": "بيانات غير كافية",
-  "weightedDimensions": "مرجح عبر 6 أبعاد تشغيلية. كل مكون يُسهم بقيم محسوبة فعلية — بدون تقديرات.",
-  "allReportsOnTime": "جميع التقارير في الوقت المحدد، لا توجد مخاطر حرجة.",
-  "strongPerformance": "أداء قوي في جميع الأبعاد.",
-  "goodPerformance": "أداء جيد بشكل عام.",
-  "someMetrics": "بعض المؤشرات تحتاج إلى متابعة أدق.",
-  "belowThreshold": "الأداء دون الحد الأدنى المطلوب.",
   "noItems": "لا توجد عناصر تنتظر إجراءك",
   "viewAll": "عرض الكل",
   "immediateAction": "إجراء فوري",
@@ -576,21 +566,6 @@
   "allStates": "كل الولايات",
   "viewAllNotifications": "عرض كل الإشعارات",
   "complianceRate": "معدل الالتزام",
-  "performanceScore": {
-    "label": "نتيجة أداء البرنامج",
-    "strategic": "نتيجة على مستوى المنظمة عبر جميع الولايات والقطاعات والمشاريع.",
-    "operational": "أداء المحفظة التشغيلية عبر المشاريع المُدارة.",
-    "sector": "الأداء ضمن نطاق القطاع لمشاريعك المخصصة.",
-    "statePrefix": "الأداء على مستوى الولاية لـ",
-    "assigned": "الأداء عبر مشاريعك المخصصة.",
-    "yourState": "ولايتك"
-  },
-  "legend": {
-    "excellent": "ممتاز ≥80",
-    "good": "جيد ≥60",
-    "needsFollowUp": "يحتاج متابعة ≥40",
-    "critical": "حرج <40"
-  },
   "aria": {
     "dataUnavailable": "البيانات غير متاحة",
     "percent": "{{value}} بالمئة",
@@ -702,6 +677,8 @@
     "insufficientSuffix": "بيانات غير كافية",
     "validSectorsSummary": "{{valid}} من {{total}} قطاعات ببيانات صالحة",
     "unresolvedSector": "القطاع غير متاح",
+    "sectorAriaExpand": "توسيع {{sector}}، الإنجاز {{rate}}",
+    "sectorAriaCollapse": "طيّ {{sector}}، الإنجاز {{rate}}",
     "onTarget": "ضمن الهدف"
   },
   "benView": {

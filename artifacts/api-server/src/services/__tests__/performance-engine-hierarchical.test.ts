@@ -74,4 +74,24 @@ describe("hierarchical performance labels", () => {
     expect(serialized).not.toContain("hierarchical.");
     expect(serialized).not.toContain("undefined");
   });
+
+  it("uses unrounded project and sector rates for equal-weight aggregation", async () => {
+    const result = await computeHierarchicalPerformance(
+      makePool([
+        { id: 1, code: "P-1", title: "Project 1", sector: "Health" },
+        { id: 2, code: "P-2", title: "Project 2", sector: "Health" },
+        { id: 3, code: "P-3", title: "Project 3", sector: "Health" },
+      ], [
+        { project_id: 1, target: 100, achieved: 1.04 },
+        { project_id: 2, target: 100, achieved: 1.04 },
+        { project_id: 3, target: 100, achieved: 1.14 },
+      ]),
+      "",
+      [],
+    );
+
+    expect(result.sectors[0]?.projects.map((project) => project.projectAchievementRate)).toEqual([1, 1, 1.1]);
+    expect(result.sectors[0]?.sectorAchievementRate).toBe(1.1);
+    expect(result.averageSectorAchievementRate).toBe(1.1);
+  });
 });

@@ -11,6 +11,7 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "release:readiness": "node ./scripts/release-readiness.mjs",
+    "test:dashboard-truthfulness-browser": "playwright test --config artifacts/cafa-pmis/playwright.dashboard-truthfulness.config.ts",
     "test:offline-browser": "playwright test --config artifacts/cafa-pmis/playwright.offline.config.ts",
     "test:visual:sidebar": "pnpm --filter @workspace/cafa-pmis run test:visual:sidebar",
     "test:visual:sidebar:update": "pnpm --filter @workspace/cafa-pmis run test:visual:sidebar:update"

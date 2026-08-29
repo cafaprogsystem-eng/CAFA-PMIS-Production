@@ -78,33 +78,14 @@ describe("dashboard agenda fail-closed state scope", () => {
     expect(String((mockQuery.mock.calls as unknown[][])[0]?.[0] ?? "")).toContain("AND FALSE");
   });
 
-  it("keeps assigned SPO performance endpoints limited to assigned projects in their state", async () => {
-    mockQuery.mockReset();
-    mockQuery.mockResolvedValue({ rows: [] });
-    mockQuery.mockResolvedValueOnce({ rows: [{ project_id: 101 }] } as never);
-
-    await request(appForAssignedSpo()).get("/dashboard/performance").expect(200);
-
-    const performanceSql = (mockQuery.mock.calls as unknown[][]).map((call) => String(call[0] ?? ""));
-    const indicator = performanceSql.find((sql) => sql.includes("FROM indicators i"));
-    const risk = performanceSql.find((sql) => sql.includes("FROM risks rk"));
-    expect(indicator).toContain("i.project_id = ANY($1::int[])");
-    expect(indicator).toContain("ps.state_id = $2");
-    expect(risk).toContain("p.id = ANY($1::int[])");
-    expect(risk).toContain("ps.state_id = $2");
-
-    mockQuery.mockReset();
-    mockQuery.mockResolvedValue({ rows: [] });
-    mockQuery.mockResolvedValueOnce({ rows: [{ project_id: 101 }] } as never);
-    await request(appForAssignedSpo()).get("/dashboard/performance/states").expect(200, []);
-
-    mockQuery.mockReset();
-    mockQuery.mockResolvedValue({ rows: [] });
-    mockQuery.mockResolvedValueOnce({ rows: [{ project_id: 101 }] } as never);
-    await request(appForAssignedSpo()).get("/dashboard/performance/projects").expect(200, []);
-    const projectSql = String((mockQuery.mock.calls as unknown[][])[1]?.[0] ?? "");
-    expect(projectSql).toContain("p.id = ANY($1::int[])");
-    expect(projectSql).toContain("ps.state_id = $2");
+  it.each([
+    "/dashboard/performance",
+    "/dashboard/performance/states",
+    "/dashboard/performance/projects",
+  ])("does not expose retired composite endpoint %s", async (path) => {
+    mockQuery.mockClear();
+    await request(appForAssignedSpo()).get(path).expect(404);
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it("applies assignment scope to project facts and canonical state scope to Report aggregates", async () => {

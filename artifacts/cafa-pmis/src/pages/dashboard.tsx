@@ -722,7 +722,6 @@ function SortableTableHeader({
 }
 
 /* ── Enhanced State Performance Table ───────────────────────────────── */
-/* Score and Status columns removed — state scoring model is Dashboard-only and not approved CAFA Business Logic. */
 type SortableCol = "stateName" | "totalProjects" | "activeProjects" | "openRisks" | "criticalRisks" |
   "reportsSubmitted" | "reportsPending" | "activityCompletionPct" |
   "reportingCompliancePct" |
@@ -769,7 +768,6 @@ function StatePerformanceTable({
     openRisks?: number | null; criticalRisks?: number | null;
     reportsSubmitted?: number | null; reportsPending?: number | null;
     activityCompletionPct?: number | null; reportingCompliancePct?: number | null;
-    performanceScore?: number | null; performanceTier?: string | null;
   }>;
   isLoading: boolean;
   showAll: boolean;
@@ -1207,18 +1205,7 @@ function ApprovalQueueWidget({
   );
 }
 
-/* tierColor and tierLabel removed — only used by unsupported composite scoring components. */
-
 // ── Follow-Up Projects Panel ──────────────────────────────────────────────
-/* ScoreBar removed — only used by PerformanceScoreBanner (unsupported composite scoring). */
-
-/* PerformanceScoreBanner removed — depended on unsupported composite performance scoring model
-   (weighted dimensions: activity completion 25%, report submission 20%, indicator achievement 20%,
-   budget utilisation 15%, risk management 10%, data completeness 10%) with unapproved tier
-   classifications (Excellent/Good/Needs Follow-Up/Critical). Never rendered in the Dashboard. */
-
-/* ProjectPerformanceRankings removed — ranked projects by unsupported composite overallScore and
-   tier (Top Performing / Needs Attention). Dead code: never rendered in the Dashboard. */
 
 // ── Projects Needing Attention ────────────────────────────────────────────
 /* ── Follow-Up Projects & Reports panels — module-level helpers ─────── *
@@ -3901,7 +3888,7 @@ export default function Dashboard() {
 
 
   // Active High and Critical Risk counts per state — uses the two factual fields
-  // returned by computeStateScores. Only states with at least one active high or critical
+  // returned by computeStateImplementation. Only states with at least one active high or critical
   // risk are included; ordered by combined count descending, state name ascending as tie-breaker.
   // Full state names are preserved — no truncation at the data level.
   const riskByStateData = (states ?? [])

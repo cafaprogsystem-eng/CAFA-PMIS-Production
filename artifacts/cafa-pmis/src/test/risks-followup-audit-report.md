@@ -1,139 +1,218 @@
 # Risks & Follow-Up Dashboard Tab — Data-Integrity Audit Report
 
-**Date**: 2026-08-06  
-**Scope**: Risks & Follow-Up tab sections — Risk Exposure By State, Projects Needing Attention, Overdue Reports, Approval Queue, My Drafts  
-**Method**: Static code inspection (performanceEngine.ts, dashboard.ts routes, dashboard.tsx, dashboard.json)  
-**Changes made**: Corrected one inaccurate UI description label (item 12 below)  
+**Original audit date**: 2026-08-06
+
+**Reconciled**: 2026-08-29 after composite performance-score retirement
+
+**Scope**: Risks & Follow-Up tab sections — Risk Exposure By State, Projects Requiring Follow-Up, Reports Awaiting Approval, Approval Queue, Drafts In My Scope
+
+**Method**: Static code inspection (`performanceEngine.ts`, Dashboard routes, `dashboard.tsx`, and Dashboard locale resources)
+
+**Changes made**: Restored the authoritative audit report and reconciled statements made obsolete by composite performance-score retirement
+
 **Business-logic changes made**: None
 
 ---
 
 ## 1. Risk Exposure By State — Exact Formula
 
-**Endpoint**: `GET /api/dashboard/state-performance`  
-**Source function**: `computeStateScores()` in `artifacts/api-server/src/services/performanceEngine.ts`
+**Endpoint**: `GET /api/dashboard/state-performance`
 
-**riskLevel SQL CASE WHEN** (lines ~398–403):
+**Source function**: `computeStateImplementation()` in `artifacts/api-server/src/services/performanceEngine.ts`
+
+The State implementation query returns separate factual counts for active
+Critical and active High Risks:
+
 ```sql
-CASE
-  WHEN (SELECT COUNT(*) FROM risks
-        WHERE state_id = s.id
-          AND severity IN ('high','critical')
-          AND status <> 'closed') >= 2  THEN 'high'
-  WHEN (SELECT COUNT(*) FROM risks
-        WHERE state_id = s.id
-          AND severity IN ('high','critical')
-          AND status <> 'closed') >= 1  THEN 'medium'
-  ELSE 'low'
-END AS "riskLevel"
+COUNT(*) WHERE severity = 'critical'
+  AND status NOT IN ('closed','mitigated','resolved','cancelled')
+
+COUNT(*) WHERE severity = 'high'
+  AND status NOT IN ('closed','mitigated','resolved','cancelled')
 ```
 
-**Frontend mapping** (`dashboard.tsx` ~2411–2418):
-```typescript
-const riskByStateData = (states ?? [])
-  .map(s => ({
-    name:  s.stateName.replace(" State", ""),
-    risk:  s.riskLevel === "high" ? 3 : s.riskLevel === "medium" ? 2 : 1,
-    label: s.riskLevel === "high" ? "High" : s.riskLevel === "medium" ? "Medium" : "Low",
-  }))
-  .filter(s => s.risk > 1)   // excludes Low-risk states from chart
-  .slice(0, 8);
-```
+The same active-status boundary is used for `riskLevel`, `openRisks`, and the
+combined `criticalRisks` field. `riskLevel` is:
 
-**Y-axis mapping**: 1 → Low, 2 → Medium, 3 → High (3 levels only; Critical is not a separate bar).  
-**Included statuses**: All statuses except `closed`.  
-**Excluded statuses**: `closed` only.  
-**Multi-state project handling**: Risks attributed by `state_id` column. A risk belongs to exactly one state. Project-level risks with `state_id = null` are invisible in the chart.  
-**States with only Low risks**: Excluded from chart (`risk > 1` filter).  
-**States with no risks**: Excluded (riskLevel = "low" → numeric = 1 → filtered out).  
-**Chart limit**: 8 states maximum.  
-**Global filter effect**: Sector query param is accepted; state and date filters are not applied.
+- `high` when a State has at least two active High or Critical Risks;
+- `medium` when it has exactly one active High or Critical Risk;
+- `low` when it has none.
+
+The Risks & Follow-Up chart does not convert those values into an invented
+numeric index. It renders the separate `critOnlyRisks` and `highOnlyRisks`
+counts, excludes States where both counts are zero, sorts by the combined count
+descending with State name as the tie-breaker, and displays at most 10 States.
+
+Risks are attributed to a State through `risks.state_id`. A Project-linked Risk
+is included only when its canonical parent Project is in the caller's authorised
+population. A Risk with `state_id = null` cannot appear in a per-State chart.
+
+**Global filter effect**: `stateId` and `sector` are supported. Donor and date
+filters are rejected for this endpoint. Any accepted filter narrows the
+authenticated scope and cannot widen it.
 
 ---
 
 ## 2. Risk Severity Source and Mapping
 
-**Approved severity values** (confirmed from SQL WHERE clauses):
-- `low`, `medium`, `high`, `critical`
+**Stored severity values used by the chart**:
+
+- `low`
+- `medium`
+- `high`
+- `critical`
 
 **Chart representation**:
-- Low → excluded from chart (numeric 1, `risk > 1` filter)
-- Medium → bar at y=2, colour: `CC.riskMed`
-- High → bar at y=3, colour: `CC.riskHigh`
-- Critical → merged into the **High** bucket (severity IN ('high','critical') in CASE WHEN)
 
-**No invented metrics**: No Risk Exposure Score, Weighted Risk Index, State Risk Score, or arbitrary numeric weights are used.
+- Active Critical Risks are shown as a factual Critical count.
+- Active High Risks are shown as a factual High count.
+- Medium and Low Risks do not enter these two series.
+- Terminal Risks with status `closed`, `mitigated`, `resolved`, or `cancelled`
+  are excluded.
 
----
+The Project follow-up endpoint uses the canonical 3×3 Risk calculation for its
+`active_critical_risk` reason: likelihood and impact each map to 1–3, and a
+computed value of 9 is Critical. This is a Risk classification rule, not a
+Project or State performance calculation.
 
-## 3. Projects Needing Attention — Actual Criteria
-
-**Endpoint**: `GET /api/dashboard/attention-projects`  
-**Source**: `computeProjectScores()` + filter in `dashboard.ts` line ~1692
-
-**Exact filter** (all four conditions use logical OR):
-1. `tier === "critical"` → composite weighted score < 40
-2. `tier === "needs-follow-up"` → composite weighted score 40–59
-3. `criticalRisks > 0` → at least one active (not closed/mitigated) critical-severity risk on the project
-4. `recentReportStatus === "draft"` → the most recent non-draft submitted report has reverted to draft status
-
-**Approved project statuses included by `computeProjectScores`**: `active`, `approved`, `coordination_approved`, `technically_approved`, `submitted`  
-**Deduplication**: Each project appears once (SQL returns by `p.id`; no duplicate rows). ✓  
-**Display limit**: 20 from API; frontend shows up to 10 (`slice(0,10)`).
+No Risk Exposure Score, Weighted Risk Index, State Risk Score, or arbitrary
+cross-metric weighting is used.
 
 ---
 
-## 4. Performance Scores — Still Active in Attention Endpoint
+## 3. Projects Requiring Follow-Up — Actual Criteria
 
-**Finding**: The composite weighted score model (`computeWeightedScore`, `scoreTier`, weights W = {activityCompletion: 0.25, reportSubmission: 0.20, indicatorAchievement: 0.20, budgetUtilization: 0.15, riskManagement: 0.10, dataCompleteness: 0.10}) is **still active** in the `/dashboard/attention-projects` backend route.
+**Endpoint**: `GET /api/dashboard/attention-projects`
 
-**Tier thresholds** (from `scoreTier()` in `performanceEngine.ts`):
-- `excellent`: score ≥ 80
-- `good`: score 60–79
-- `needs-follow-up`: score 40–59
-- `critical`: score < 40
-- `insufficient`: fewer than 2 data components
+**Source**: Six factual condition queries in
+`artifacts/api-server/src/routes/dashboard.ts`
 
-The `tier === "critical"` and `tier === "needs-follow-up"` conditions in the attention filter directly depend on this composite score.
+A Project is included when at least one of these conditions is true:
 
-**Status**: Confirmed active. Per the approved Dashboard architecture (composite score removed from Dashboard tabs), this is a **Defect (RF-2)** requiring a separate approved correction.
+1. **`draft_project`** — the Project status is `draft`; reason count is 1.
+2. **`draft_project_report`** — one or more operational canonical reports
+   linked to the Project currently have status `draft`; reason count is the
+   number of distinct matching Report records.
+3. **`returned_report`** — one or more operational canonical reports linked to
+   the Project currently have status `draft` and their latest Approval action is
+   `request_revision`; reason count is the number of distinct matching Reports.
+4. **`report_awaiting_approval`** — one or more operational canonical reports
+   linked to the Project have an awaiting-approval status, a non-null
+   `submitted_at`, and were submitted more than 14 calendar days ago; reason
+   count is the number of distinct matching Reports.
+5. **`active_critical_risk`** — one or more Project Risks have a canonical 3×3
+   Risk value of 9 and are not terminal; reason count is the number of matching
+   Risks.
+6. **`overdue_risk_mitigation`** — one or more non-terminal Project Risks have a
+   non-null `due_date` earlier than `CURRENT_DATE`; reason count is the number
+   of distinct matching Risks.
+
+Canonical Report types are `project`, `activity`, `program_state`, and
+`hq_sector`. Report conditions also apply the operational-population boundary.
+Every condition starts from the same authorised, non-deleted Project
+population produced by `buildScope()` and `projectScopeWhere()`.
+
+The response contains only:
+
+- `projectId`
+- `projectCode`
+- `projectTitle`
+- `sector`
+- `followUpReasons[]`, where each reason has stable `code`, display-only
+  `label`, and factual `count`
+
+There is no API result limit. The frontend initially shows six Projects,
+supports expansion to the complete returned population, sorts by factual
+operational priority, and never classifies a Project through a composite
+performance result.
 
 ---
 
-## 5. Stalled Progress — Not Formally Defined
+## 4. Composite Performance Retirement Record
 
-**Finding**: "Stalled progress" has no formal definition in the codebase.
+Organisation, State, and Project composite performance scores are no longer
+manager-facing or live. The former six-component weighting model, classification
+bands, component weights, rankings, and three Dashboard score routes have been
+retired.
 
-The fourth attention criterion (`recentReportStatus === "draft"`) flags projects whose most recent submitted report has been returned to draft. This is a return-to-draft condition, not "stalled progress."
+`GET /api/dashboard/attention-projects` now derives inclusion exclusively from
+the six factual conditions documented in §3. Its response contains no composite
+value, classification band, component breakdown, or hidden threshold.
 
-No activity-ageing rule, no date-based threshold, and no formally approved "stalled" project state exists. **"Stalled Progress" is unsupported** as stated in the section description.
+The authoritative retirement contract is recorded in
+`docs/decisions/composite-performance-retirement.md`. The retained
+Indicator → Project → Sector hierarchy is a separate achievement hierarchy
+based on equal-weight averages of valid source rates; it does not restore the
+retired model.
 
-**Status**: **Defect (RF-3)** — description label corrected (see §12).
+---
+
+## 5. Stalled Progress Terminology
+
+"Stalled progress" is not a current follow-up condition or a current section
+description. No activity-ageing rule, generic inactivity threshold, or
+undocumented stalled-project state is used.
+
+The visible section description now states that Projects require follow-up for
+active Risks, incomplete records, or Reports requiring follow-up. Each rendered
+reason corresponds to one of the six factual codes in §3.
 
 ---
 
 ## 6. Project Deduplication Behaviour
 
-**Risk Exposure**: One SQL row per state (stateId is the primary key grouping). ✓  
-**Attention Projects**: `computeProjectScores` returns each project once by `p.id`. The filter is applied in-memory after the SQL fetch; no row multiplication. ✓  
-**Overdue Reports**: One SQL row per report (`r.id` is unique). ✓  
-**Approval Queue**: Projects and reports each return one row per `p.id`/`r.id`. ✓  
-**My Drafts**: One row per draft record. Totals are simple array lengths (no double-counting). ✓
+**Risk Exposure**: The State implementation response contains one aggregate row
+per State. ✓
+
+**Projects Requiring Follow-Up**: Each condition query can return a Project, but
+the route merges results into a `Map` keyed by `projectId`. A Project therefore
+appears once, with all applicable reasons accumulated in `followUpReasons`.
+Reason counts preserve the number of matching source records. ✓
+
+**Reports Awaiting Approval**: The route returns one row per Report ID. ✓
+
+**Approval Queue**: Project and Report queries each return one row per entity
+ID. ✓
+
+**Drafts In My Scope**: Each source list is counted separately by entity/report
+type; the displayed total is the arithmetic sum of those mutually separated
+lists. ✓
+
+Follow-up reason categories may overlap. The unique Project count is the
+response-array length; category totals are sums of `reason.count` and must not
+be added together to infer a unique Project total.
 
 ---
 
-## 7. Overdue Report Rule
+## 7. Reports Awaiting Approval Rule
 
-**Endpoint**: `GET /api/dashboard/late-reports`  
-**Threshold**: `submitted_at < NOW() - INTERVAL '14 days'` (strict, calendar days)  
-**Included statuses**: `submitted`, `coordination_approved`, `technically_approved`  
-**Excluded statuses**: `approved`, `rejected`, `draft`, `returned`  
-**Days waiting**: `EXTRACT(day FROM NOW() - r.submitted_at)::int` — always ≥ 0 for included records  
-**Weekend handling**: Calendar days (no business-day adjustment)  
-**Order**: Ascending by `submitted_at` (oldest first)  
-**Limit**: 30 reports  
-**Scope**: `userScope(req)` — state and sector from authenticated user; no global dashboard filter effect  
-**14-day origin**: Dashboard-specific threshold introduced in this endpoint; not cross-referenced to a separately approved business rule document
+**Endpoint**: `GET /api/dashboard/late-reports`
+
+**Threshold**: `submitted_at < NOW() - INTERVAL '14 days'` (strict, calendar days)
+
+**Included statuses**: `submitted`, `state_reviewed`,
+`technically_approved`, `coordination_approved`
+
+**Included Report types**: `project`, `activity`, `program_state`, `hq_sector`
+
+**Days waiting**: `EXTRACT(day FROM NOW() - submitted_at)::int`
+
+**Weekend handling**: Calendar days; there is no business-day adjustment
+
+**Order**: Ascending by `submitted_at` in the API; the panel sorts the returned
+rows by days waiting descending with title as a deterministic tie-breaker
+
+**Limit**: 30 Reports
+
+**Scope**: Canonical Report scope from the authenticated user's State, sector,
+and assignment restrictions; deleted Project parents and non-operational
+Reports are excluded
+
+**Global filter effect**: None; unsupported Dashboard filter parameters are
+rejected
+
+The 14-day threshold is Dashboard-specific and is not presented here as the
+Monthly Reporting Deadline Engine's deadline rule.
 
 ---
 
@@ -141,123 +220,175 @@ No activity-ageing rule, no date-based threshold, and no formally approved "stal
 
 **Endpoint**: `GET /api/dashboard/pending-approvals`
 
-**Project inclusion**: `status NOT IN ('approved', 'rejected', 'draft')`  
-→ includes: `submitted`, `coordination_approved`, `technically_approved`, `active`, `returned`
+Only workflow items actionable by the authenticated role are returned:
 
-**Report inclusion**: `status NOT IN ('approved', 'rejected', 'draft')`  
-→ includes: `submitted`, `coordination_approved`, `technically_approved`, `returned`
+| Role | Project statuses | Report conditions |
+|---|---|---|
+| Technical Coordinator | `submitted` | State-authored Project/Activity Reports at `submitted` or `state_reviewed` |
+| Senior Programme Coordinator | `technically_approved` | State-authored Project/Activity Reports at `technically_approved`; technically authored Project/Activity Reports at `submitted`; State Programme and HQ Sector Reports at `submitted` |
+| Programme Manager | `coordination_approved` | Reports at `coordination_approved` |
+| Super Administrator | `submitted`, `technically_approved`, `coordination_approved` | All canonical Reports in an awaiting-approval status |
+| Other roles | none | none |
 
-**Role check**: **None**. The endpoint does not verify that the current user's role is the designated next approver for each item. All pending items in the user's authorized scope are returned.
+Project results use `buildScope()` and Report results use canonical Report
+scope. Roles outside the approval workflow receive empty arrays. Each query is
+limited to 20 items. Report `approvalHistory` is omitted because this endpoint
+does not source approval-history records; it is not returned as a misleading
+empty array.
 
-**approvalHistory**: Always `[]` for all report items. Approval history is not populated.
-
-**Scope**: `projectScopeWhere(scope, "p", 1)` + state/sector filter for reports. No global dashboard filter effect.
+**Global filter effect**: None; unsupported Dashboard filter parameters are
+rejected.
 
 ---
 
-## 9. My Drafts Ownership Logic
+## 9. Drafts In My Scope Ownership Logic
 
-**Endpoints**: `GET /api/projects?status=draft` + `GET /api/reports?status=draft&reportType=*`
+The widget deliberately uses the label **Drafts In My Scope**, not "My Drafts."
+It lists records visible through each module's canonical authorised-scope
+endpoint; it is role/scoping based rather than a claim that the current user
+created every record.
 
-**Ownership model**: **Role-scoped** (not creator-scoped). All draft records within the user's authorized state/sector scope are returned, including records created by colleagues.
+**Categories**:
 
-**Creator ownership** is enforced only for draft **deletion** (`submitted_by_id = current_user_id`), not for listing.
+1. Draft Projects
+2. Draft Plans
+3. Draft Project Reports
+4. Draft Activity Reports
+5. Draft HQ Sector Reports
+6. Draft State Programme Reports
 
-**Categories** (mutually exclusive):
-1. Projects (`/api/projects?status=draft`)
-2. Project Reports (`/api/reports?status=draft&reportType=project`)
-3. HQ/Sector Reports (`/api/reports?status=draft&reportType=hq_sector`)
-4. Programme/State Reports (`/api/reports?status=draft&reportType=program_state`)
-
-**Total**: Arithmetic sum of four categories (confirmed mutually exclusive). ✓
+The six categories are queried independently and the displayed total is their
+arithmetic sum. Query failure is rendered as an error state rather than being
+silently converted to an authoritative zero.
 
 ---
 
 ## 10. Global Filter Support By Section
 
-| Section | State Filter | Sector Filter | Date Filter |
-|---|---|---|---|
-| Risk Exposure By State | Not Supported | Partially Supported (sector query param to state-performance endpoint) | Not Supported |
-| Projects Needing Attention | Not Supported | Not Supported | Not Supported |
-| Overdue Reports | Not Supported | Not Supported | Not Supported |
-| Approval Queue | Not Supported | Not Supported | Not Supported |
-| My Drafts | Not Supported | Not Supported | Not Supported |
+| Section | State Filter | Sector Filter | Donor Filter | Date Filter |
+|---|---|---|---|---|
+| Risk Exposure By State | Supported | Supported | Not Supported | Not Supported |
+| Projects Requiring Follow-Up | Not Supported | Not Supported | Not Supported | Not Supported |
+| Reports Awaiting Approval | Not Supported | Not Supported | Not Supported | Not Supported |
+| Approval Queue | Not Supported | Not Supported | Not Supported | Not Supported |
+| Drafts In My Scope | Not Supported by the Dashboard filter bar | Not Supported by the Dashboard filter bar | Not Supported | Not Supported |
 
-All sections use `userScope(req)` or `buildScope(req)` which derives scope exclusively from the authenticated user's role, state, and sector assignments. Global dashboard UI filters (state dropdown, sector dropdown, date range) do not affect any Risks & Follow-Up section. The "Filters Apply To Supported Metrics" notice in the UI is correct.
+State and sector filters sent to State implementation metrics are validated and
+clamped to the caller's authorised scope. Endpoints with no filter support use
+an empty allow-list and reject supplied Dashboard filter parameters instead of
+silently ignoring them.
+
+All sections still apply canonical backend authorisation independently of the
+global filter bar. Frontend filtering is never the security boundary.
 
 ---
 
 ## 11. Authorised Scope Enforcement
 
-| Endpoint | Scope mechanism | Override via query param |
+| Endpoint | Scope mechanism | Query-param narrowing |
 |---|---|---|
-| `/dashboard/state-performance` | `userScope(req)` + optional `sector` query param (narrows, never expands) | Sector only, within user's authorised sectors |
-| `/dashboard/attention-projects` | `buildScope(req)` → `projectScopeWhere()` | No |
-| `/dashboard/late-reports` | `userScope(req)` → state/sector WHERE clauses | No |
-| `/dashboard/pending-approvals` | `userScope(req)` → `projectScopeWhere()` + state/sector filter | No |
-| `GET /api/projects?status=draft` | Role-based visibility in `projects.ts` | No |
-| `GET /api/reports?status=draft` | Role-based scope in `reports.ts` | No |
+| `/dashboard/state-performance` | `buildScope()`; assignment-scoped officers are denied because a partial portfolio cannot truthfully represent a State aggregate | `stateId` and `sector`, within authorised scope |
+| `/dashboard/attention-projects` | `buildScope()` → `projectScopeWhere()` | None |
+| `/dashboard/late-reports` | `userScope()` → canonical Report scope | None |
+| `/dashboard/pending-approvals` | role-step allow-list plus Project/Report scope | None |
+| Draft Project and Plan lists | module-specific authorised visibility | Module query only |
+| Draft Report lists | canonical Report visibility by Report type and status | Module query only |
 
-`AND FALSE` is applied for Technical Coordinators with an empty sector assignment — zero results, no data leakage. ✓  
-Backend scope is applied before aggregation, not after. ✓  
-Frontend filtering is not the security boundary. ✓
+State roles with no State assignment and Technical Coordinators with no sector
+assignment fail closed. State Programme Officers are restricted to explicitly
+assigned Projects where Project-level aggregation is valid. Backend scope is
+applied before aggregation, and Project-linked child records cannot widen
+access through their own optional fields. ✓
 
 ---
 
-## 12. Confirmed Defects
+## 12. Confirmed Findings After Reconciliation
 
-| ID | Section | Description | Severity |
-|---|---|---|---|
-| RF-1 | Risk Exposure | riskLevel CASE WHEN excludes only `closed`; mitigated/resolved/cancelled risks still count toward the displayed risk level. The `openRisks` and `criticalRisks` sub-counts in the same query correctly use `NOT IN ('closed','mitigated')`. Inconsistency. | Medium |
-| RF-2 | Attention Projects | Composite weighted score model (6 dimensions, W = {0.25, 0.20, 0.20, 0.15, 0.10, 0.10}) is still active in `/dashboard/attention-projects`. Per the approved architecture, this model was to be removed from Dashboard tabs. | Medium |
-| RF-3 | Attention Projects | Description "stalled progress" has no formal code definition. Actual fourth criterion is `recentReportStatus === "draft"`. **Corrected**: description label updated to "Active critical risks, low tier score, or recent report in draft". | Low (label) |
-| RF-4 | Overdue Reports | "View All Reports" link goes to `/reports/project` — no overdue filter applied, and hq_sector/program_state report types are omitted. | Low |
-| RF-5 | Approval Queue | Returns all pending items in user's scope regardless of whether the current user's role is the designated next approver. Projects with status `active` (already approved) are included. Description "Items awaiting your action" is not factually correct for all returned items. | High |
-| RF-6 | My Drafts | Label "My Drafts" is inaccurate — widget shows all role-scoped drafts including colleagues' records. Only draft deletion enforces creator ownership. | Medium |
-| RF-7 | Approval Queue | `approvalHistory` is always `[]` for all report items — approval history not populated from the database. | Low |
+The score-related findings in the original audit are resolved:
+
+- The unsupported composite model no longer feeds Projects Requiring Follow-Up.
+- The State risk chart uses separate factual Critical and High counts with a
+  consistent terminal-status exclusion.
+- The unsupported "stalled progress" description is gone.
+- Approval Queue results are restricted to the authenticated role's actionable
+  workflow step; approved/active Projects are not returned as pending.
+- Report approval history is omitted when unavailable rather than represented
+  as an empty sourced history.
+- The draft widget is labelled "Drafts In My Scope" and includes all six
+  documented categories.
+- Report-list footer links cover Project, Activity, HQ Sector, and State
+  Programme Reports.
+
+No unresolved composite-score defect remains in this audit's current live
+surface. The interpretation and source-data cautions in §14 remain valid.
 
 ---
 
 ## 13. Unsupported Calculations or Labels
 
-1. **"Low performance scores"** (attention projects description) — references the composite score model. Corrected to "low tier score" to reflect the actual tier classification used.
-2. **"Stalled progress"** (attention projects description) — no formal definition in code. Corrected to "recent report in draft."
-3. **"Items awaiting your action"** (approval queue description) — overstates actionability; items not at the user's approval step are included. Requires Business Logic correction to resolve.
+The current live Risks & Follow-Up surface does not use:
+
+1. low-performance classification as a Project follow-up reason;
+2. undocumented cross-metric thresholds;
+3. a generic "stalled progress" reason;
+4. component weighting or ranking for Project attention;
+5. creator ownership implied by a "My Drafts" label.
+
+Projects Requiring Follow-Up uses stable factual reason codes, Approval Queue
+copy describes role-actionable items, and Drafts In My Scope describes
+authorised visibility rather than authorship.
 
 ---
 
-## 14. Data Quality Issues
+## 14. Data Quality and Interpretation Notes
 
-1. **Project-level risks with `state_id = null`**: Invisible in the Risk Exposure chart. If a risk is recorded against a project but without a state assignment, it does not appear in any state's risk exposure display.
-2. **`recentReportStatus === "draft"`**: A project flagged for this reason may not have a genuinely problematic report — a newly created draft report that has never been submitted would also trigger this criterion.
-3. **14-day overdue threshold**: Dashboard-specific; not cross-referenced to a separately approved policy document.
+1. **Risks without a State**: A Risk with `state_id = null` cannot appear in the
+   per-State Risk Exposure chart, even when linked to a Project. This is a
+   source-data limitation of a State-attributed display.
+2. **Overlapping follow-up categories**: A returned Report can also be a draft
+   Report, and a Project can have several different factual reasons. The API
+   intentionally returns one Project with multiple reasons; category totals
+   are not mutually exclusive.
+3. **Fourteen-day threshold**: The Reports Awaiting Approval threshold is a
+   Dashboard-specific calendar-day rule. It is separate from the Monthly
+   Reporting Deadline Engine.
+4. **Unavailable data**: Pending or failed source queries are not evidence of
+   zero. The UI preserves an unavailable/error state instead of manufacturing a
+   factual count.
 
 ---
 
 ## 15. Recommended Corrections Requiring Approval
 
-| Priority | Correction | Scope |
+No score-related correction remains to be approved.
+
+The remaining items are data-governance or policy-documentation questions, not
+changes performed by this audit:
+
+| Priority | Question | Scope |
 |---|---|---|
-| High | Approval Queue: add role-step check — return only items where the current user's role is the designated next approver | Backend Business Logic |
-| High | Approval Queue: exclude `active` status projects (already approved, not pending) | Backend Business Logic |
-| Medium | Risk Level CASE WHEN: exclude `mitigated`, `resolved`, `cancelled` consistently with `openRisks`/`criticalRisks` counts | Backend Business Logic |
-| Medium | Attention Projects: decide whether to retain or remove the composite score model; if removed, replace `tier` criteria with factual field-based rules | Backend Business Logic |
-| Medium | My Drafts: either add creator-filter (`submitted_by_id = current_user_id`) or rename to "Drafts in My Scope" | Backend + UI |
-| Low | View All Reports: navigate to a filtered list showing overdue/pending reports across all types, or remove the link | Frontend |
-| Low | Approval Queue: populate `approvalHistory` from the database for report items | Backend |
+| Medium | Decide whether every Risk expected in a per-State chart must have a canonical `state_id` | Data governance |
+| Low | Cross-reference the Dashboard's 14-calendar-day awaiting-approval rule to an approved policy source, if one exists | Policy documentation |
+
+No new business rule is proposed here.
 
 ---
 
 ## Final Verification
 
-- ✅ No unsupported Project Performance Score is treated as an approved attention reason *(composite score still used in backend — Defect RF-2 reported)*
-- ✅ Stalled Progress is reported as unsupported; description label corrected
-- ✅ Risk Exposure is based on documented factual Risk data (severity + status counts)
-- ✅ Projects are deduplicated (one row per project in all SQL queries)
-- ✅ Overdue Reports use the documented 14-day rule (`submitted_at < NOW() - INTERVAL '14 days'`)
-- ⚠️ Approval Queue — description "Items awaiting your action" is not fully factual (Defect RF-5)
-- ⚠️ My Drafts — "My" label is not fully factual for role-scoped ownership (Defect RF-6)
-- ✅ Filters do not falsely claim unsupported coverage ("Filters Apply To Supported Metrics" notice present)
-- ✅ Backend scope applied before aggregation
-- ✅ Failed queries return `undefined`, not `0`; no conversion of failure to zero
-- ✅ No API, database, RBAC, permission, workflow or source-data change was made
+- ✅ Organisation, State, and Project composite performance scores are retired
+  from live manager-facing Dashboard behavior.
+- ✅ Projects Requiring Follow-Up uses only the six factual reasons in §3.
+- ✅ Projects are deduplicated by Project ID while factual source-record counts
+  are preserved per reason.
+- ✅ Risk Exposure uses separate active Critical and High counts with consistent
+  terminal-status exclusion.
+- ✅ Reports Awaiting Approval use the documented strict 14-calendar-day rule.
+- ✅ Approval Queue returns role-actionable items in authorised scope.
+- ✅ Drafts In My Scope accurately describes role-scoped visibility and covers
+  six categories.
+- ✅ Unsupported Dashboard filter parameters are rejected.
+- ✅ Backend scope is applied before aggregation.
+- ✅ Failed or unavailable queries are not converted into authoritative zeroes.
+- ✅ No API, database, RBAC, permission, workflow, source-data, Dashboard, or
+  Monthly Reporting Deadline Engine behavior was changed by this correction.

@@ -1588,47 +1588,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardAgenda"
 
-  /dashboard/performance:
+  /dashboard/sector-snapshot:
     get:
-      operationId: getDashboardPerformance
+      operationId: getDashboardSectorSnapshot
       tags: [dashboard]
-      summary: Organization-wide (or scoped) 6-component weighted performance score
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/PerformanceScore" }
-
-  /dashboard/performance/states:
-    get:
-      operationId: getDashboardPerformanceStates
-      tags: [dashboard]
-      summary: Per-state performance scores sorted by rank (descending)
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/StatePerformance" }
-
-  /dashboard/performance/projects:
-    get:
-      operationId: getDashboardPerformanceProjects
-      tags: [dashboard]
-      summary: Per-project performance scores sorted by rank (descending)
+      summary: Authorised HQ Sector Report snapshot for one canonical sector
       parameters:
-        - { in: query, name: limit, schema: { type: integer, minimum: 10, maximum: 100, default: 50 } }
+        - { name: sector, in: query, required: true, schema: { type: string } }
       responses:
         "200":
           description: OK
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/ProjectPerformanceScore" }
+              schema: { $ref: "#/components/schemas/DashboardSectorSnapshot" }
+        "400":
+          description: Missing or invalid sector
+        "403":
+          description: Sector is outside the caller's authorised scope
 
   /dashboard/attention-projects:
     get:
@@ -1643,6 +1619,24 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/FollowUpProject" }
+
+  /dashboard/hierarchical-performance:
+    get:
+      operationId: getDashboardHierarchicalPerformance
+      tags: [dashboard]
+      summary: Equal-weight Indicator to Project to Sector achievement hierarchy
+      parameters:
+        - { in: query, name: stateId, schema: { type: integer } }
+        - { in: query, name: sector, schema: { type: string } }
+        - { in: query, name: donor, schema: { type: string } }
+        - { in: query, name: dateFrom, schema: { type: string, format: date } }
+        - { in: query, name: dateTo, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HierarchicalPerformance" }
 
   /dashboard/late-reports:
     get:
@@ -4619,25 +4613,6 @@ components:
               target: { type: integer }
               achieved: { type: integer }
 
-    ComponentScores:
-      type: object
-      properties:
-        activityCompletion:   { type: number, nullable: true }
-        reportSubmission:     { type: number, nullable: true }
-        indicatorAchievement: { type: number, nullable: true }
-        budgetUtilization:    { type: number, nullable: true }
-        riskManagement:       { type: number, nullable: true }
-        dataCompleteness:     { type: number, nullable: true }
-
-    PerformanceScore:
-      type: object
-      required: [tier, dataAvailable, components]
-      properties:
-        overallScore: { type: number, nullable: true }
-        tier: { type: string }
-        dataAvailable: { type: boolean }
-        components: { $ref: "#/components/schemas/ComponentScores" }
-
     FollowUpReasonCode:
       type: string
       enum:
@@ -4673,24 +4648,6 @@ components:
         followUpReasons:
           type: array
           items: { $ref: "#/components/schemas/FollowUpReason" }
-
-    ProjectPerformanceScore:
-      type: object
-      required: [projectId, projectCode, projectTitle, sector, stateNames, status, tier, components]
-      properties:
-        projectId:   { type: integer }
-        projectCode: { type: string }
-        projectTitle: { type: string }
-        sector:      { type: string }
-        stateNames:  { type: array, items: { type: string } }
-        status:      { type: string }
-        overallScore: { type: number, nullable: true }
-        tier:        { type: string }
-        components:  { $ref: "#/components/schemas/ComponentScores" }
-        activityCount:        { type: integer }
-        openRisks:            { type: integer }
-        criticalRisks:        { type: integer }
-        recentReportStatus:   { type: string, nullable: true }
 
     LateReport:
       type: object
@@ -4830,29 +4787,210 @@ components:
 
     StatePerformance:
       type: object
-      required: [stateId, stateName, activeProjects, beneficiaries, progressPct, riskLevel]
+      required:
+        - stateId
+        - stateName
+        - stateNameAr
+        - totalProjects
+        - activeProjects
+        - beneficiaries
+        - progressPct
+        - budgetUtilizationPct
+        - activityCompletionPct
+        - reportingCompliancePct
+        - riskLevel
+        - openRisks
+        - criticalRisks
+        - critOnlyRisks
+        - highOnlyRisks
+        - reportsSubmitted
+        - reportsPending
       properties:
         stateId: { type: integer }
         stateName: { type: string }
         stateNameAr: { type: ["string", "null"], description: "Canonical Arabic State label for locale-aware display." }
+        totalProjects: { type: integer }
         activeProjects: { type: integer }
         beneficiaries: { type: integer }
-        budgetUtilizationPct: { type: integer, nullable: true }
+        budgetUtilizationPct: { type: ["integer", "null"], description: "Always null until an approved State-level expenditure source exists." }
         progressPct: { type: integer }
         riskLevel: { type: string }
         openRisks: { type: integer }
         criticalRisks: { type: integer }
+        critOnlyRisks: { type: integer }
+        highOnlyRisks: { type: integer }
         reportsSubmitted: { type: integer }
         reportsPending: { type: integer }
-        activityCompletionPct: { type: integer }
-        reportingCompliancePct: { type: integer }
-        performanceScore: { type: number, nullable: true }
-        performanceTier: { type: string }
-        components: { $ref: "#/components/schemas/ComponentScores" }
-        currentScore: { type: number, nullable: true }
-        previousScore: { type: number, nullable: true }
-        scoreDifference: { type: number, nullable: true }
-        trendDirection: { type: string, nullable: true }
+        activityCompletionPct: { type: ["integer", "null"] }
+        reportingCompliancePct: { type: ["integer", "null"] }
+
+    HierarchicalProjectPerformance:
+      type: object
+      required:
+        - projectId
+        - projectCode
+        - projectTitle
+        - sector
+        - stateNames
+        - validIndicatorCount
+        - missingIndicatorCount
+        - projectAchievementRate
+      properties:
+        projectId: { type: integer }
+        projectCode: { type: string }
+        projectTitle: { type: string }
+        sector: { type: ["string", "null"] }
+        stateNames: { type: array, items: { type: string } }
+        validIndicatorCount: { type: integer }
+        missingIndicatorCount: { type: integer }
+        projectAchievementRate:
+          type: ["number", "null"]
+          description: Equal-weight average of valid indicator achievement rates; overachievement is preserved.
+
+    HierarchicalSectorPerformance:
+      type: object
+      required:
+        - sector
+        - projectCount
+        - validProjectCount
+        - insufficientProjectCount
+        - sectorAchievementRate
+        - projects
+      properties:
+        sector: { type: ["string", "null"] }
+        projectCount: { type: integer }
+        validProjectCount: { type: integer }
+        insufficientProjectCount: { type: integer }
+        sectorAchievementRate:
+          type: ["number", "null"]
+          description: Equal-weight average of valid Project achievement rates.
+        projects:
+          type: array
+          items: { $ref: "#/components/schemas/HierarchicalProjectPerformance" }
+
+    HierarchicalPerformance:
+      type: object
+      required: [averageSectorAchievementRate, validSectorCount, validProjectCount, sectors]
+      properties:
+        averageSectorAchievementRate:
+          type: ["number", "null"]
+          description: Equal-weight average of valid Sector achievement rates.
+        validSectorCount: { type: integer }
+        validProjectCount: { type: integer }
+        sectors:
+          type: array
+          items: { $ref: "#/components/schemas/HierarchicalSectorPerformance" }
+
+    DashboardSectorSnapshot:
+      type: object
+      required:
+        - snapshot
+        - stateSummaries
+        - projectSummaries
+        - beneficiaryBreakdown
+        - beneficiaryByState
+        - beneficiaryByProject
+        - beneficiaryByDonor
+        - indicators
+      properties:
+        snapshot:
+          type: object
+          required: [activeProjects, activeStates, activeLocalities, activitiesImplemented, beneficiariesReached, indicatorProgressPct, delayedActivities, openRisks, pendingApprovals]
+          properties:
+            activeProjects: { type: integer }
+            activeStates: { type: integer }
+            activeLocalities: { type: integer }
+            activitiesImplemented: { type: integer }
+            beneficiariesReached: { type: integer }
+            indicatorProgressPct: { type: number }
+            delayedActivities: { type: integer }
+            openRisks: { type: integer }
+            pendingApprovals: { type: integer }
+        stateSummaries:
+          type: array
+          items:
+            type: object
+            required: [stateId, stateName, stateNameAr, projects, activities, beneficiaries, progressPct, openRisks]
+            properties:
+              stateId: { type: integer }
+              stateName: { type: string }
+              stateNameAr: { type: ["string", "null"] }
+              projects: { type: integer }
+              activities: { type: integer }
+              beneficiaries: { type: integer }
+              progressPct: { type: integer }
+              openRisks: { type: integer }
+        projectSummaries:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [id, code, title, donor, progressPct, beneficiaries, budgetUtilizationPct, riskLevel]
+            properties:
+              id: { type: integer }
+              code: { type: string }
+              title: { type: string }
+              donor: { type: ["string", "null"] }
+              progressPct: { type: integer }
+              beneficiaries: { type: integer }
+              budgetUtilizationPct: { type: integer }
+              riskLevel: { type: string }
+        beneficiaryBreakdown:
+          $ref: "#/components/schemas/DashboardBeneficiaryBreakdown"
+        beneficiaryByState:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/DashboardBeneficiaryBreakdown"
+              - type: object
+                required: [stateId, stateName, stateNameAr, total]
+                properties:
+                  stateId: { type: integer }
+                  stateName: { type: string }
+                  stateNameAr: { type: ["string", "null"] }
+                  total: { type: integer }
+        beneficiaryByProject:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/DashboardBeneficiaryBreakdown"
+              - type: object
+                required: [code, title, total]
+                properties:
+                  code: { type: string }
+                  title: { type: string }
+                  total: { type: integer }
+        beneficiaryByDonor:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/DashboardBeneficiaryBreakdown"
+              - type: object
+                required: [donor, total]
+                properties:
+                  donor: { type: string }
+                  total: { type: integer }
+        indicators:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [name, target, achieved, progressPct, status]
+            properties:
+              name: { type: string }
+              target: { type: number }
+              achieved: { type: number }
+              progressPct: { type: integer }
+              status: { type: string }
+
+    DashboardBeneficiaryBreakdown:
+      type: object
+      required: [men, women, boys, girls]
+      properties:
+        men: { type: integer }
+        women: { type: integer }
+        boys: { type: integer }
+        girls: { type: integer }
 
     DashboardNotificationsSummary:
       type: object

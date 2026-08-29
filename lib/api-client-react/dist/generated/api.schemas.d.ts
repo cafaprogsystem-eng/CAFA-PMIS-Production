@@ -2473,20 +2473,6 @@ export interface DashboardSummary {
     /** Verified monthly achievement series. Empty when the source system has no dated, validated time-series data; consumers must render an unavailable state, not zero. */
     monthlyAchievement: DashboardSummaryMonthlyAchievementItem[];
 }
-export interface ComponentScores {
-    activityCompletion?: number | null;
-    reportSubmission?: number | null;
-    indicatorAchievement?: number | null;
-    budgetUtilization?: number | null;
-    riskManagement?: number | null;
-    dataCompleteness?: number | null;
-}
-export interface PerformanceScore {
-    overallScore?: number | null;
-    tier: string;
-    dataAvailable: boolean;
-    components: ComponentScores;
-}
 export type FollowUpReasonCode = (typeof FollowUpReasonCode)[keyof typeof FollowUpReasonCode];
 export declare const FollowUpReasonCode: {
     readonly draft_project: "draft_project";
@@ -2512,21 +2498,6 @@ export interface FollowUpProject {
     projectTitle: string;
     sector: string;
     followUpReasons: FollowUpReason[];
-}
-export interface ProjectPerformanceScore {
-    projectId: number;
-    projectCode: string;
-    projectTitle: string;
-    sector: string;
-    stateNames: string[];
-    status: string;
-    overallScore?: number | null;
-    tier: string;
-    components: ComponentScores;
-    activityCount?: number;
-    openRisks?: number;
-    criticalRisks?: number;
-    recentReportStatus?: string | null;
 }
 export interface LateReport {
     id: number;
@@ -2657,25 +2628,139 @@ export interface StatePerformance {
      * Canonical Arabic State label for locale-aware display.
      * @nullable
      */
-    stateNameAr?: string | null;
+    stateNameAr: string | null;
+    totalProjects: number;
     activeProjects: number;
     beneficiaries: number;
-    budgetUtilizationPct?: number | null;
+    /**
+     * Always null until an approved State-level expenditure source exists.
+     * @nullable
+     */
+    budgetUtilizationPct: number | null;
     progressPct: number;
     riskLevel: string;
-    openRisks?: number;
-    criticalRisks?: number;
-    reportsSubmitted?: number;
-    reportsPending?: number;
-    activityCompletionPct?: number;
-    reportingCompliancePct?: number;
-    performanceScore?: number | null;
-    performanceTier?: string;
-    components?: ComponentScores;
-    currentScore?: number | null;
-    previousScore?: number | null;
-    scoreDifference?: number | null;
-    trendDirection?: string | null;
+    openRisks: number;
+    criticalRisks: number;
+    critOnlyRisks: number;
+    highOnlyRisks: number;
+    reportsSubmitted: number;
+    reportsPending: number;
+    /** @nullable */
+    activityCompletionPct: number | null;
+    /** @nullable */
+    reportingCompliancePct: number | null;
+}
+export interface HierarchicalProjectPerformance {
+    projectId: number;
+    projectCode: string;
+    projectTitle: string;
+    /** @nullable */
+    sector: string | null;
+    stateNames: string[];
+    validIndicatorCount: number;
+    missingIndicatorCount: number;
+    /**
+     * Equal-weight average of valid indicator achievement rates; overachievement is preserved.
+     * @nullable
+     */
+    projectAchievementRate: number | null;
+}
+export interface HierarchicalSectorPerformance {
+    /** @nullable */
+    sector: string | null;
+    projectCount: number;
+    validProjectCount: number;
+    insufficientProjectCount: number;
+    /**
+     * Equal-weight average of valid Project achievement rates.
+     * @nullable
+     */
+    sectorAchievementRate: number | null;
+    projects: HierarchicalProjectPerformance[];
+}
+export interface HierarchicalPerformance {
+    /**
+     * Equal-weight average of valid Sector achievement rates.
+     * @nullable
+     */
+    averageSectorAchievementRate: number | null;
+    validSectorCount: number;
+    validProjectCount: number;
+    sectors: HierarchicalSectorPerformance[];
+}
+export type DashboardSectorSnapshotSnapshot = {
+    activeProjects: number;
+    activeStates: number;
+    activeLocalities: number;
+    activitiesImplemented: number;
+    beneficiariesReached: number;
+    indicatorProgressPct: number;
+    delayedActivities: number;
+    openRisks: number;
+    pendingApprovals: number;
+};
+export type DashboardSectorSnapshotStateSummariesItem = {
+    stateId: number;
+    stateName: string;
+    /** @nullable */
+    stateNameAr: string | null;
+    projects: number;
+    activities: number;
+    beneficiaries: number;
+    progressPct: number;
+    openRisks: number;
+};
+export type DashboardSectorSnapshotProjectSummariesItem = {
+    id: number;
+    code: string;
+    title: string;
+    /** @nullable */
+    donor: string | null;
+    progressPct: number;
+    beneficiaries: number;
+    budgetUtilizationPct: number;
+    riskLevel: string;
+};
+export interface DashboardBeneficiaryBreakdown {
+    men: number;
+    women: number;
+    boys: number;
+    girls: number;
+}
+export type DashboardSectorSnapshotBeneficiaryByStateItem = DashboardBeneficiaryBreakdown & {
+    stateId: number;
+    stateName: string;
+    /** @nullable */
+    stateNameAr: string | null;
+    total: number;
+};
+export type DashboardSectorSnapshotBeneficiaryByProjectItem = DashboardBeneficiaryBreakdown & {
+    code: string;
+    title: string;
+    total: number;
+};
+export type DashboardSectorSnapshotBeneficiaryByDonorItem = DashboardBeneficiaryBreakdown & {
+    donor: string;
+    total: number;
+};
+export type DashboardSectorSnapshotIndicatorsItem = {
+    name: string;
+    target: number;
+    achieved: number;
+    progressPct: number;
+    status: string;
+};
+export interface DashboardSectorSnapshot {
+    snapshot: DashboardSectorSnapshotSnapshot;
+    stateSummaries: DashboardSectorSnapshotStateSummariesItem[];
+    /** @maxItems 20 */
+    projectSummaries: DashboardSectorSnapshotProjectSummariesItem[];
+    beneficiaryBreakdown: DashboardBeneficiaryBreakdown;
+    beneficiaryByState: DashboardSectorSnapshotBeneficiaryByStateItem[];
+    beneficiaryByProject: DashboardSectorSnapshotBeneficiaryByProjectItem[];
+    beneficiaryByDonor: DashboardSectorSnapshotBeneficiaryByDonorItem[];
+    /** @maxItems 20 */
+    indicators: DashboardSectorSnapshotIndicatorsItem[];
 }
 export type DashboardNotificationsSummaryByModuleItem = {
     module: string;
@@ -3834,12 +3919,15 @@ export type GetSectorBudgetParams = {
     dateFrom?: string;
     dateTo?: string;
 };
-export type GetDashboardPerformanceProjectsParams = {
-    /**
-     * @minimum 10
-     * @maximum 100
-     */
-    limit?: number;
+export type GetDashboardSectorSnapshotParams = {
+    sector: string;
+};
+export type GetDashboardHierarchicalPerformanceParams = {
+    stateId?: number;
+    sector?: string;
+    donor?: string;
+    dateFrom?: string;
+    dateTo?: string;
 };
 export type GetPmrReportingCompletenessParams = {
     projectId?: number;

@@ -49,6 +49,7 @@ import type {
   CurrentUser,
   DashboardAgenda,
   DashboardNotificationsSummary,
+  DashboardSectorSnapshot,
   DashboardSummary,
   DeleteUser200,
   Donor,
@@ -64,7 +65,8 @@ import type {
   GetBeneficiariesBreakdownParams,
   GetConsolidatedProjectReportParams,
   GetConversationsUnreadCount200,
-  GetDashboardPerformanceProjectsParams,
+  GetDashboardHierarchicalPerformanceParams,
+  GetDashboardSectorSnapshotParams,
   GetDashboardSummaryParams,
   GetLegacyStorageEvidenceInventoryParams,
   GetPmrReportingCompletenessParams,
@@ -72,6 +74,7 @@ import type {
   GetStatePerformanceParams,
   GetVoiceNoteUrl200,
   HealthStatus,
+  HierarchicalPerformance,
   Indicator,
   InvitationListPage,
   InviteActionResponse,
@@ -111,7 +114,6 @@ import type {
   PasswordResetInput,
   PasswordResetResponse,
   PendingApprovals,
-  PerformanceScore,
   PlanDetail,
   PlanInput,
   PlanSummary,
@@ -131,7 +133,6 @@ import type {
   ProjectDonorCorrectionInput,
   ProjectInput,
   ProjectMergeInput,
-  ProjectPerformanceScore,
   ProjectStateAllocation,
   ProjectSummary,
   Reaction,
@@ -7091,164 +7092,8 @@ export function useGetDashboardAgenda<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
-export const getGetDashboardPerformanceUrl = () => {
-  return `/api/dashboard/performance`;
-};
-
-/**
- * @summary Organization-wide (or scoped) 6-component weighted performance score
- */
-export const getDashboardPerformance = async (
-  options?: RequestInit,
-): Promise<PerformanceScore> => {
-  return customFetch<PerformanceScore>(getGetDashboardPerformanceUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetDashboardPerformanceQueryKey = () => {
-  return [`/api/dashboard/performance`] as const;
-};
-
-export const getGetDashboardPerformanceQueryOptions = <
-  TData = Awaited<ReturnType<typeof getDashboardPerformance>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardPerformance>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getGetDashboardPerformanceQueryKey();
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getDashboardPerformance>>
-  > = ({ signal }) => getDashboardPerformance({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardPerformance>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetDashboardPerformanceQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getDashboardPerformance>>
->;
-export type GetDashboardPerformanceQueryError = ErrorType<unknown>;
-
-/**
- * @summary Organization-wide (or scoped) 6-component weighted performance score
- */
-
-export function useGetDashboardPerformance<
-  TData = Awaited<ReturnType<typeof getDashboardPerformance>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardPerformance>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetDashboardPerformanceQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-export const getGetDashboardPerformanceStatesUrl = () => {
-  return `/api/dashboard/performance/states`;
-};
-
-/**
- * @summary Per-state performance scores sorted by rank (descending)
- */
-export const getDashboardPerformanceStates = async (
-  options?: RequestInit,
-): Promise<StatePerformance[]> => {
-  return customFetch<StatePerformance[]>(
-    getGetDashboardPerformanceStatesUrl(),
-    {
-      ...options,
-      method: "GET",
-    },
-  );
-};
-
-export const getGetDashboardPerformanceStatesQueryKey = () => {
-  return [`/api/dashboard/performance/states`] as const;
-};
-
-export const getGetDashboardPerformanceStatesQueryOptions = <
-  TData = Awaited<ReturnType<typeof getDashboardPerformanceStates>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardPerformanceStates>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getGetDashboardPerformanceStatesQueryKey();
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getDashboardPerformanceStates>>
-  > = ({ signal }) =>
-    getDashboardPerformanceStates({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardPerformanceStates>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetDashboardPerformanceStatesQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getDashboardPerformanceStates>>
->;
-export type GetDashboardPerformanceStatesQueryError = ErrorType<unknown>;
-
-/**
- * @summary Per-state performance scores sorted by rank (descending)
- */
-
-export function useGetDashboardPerformanceStates<
-  TData = Awaited<ReturnType<typeof getDashboardPerformanceStates>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardPerformanceStates>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetDashboardPerformanceStatesQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-export const getGetDashboardPerformanceProjectsUrl = (
-  params?: GetDashboardPerformanceProjectsParams,
+export const getGetDashboardSectorSnapshotUrl = (
+  params: GetDashboardSectorSnapshotParams,
 ) => {
   const normalizedParams = new URLSearchParams();
 
@@ -7261,19 +7106,19 @@ export const getGetDashboardPerformanceProjectsUrl = (
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/dashboard/performance/projects?${stringifiedParams}`
-    : `/api/dashboard/performance/projects`;
+    ? `/api/dashboard/sector-snapshot?${stringifiedParams}`
+    : `/api/dashboard/sector-snapshot`;
 };
 
 /**
- * @summary Per-project performance scores sorted by rank (descending)
+ * @summary Authorised HQ Sector Report snapshot for one canonical sector
  */
-export const getDashboardPerformanceProjects = async (
-  params?: GetDashboardPerformanceProjectsParams,
+export const getDashboardSectorSnapshot = async (
+  params: GetDashboardSectorSnapshotParams,
   options?: RequestInit,
-): Promise<ProjectPerformanceScore[]> => {
-  return customFetch<ProjectPerformanceScore[]>(
-    getGetDashboardPerformanceProjectsUrl(params),
+): Promise<DashboardSectorSnapshot> => {
+  return customFetch<DashboardSectorSnapshot>(
+    getGetDashboardSectorSnapshotUrl(params),
     {
       ...options,
       method: "GET",
@@ -7281,23 +7126,23 @@ export const getDashboardPerformanceProjects = async (
   );
 };
 
-export const getGetDashboardPerformanceProjectsQueryKey = (
-  params?: GetDashboardPerformanceProjectsParams,
+export const getGetDashboardSectorSnapshotQueryKey = (
+  params?: GetDashboardSectorSnapshotParams,
 ) => {
   return [
-    `/api/dashboard/performance/projects`,
+    `/api/dashboard/sector-snapshot`,
     ...(params ? [params] : []),
   ] as const;
 };
 
-export const getGetDashboardPerformanceProjectsQueryOptions = <
-  TData = Awaited<ReturnType<typeof getDashboardPerformanceProjects>>,
-  TError = ErrorType<unknown>,
+export const getGetDashboardSectorSnapshotQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardSectorSnapshot>>,
+  TError = ErrorType<void>,
 >(
-  params?: GetDashboardPerformanceProjectsParams,
+  params: GetDashboardSectorSnapshotParams,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getDashboardPerformanceProjects>>,
+      Awaited<ReturnType<typeof getDashboardSectorSnapshot>>,
       TError,
       TData
     >;
@@ -7307,45 +7152,44 @@ export const getGetDashboardPerformanceProjectsQueryOptions = <
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
   const queryKey =
-    queryOptions?.queryKey ??
-    getGetDashboardPerformanceProjectsQueryKey(params);
+    queryOptions?.queryKey ?? getGetDashboardSectorSnapshotQueryKey(params);
 
   const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getDashboardPerformanceProjects>>
+    Awaited<ReturnType<typeof getDashboardSectorSnapshot>>
   > = ({ signal }) =>
-    getDashboardPerformanceProjects(params, { signal, ...requestOptions });
+    getDashboardSectorSnapshot(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardPerformanceProjects>>,
+    Awaited<ReturnType<typeof getDashboardSectorSnapshot>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetDashboardPerformanceProjectsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getDashboardPerformanceProjects>>
+export type GetDashboardSectorSnapshotQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardSectorSnapshot>>
 >;
-export type GetDashboardPerformanceProjectsQueryError = ErrorType<unknown>;
+export type GetDashboardSectorSnapshotQueryError = ErrorType<void>;
 
 /**
- * @summary Per-project performance scores sorted by rank (descending)
+ * @summary Authorised HQ Sector Report snapshot for one canonical sector
  */
 
-export function useGetDashboardPerformanceProjects<
-  TData = Awaited<ReturnType<typeof getDashboardPerformanceProjects>>,
-  TError = ErrorType<unknown>,
+export function useGetDashboardSectorSnapshot<
+  TData = Awaited<ReturnType<typeof getDashboardSectorSnapshot>>,
+  TError = ErrorType<void>,
 >(
-  params?: GetDashboardPerformanceProjectsParams,
+  params: GetDashboardSectorSnapshotParams,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getDashboardPerformanceProjects>>,
+      Awaited<ReturnType<typeof getDashboardSectorSnapshot>>,
       TError,
       TData
     >;
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetDashboardPerformanceProjectsQueryOptions(
+  const queryOptions = getGetDashboardSectorSnapshotQueryOptions(
     params,
     options,
   );
@@ -7426,6 +7270,116 @@ export function useGetDashboardAttentionProjects<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDashboardAttentionProjectsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetDashboardHierarchicalPerformanceUrl = (
+  params?: GetDashboardHierarchicalPerformanceParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dashboard/hierarchical-performance?${stringifiedParams}`
+    : `/api/dashboard/hierarchical-performance`;
+};
+
+/**
+ * @summary Equal-weight Indicator to Project to Sector achievement hierarchy
+ */
+export const getDashboardHierarchicalPerformance = async (
+  params?: GetDashboardHierarchicalPerformanceParams,
+  options?: RequestInit,
+): Promise<HierarchicalPerformance> => {
+  return customFetch<HierarchicalPerformance>(
+    getGetDashboardHierarchicalPerformanceUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDashboardHierarchicalPerformanceQueryKey = (
+  params?: GetDashboardHierarchicalPerformanceParams,
+) => {
+  return [
+    `/api/dashboard/hierarchical-performance`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetDashboardHierarchicalPerformanceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetDashboardHierarchicalPerformanceParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetDashboardHierarchicalPerformanceQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>
+  > = ({ signal }) =>
+    getDashboardHierarchicalPerformance(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDashboardHierarchicalPerformanceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>
+>;
+export type GetDashboardHierarchicalPerformanceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Equal-weight Indicator to Project to Sector achievement hierarchy
+ */
+
+export function useGetDashboardHierarchicalPerformance<
+  TData = Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetDashboardHierarchicalPerformanceParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDashboardHierarchicalPerformance>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardHierarchicalPerformanceQueryOptions(
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

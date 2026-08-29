@@ -5,7 +5,7 @@
    from the Business Logic and Data-Integrity Remediation spec.
 
    Helpers mirror the corrected implementation in:
-     - performanceEngine.ts  (computeStateScores, critOnlyRisks, highOnlyRisks)
+     - performanceEngine.ts  (computeStateImplementation, critOnlyRisks, highOnlyRisks)
      - dashboard.ts routes   (/dashboard/attention-projects, /dashboard/pending-approvals)
      - dashboard.tsx         (FollowUpProjectsPanel, LateReportsPanel, ApprovalQueueWidget,
                               MyDraftsWidget → "Drafts In My Scope", riskByStateData)
@@ -665,7 +665,7 @@ describe("§RF  Risks & Follow-Up Remediation", () => {
 
   // RFR-38.  State filter — sector query param narrows state-performance data only
   it("RFR-38. State filter affects Risk By State chart via sector query param; personal widgets (Approval Queue, Drafts) are unaffected", () => {
-    // sectorSql() is applied inside computeStateScores() when sector query param is set
+    // sectorSql() is applied inside computeStateImplementation() when sector query param is set
     expect(sectorSql(["Food Security"])).toContain("ANY($1::text[])");
     // Approval Queue and Drafts use userScope() — not the query param sector
     const approvalQueueRespondsToSectorFilter = false;
@@ -1008,16 +1008,16 @@ describe("§RF  Risks & Follow-Up Remediation", () => {
     expect(r.count).toBeGreaterThanOrEqual(1);
   });
 
-  it("COUNT-12. Generated client type: FollowUpProject has followUpReasons and no legacy ProjectPerformanceScore fields", () => {
+  it("COUNT-12. Generated client type: FollowUpProject has the exact factual follow-up shape", () => {
     const p = buildFollowUpProject({ projectId: 231, activeCriticalRisks: 1 });
-    // Must have structured reasons
     expect("followUpReasons" in p).toBe(true);
-    // Must NOT expose old ProjectPerformanceScore-only fields
-    expect("tier"         in p).toBe(false);
-    expect("components"   in p).toBe(false);
-    expect("stateNames"   in p).toBe(false);
-    expect("overallScore" in p).toBe(false);
-    expect("criticalRisks" in p).toBe(false);
+    expect(Object.keys(p).sort()).toEqual([
+      "followUpReasons",
+      "projectCode",
+      "projectId",
+      "projectTitle",
+      "sector",
+    ]);
   });
 
   it("COUNT-13. Label changes do not affect calculations — all logic uses reason.code", () => {

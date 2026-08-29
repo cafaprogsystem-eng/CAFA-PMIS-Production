@@ -16,9 +16,7 @@ import {
   queryProjectStateLocations,
 } from "../lib/pmrLocationHelper";
 import {
-  computeOrgScore,
-  computeStateScores,
-  computeProjectScores,
+  computeStateImplementation,
   computeHierarchicalPerformance,
 } from "../services/performanceEngine";
 import { assertCanViewHqSectorSnapshot } from "../lib/reportAuth";
@@ -51,9 +49,6 @@ const DASHBOARD_FILTER_MATRIX: Record<string, ReadonlySet<string>> = {
   beneficiaries: DASHBOARD_FILTER_KEYS,
   agenda: new Set(),
   sectorSnapshot: new Set(["sector"]),
-  performance: new Set(),
-  performanceStates: new Set(),
-  performanceProjects: new Set(["limit"]),
   attentionProjects: new Set(),
   hierarchicalPerformance: DASHBOARD_FILTER_KEYS,
   lateReports: new Set(),
@@ -754,7 +749,7 @@ router.get("/dashboard/state-performance", dashboardFilterGuard("statePerformanc
     // narrowing semantics as Dashboard aggregates rather than a local sector
     // special case.
     const { effectiveScope } = applyFilterParams(scope, query);
-    const rows = await computeStateScores(pool, effectiveScope);
+    const rows = await computeStateImplementation(pool, effectiveScope);
     res.json(rows);
   } catch (err) {
     next(err);
@@ -2433,69 +2428,6 @@ router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), dashboardF
       beneficiaryByDonor: benByDonor.rows,
       indicators: indicators.rows,
     });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ── Performance Engine Routes ───────────────────────────────────────────────
-
-router.get("/dashboard/performance", dashboardFilterGuard("performance"), async (req, res, next) => {
-  try {
-    const scope = await buildScope(req);
-    const scopeError = dashboardScopeError(scope, {});
-    if (scopeError) {
-      res.status(403).json({ error: scopeError });
-      return;
-    }
-    const score = await computeOrgScore(pool, scope);
-    res.json(score);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/dashboard/performance/states", dashboardFilterGuard("performanceStates"), async (req, res, next) => {
-  try {
-    const scope = await buildScope(req);
-    const scopeError = dashboardScopeError(scope, {});
-    if (scopeError) {
-      res.status(403).json({ error: scopeError });
-      return;
-    }
-    const rows = await computeStateScores(pool, scope);
-    // Sort by performanceScore descending (nulls last)
-    rows.sort((a, b) => {
-      if (a.performanceScore === null && b.performanceScore === null) return 0;
-      if (a.performanceScore === null) return 1;
-      if (b.performanceScore === null) return -1;
-      return b.performanceScore - a.performanceScore;
-    });
-    res.json(rows);
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.get("/dashboard/performance/projects", dashboardFilterGuard("performanceProjects"), async (req, res, next) => {
-  try {
-    const scope = await buildScope(req);
-    const scopeError = dashboardScopeError(scope, {});
-    if (scopeError) {
-      res.status(403).json({ error: scopeError });
-      return;
-    }
-    const { limit: qLimit } = req.query as Record<string, string | undefined>;
-    const limit = Math.min(100, Math.max(10, Number(qLimit ?? 50)));
-    const rows = await computeProjectScores(pool, scope, limit);
-    // Sort by overallScore descending (nulls last)
-    rows.sort((a, b) => {
-      if (a.overallScore === null && b.overallScore === null) return 0;
-      if (a.overallScore === null) return 1;
-      if (b.overallScore === null) return -1;
-      return b.overallScore - a.overallScore;
-    });
-    res.json(rows);
   } catch (err) {
     next(err);
   }
