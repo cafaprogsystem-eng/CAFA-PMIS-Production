@@ -28,6 +28,14 @@ describe("logout client contract", () => {
   });
 
   it("clears account-scoped state and disconnects realtime without touching public preferences", () => {
+    const stopBackground = source.indexOf("stopAuthenticatedBackgroundWork()");
+    const cancelQueries = source.indexOf("await queryClient.cancelQueries");
+    const disconnect = source.indexOf("socket?.disconnect()");
+    const clearQueries = source.indexOf("queryClient.clear()", disconnect);
+    expect(stopBackground).toBeGreaterThan(-1);
+    expect(cancelQueries).toBeGreaterThan(stopBackground);
+    expect(disconnect).toBeGreaterThan(cancelQueries);
+    expect(clearQueries).toBeGreaterThan(disconnect);
     expect(source).toContain("socket?.disconnect()");
     expect(source).toContain("clearFavorites(meData.user.id)");
     expect(source).toContain('window.localStorage.removeItem("cafa.userId")');

@@ -7,6 +7,11 @@ import {
   recordConnectivityEvidence,
   requestConnectivityConfirmation,
 } from "../connectivity-state";
+import {
+  getAuthenticatedSessionSnapshot,
+  isAuthenticatedSessionCurrent,
+  type AuthenticatedSessionSnapshot,
+} from "../authenticated-session";
 
 /* ── Offline-queued error (mutation was saved for later sync) ───────────── */
 
@@ -98,11 +103,21 @@ async function getCached(url: string, userId: number | null): Promise<string | n
   }
 }
 
-async function setCached(url: string, data: string, userId: number | null): Promise<void> {
-  if (userId === null || !isAuthorisedOfflineRead(url)) return;
+export async function cacheAuthenticatedResponse(
+  url: string,
+  data: string,
+  session: AuthenticatedSessionSnapshot,
+): Promise<void> {
+  const userId = session.userId;
+  if (
+    userId === null
+    || !isAuthenticatedSessionCurrent(session)
+    || !isAuthorisedOfflineRead(url)
+  ) return;
+  const key = cacheKey(userId, url);
   try {
     await db.apiCache.put({
-      cacheKey: cacheKey(userId, url),
+      cacheKey: key,
       url,
       data,
       status: 200,
@@ -110,6 +125,12 @@ async function setCached(url: string, data: string, userId: number | null): Prom
       ttlSeconds: getTtl(url),
       userId,
     });
+    // The authority can change while IndexedDB is committing. Delete a write
+    // that landed after logout/scope invalidation so a late response cannot
+    // recreate protected offline data after the purge.
+    if (!isAuthenticatedSessionCurrent(session)) {
+      await db.apiCache.delete(key);
+    }
   } catch {
     // storage quota exceeded — silently ignore
   }
@@ -202,6 +223,17 @@ function isCafaApiUrl(url: string): boolean {
   }
 }
 
+export function shouldSignalSessionExpiry(url: string, status: number): boolean {
+  if (status !== 401) return false;
+  try {
+    const pathname = new URL(url, window.location.origin).pathname;
+    return pathname !== "/api/me" && !pathname.startsWith("/api/auth/");
+  } catch {
+    const pathname = url.split(/[?#]/, 1)[0];
+    return pathname !== "/api/me" && !pathname.startsWith("/api/auth/");
+  }
+}
+
 /* ── Installer ──────────────────────────────────────────────────────────── */
 
 let installed = false;
@@ -220,6 +252,7 @@ export function installFetchInterceptor(getUserId: () => number | null): void {
     const isApi = isCafaApiUrl(url);
     const isMutation = !["GET", "HEAD", "OPTIONS"].includes(method);
     const userId = getUserId();
+    const authenticatedSession = getAuthenticatedSessionSnapshot();
     await setOfflineUser(userId);
 
     /* ── OFFLINE PATH ─────────────────────────────────────────────────── */
@@ -307,6 +340,13 @@ export function installFetchInterceptor(getUserId: () => number | null): void {
         if (response.ok) recordConnectivityEvidence({ kind: "api-success" });
         else {
           recordConnectivityEvidence({ kind: "api-http", status: response.status });
+          // A staff endpoint returning 401 means the established identity is
+          // no longer authoritative. Reuse the socket provider's fail-closed
+          // refresh path so active requests are cancelled and protected
+          // caches are purged before the public shell is shown.
+          if (shouldSignalSessionExpiry(url, response.status)) {
+            window.dispatchEvent(new Event("cafa:authorization-changed"));
+          }
           // One failed route is not global service evidence. A 5xx does,
           // however, ask the same bounded health confirmation used by a
           // transport failure so the banner can only become Degraded when the
@@ -318,7 +358,9 @@ export function installFetchInterceptor(getUserId: () => number | null): void {
       // Cache successful GET API responses for offline use
       if (isApi && !isMutation && response.ok && response.status === 200) {
         response.clone().text().then((text) => {
-          if (text.startsWith("{") || text.startsWith("[")) setCached(url, text, userId);
+          if (text.startsWith("{") || text.startsWith("[")) {
+            void cacheAuthenticatedResponse(url, text, authenticatedSession);
+          }
         }).catch(() => {});
       }
 

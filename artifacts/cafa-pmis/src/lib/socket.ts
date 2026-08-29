@@ -42,6 +42,11 @@ import {
 import { clearNotificationQueries, invalidateNotificationQueries } from "@/lib/notification-client";
 import { authorizationFingerprint, type AuthorizationContext } from "@/lib/authorization-context";
 import { clearApiCache } from "@/lib/offline/db";
+import {
+  establishAuthenticatedSession,
+  invalidateAuthenticatedSession,
+} from "@/lib/authenticated-session";
+import { stopAuthenticatedBackgroundWork } from "@/contexts/sync-context";
 
 export type ConnectionStatus =
   | "connecting"
@@ -449,6 +454,8 @@ async function refreshAuthenticatedIdentity(
     // A changed authorisation scope must never retain data fetched under the
     // former authority. Keep auth/me so AuthGate can redirect on 401.
     if (nextFingerprint !== previous) {
+      invalidateAuthenticatedSession();
+      stopAuthenticatedBackgroundWork();
       clearNotificationQueries(queryClient);
       await queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
       if (!isCurrent()) return { status: "unavailable", fingerprint: previous };
@@ -465,6 +472,7 @@ async function refreshAuthenticatedIdentity(
     queryClient.setQueryData(["auth", "me"], next);
     queryClient.setQueryData(getGetMeQueryKey(), next);
     if (next === null) return { status: "unauthenticated", fingerprint: null };
+    establishAuthenticatedSession(next.user?.id as number);
     // The malformed-auth guard above establishes this narrowing for callers.
     return { status: "authenticated", fingerprint: nextFingerprint as string };
   } catch {
@@ -504,6 +512,8 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
     setStatus("connecting");
 
     const purgeProtectedBrowserState = async (isCurrent: () => boolean) => {
+      invalidateAuthenticatedSession();
+      stopAuthenticatedBackgroundWork();
       clearNotificationQueries(qc);
       const previousIdentity = qc.getQueryData<AuthorizationContext>(["auth", "me"]);
       await qc.cancelQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
