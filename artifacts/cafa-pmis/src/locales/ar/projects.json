@@ -384,7 +384,13 @@
       "girlsUnder18": "البنات (أقل من 18)",
       "totalBeneficiaries": "إجمالي المستفيدين (يُحسب تلقائياً)",
       "operationalLocationsSection": "المواقع التشغيلية",
-      "operationalLocationsLabel": "مواقع التشغيل"
+      "operationalLocationsLabel": "مواقع التشغيل",
+      "statesLoading": "جارٍ تحميل الولايات النشطة…",
+      "statesError": "تعذّر تحميل الولايات النشطة.",
+      "statesEmpty": "لا توجد ولايات نشطة متاحة للتعيين.",
+      "statesRetry": "إعادة المحاولة",
+      "statesUnavailable": "بيانات الولايات المرجعية غير متاحة. أعد المحاولة قبل الحفظ.",
+      "assignedStateLocked": "ولايتك المعيّنة ثابتة لهذا المشروع."
     },
     "donor": {
       "donorOrg": "منظمة الجهة المانحة",

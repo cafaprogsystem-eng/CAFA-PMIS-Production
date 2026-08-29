@@ -141,7 +141,7 @@ function NewProjectDialog() {
             </DialogDescription>
           </DialogHeader>
         </div>
-        <div className="overflow-y-auto flex-1 px-6 py-6">
+        <div className="flex min-h-0 flex-1 flex-col">
           <ProjectRegistrationForm onClose={() => setOpen(false)} />
         </div>
       </DialogContent>

@@ -384,7 +384,13 @@
       "girlsUnder18": "Girls (<18)",
       "totalBeneficiaries": "Total beneficiaries (auto-summed)",
       "operationalLocationsSection": "Operational locations",
-      "operationalLocationsLabel": "Operational Locations"
+      "operationalLocationsLabel": "Operational Locations",
+      "statesLoading": "Loading active States…",
+      "statesError": "Active States could not be loaded.",
+      "statesEmpty": "No active States are available for assignment.",
+      "statesRetry": "Retry",
+      "statesUnavailable": "State reference data is unavailable. Retry before saving.",
+      "assignedStateLocked": "Your assigned State is fixed for this project."
     },
     "donor": {
       "donorOrg": "Donor organisation",

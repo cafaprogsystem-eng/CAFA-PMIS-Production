@@ -192,7 +192,19 @@ vi.mock("react-i18next", () => ({
 vi.mock("@workspace/api-client-react", () => ({
   useGetMe: () => ({ data: detailQueryState.me }),
   useListProjects: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
-  useListStates: () => ({ data: [{ id: 1, name: "Khartoum" }, { id: 2, name: "Kassala" }, { id: 3, name: "Gedaref" }, { id: 4, name: "Gezira" }, { id: 5, name: "River Nile" }] }),
+  useListStates: () => ({
+    data: [
+      { id: 1, name: "Khartoum", nameAr: "الخرطوم" },
+      { id: 2, name: "Kassala", nameAr: "كسلا" },
+      { id: 3, name: "Gedaref", nameAr: "القضارف" },
+      { id: 4, name: "Gezira", nameAr: "الجزيرة" },
+      { id: 5, name: "River Nile", nameAr: "نهر النيل" },
+    ],
+    isLoading: false,
+    isError: false,
+    isSuccess: true,
+    refetch: vi.fn(),
+  }),
   useListUsers: () => ({ data: [] }),
   useListDonors: () => ({ data: [] }),
   useListProjectStateAllocations: () => detailQueryState.allocationResult,

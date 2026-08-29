@@ -54,6 +54,24 @@ describe("USER-SEC: administrative authority and lifecycle protection", () => {
     expect(patchRoute).not.toContain("const finalActiveState = finalStateId");
     expect(patchRoute).toContain("SELECT name FROM states WHERE id = $1");
   });
+
+  it("requires an active State for new State-role assignments and clears incompatible scope on role changes", () => {
+    const createRoute = usersRoute.slice(
+      usersRoute.indexOf('router.post("/users"'),
+      usersRoute.indexOf('router.post("/users/:id/resend-invite"'),
+    );
+    const patchRoute = usersRoute.slice(
+      usersRoute.indexOf('router.patch("/users/:id"'),
+      usersRoute.indexOf("// CHANGE STATUS"),
+    );
+    expect(createRoute).toContain('error: "state_required_for_state_role"');
+    expect(createRoute).toContain("const activeState = stateId ? await assertActiveState(stateId) : null");
+    expect(createRoute).toContain("if (stateId && !stateName)");
+    expect(patchRoute).toContain("if (STATE_ROLES.has(finalRole) && !finalStateId)");
+    expect(patchRoute).toContain("if (finalStateId && (stateAssignmentChanged || roleNewlyRequiresState))");
+    expect(patchRoute).toContain("next_.state_id = null;");
+    expect(patchRoute).toContain("next_.sector = null;");
+  });
 });
 
 describe("USER-FUNC: bounded truthful directory contract", () => {

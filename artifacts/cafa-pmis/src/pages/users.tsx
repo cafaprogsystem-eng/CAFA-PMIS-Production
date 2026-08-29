@@ -120,6 +120,8 @@ import { formatDate, formatDateTime, hasPerm } from "@/lib/format";
 import { SECTORS } from "@/lib/sectors";
 import { localizeUserApiError } from "@/lib/user-error-localization";
 import { StateLabel } from "@/components/state-label";
+import { StateReferenceStatus } from "@/components/state-reference-status";
+import { deriveStateReferenceData, type StateReferenceData } from "@/lib/state-reference-data";
 import { useSocket } from "@/lib/socket";
 
 // ─── API error helpers ────────────────────────────────────────────────────────
@@ -349,7 +351,8 @@ export default function UsersPage() {
   const users = useMemo(() => usersPage?.items ?? [], [usersPage]);
   const hasFilters = Boolean(q || role || status || stateId || sector);
   const { data: summary } = useGetUsersSummary();
-  const { data: states } = useListStates();
+  const statesQuery = useListStates();
+  const stateReference = deriveStateReferenceData(statesQuery);
   const [activeTab, setActiveTab] = useState<"all" | "resets" | "invitations">("all");
 
   useEffect(() => {
@@ -437,6 +440,11 @@ export default function UsersPage() {
 
   const submitForm = async () => {
     if (!editing) return;
+    const requiresState = ["state_office_manager", "state_program_officer"].includes(editing.role ?? "");
+    if (requiresState && (!stateReference.isReady || !editing.stateId)) {
+      toast.error(t(!stateReference.isReady ? "userForm.statesUnavailable" : "userForm.stateRequired"));
+      return;
+    }
     const isCreate = !editing.id;
     if (isCreate) {
       const wantsPassword = editing.status !== "invited" && (editing.password ?? "").length > 0;
@@ -777,7 +785,7 @@ export default function UsersPage() {
           <SelectTrigger className="h-9 w-full sm:w-40 text-sm"><SelectValue placeholder={t("allStates")} /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("allStates")}</SelectItem>
-            {states?.map((s) => (
+            {stateReference.states.map((s) => (
               <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
             ))}
           </SelectContent>
@@ -972,29 +980,41 @@ export default function UsersPage() {
 
       {/* Create / Edit dialog */}
       <Dialog open={formOpen} onOpenChange={(o) => { if (!o) { setFormOpen(false); setEditing(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing?.id ? t("form.editTitle") : t("form.createTitle")}</DialogTitle>
-            <DialogDescription>
-              {editing?.id
-                ? t("dialog.editDesc")
-                : t("dialog.createDesc")}
-            </DialogDescription>
-          </DialogHeader>
-          {editing && (
-            <UserForm editing={editing} setEditing={setEditing} states={states ?? []} />
-          )}
-          {!editing?.id && (
-            <CreateDiagnostics
-              mode={diagMode}
-              failedStep={diagStep}
-              errorMessage={diagError}
-              inviteMode={editing?.status === "invited" || !(editing?.password ?? "")}
-            />
-          )}
-          <DialogFooter>
+        <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
+          <div className="shrink-0 border-b px-6 pb-4 pt-6">
+            <DialogHeader>
+              <DialogTitle>{editing?.id ? t("form.editTitle") : t("form.createTitle")}</DialogTitle>
+              <DialogDescription>
+                {editing?.id
+                  ? t("dialog.editDesc")
+                  : t("dialog.createDesc")}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            {editing && (
+              <UserForm editing={editing} setEditing={setEditing} stateReference={stateReference} />
+            )}
+            {!editing?.id && (
+              <CreateDiagnostics
+                mode={diagMode}
+                failedStep={diagStep}
+                errorMessage={diagError}
+                inviteMode={editing?.status === "invited" || !(editing?.password ?? "")}
+              />
+            )}
+          </div>
+          <DialogFooter className="shrink-0 border-t px-6 py-4">
             <Button variant="outline" onClick={() => { setFormOpen(false); setEditing(null); setDiagMode("idle"); setDiagStep(undefined); setDiagError(undefined); }}>{t("common:cancel")}</Button>
-            <Button onClick={submitForm} disabled={createMut.isPending || updateMut.isPending}>
+            <Button
+              onClick={submitForm}
+              disabled={
+                createMut.isPending
+                || updateMut.isPending
+                || (!!editing && ["state_office_manager", "state_program_officer"].includes(editing.role ?? "")
+                  && (!stateReference.isReady || !editing.stateId))
+              }
+            >
               {editing?.id ? t("form.saveChanges") : t("form.createUser")}
             </Button>
           </DialogFooter>
@@ -2066,13 +2086,14 @@ function SummaryCard({
 }
 
 function UserForm({
-  editing, setEditing, states,
+  editing, setEditing, stateReference,
 }: {
   editing: EditingUser;
   setEditing: (u: EditingUser) => void;
-  states: { id: number; name: string }[];
+  stateReference: StateReferenceData;
 }) {
-  const { t } = useTranslation("users");
+  const { t, i18n } = useTranslation("users");
+  const { states } = stateReference;
   const set = <K extends keyof EditingUser>(k: K, v: EditingUser[K]) =>
     setEditing({ ...editing, [k]: v });
 
@@ -2105,7 +2126,19 @@ function UserForm({
           <Input value={editing.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
         </Field>
         <Field label={t("userForm.role")}>
-          <Select value={editing.role} onValueChange={(v) => set("role", v)}>
+          <Select
+            value={editing.role}
+            onValueChange={(v) => {
+              const nextRequiresState = ["state_office_manager", "state_program_officer"].includes(v);
+              const wasStateRole = ["state_office_manager", "state_program_officer"].includes(editing.role ?? "");
+              setEditing({
+                ...editing,
+                role: v,
+                stateId: nextRequiresState && wasStateRole ? editing.stateId : null,
+                sector: v === "technical_coordinator" ? editing.sector ?? null : null,
+              });
+            }}
+          >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {ROLES.map((r) => (
@@ -2114,35 +2147,38 @@ function UserForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field label={requiresState ? t("userForm.assignedStateRequired") : t("userForm.assignedState")}>
-          <Select
-            value={editing.stateId ? String(editing.stateId) : "none"}
-            onValueChange={(v) => set("stateId", v === "none" ? null : Number(v))}
-          >
-            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">{t("userForm.noneHQ")}</SelectItem>
-              {states.map((s) => (
-                <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Office Location">
-          <Select
-            value={(editing as Record<string, unknown>).officeLocation as string ?? "none"}
-            onValueChange={(v) => set("officeLocation" as keyof typeof editing, v === "none" ? null : v)}
-          >
-            <SelectTrigger><SelectValue placeholder={t("common:notSpecified")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">{t("common:notSpecified")}</SelectItem>
-              <SelectItem value="hq">HQ — Headquarters</SelectItem>
-              {states.map((s) => (
-                <SelectItem key={s.id} value={s.name}><StateLabel state={s} /></SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        {requiresState ? (
+          <Field label={t("userForm.assignedStateRequired")}>
+            {stateReference.status === "ready" ? (
+              <Select
+                value={editing.stateId ? String(editing.stateId) : undefined}
+                onValueChange={(v) => set("stateId", Number(v))}
+                required
+              >
+                <SelectTrigger aria-required="true"><SelectValue placeholder={t("userForm.selectState")} /></SelectTrigger>
+                <SelectContent>
+                  {editing.stateId && !states.some((state) => state.id === editing.stateId) && editing.stateName ? (
+                    <SelectItem value={String(editing.stateId)} disabled>
+                      {i18n.language.startsWith("ar") ? editing.stateNameAr || editing.stateName : editing.stateName}
+                    </SelectItem>
+                  ) : null}
+                  {states.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <StateReferenceStatus
+                status={stateReference.status}
+                loadingText={t("userForm.statesLoading")}
+                errorText={t("userForm.statesError")}
+                emptyText={t("userForm.statesEmpty")}
+                retryText={t("userForm.statesRetry")}
+                onRetry={() => { void stateReference.retry(); }}
+              />
+            )}
+          </Field>
+        ) : null}
         {editing.role === "technical_coordinator" ? (
           <Field label={t("userForm.assignedSector")}>
             <SectorMultiSelect

@@ -22,9 +22,20 @@ import { ZodError } from "zod";
 
 const mockQuery = vi.fn();
 mockQuery.mockResolvedValue({ rows: [] });
+let stateAccessAllowed = true;
+let stateValidation: "active" | "inactive" | "invalid" = "active";
 
 const mockClientQuery = vi.fn();
 const mockClient = { query: mockClientQuery, release: vi.fn() };
+
+function configureClientRelease(strict: boolean) {
+  mockClient.release.mockReset();
+  mockClient.release.mockImplementation(() => {
+    if (strict && mockClient.release.mock.calls.length > 1) {
+      throw new Error("project route released the PostgreSQL client more than once");
+    }
+  });
+}
 
 vi.mock("@workspace/db", () => ({
   pool: {
@@ -78,6 +89,13 @@ const SPO_USER = {
   stateId: 5, stateName: "South Kordofan", sector: null, avatarUrl: null,
 };
 
+const SPO_WITHOUT_STATE_USER = {
+  ...SPO_USER,
+  id: 3,
+  stateId: null,
+  stateName: null,
+};
+
 async function buildProjectsApp(user?: Record<string, unknown>) {
   const app = express();
   app.use(express.json());
@@ -114,7 +132,23 @@ const BASE_PROJECT_BODY = {
 
 function mockPoolNoOp() {
   mockQuery.mockImplementation((sql: string) => {
+    if (/FROM project_assignments|FROM project_states/.test(sql)) {
+      return Promise.resolve({ rows: stateAccessAllowed ? [{ exists: 1 }] : [] });
+    }
     if (/FROM states[\s\S]*WHERE id = \$1/.test(sql)) {
+      if (stateValidation === "invalid") return Promise.resolve({ rows: [] });
+      if (stateValidation === "inactive") {
+        return Promise.resolve({
+          rows: [{
+            id: 6,
+            name: "Khartoum",
+            nameAr: "الخرطوم",
+            code: "KRT",
+            operationalStatus: "inactive",
+            officeStatus: "present",
+          }],
+        });
+      }
       return Promise.resolve({ rows: [{ id: 5, name: "South Kordofan", nameAr: "جنوب كردفان", code: "SKR", operationalStatus: "active", officeStatus: "present" }] });
     }
     return Promise.resolve({ rows: [] });
@@ -150,6 +184,7 @@ const MIG_018 = MIGRATIONS_SRC.slice(
 describe("RFREQ-01..06 — POST /projects reportingFrequency validation", () => {
   beforeEach(() => {
     denyPerms = false;
+    stateAccessAllowed = true;
     mockQuery.mockReset();
     mockPoolNoOp();
     captureClientQueries();
@@ -193,6 +228,76 @@ describe("RFREQ-01..06 — POST /projects reportingFrequency validation", () => 
     const res = await request(app).post("/api/projects").send({ ...BASE_PROJECT_BODY });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_reporting_frequency");
+  });
+});
+
+describe("PRJ-897 — State-scoped project write boundaries", () => {
+  beforeEach(() => {
+    denyPerms = false;
+    stateAccessAllowed = true;
+    stateValidation = "active";
+    mockQuery.mockReset();
+    mockPoolNoOp();
+    captureClientQueries();
+    configureClientRelease(true);
+  });
+
+  it("fails closed for an SPO with no assigned State before creating a project", async () => {
+    const app = await buildProjectsApp(SPO_WITHOUT_STATE_USER);
+    const res = await request(app)
+      .post("/api/projects")
+      .send({ ...BASE_PROJECT_BODY, reportingFrequency: "monthly" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("state_forbidden");
+    expect(mockClientQuery).not.toHaveBeenCalled();
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects HQ, foreign State links, allocations, and activity assignments on State project creation", async () => {
+    const app = await buildProjectsApp(SPO_USER);
+    for (const body of [
+      { ...BASE_PROJECT_BODY, hasHqOperations: true },
+      { ...BASE_PROJECT_BODY, stateIds: [6] },
+      { ...BASE_PROJECT_BODY, stateAllocations: [{ stateId: 6, budgetAllocation: 0 }] },
+      { ...BASE_PROJECT_BODY, outputs: [{ title: "Output", activities: [{ title: "Activity", stateId: 6 }] }] },
+    ]) {
+      mockClientQuery.mockClear();
+      mockClient.release.mockClear();
+      const res = await request(app)
+        .post("/api/projects")
+        .send({ ...body, reportingFrequency: "monthly" });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("state_forbidden");
+      expect(mockClientQuery).not.toHaveBeenCalled();
+      expect(mockClient.release).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it.each([
+    ["invalid_state", "invalid", 99],
+    ["inactive_state", "inactive", 6],
+  ] as const)("returns %s cleanly for a State assignment on project creation", async (error, validation, stateId) => {
+    stateValidation = validation;
+    const app = await buildProjectsApp(HQ_USER);
+    const res = await request(app)
+      .post("/api/projects")
+      .send({ ...BASE_PROJECT_BODY, stateIds: [stateId], reportingFrequency: "monthly" });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe(error);
+    expect(mockClientQuery).not.toHaveBeenCalled();
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("authorised project creation releases its client once", async () => {
+    const app = await buildProjectsApp(HQ_USER);
+    const res = await request(app)
+      .post("/api/projects")
+      .send({ ...BASE_PROJECT_BODY, reportingFrequency: "monthly" });
+
+    expect(res.status).toBe(201);
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -296,22 +401,124 @@ describe("RFREQ-HIST — historical projects stay null", () => {
 describe("RFREQ-UPD — PATCH /projects/:id", () => {
   beforeEach(() => {
     denyPerms = false;
+    stateAccessAllowed = true;
+    stateValidation = "active";
     mockQuery.mockReset();
     mockPoolNoOp();
+    configureClientRelease(false);
   });
 
-  function mockPatchClient() {
+  function mockPatchClient(hasHqOperations = false, stateIds = [5]) {
     const captured: { sql: string; params: unknown[] }[] = [];
     mockClientQuery.mockReset();
     mockClientQuery.mockImplementation((sql: string, params: unknown[] = []) => {
       captured.push({ sql, params });
       if (/SELECT/i.test(sql) && /FROM projects/i.test(sql)) {
-        return Promise.resolve({ rows: [{ id: 1, status: "draft", sector: "Health" }] });
+        return Promise.resolve({ rows: [{ id: 1, status: "draft", sector: "Health", has_hq_operations: hasHqOperations, state_ids: stateIds }] });
       }
       return Promise.resolve({ rows: [{ id: 1 }] });
     });
     return captured;
   }
+
+  it("rejects a State caller's draft edit when it claims HQ or another State", async () => {
+    const captured = mockPatchClient();
+    configureClientRelease(true);
+    const app = await buildProjectsApp(SPO_USER);
+    for (const body of [
+      { ...BASE_PROJECT_BODY, hasHqOperations: true },
+      { ...BASE_PROJECT_BODY, stateIds: [6] },
+      { ...BASE_PROJECT_BODY, stateAllocations: [{ stateId: 6, budgetAllocation: 0 }] },
+      { ...BASE_PROJECT_BODY, outputs: [{ title: "Output", activities: [{ title: "Activity", stateId: 6 }] }] },
+    ]) {
+      captured.splice(0);
+      const res = await request(app).patch("/api/projects/1").send(body);
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("state_forbidden");
+      expect(captured.some((call) => /UPDATE projects SET/i.test(call.sql))).toBe(false);
+      expect(mockClient.release).toHaveBeenCalledTimes(1);
+      mockClient.release.mockClear();
+    }
+  });
+
+  it("fails closed for a State caller with no assigned State before updating a draft", async () => {
+    const captured = mockPatchClient();
+    configureClientRelease(true);
+    const app = await buildProjectsApp(SPO_WITHOUT_STATE_USER);
+    const res = await request(app).patch("/api/projects/1").send(BASE_PROJECT_BODY);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("state_forbidden");
+    expect(captured.some((call) => /UPDATE projects SET/i.test(call.sql))).toBe(false);
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a State caller who has no record-level access to the draft", async () => {
+    stateAccessAllowed = false;
+    const captured = mockPatchClient();
+    configureClientRelease(true);
+    const app = await buildProjectsApp(SPO_USER);
+    const res = await request(app).patch("/api/projects/1").send(BASE_PROJECT_BODY);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("state_forbidden");
+    expect(captured.some((call) => /UPDATE projects SET/i.test(call.sql))).toBe(false);
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects State edits of an existing multi-State draft instead of silently narrowing it", async () => {
+    const captured = mockPatchClient(false, [5, 6]);
+    configureClientRelease(true);
+    const app = await buildProjectsApp(SPO_USER);
+    const res = await request(app).patch("/api/projects/1").send(BASE_PROJECT_BODY);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("state_forbidden");
+    expect(captured.some((call) => /DELETE FROM project_states/i.test(call.sql))).toBe(false);
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires a State caller to clear HQ operations before editing a historical HQ draft", async () => {
+    const captured = mockPatchClient(true);
+    configureClientRelease(true);
+    const app = await buildProjectsApp(SPO_USER);
+    const res = await request(app).patch("/api/projects/1").send(BASE_PROJECT_BODY);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("state_forbidden");
+    expect(captured.some((call) => /UPDATE projects SET/i.test(call.sql))).toBe(false);
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["invalid_state", "invalid", 99],
+    ["inactive_state", "inactive", 6],
+  ] as const)("returns %s cleanly for a State assignment on draft edit", async (error, validation, stateId) => {
+    stateValidation = validation;
+    mockPatchClient();
+    configureClientRelease(true);
+    const app = await buildProjectsApp(HQ_USER);
+    const res = await request(app)
+      .patch("/api/projects/1")
+      .send({ ...BASE_PROJECT_BODY, stateIds: [stateId] });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe(error);
+    expect(mockClientQuery.mock.calls.some(([sql]) => sql === "BEGIN")).toBe(false);
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("authorised draft editing releases its client once", async () => {
+    mockPatchClient();
+    configureClientRelease(true);
+    const app = await buildProjectsApp(HQ_USER);
+    const res = await request(app)
+      .patch("/api/projects/1")
+      .send(BASE_PROJECT_BODY);
+
+    expect(res.status).toBe(200);
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
 
   it("RFREQ-UPD-01: PATCH reportingFrequency=quarterly on a monthly project → 200, column updated", async () => {
     const captured = mockPatchClient();
