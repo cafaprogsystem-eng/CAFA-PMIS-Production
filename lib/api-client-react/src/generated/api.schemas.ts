@@ -3230,7 +3230,11 @@ export interface SectorPerformance {
   sector: string;
   projects: number;
   beneficiaries: number;
-  indicatorAchievementPct: number;
+  /**
+   * Achievement across valid positive-target indicators in the authorised scoped Project population; null when no valid indicator evidence exists
+   * @nullable
+   */
+  indicatorAchievementPct: number | null;
   /**
    * Single-currency sectors only; null when the sector spans multiple currencies or the budget/spend data is unavailable
    * @nullable
