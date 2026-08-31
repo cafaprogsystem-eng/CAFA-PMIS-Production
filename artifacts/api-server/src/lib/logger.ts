@@ -1,6 +1,11 @@
 import pino from "pino";
+import { isProductionEnv } from "./env";
 
-const isProduction = process.env.NODE_ENV === "production";
+// This is the first module index.ts imports, so validating NODE_ENV here
+// doubles as the boot-time assertion: an unrecognized value throws before any
+// other module (session cookies, CORS, rate limiting) can read it and quietly
+// fall back to a less secure default.
+const isProduction = isProductionEnv();
 
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",

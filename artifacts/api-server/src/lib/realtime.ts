@@ -13,6 +13,7 @@ import {
   permissionsFor,
   type CurrentUser,
 } from "../middlewares/currentUser";
+import { isProductionEnv } from "./env";
 import { canAccessConversation, type ConversationAccessUser } from "./conversationAuth";
 import { resolveReportViewAccess } from "./reportAuth";
 import { PresenceService, type PresenceTransition } from "./presence";
@@ -446,7 +447,7 @@ class SocketIoOperationalEventTransport implements OperationalEventTransport {
 
 export function createRealtimeCorsOptions(
   allowedOrigins: readonly string[],
-  allowAllWhenEmpty = process.env.NODE_ENV !== "production",
+  allowAllWhenEmpty = !isProductionEnv(),
 ): {
   cors: { origin: ReturnType<typeof createCredentialedCorsOriginHandler>; credentials: true };
   allowRequest: (

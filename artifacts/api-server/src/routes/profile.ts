@@ -12,6 +12,8 @@ import {
   isStorageConfigured,
 } from "../lib/objectStorage";
 import { signUploadToken, UploadTokenError, verifyUploadToken } from "../lib/uploadToken";
+import { isProductionEnv } from "../lib/env";
+import { revokeAllSessionsForUser } from "../lib/session";
 import {
   NOTIFICATION_TIMEZONES,
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -225,7 +227,7 @@ const passwordChangeLimiter = rateLimit({
   keyGenerator: (req) => req.currentUser
     ? `profile-password:${req.currentUser.id}`
     : `profile-password:${ipKeyGenerator(req.ip ?? "")}`,
-  skip: () => process.env.NODE_ENV !== "production",
+  skip: () => !isProductionEnv(),
 });
 
 router.post("/profile/change-password", passwordChangeLimiter, async (req: Request, res: Response) => {
@@ -245,6 +247,10 @@ router.post("/profile/change-password", passwordChangeLimiter, async (req: Reque
     if (!match) { res.status(401).json({ error: "incorrect_password" }); return; }
     const newHash = await bcrypt.hash(String(newPassword), 12);
     await pool.query(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [newHash, req.currentUser.id]);
+    // Sign out every other session for this account — a stolen cookie or an
+    // unattended device must not survive the owner deliberately changing the
+    // password. The session making this request is kept alive.
+    await revokeAllSessionsForUser(req.currentUser.id, req.authSession?.id);
     await logAudit({ userId: req.currentUser.id, action: "change_password", module: "profile", entityId: req.currentUser.id });
     res.json({ message: "Password changed successfully." });
   } catch (err) {

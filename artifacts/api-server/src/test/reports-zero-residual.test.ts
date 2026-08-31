@@ -947,16 +947,23 @@ describe("REP-ZR-22 — notifications post-COMMIT only", () => {
 describe("REP-ZR-23 — production rate limit guard", () => {
   const APP_SRC = src("../app.ts");
 
-  it("both limiters gate the dev/test bypass on NODE_ENV !== 'production' exactly", () => {
-    const skips = APP_SRC.match(/skip:\s*\(\)\s*=>\s*process\.env\.NODE_ENV\s*!==\s*"production"/g) ?? [];
+  it("both limiters gate the dev/test bypass on the shared isProductionEnv() check exactly", () => {
+    // app.ts no longer inlines `process.env.NODE_ENV === "production"` — both
+    // limiters route through the single validated `lib/env.ts` helper so a
+    // mis-set NODE_ENV can't silently widen the bypass in one spot but not
+    // the other (see lib/env.test.ts for the fail-closed behavior itself).
+    const skips = APP_SRC.match(/skip:\s*\(\)\s*=>\s*!isProductionEnv\(\)/g) ?? [];
     expect(skips.length).toBeGreaterThanOrEqual(2); // defaultLimiter + authLimiter
     // No other skip conditions exist that could widen the bypass.
     const allSkips = APP_SRC.match(/skip:\s*/g) ?? [];
     expect(allSkips.length).toBe(skips.length);
+    // The old inline string comparison must not have crept back in.
+    expect(APP_SRC).not.toMatch(/process\.env\.NODE_ENV\s*[!=]==\s*"production"/);
   });
 
   it("the guard predicate evaluates to 'do not skip' when NODE_ENV=production", () => {
-    // The exact predicate shipped in app.ts: skip iff NODE_ENV !== "production".
+    // The exact predicate shipped via lib/env.ts's isProductionEnv(): skip
+    // iff NODE_ENV !== "production".
     const skipPredicate = (nodeEnv: string | undefined) => nodeEnv !== "production";
     expect(skipPredicate("production")).toBe(false); // limiter ACTIVE in production
     expect(skipPredicate("development")).toBe(true);

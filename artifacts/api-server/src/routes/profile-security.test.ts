@@ -138,6 +138,7 @@ describe("secure self-profile boundary", () => {
     const hash = await bcrypt.hash("Currentpass1", 4);
     mockPoolQuery
       .mockResolvedValueOnce({ rows: [{ password_hash: hash }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     const response = await request(appFor()).post("/profile/change-password").send({
@@ -148,6 +149,7 @@ describe("secure self-profile boundary", () => {
     expect(response.body).toEqual({ message: "Password changed successfully." });
     expect(JSON.stringify(response.body)).not.toContain("password");
     expect(mockPoolQuery.mock.calls[1][0]).toContain("UPDATE users SET password_hash");
+    expect(mockPoolQuery.mock.calls[2][0]).toContain("UPDATE auth_sessions");
     expect(mockLogAudit).toHaveBeenCalledWith(expect.objectContaining({ action: "change_password" }));
   });
 

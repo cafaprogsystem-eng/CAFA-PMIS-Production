@@ -28,7 +28,6 @@ import voiceNotesRouter from "./voice-notes";
 import programResourcesRouter from "./program-resources";
 import filesRouter from "./files";
 import searchRouter from "./search";
-import auditReportViewerRouter from "./audit-report-viewer";
 import attachmentReconciliationRouter from "./attachment-reconciliation";
 import historicalStorageImportRouter from "./historical-storage-import";
 import attachmentsRouter from "./attachments";
@@ -40,8 +39,6 @@ router.use(attachCurrentUser);
 // Public routes (login, health) — no auth required.
 router.use(authRouter);
 router.use(healthRouter);
-// Temporary internal audit viewer — no auth required (read-only, dev-only file)
-router.use(auditReportViewerRouter);
 
 // Everything below requires a current user. The development identity header is
 // ignored unless the explicitly enabled non-production demo harness accepts it.

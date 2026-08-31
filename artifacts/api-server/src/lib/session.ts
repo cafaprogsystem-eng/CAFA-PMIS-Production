@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import crypto from "node:crypto";
 import { pool } from "@workspace/db";
+import { isProductionEnv } from "./env";
 
 const COOKIE_NAME = "cafa_sid";
 const DEFAULT_MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours
@@ -137,12 +138,36 @@ export async function revokeSession(sessionId: string): Promise<boolean> {
   return result.rows.length > 0;
 }
 
+/**
+ * Revoke every active session belonging to a user — used whenever their
+ * password changes, so a session established before the change (a stolen
+ * cookie, an unattended device) cannot outlive the credential that was meant
+ * to lock it out. Pass `exceptSessionId` to keep the caller's own session
+ * alive for a self-service change; omit it (admin-triggered reset, forgot-
+ * password) to sign the user out everywhere.
+ */
+export async function revokeAllSessionsForUser(
+  userId: number,
+  exceptSessionId?: string,
+): Promise<number> {
+  const result = await pool.query(
+    `UPDATE auth_sessions
+        SET revoked_at = NOW()
+      WHERE user_id = $1
+        AND revoked_at IS NULL
+        AND id IS DISTINCT FROM $2
+      RETURNING id`,
+    [userId, exceptSessionId ?? null],
+  );
+  return result.rows.length;
+}
+
 export function setSessionCookie(res: Response, token: string, remember = false): void {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     signed: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProductionEnv(),
     maxAge: remember ? REMEMBER_MAX_AGE_MS : DEFAULT_MAX_AGE_MS,
     path: "/",
   });
@@ -153,7 +178,7 @@ export function clearSessionCookie(res: Response): void {
     path: "/",
     httpOnly: true,
     signed: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProductionEnv(),
     sameSite: "lax",
   });
 }

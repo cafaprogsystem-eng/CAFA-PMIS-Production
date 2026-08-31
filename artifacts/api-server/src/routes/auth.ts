@@ -5,6 +5,7 @@ import { pool } from "@workspace/db";
 import {
   clearSessionCookie,
   createSession,
+  revokeAllSessionsForUser,
   revokeSession,
   setSessionCookie,
 } from "../lib/session";
@@ -377,6 +378,11 @@ router.post("/auth/reset-password", async (req, res, next) => {
       await pool.query("ROLLBACK");
       throw txErr;
     }
+
+    // A password reset means any session established before it — a stolen
+    // cookie, an unattended device — must not outlive the old credential.
+    await revokeAllSessionsForUser(row.userId);
+    realtime.disconnectUser(row.userId);
 
     // Post-reset notification uses the shared delivery/realtime/recipient
     // contract. The specialised confirmation email below remains authoritative.

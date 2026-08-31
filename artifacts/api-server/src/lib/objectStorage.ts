@@ -27,6 +27,7 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
+import { isProductionEnv } from "./env";
 import { Storage, File as GCSFile } from "@google-cloud/storage";
 import {
   S3Client,
@@ -101,7 +102,7 @@ export function isStorageConfigured(): StorageStatus {
     // Development keeps the historical "auto" default for S3-compatible
     // local services. Production must name the region explicitly so an
     // incomplete AWS configuration cannot reach the listener.
-    if (process.env.NODE_ENV === "production" && !region) missing.push("S3_REGION");
+    if (isProductionEnv() && !region) missing.push("S3_REGION");
 
     if (missing.length > 0) {
       return {
@@ -137,7 +138,7 @@ export function isStorageConfigured(): StorageStatus {
   }
 
   // "replit" provider
-  if (process.env.NODE_ENV === "production") {
+  if (isProductionEnv()) {
     return {
       configured: false,
       provider,
@@ -158,7 +159,7 @@ export function isStorageConfigured(): StorageStatus {
  */
 export function validateStorageConfiguration(): void {
   const status = isStorageConfigured();
-  if (process.env.NODE_ENV === "production" && !status.configured) {
+  if (isProductionEnv() && !status.configured) {
     throw new Error(`Storage configuration invalid: ${status.reason ?? "unknown error"}`);
   }
 }

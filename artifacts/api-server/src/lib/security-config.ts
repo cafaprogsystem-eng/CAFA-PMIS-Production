@@ -1,3 +1,5 @@
+import { isProductionEnv } from "./env";
+
 const ALLOWED_ORIGIN_PROTOCOLS = new Set(["http:", "https:"]);
 
 export type PublicAppOriginOptions = {
@@ -94,6 +96,6 @@ export function parsePublicAppOrigins(
  */
 export function getConfiguredPublicAppOrigins(): string[] {
   return parsePublicAppOrigins(process.env.PUBLIC_APP_URL, {
-    required: process.env.NODE_ENV === "production",
+    required: isProductionEnv(),
   });
 }

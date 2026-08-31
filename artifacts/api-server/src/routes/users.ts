@@ -17,6 +17,7 @@ import { validatePassword } from "../lib/password";
 import { resolveEffectiveAccess } from "../lib/effectiveAccess";
 import { assertActiveState } from "../lib/state-master";
 import { realtime } from "../lib/realtime";
+import { revokeAllSessionsForUser } from "../lib/session";
 
 async function dispatchInviteEmail(opts: {
   name: string; email: string; roleLabel: string; stateName: string | null; sector: string | null;
@@ -1147,6 +1148,7 @@ router.post("/users/:id/reset-password", requirePerm("users.manage"), requireVal
         `UPDATE users SET password_hash = NULL, invite_token = $1, invite_expires_at = $2, status = 'invited', updated_at = NOW() WHERE id = $3`,
         [inviteToken, inviteExpiresAt, id],
       );
+      await revokeAllSessionsForUser(id);
       await publishUserDirectoryChange(id, "invite_changed", true);
       realtime.disconnectUser(id);
       await logAudit({ userId: req.currentUser?.id ?? null, action: "password_reset_invite", module: "users", entityId: id });
@@ -1164,6 +1166,10 @@ router.post("/users/:id/reset-password", requirePerm("users.manage"), requireVal
       `UPDATE users SET password_hash = $1, invite_token = NULL, invite_expires_at = NULL, updated_at = NOW() WHERE id = $2`,
       [hash, id],
     );
+    // An admin-issued password reset must sign the target user out of every
+    // existing session, not just change the credential going forward.
+    await revokeAllSessionsForUser(id);
+    realtime.disconnectUser(id);
     await logAudit({ userId: req.currentUser?.id ?? null, action: "password_reset", module: "users", entityId: id });
     res.json({ ok: true });
   } catch (err) {

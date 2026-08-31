@@ -13,6 +13,7 @@ import {
   getConfiguredPublicAppOrigins,
 } from "./lib/security-config";
 import { createApiErrorHandler } from "./lib/error-handler";
+import { isProductionEnv } from "./lib/env";
 
 const app: Express = express();
 
@@ -22,7 +23,7 @@ app.set("trust proxy", 1);
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) {
-  if (process.env.NODE_ENV === "production") {
+  if (isProductionEnv()) {
     throw new Error("SESSION_SECRET is required in production");
   }
   logger.warn("SESSION_SECRET is not set — using an insecure development fallback. Configure it before deploying.");
@@ -61,7 +62,7 @@ app.use(
   cors({
     origin: createCredentialedCorsOriginHandler(
       allowedOrigins,
-      process.env.NODE_ENV !== "production",
+      !isProductionEnv(),
     ),
     credentials: true,
   }),
@@ -76,7 +77,7 @@ const defaultLimiter = rateLimit({
   message: { error: "too_many_requests" },
   // Skip rate limiting in non-production environments so E2E tests and local dev
   // are not blocked by in-memory counters. Production still enforces the limit.
-  skip: () => process.env.NODE_ENV !== "production",
+  skip: () => !isProductionEnv(),
 });
 
 const authLimiter = rateLimit({
@@ -85,7 +86,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "too_many_requests" },
-  skip: () => process.env.NODE_ENV !== "production",
+  skip: () => !isProductionEnv(),
 });
 
 app.use("/api/auth/login", authLimiter);
