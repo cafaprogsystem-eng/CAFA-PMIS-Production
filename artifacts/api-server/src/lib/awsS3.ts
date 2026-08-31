@@ -10,6 +10,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "node:crypto";
 import { logger } from "./logger";
+import { MAX_ATTACHMENT_BYTES } from "./attachmentLimits";
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 // All values come from environment variables — no hardcoded secrets.
@@ -23,8 +24,7 @@ import { logger } from "./logger";
 const REGION = process.env.AWS_REGION;
 const BUCKET = process.env.AWS_S3_BUCKET;
 
-export const MAX_ATTACHMENT_BYTES =
-  Number(process.env.MAX_ATTACHMENT_SIZE_MB ?? "25") * 1024 * 1024;
+export { MAX_ATTACHMENT_BYTES };
 
 // ── Config status (safe — no secrets ever surfaced) ───────────────────────────
 

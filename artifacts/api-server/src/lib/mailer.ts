@@ -284,7 +284,7 @@ export function renderPasswordResetEmail(opts: {
   const html = HEADER() + `
     <h2 style="margin:0 0 16px;font-size:20px">Reset your password</h2>
     <p>Hello <strong>${opts.name}</strong>,</p>
-    <p>We received a request to reset the password for your CAFA PMIS account (<strong>${opts.email}</strong>). Click below — this link is valid for <strong>30 minutes</strong> and can only be used once.</p>
+    <p>We received a request to reset the password for your CAFA PMIS account (<strong>${opts.email}</strong>). Click below — this link is valid for <strong>60 minutes</strong> and can only be used once.</p>
     ${actionBtn("Reset my password", link)}
     ${fallbackUrl(link)}
     <p style="font-size:12px;color:#6b7280;margin-top:16px">Expires: <strong>${expires}</strong><br/>If you didn't request this, ignore this email — your password won't change.</p>

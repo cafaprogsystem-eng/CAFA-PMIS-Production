@@ -15,12 +15,13 @@ import { assertAttachmentMutationAllowed } from "../lib/reportAuth";
 import { signUploadToken } from "../lib/uploadToken";
 import { canAccessConversation } from "../lib/conversationAuth";
 import { findConversationAttachmentByObjectPath } from "../lib/conversationAttachments";
+import { projectScopeSql, planScopeSql, reportScopeSql } from "./files";
+import { MAX_ATTACHMENT_BYTES as MAX_FILE_SIZE_BYTES } from "../lib/attachmentLimits";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
 // ─── Upload policy ─────────────────────────────────────────────────────────────
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 
 const ALLOWED_CONTENT_TYPES = new Set([
   "application/pdf",
@@ -52,6 +53,60 @@ function requireUser(req: Request, res: Response): boolean {
     return false;
   }
   return true;
+}
+
+// The three record-scoped attachment tables /storage/objects/* can be asked
+// to serve. Holding the broad `documents.view` permission is not enough on
+// its own — each owner's own sector/state scope (the same rules
+// projectScopeSql/planScopeSql/reportScopeSql apply in the Filing & Archive
+// registry) must also allow this specific caller, or a TC/SPO who obtains an
+// internal object path out of band (an old bookmark, a leaked log line) could
+// read another sector's or state's attachment despite never having access to
+// it through any canonical route.
+const OBJECT_OWNER_TABLES: {
+  table: string;
+  alias: string;
+  join: string;
+  scope: (req: Request, params: unknown[]) => string;
+}[] = [
+  {
+    table: "project_documents",
+    alias: "pd",
+    join: "JOIN projects p ON p.id = pd.project_id",
+    scope: (req, params) => projectScopeSql(req, params, "p"),
+  },
+  {
+    table: "plan_attachments",
+    alias: "pa",
+    join: "JOIN plans pl ON pl.id = pa.plan_id LEFT JOIN projects p ON p.id = pl.project_id",
+    scope: planScopeSql,
+  },
+  {
+    table: "report_attachments",
+    alias: "ra",
+    join: "JOIN reports r ON r.id = ra.report_id LEFT JOIN projects p ON p.id = r.project_id LEFT JOIN activities act ON act.id = r.activity_id",
+    scope: reportScopeSql,
+  },
+];
+
+// Returns true when `objectPath` is owned by one of the three tables above
+// AND the current user's scope excludes it — the caller must be denied.
+// Returns false when the object is either not owned by any of these tables
+// (a different owner, e.g. program_resources, or the Communication Centre
+// attachment already checked by the caller) or is owned and in scope.
+async function scopedAttachmentOwnerDenies(req: Request, objectPath: string): Promise<boolean> {
+  for (const { table, alias, join, scope } of OBJECT_OWNER_TABLES) {
+    const params: unknown[] = [objectPath];
+    const scopeSql = scope(req, params);
+    const scoped = await pool.query(
+      `SELECT 1 FROM ${table} ${alias} ${join} WHERE ${alias}.object_path = $1 AND (${scopeSql}) LIMIT 1`,
+      params,
+    );
+    if (scoped.rows.length > 0) return false;
+    const exists = await pool.query(`SELECT 1 FROM ${table} WHERE object_path = $1 LIMIT 1`, [objectPath]);
+    if (exists.rows.length > 0) return true;
+  }
+  return false;
 }
 
 // ─── GET /storage/status ───────────────────────────────────────────────────────
@@ -290,6 +345,13 @@ router.get(
           res.status(410).json({ error: "file_unavailable", message: "File Unavailable" });
           return;
         }
+      } else if (await scopedAttachmentOwnerDenies(req, objectPath)) {
+        // Owned by a project document, plan attachment, or report attachment
+        // outside this caller's sector/state scope — deny regardless of the
+        // broad documents.view permission the route-level middleware already
+        // granted.
+        res.status(403).json({ error: "forbidden" });
+        return;
       }
       // Legacy private-object URLs may still exist in bookmarks or old
       // metadata. Do not stream an object when any canonical attachment owner

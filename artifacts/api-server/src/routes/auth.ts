@@ -52,6 +52,52 @@ function hashToken(plain: string): string {
   return crypto.createHash("sha256").update(plain).digest("hex");
 }
 
+// Precomputed once at startup and reused for every failed lookup, so a
+// non-existent identifier takes the same time to reject as a wrong password
+// on a real account. Without this, a fast DB miss (no row found) versus a
+// ~50-100ms bcrypt comparison (row found, password wrong) lets an attacker
+// distinguish "valid account" from "no such account" purely from response
+// timing, even though the error message itself is already identical either way.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("no-such-account-constant-time-placeholder", 12);
+
+// Account-level lockout: N consecutive failed attempts against the SAME
+// identifier locks it out for a cooldown period, independent of the caller's
+// source IP. The existing authLimiter in app.ts is IP-keyed only, so a
+// distributed attacker (rotating IPs / residential proxies) could otherwise
+// brute-force one high-value account indefinitely since the IP-based limiter
+// never trips for them.
+const ACCOUNT_LOCKOUT_THRESHOLD = 10;
+const ACCOUNT_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+const ACCOUNT_LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+const accountFailures = new Map<string, number[]>();
+const accountLockouts = new Map<string, number>();
+
+function isAccountLocked(identifier: string): boolean {
+  const until = accountLockouts.get(identifier);
+  if (until === undefined) return false;
+  if (Date.now() >= until) {
+    accountLockouts.delete(identifier);
+    accountFailures.delete(identifier);
+    return false;
+  }
+  return true;
+}
+
+function recordFailedLogin(identifier: string): void {
+  const now = Date.now();
+  const attempts = (accountFailures.get(identifier) ?? []).filter((t) => now - t < ACCOUNT_LOCKOUT_WINDOW_MS);
+  attempts.push(now);
+  accountFailures.set(identifier, attempts);
+  if (attempts.length >= ACCOUNT_LOCKOUT_THRESHOLD) {
+    accountLockouts.set(identifier, now + ACCOUNT_LOCKOUT_DURATION_MS);
+  }
+}
+
+function clearAccountFailures(identifier: string): void {
+  accountFailures.delete(identifier);
+  accountLockouts.delete(identifier);
+}
+
 const router: IRouter = Router();
 
 router.post("/auth/login", async (req, res, next) => {
@@ -65,6 +111,12 @@ router.post("/auth/login", async (req, res, next) => {
       return;
     }
 
+    const normalizedIdentifier = identifier.toLowerCase();
+    if (isAccountLocked(normalizedIdentifier)) {
+      res.status(429).json({ error: "too_many_requests" });
+      return;
+    }
+
     const { rows } = await pool.query(
       `SELECT u.id, u.name, u.email, u.username, u.password_hash, u.role, u.role_label, u.scope, u.state_id, u.sector, u.status, s.name AS state_name
        FROM users u
@@ -75,15 +127,20 @@ router.post("/auth/login", async (req, res, next) => {
     );
     const row = rows[0];
     if (!row || !row.password_hash) {
+      // Always run a real bcrypt comparison — see DUMMY_PASSWORD_HASH above.
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      recordFailedLogin(normalizedIdentifier);
       res.status(401).json({ error: "invalid_credentials" });
       return;
     }
 
     const ok = await bcrypt.compare(password, row.password_hash);
     if (!ok) {
+      recordFailedLogin(normalizedIdentifier);
       res.status(401).json({ error: "invalid_credentials" });
       return;
     }
+    clearAccountFailures(normalizedIdentifier);
 
     // Only active accounts may sign in.
     if (row.status && row.status !== "active") {

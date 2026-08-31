@@ -6,6 +6,7 @@ import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage"
 import { nextResourceFileVersion } from "../lib/resourceFileVersion";
 import { UploadTokenError, verifyUploadToken } from "../lib/uploadToken";
 import { realtime } from "../lib/realtime";
+import { MAX_ATTACHMENT_BYTES } from "../lib/attachmentLimits";
 
 /**
  * Filing & Archive is a metadata registry over authoritative attachments.
@@ -14,8 +15,6 @@ import { realtime } from "../lib/realtime";
  */
 const router: IRouter = Router();
 const objectStorage = new ObjectStorageService();
-
-const MAX_ATTACHMENT_BYTES = Number(process.env.MAX_ATTACHMENT_SIZE_MB ?? "25") * 1024 * 1024;
 
 /** Ordered, approved filing taxonomy. HR Records remains readable as legacy
  * metadata, but is intentionally not offered in upload or active navigation. */
@@ -72,7 +71,7 @@ function archiveViewEnabled(req: Request): boolean {
   );
 }
 
-function projectScopeSql(req: Request, params: unknown[], alias = "p"): string {
+export function projectScopeSql(req: Request, params: unknown[], alias = "p"): string {
   const user = req.currentUser!;
   if (archiveManager(req)) return `${alias}.deleted_at IS NULL`;
   if (!archiveViewEnabled(req)) return "FALSE";
@@ -92,7 +91,7 @@ function projectScopeSql(req: Request, params: unknown[], alias = "p"): string {
   return `${alias}.deleted_at IS NULL`;
 }
 
-function reportScopeSql(req: Request, params: unknown[]): string {
+export function reportScopeSql(req: Request, params: unknown[]): string {
   const user = req.currentUser!;
   if (!resourcePermission(req, "reports.view")) return "FALSE";
   if (archiveManager(req)) return "TRUE";
@@ -117,7 +116,7 @@ function reportScopeSql(req: Request, params: unknown[]): string {
   return "TRUE";
 }
 
-function planScopeSql(req: Request, params: unknown[]): string {
+export function planScopeSql(req: Request, params: unknown[]): string {
   const user = req.currentUser!;
   if (archiveManager(req)) return "TRUE";
   if (!archiveViewEnabled(req)) return "FALSE";

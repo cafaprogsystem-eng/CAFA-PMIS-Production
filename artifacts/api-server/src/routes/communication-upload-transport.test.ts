@@ -108,7 +108,7 @@ describe("Communication Centre upload capability and transport", () => {
 
   it.each([
     ["unsupported MIME", { name: "script.html", size: 1024, contentType: "text/html", scope: "messages" }, 415, "unsupported_media_type"],
-    ["oversized file", { name: "large.pdf", size: 20 * 1024 * 1024 + 1, contentType: "application/pdf", scope: "messages" }, 413, "file_too_large"],
+    ["oversized file", { name: "large.pdf", size: 25 * 1024 * 1024 + 1, contentType: "application/pdf", scope: "messages" }, 413, "file_too_large"],
     ["unsafe filename", { name: "../secret.pdf", size: 1024, contentType: "application/pdf", scope: "messages" }, 400, "invalid_file_name"],
   ])("retains server validation for %s", async (_case, body, status, error) => {
     const response = await requestUpload(makeApp(), body);

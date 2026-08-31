@@ -119,7 +119,7 @@ describe("Communication Centre upload capability and descriptor contract", () =>
       .send({
         scope: "messages",
         name: "large.pdf",
-        size: 20 * 1024 * 1024 + 1,
+        size: 25 * 1024 * 1024 + 1,
         contentType: "application/pdf",
       });
 

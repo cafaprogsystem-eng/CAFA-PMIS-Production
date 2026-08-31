@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
 import { CreateBeneficiaryBody } from "@workspace/api-zod";
-import { logAudit } from "../middlewares/currentUser";
+import { logAudit, requirePerm } from "../middlewares/currentUser";
 import { resolveLocationContext } from "../lib/accessControl";
 
 const router: IRouter = Router();
@@ -56,9 +56,25 @@ router.get("/beneficiaries", async (req, res, next) => {
   }
 });
 
-router.post("/beneficiaries", async (req, res, next) => {
+router.post("/beneficiaries", requirePerm("beneficiaries.create"), async (req, res, next) => {
   try {
+    const user = req.currentUser!;
     const body = CreateBeneficiaryBody.parse(req.body);
+
+    // Security: a state-scoped role (state_program_officer) must not be able
+    // to attribute a beneficiary to a state outside their own assignment via
+    // a crafted stateId in the request body. resolveLocationContext is the
+    // same canonical clamp the GET route above uses — reuse it for writes.
+    const { stateId: clampedStateId, denied } = resolveLocationContext(
+      { id: user.id, role: user.role, stateId: user.stateId ?? null },
+      String(body.stateId),
+    );
+    if (denied) {
+      res.status(403).json({ error: "forbidden", message: "No state assignment configured for this account." });
+      return;
+    }
+    const stateId = clampedStateId ?? body.stateId;
+
     const code = `BEN-${Date.now().toString(36).toUpperCase()}`;
     const { rows } = await pool.query(
       `INSERT INTO beneficiaries (code, name, gender, age_group, category, vulnerability, state_id, locality_id, project_id, assistance_received, verification_status)
@@ -75,7 +91,7 @@ router.post("/beneficiaries", async (req, res, next) => {
                  verification_status AS "verificationStatus"`,
       [
         code, body.name, body.gender, body.ageGroup, body.category,
-        body.vulnerability ?? null, body.stateId,
+        body.vulnerability ?? null, stateId,
         body.localityId ?? null, body.projectId ?? null,
         body.assistanceReceived ?? null,
       ],

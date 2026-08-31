@@ -97,6 +97,15 @@ function hasRiskMutationPerm(req: Request): boolean {
   return hasPerm(permissionsFor(req.currentUser!), "risks.update");
 }
 
+// Fail-closed Technical Coordinator sector restriction for the Drive module.
+// An empty result means "match nothing", never "no restriction" — a TC whose
+// `sectors` parsed empty (no assignment, legacy blank data) must be denied
+// everything, not granted everything. Falls back to the legacy singular
+// `sector` field when `sectors` was not populated.
+function tcDriveSectors(user: { sectors: string[] | null; sector: string | null }): string[] {
+  return user.sectors?.length ? user.sectors : user.sector ? [user.sector] : [];
+}
+
 // RISK-004 DTO allow-list: risk attachment responses expose only user-facing
 // fields. Internal/structural fields (driveFileId S3 key, recordId, projectId,
 // sector, visibilityLevel, permissionLevel, parentFileId, uploadedByUserId)
@@ -308,8 +317,9 @@ router.get("/drive/files", requireAuth, async (req: Request, res: Response, next
     if (user.role === "state_office_manager" || user.role === "state_program_officer") {
       params.push(user.stateId); where.push(`df.state_id = $${params.length}`);
     }
-    if (user.role === "technical_coordinator" && user.sectors?.length) {
-      params.push(user.sectors); where.push(`df.sector = ANY($${params.length}::text[])`);
+    if (user.role === "technical_coordinator") {
+      const tcSectors = tcDriveSectors(user);
+      params.push(tcSectors); where.push(`df.sector = ANY($${params.length}::text[])`);
     }
 
     // RISK-004: parent-risk authorisation applied at SQL level, so BOTH the
@@ -328,7 +338,7 @@ router.get("/drive/files", requireAuth, async (req: Request, res: Response, next
           );
         }
       } else if (user.role === "technical_coordinator") {
-        const tcSectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : [];
+        const tcSectors = tcDriveSectors(user);
         if (!tcSectors.length) {
           where.push(`df.module <> 'risks'`);
         } else {
@@ -594,8 +604,11 @@ router.get("/drive/files/:id/download", requireAuth, async (req: Request, res: R
       if ((user.role === "state_office_manager" || user.role === "state_program_officer") && file.stateId && file.stateId !== user.stateId) {
         res.status(403).json({ error: "forbidden" }); return;
       }
-      if (user.role === "technical_coordinator" && user.sectors?.length && file.sector && !user.sectors.includes(file.sector)) {
-        res.status(403).json({ error: "forbidden" }); return;
+      if (user.role === "technical_coordinator") {
+        const tcSectors = tcDriveSectors(user);
+        if (!file.sector || !tcSectors.includes(file.sector)) {
+          res.status(403).json({ error: "forbidden" }); return;
+        }
       }
     }
 

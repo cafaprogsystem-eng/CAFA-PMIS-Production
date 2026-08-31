@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import crypto from "node:crypto";
 import fsSync from "node:fs";
 import path from "node:path";
 import { pool } from "@workspace/db";
@@ -83,6 +84,19 @@ const CERT_SELECT = `
   JOIN training_videos v ON v.id = cert.training_video_id
   JOIN users u ON u.id = cert.user_id
 `;
+
+// Certificate IDs are shown/printed on the certificate but must not be
+// enumerable — the verification endpoint below returns each holder's name,
+// role, and email for any certificate_id it's given. A sequential counter
+// (CAFA-PMIS-2026-000001, 000002, ...) let any authenticated user harvest
+// every staff member's PII by walking the counter. The random suffix carries
+// 48 bits of entropy — practically unguessable — while keeping the same
+// human-readable, printable format.
+function generateCertificateId(): string {
+  const year = new Date().getFullYear();
+  const random = crypto.randomBytes(6).toString("hex").toUpperCase();
+  return `CAFA-PMIS-${year}-${random}`;
+}
 
 function probeDuration(filePath: string): number {
   try {
@@ -658,10 +672,7 @@ router.post("/training-videos/:id/complete", requireAuth, async (req, res, next)
     const { rows: certRows } = await pool.query(`
       WITH issued AS (
         INSERT INTO training_certificates (certificate_id, user_id, training_video_id)
-        VALUES (
-          'CAFA-PMIS-' || EXTRACT(YEAR FROM NOW())::text || '-' || LPAD(NEXTVAL('training_cert_seq')::text, 6, '0'),
-          $1, $2
-        )
+        VALUES ($1, $2, $3)
         RETURNING *
       )
       SELECT
@@ -674,7 +685,7 @@ router.post("/training-videos/:id/complete", requireAuth, async (req, res, next)
       FROM issued
       JOIN training_videos v ON v.id = issued.training_video_id
       JOIN users u ON u.id = issued.user_id
-    `, [userId, id]);
+    `, [generateCertificateId(), userId, id]);
 
     await pool.query(
       `UPDATE training_completions SET certificate_issued=TRUE WHERE user_id=$1 AND training_video_id=$2`,
@@ -785,10 +796,7 @@ router.post("/training-certificates/:id/reissue", requireAuth, requireVideoAdmin
       WITH issued AS (
         INSERT INTO training_certificates
           (certificate_id, user_id, training_video_id, reissued_by_id, reissued_at)
-        VALUES (
-          'CAFA-PMIS-' || EXTRACT(YEAR FROM NOW())::text || '-' || LPAD(NEXTVAL('training_cert_seq')::text, 6, '0'),
-          $1, $2, $3, NOW()
-        )
+        VALUES ($1, $2, $3, $4, NOW())
         RETURNING *
       )
       SELECT
@@ -800,7 +808,7 @@ router.post("/training-certificates/:id/reissue", requireAuth, requireVideoAdmin
       FROM issued
       JOIN training_videos v ON v.id = issued.training_video_id
       JOIN users u ON u.id = issued.user_id
-    `, [orig[0].user_id, orig[0].training_video_id, req.currentUser!.id]);
+    `, [generateCertificateId(), orig[0].user_id, orig[0].training_video_id, req.currentUser!.id]);
 
     await logAudit({ userId: req.currentUser!.id, action: "certificate_reissued", module: "manual", entityId: newRows[0].id });
     res.json({ certificate: newRows[0] });

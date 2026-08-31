@@ -13,10 +13,10 @@ import { hasPerm, logAudit, permissionsFor, assertSectorAllowed } from "../middl
 import { assertAnySectorAllowed, assertStateAllowed, isPlanCurrentlyEditable } from "./plans";
 import { signUploadToken, UploadTokenError, verifyUploadToken } from "../lib/uploadToken";
 import { realtime } from "../lib/realtime";
+import { MAX_ATTACHMENT_BYTES } from "../lib/attachmentLimits";
 
 const router: IRouter = Router();
 const objectStorage = new ObjectStorageService();
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const UPLOAD_TTL_MS = 15 * 60 * 1000;
 const ALLOWED_CONTENT_TYPES = new Set([
   "application/pdf",
