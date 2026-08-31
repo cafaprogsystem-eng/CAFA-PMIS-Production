@@ -185,7 +185,7 @@ export async function computeStateImplementation(
         FROM activities a LEFT JOIN scoped_projects sp ON sp.id = a.project_id WHERE a.state_id = s.id AND (sp.id IS NOT NULL${standaloneActivityScope})) AS "activityCompletionPct",
       (SELECT
         CASE WHEN COUNT(*) > 0
-          THEN (COUNT(*) FILTER (WHERE status = 'approved') * 100 / COUNT(*))::int
+          THEN (COUNT(*) FILTER (WHERE r.status = 'approved') * 100 / COUNT(*))::int
           ELSE NULL END
         FROM reports r LEFT JOIN scoped_projects sp ON sp.id = r.project_id
         LEFT JOIN activities ra ON ra.id = r.activity_id

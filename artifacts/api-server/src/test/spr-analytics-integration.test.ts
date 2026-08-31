@@ -186,7 +186,7 @@ describe("SPR-AN-01 — /dashboard/pending-approvals approval queue keeps projec
   });
 
   it("TC sector predicate uses the canonical type-aware helper and activity join", () => {
-    expect(seg).toContain('reportScopeWhere(canonicalReportScope, "r", "p", "act", 1)');
+    expect(seg).toContain('reportScopeConditions(canonicalReportScope, "r", "p", "act", 1)');
     expect(seg).toContain("LEFT JOIN activities act ON act.id = r.activity_id");
   });
 

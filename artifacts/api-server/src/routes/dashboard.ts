@@ -343,14 +343,14 @@ function technicalCoordinatorReportSectorSQL(
 }
 
 /** Report scope mirrors GET /reports, including SPO project assignments. */
-function reportScopeWhere(
+function reportScopeConditions(
   scope: Scope,
   reportAlias: string,
   projectAlias: string,
   activityAlias: string,
   baseIdx: number,
   filters: Record<string, string | undefined> = {},
-): { sql: string; params: (number | number[] | string | string[])[] } {
+): { conditions: string[]; params: (number | number[] | string | string[])[] } {
   const parts: string[] = [];
   const params: (number | number[] | string | string[])[] = [];
   let idx = baseIdx;
@@ -376,7 +376,26 @@ function reportScopeWhere(
   if (filters.donor) { parts.push(`${projectAlias}.donor = $${idx++}`); params.push(filters.donor); }
   if (filters.dateFrom) { parts.push(`${projectAlias}.end_date >= $${idx++}::date`); params.push(filters.dateFrom); }
   if (filters.dateTo) { parts.push(`${projectAlias}.start_date <= $${idx++}::date`); params.push(filters.dateTo); }
-  return { sql: parts.length ? ` AND ${parts.join(" AND ")}` : "", params };
+  return { conditions: parts, params };
+}
+
+function reportScopeWhere(
+  scope: Scope,
+  reportAlias: string,
+  projectAlias: string,
+  activityAlias: string,
+  baseIdx: number,
+  filters: Record<string, string | undefined> = {},
+): { sql: string; params: (number | number[] | string | string[])[] } {
+  const { conditions, params } = reportScopeConditions(
+    scope,
+    reportAlias,
+    projectAlias,
+    activityAlias,
+    baseIdx,
+    filters,
+  );
+  return { sql: conditions.length ? ` AND ${conditions.join(" AND ")}` : "", params };
 }
 
 /** Computed 3×3 Risk score; must mirror routes/risks.ts. */
@@ -489,9 +508,9 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
     const [proj, budgetTotal, budgetSpent, risks, pending, delayed, byStatus, riskCounts, reportCounts, activityCounts] = await Promise.all([
       pool.query(
         `SELECT
-          COUNT(*) FILTER (WHERE status IN ('approved','coordination_approved','technically_approved','active'))::int AS active,
+          COUNT(*) FILTER (WHERE p.status IN ('approved','coordination_approved','technically_approved','active'))::int AS active,
           COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE status = 'closed')::int AS closed
+          COUNT(*) FILTER (WHERE p.status = 'closed')::int AS closed
          FROM projects p WHERE p.deleted_at IS NULL${scopeSql}`,
         scopeParams,
       ),
@@ -537,11 +556,11 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
         );
         return pool.query(
           `SELECT
-            (SELECT COUNT(*)::int FROM projects p WHERE status NOT IN ('approved','rejected','draft')${scopeSql}) AS proj,
+            (SELECT COUNT(*)::int FROM projects p WHERE p.status NOT IN ('approved','rejected','draft')${scopeSql}) AS proj,
             (SELECT COUNT(*)::int FROM reports r
              LEFT JOIN projects rp ON rp.id = r.project_id
              LEFT JOIN activities ra ON ra.id = r.activity_id
-             WHERE status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})${pendingReportScope.sql}
+             WHERE r.status = ANY(${AWAITING_APPROVAL_STATUSES_SQL})${pendingReportScope.sql}
                AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
                AND ${activeProjectParentSQL("r.project_id")}
                AND ${operationalPopulationSQL()}
@@ -560,7 +579,7 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
       ),
       // 6: project counts by status
       pool.query(
-        `SELECT status, COUNT(*)::int AS count FROM projects p WHERE 1=1${scopeSql} GROUP BY status`,
+        `SELECT p.status, COUNT(*)::int AS count FROM projects p WHERE 1=1${scopeSql} GROUP BY p.status`,
         scopeParams,
       ),
       // 7: risk open/critical counts
@@ -956,11 +975,16 @@ router.get("/dashboard/pending-approvals", dashboardFilterGuard("pendingApproval
     // Reports query — scoped to role's actionable report statuses
     let reportRows: Record<string, unknown>[] = [];
     if (steps.reportPredicate) {
-      const reportFilters: string[] = [steps.reportPredicate];
+      const reportConditions: string[] = [steps.reportPredicate];
       const rptExtraParams: (number | string | string[] | number[])[] = [];
-      const reportScope = reportScopeWhere(canonicalReportScope, "r", "p", "act", 1);
-      reportFilters.push(reportScope.sql.replace(/^ AND /, ""));
+      const reportScope = reportScopeConditions(canonicalReportScope, "r", "p", "act", 1);
+      reportConditions.push(...reportScope.conditions);
       rptExtraParams.push(...reportScope.params);
+      reportConditions.push(
+        `r.report_type = ANY(${CANONICAL_TYPES_SQL})`,
+        activeProjectParentSQL("r.project_id"),
+        operationalPopulationSQL(),
+      );
 
       const reports = await pool.query(`
         SELECT r.id, r.title, r.kind, r.report_type AS "reportType", r.status,
@@ -973,10 +997,7 @@ router.get("/dashboard/pending-approvals", dashboardFilterGuard("pendingApproval
         LEFT JOIN activities act ON act.id = r.activity_id
         LEFT JOIN states s ON s.id = r.state_id
         LEFT JOIN users u ON u.id = r.submitted_by_id
-        WHERE ${reportFilters.join(" AND ")}
-          AND r.report_type = ANY(${CANONICAL_TYPES_SQL})
-          AND ${activeProjectParentSQL("r.project_id")}
-          AND ${operationalPopulationSQL()}
+        WHERE ${reportConditions.join("\n          AND ")}
         ORDER BY r.submitted_at DESC LIMIT 20
       `, rptExtraParams);
       reportRows = reports.rows as Record<string, unknown>[];
