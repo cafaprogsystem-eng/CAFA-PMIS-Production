@@ -23,5 +23,9 @@ The `/dashboard/summary` query 4 (pending approvals) applied stateId filter to t
 TC users (no stateId, has sectors) were seeing all pending reports globally instead of only those in their assigned sectors.
 Fix: add `repScopeFilter` that uses `r.project_id IN (SELECT id FROM projects pf WHERE pf.sector = ANY($N::text[]))` for TC, mirroring the pattern used in `/dashboard/pending-approvals`.
 
+**Joined Dashboard SQL must qualify collision-prone columns and represent optional predicates as arrays.**
+**Why:** PostgreSQL rejects an unqualified column when joined relations expose the same name, and joining an empty SQL fragment can produce a malformed `AND`.
+**How to apply:** Name the owning alias for status/identity predicates; build conditions and parameters together, omit absent conditions, then join the populated array once.
+
 ## Data note
 Project sector field should always use canonical-cased values from `VALID_SECTORS` (e.g. `"Health"` not `"health"`). One seed project (CAFA-MPLOLNFX "Smoke Test Project") had `sector='health'` (lowercase) which surfaced as a phantom extra sector in sector-performance. Fixed via `UPDATE projects SET sector='Health' WHERE sector='health'`.
