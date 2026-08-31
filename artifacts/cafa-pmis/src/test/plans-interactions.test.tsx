@@ -126,9 +126,8 @@ afterEach(() => {
 });
 
 function plan(id: number, status: string, title: string) {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const date = tomorrow.toISOString().slice(0, 10);
+  const today = new Date();
+  const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-15`;
   return {
     id,
     title,
