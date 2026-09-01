@@ -1,4 +1,5 @@
 import { CANONICAL_TYPES_SQL, operationalPopulationSQL } from "../lib/reportConstants";
+import { ACTIVE_PROJECT_STATUSES_SQL } from "../lib/projectStatusConstants";
 
 export interface PgPool {
   query<T extends Record<string, unknown> = Record<string, unknown>>(
@@ -163,7 +164,7 @@ export async function computeStateImplementation(
       s.name_ar AS "stateNameAr",
       COALESCE((SELECT COUNT(DISTINCT ps.project_id)::int
          FROM scoped_state_projects ps JOIN projects p ON p.id = ps.project_id
-        WHERE ps.state_id = s.id AND p.status IN ('approved','coordination_approved','technically_approved','active')), 0) AS "activeProjects",
+        WHERE ps.state_id = s.id AND p.status = ANY(${ACTIVE_PROJECT_STATUSES_SQL})), 0) AS "activeProjects",
       COALESCE((SELECT COUNT(*)::int FROM beneficiaries b LEFT JOIN scoped_projects sp ON sp.id = b.project_id WHERE b.state_id = s.id AND (sp.id IS NOT NULL${standaloneBeneficiaryScope})), 0) AS beneficiaries,
       NULL::int AS "budgetUtilizationPct", -- BUD-004: no canonical State-level expenditure source; proxy removed
       COALESCE((SELECT AVG(a.progress_pct)::int FROM activities a LEFT JOIN scoped_projects sp ON sp.id = a.project_id WHERE a.state_id = s.id AND (sp.id IS NOT NULL${standaloneActivityScope})), 0) AS "progressPct",

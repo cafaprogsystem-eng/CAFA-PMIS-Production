@@ -165,19 +165,20 @@ async function buildApp(user: Record<string, unknown>) {
  *  3. BEGIN
  *  4. SELECT id,budget_spent,progress_pct (spend map)
  *  5. UPDATE project row
- *  6. DELETE indicators
- *  7. DELETE outputs
- *  8. DELETE project_states
- *  9. DELETE project_state_allocations
- * 10. DELETE project_free_localities
- * 11. DELETE project_assignments
- * 12. DELETE dependent registry entries
- * 13. DELETE project_documents
- * 14. INSERT output → RETURNING id
- * 15. INSERT indicator → RETURNING id
- * 16. UPDATE or INSERT activity
- * 17. DELETE removed activities  (or DELETE all when matchedIds empty)
- * 18. COMMIT
+ *  6. SELECT code,achieved (indicator achieved-preservation map)
+ *  7. DELETE indicators
+ *  8. DELETE outputs
+ *  9. DELETE project_states
+ * 10. DELETE project_state_allocations
+ * 11. DELETE project_free_localities
+ * 12. DELETE project_assignments
+ * 13. DELETE dependent registry entries
+ * 14. DELETE project_documents
+ * 15. INSERT output → RETURNING id
+ * 16. INSERT indicator → RETURNING id
+ * 17. UPDATE or INSERT activity
+ * 18. DELETE removed activities  (or DELETE all when matchedIds empty)
+ * 19. COMMIT
  */
 function makeClientResponses(
   existingActivities: Array<{ id: number; budget_spent: string; progress_pct: number }>,
@@ -191,19 +192,20 @@ function makeClientResponses(
     { rows: [{ budget: 0 }] },                             // 3b. BUD-BD-01 budget lock (FOR UPDATE)
     { rows: existingActivities },                          // 4. spend map SELECT
     { rows: [] },                                          // 5. UPDATE project
-    { rows: [] },                                          // 6. DELETE indicators
-    { rows: [] },                                          // 7. DELETE outputs
-    { rows: [] },                                          // 8. DELETE project_states
-    { rows: [] },                                          // 9. DELETE state_allocations
-    { rows: [] },                                          // 10. DELETE free_localities
-    { rows: [] },                                          // 11. DELETE project_assignments
-    { rows: [] },                                          // 12. DELETE document registry entries
-    { rows: [] },                                          // 13. DELETE project_documents
-    { rows: [{ id: 999 }] },                              // 14. INSERT output
-    { rows: [{ id: 888 }] },                              // 15. INSERT indicator
-    { rows: [] },                                          // 16. UPDATE/INSERT activity
-    { rows: [] },                                          // 17. DELETE removed activities
-    { rows: [] },                                          // 18. COMMIT
+    { rows: [] },                                          // 6. indicator achieved-map SELECT
+    { rows: [] },                                          // 7. DELETE indicators
+    { rows: [] },                                          // 8. DELETE outputs
+    { rows: [] },                                          // 9. DELETE project_states
+    { rows: [] },                                          // 10. DELETE state_allocations
+    { rows: [] },                                          // 11. DELETE free_localities
+    { rows: [] },                                          // 12. DELETE project_assignments
+    { rows: [] },                                          // 13. DELETE document registry entries
+    { rows: [] },                                          // 14. DELETE project_documents
+    { rows: [{ id: 999 }] },                              // 15. INSERT output
+    { rows: [{ id: 888 }] },                              // 16. INSERT indicator
+    { rows: [] },                                          // 17. UPDATE/INSERT activity
+    { rows: [] },                                          // 18. DELETE removed activities
+    { rows: [] },                                          // 19. COMMIT
   ];
 
   if (failAt !== undefined) {
@@ -301,6 +303,7 @@ describe("PRJ-BD-03 — Activity Spend Preservation", () => {
       { rows: [{ budget: 0 }] },           // BUD-BD-01 budget lock (FOR UPDATE)
       { rows: existingActivities },        // spend map
       { rows: [] },                        // UPDATE project
+      { rows: [] },                        // indicator achieved-map SELECT
       { rows: [] },                        // DELETE indicators
       { rows: [] },                        // DELETE outputs
       { rows: [] },                        // DELETE project_states
@@ -409,6 +412,7 @@ describe("PRJ-BD-03 — Activity Spend Preservation", () => {
       { rows: [{ budget: 0 }] }, // BUD-BD-01 budget lock (FOR UPDATE)
       { rows: existingActivities },
       { rows: [] }, // UPDATE project
+      { rows: [] }, // indicator achieved-map SELECT
       { rows: [] }, // DELETE indicators
       { rows: [] }, // DELETE outputs
       { rows: [] }, // DELETE project states

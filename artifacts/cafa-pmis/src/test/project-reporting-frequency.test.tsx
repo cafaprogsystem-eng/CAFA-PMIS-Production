@@ -334,4 +334,19 @@ describe("Reporting coverage contract", () => {
     expect((src.match(/reportingStartDate: values\.reportingStartDate/g) ?? []).length).toBeGreaterThanOrEqual(3);
     expect((src.match(/reportingEndDate: values\.reportingEndDate/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
+
+  it("also enforces strict ordering on the implementation period itself (startDate/endDate)", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(
+      path.resolve(process.cwd(), "src/components/project-registration-form.tsx"),
+      "utf8",
+    );
+    // The End Date input's native `min` has no effect at submit time (the
+    // form uses noValidate) and reporting dates only mirror start/end until
+    // a user customises them, so this superRefine check was previously the
+    // only gap: a project could be saved with endDate before startDate.
+    expect(src).toContain("End Date cannot be before Start Date");
+    expect(src).toMatch(/data\.startDate && data\.endDate && data\.startDate > data\.endDate/);
+  });
 });

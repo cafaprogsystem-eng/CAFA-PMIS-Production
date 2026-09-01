@@ -65,7 +65,7 @@ describe("Dashboard source-population reconciliation", () => {
     );
     expect(routeSource).toContain("JOIN projects p ON p.id = ps.project_id");
     expect(routeSource).toContain(
-      "WHERE p.status IN ('approved','coordination_approved','technically_approved','active')",
+      "WHERE p.status = ANY(${ACTIVE_PROJECT_STATUSES_SQL})",
     );
     expect(routeSource).toContain(
       '${activeProjectParentSQL("rk.project_id")}',
@@ -95,8 +95,12 @@ describe("Dashboard source-population reconciliation", () => {
   });
 
   it("uses reached project demographics for explicitly reached Dashboard fields", () => {
-    expect(routeSource).toContain(
-      'COALESCE(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls, 0)::int AS "beneficiariesReached"',
+    // Each demographic column is COALESCEd individually before being summed —
+    // not the whole expression at once — so a single NULL column (e.g. an
+    // unrecorded beneficiaries_boys) doesn't zero out the other three
+    // columns' otherwise-known values for that project.
+    expect(routeSource).toMatch(
+      /\(COALESCE\(p\.beneficiaries_male,0\) \+ COALESCE\(p\.beneficiaries_female,0\) \+\s*COALESCE\(p\.beneficiaries_boys,0\) \+ COALESCE\(p\.beneficiaries_girls,0\)\)::int AS "beneficiariesReached"/,
     );
     expect(routeSource).not.toContain(
       'COUNT(*)::int FROM beneficiaries b WHERE b.project_id = p.id), 0) AS "beneficiariesReached"',

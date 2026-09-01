@@ -116,8 +116,13 @@ export function DeleteProjectDialog({
     onSuccess: (data) => {
       const archived = data.deletionMode === "permanent" ? "permanently deleted" : "archived";
       toast.success(`Project ${projectCode} has been ${archived}.`);
-      qc.invalidateQueries({ queryKey: ["projects"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      // ["projects"]/["dashboard"] never matched the generated hooks' real
+      // keys (["/api/projects", ...], ["/api/dashboard/...", ...]), so the
+      // list/dashboard silently kept showing the deleted project until a
+      // manual reload. A bare invalidateQueries() refreshes everything
+      // mounted, matching the pattern already used by projects.tsx's own
+      // submit/duplicate mutations.
+      qc.invalidateQueries();
       qc.removeQueries({ queryKey: ["project-deletion-info", projectId] });
       onOpenChange(false);
       setLocation("/projects");

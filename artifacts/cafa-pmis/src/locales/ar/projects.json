@@ -390,7 +390,14 @@
       "statesEmpty": "لا توجد ولايات نشطة متاحة للتعيين.",
       "statesRetry": "إعادة المحاولة",
       "statesUnavailable": "بيانات الولايات المرجعية غير متاحة. أعد المحاولة قبل الحفظ.",
-      "assignedStateLocked": "ولايتك المعيّنة ثابتة لهذا المشروع."
+      "assignedStateLocked": "ولايتك المعيّنة ثابتة لهذا المشروع.",
+      "stateAllocationSection": "توزيع الميزانية والمستهدفات على الولايات",
+      "stateAllocationHint": "اختياري — وزّع إجمالي الميزانية ومستهدف المستفيدين على الولايات المختارة. اتركه فارغاً لتخطي هذه الخطوة.",
+      "stateAllocationBudget": "حصة الميزانية",
+      "stateAllocationBeneficiaries": "مستهدف المستفيدين",
+      "stateAllocationAllocated": "الموزَّع",
+      "stateAllocationOfTotal": "من إجمالي {{total}}",
+      "stateAllocationExceeds": "إجمالي الموزَّع يتجاوز ميزانية المشروع"
     },
     "donor": {
       "donorOrg": "منظمة الجهة المانحة",

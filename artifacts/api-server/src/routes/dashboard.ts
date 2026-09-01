@@ -9,6 +9,10 @@ import {
   operationalPopulationSQL,
 } from "../lib/reportConstants";
 import { ACTIVE_RISK_STATUS_SQL } from "../lib/riskConstants";
+import {
+  ACTIVE_PROJECT_STATUSES_SQL,
+  AWAITING_PROJECT_APPROVAL_STATUSES_SQL,
+} from "../lib/projectStatusConstants";
 import { VALID_SECTOR_SET } from "../lib/sectors";
 import {
   PMR_COMP_SUBMITTED_STATUSES,
@@ -508,7 +512,7 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
     const [proj, budgetTotal, budgetSpent, risks, pending, delayed, byStatus, riskCounts, reportCounts, activityCounts] = await Promise.all([
       pool.query(
         `SELECT
-          COUNT(*) FILTER (WHERE p.status IN ('approved','coordination_approved','technically_approved','active'))::int AS active,
+          COUNT(*) FILTER (WHERE p.status = ANY(${ACTIVE_PROJECT_STATUSES_SQL}))::int AS active,
           COUNT(*)::int AS total,
           COUNT(*) FILTER (WHERE p.status = 'closed')::int AS closed
          FROM projects p WHERE p.deleted_at IS NULL${scopeSql}`,
@@ -556,7 +560,7 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
         );
         return pool.query(
           `SELECT
-            (SELECT COUNT(*)::int FROM projects p WHERE p.status NOT IN ('approved','rejected','draft')${scopeSql}) AS proj,
+            (SELECT COUNT(*)::int FROM projects p WHERE p.status = ANY(${AWAITING_PROJECT_APPROVAL_STATUSES_SQL})${scopeSql}) AS proj,
             (SELECT COUNT(*)::int FROM reports r
              LEFT JOIN projects rp ON rp.id = r.project_id
              LEFT JOIN activities ra ON ra.id = r.activity_id
@@ -637,7 +641,8 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
 
     const [benReached, benTarget] = await Promise.all([
       pool.query(
-        `SELECT COALESCE(SUM(beneficiaries_male + beneficiaries_female + beneficiaries_boys + beneficiaries_girls),0)::int AS reached
+        `SELECT (COALESCE(SUM(beneficiaries_male),0) + COALESCE(SUM(beneficiaries_female),0) +
+                 COALESCE(SUM(beneficiaries_boys),0) + COALESCE(SUM(beneficiaries_girls),0))::int AS reached
          FROM projects p WHERE 1=1${scopeSql}`,
         scopeParams,
       ),
@@ -650,7 +655,7 @@ router.get("/dashboard/summary", dashboardFilterGuard("summary"), async (req, re
       `SELECT COUNT(DISTINCT ps.state_id)::int AS c
        FROM project_states ps
        JOIN projects p ON p.id = ps.project_id
-       WHERE p.status IN ('approved','coordination_approved','technically_approved','active')${scopeSql}`,
+       WHERE p.status = ANY(${ACTIVE_PROJECT_STATUSES_SQL})${scopeSql}`,
       scopeParams,
     );
 
@@ -867,7 +872,8 @@ router.get("/dashboard/sector-performance", dashboardFilterGuard("sectorPerforma
       SELECT
         p.sector AS sector,
         COUNT(DISTINCT p.id)::int AS projects,
-        COALESCE(SUM(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls), 0)::int AS beneficiaries,
+        (COALESCE(SUM(p.beneficiaries_male),0) + COALESCE(SUM(p.beneficiaries_female),0) +
+         COALESCE(SUM(p.beneficiaries_boys),0) + COALESCE(SUM(p.beneficiaries_girls),0))::int AS beneficiaries,
         ia."indicatorAchievementPct",
         COUNT(DISTINCT NULLIF(p.currency, ''))::int AS "currencyCount",
         SUM(p.budget_total)::float AS "totalBudget",
@@ -962,7 +968,8 @@ router.get("/dashboard/pending-approvals", dashboardFilterGuard("pendingApproval
              p.budget_total::float AS "budgetTotal",
              COALESCE((SELECT SUM(a.budget_spent)::float FROM activities a WHERE a.project_id = p.id), 0) AS "budgetSpent",
              p.beneficiaries_target AS "beneficiariesTarget",
-              COALESCE(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls, 0)::int AS "beneficiariesReached",
+              (COALESCE(p.beneficiaries_male,0) + COALESCE(p.beneficiaries_female,0) +
+               COALESCE(p.beneficiaries_boys,0) + COALESCE(p.beneficiaries_girls,0))::int AS "beneficiariesReached",
              COALESCE((SELECT AVG(a.progress_pct)::int FROM activities a WHERE a.project_id = p.id), 0) AS "progressPct",
              ARRAY(SELECT ps.state_id FROM project_states ps WHERE ps.project_id = p.id ORDER BY ps.state_id) AS "stateIds",
              ARRAY(SELECT s.name FROM project_states ps JOIN states s ON s.id = ps.state_id WHERE ps.project_id = p.id ORDER BY ps.state_id) AS "stateNames",
@@ -1422,7 +1429,8 @@ router.get("/dashboard/donor-portfolio", dashboardFilterGuard("donorPortfolio"),
         p.donor_id,
         d.id                   AS d_id,
         d.name                 AS d_name,
-        COALESCE(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls, 0)::int AS beneficiaries
+        (COALESCE(p.beneficiaries_male,0) + COALESCE(p.beneficiaries_female,0) +
+         COALESCE(p.beneficiaries_boys,0) + COALESCE(p.beneficiaries_girls,0))::int AS beneficiaries
       FROM projects p
       LEFT JOIN donors d ON d.id = p.donor_id
       WHERE p.deleted_at IS NULL${scopeSql}
@@ -1897,7 +1905,8 @@ router.get("/dashboard/beneficiaries", dashboardFilterGuard("beneficiaries"), as
         COALESCE(SUM(beneficiaries_female), 0)::int  AS female,
         COALESCE(SUM(beneficiaries_boys), 0)::int    AS boys,
         COALESCE(SUM(beneficiaries_girls), 0)::int   AS girls,
-        COALESCE(SUM(beneficiaries_male + beneficiaries_female + beneficiaries_boys + beneficiaries_girls), 0)::int AS total
+        (COALESCE(SUM(beneficiaries_male),0) + COALESCE(SUM(beneficiaries_female),0) +
+         COALESCE(SUM(beneficiaries_boys),0) + COALESCE(SUM(beneficiaries_girls),0))::int AS total
         FROM projects p WHERE 1=1${scopeSql}`, scopeParams),
 
       scope.stateId !== null
@@ -1909,7 +1918,8 @@ router.get("/dashboard/beneficiaries", dashboardFilterGuard("beneficiaries"), as
             COALESCE(ROUND(SUM(p.beneficiaries_female::float))::int, 0) AS female,
             COALESCE(ROUND(SUM(p.beneficiaries_boys::float))::int, 0) AS boys,
             COALESCE(ROUND(SUM(p.beneficiaries_girls::float))::int, 0) AS girls,
-            COALESCE(ROUND(SUM((p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls)::float))::int, 0) AS total
+            (COALESCE(ROUND(SUM(p.beneficiaries_male::float))::int, 0) + COALESCE(ROUND(SUM(p.beneficiaries_female::float))::int, 0) +
+             COALESCE(ROUND(SUM(p.beneficiaries_boys::float))::int, 0) + COALESCE(ROUND(SUM(p.beneficiaries_girls::float))::int, 0)) AS total
           FROM states s
           JOIN project_states pst ON pst.state_id = s.id
           JOIN projects p ON p.id = pst.project_id
@@ -1936,7 +1946,10 @@ router.get("/dashboard/beneficiaries", dashboardFilterGuard("beneficiaries"), as
             COALESCE(ROUND(SUM(ps_share.beneficiaries_female::float / ps_share.state_count))::int, 0) AS female,
             COALESCE(ROUND(SUM(ps_share.beneficiaries_boys::float / ps_share.state_count))::int, 0) AS boys,
             COALESCE(ROUND(SUM(ps_share.beneficiaries_girls::float / ps_share.state_count))::int, 0) AS girls,
-            COALESCE(ROUND(SUM((ps_share.beneficiaries_male + ps_share.beneficiaries_female + ps_share.beneficiaries_boys + ps_share.beneficiaries_girls)::float / ps_share.state_count))::int, 0) AS total
+            (COALESCE(ROUND(SUM(ps_share.beneficiaries_male::float / ps_share.state_count))::int, 0) +
+             COALESCE(ROUND(SUM(ps_share.beneficiaries_female::float / ps_share.state_count))::int, 0) +
+             COALESCE(ROUND(SUM(ps_share.beneficiaries_boys::float / ps_share.state_count))::int, 0) +
+             COALESCE(ROUND(SUM(ps_share.beneficiaries_girls::float / ps_share.state_count))::int, 0)) AS total
           FROM states s
           LEFT JOIN project_states pst ON pst.state_id = s.id
           LEFT JOIN project_share ps_share ON ps_share.id = pst.project_id
@@ -1948,7 +1961,8 @@ router.get("/dashboard/beneficiaries", dashboardFilterGuard("beneficiaries"), as
           COALESCE(SUM(p.beneficiaries_female), 0)::int AS female,
           COALESCE(SUM(p.beneficiaries_boys), 0)::int   AS boys,
           COALESCE(SUM(p.beneficiaries_girls), 0)::int  AS girls,
-          COALESCE(SUM(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls), 0)::int AS total
+          (COALESCE(SUM(p.beneficiaries_male),0) + COALESCE(SUM(p.beneficiaries_female),0) +
+           COALESCE(SUM(p.beneficiaries_boys),0) + COALESCE(SUM(p.beneficiaries_girls),0))::int AS total
         FROM projects p WHERE 1=1${scopeSql}
         GROUP BY p.sector ORDER BY total DESC, p.sector ASC`, scopeParams),
 
@@ -1965,11 +1979,12 @@ router.get("/dashboard/beneficiaries", dashboardFilterGuard("beneficiaries"), as
             JOIN states s ON s.id = ps.state_id
             WHERE ps.project_id = p.id ORDER BY ps.state_id
           ), ARRAY[]::text[]) AS "stateNamesAr",
-          p.beneficiaries_male::int   AS male,
-          p.beneficiaries_female::int AS female,
-          p.beneficiaries_boys::int   AS boys,
-          p.beneficiaries_girls::int  AS girls,
-          (p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls)::int AS total
+          COALESCE(p.beneficiaries_male, 0)::int   AS male,
+          COALESCE(p.beneficiaries_female, 0)::int AS female,
+          COALESCE(p.beneficiaries_boys, 0)::int   AS boys,
+          COALESCE(p.beneficiaries_girls, 0)::int  AS girls,
+          (COALESCE(p.beneficiaries_male,0) + COALESCE(p.beneficiaries_female,0) +
+           COALESCE(p.beneficiaries_boys,0) + COALESCE(p.beneficiaries_girls,0))::int AS total
         FROM projects p WHERE 1=1${scopeSql}
         ORDER BY total DESC, p.title ASC`, scopeParams),
     ]);
@@ -2352,11 +2367,13 @@ router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), dashboardF
       // Snapshot cards
       pool.query(`
         SELECT
-          COALESCE((SELECT COUNT(DISTINCT p.id)::int FROM projects p WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status IN ('approved','active')), 0) AS "activeProjects",
-          COALESCE((SELECT COUNT(DISTINCT ps.state_id)::int FROM project_states ps JOIN projects p ON p.id = ps.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status IN ('approved','active')), 0) AS "activeStates",
-          COALESCE((SELECT COUNT(DISTINCT l.id)::int FROM project_localities pl JOIN localities l ON l.id = pl.locality_id JOIN project_states ps ON ps.project_id = pl.project_id JOIN projects p ON p.id = pl.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status IN ('approved','active')), 0) AS "activeLocalities",
+          COALESCE((SELECT COUNT(DISTINCT p.id)::int FROM projects p WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status = ANY(${ACTIVE_PROJECT_STATUSES_SQL})), 0) AS "activeProjects",
+          COALESCE((SELECT COUNT(DISTINCT ps.state_id)::int FROM project_states ps JOIN projects p ON p.id = ps.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status = ANY(${ACTIVE_PROJECT_STATUSES_SQL})), 0) AS "activeStates",
+          COALESCE((SELECT COUNT(DISTINCT l.id)::int FROM project_localities pl JOIN localities l ON l.id = pl.locality_id JOIN project_states ps ON ps.project_id = pl.project_id JOIN projects p ON p.id = pl.project_id WHERE p.deleted_at IS NULL AND p.sector = $1 AND p.status = ANY(${ACTIVE_PROJECT_STATUSES_SQL})), 0) AS "activeLocalities",
           COALESCE((SELECT COUNT(*)::int FROM activities a JOIN projects p ON p.id = a.project_id WHERE p.deleted_at IS NULL AND p.sector = $1), 0) AS "activitiesImplemented",
-          COALESCE((SELECT SUM(p.beneficiaries_male + p.beneficiaries_female + p.beneficiaries_boys + p.beneficiaries_girls)::int FROM projects p WHERE p.deleted_at IS NULL AND p.sector = $1), 0) AS "beneficiariesReached",
+          (SELECT (COALESCE(SUM(p.beneficiaries_male),0) + COALESCE(SUM(p.beneficiaries_female),0) +
+                   COALESCE(SUM(p.beneficiaries_boys),0) + COALESCE(SUM(p.beneficiaries_girls),0))::int
+           FROM projects p WHERE p.deleted_at IS NULL AND p.sector = $1) AS "beneficiariesReached",
           (SELECT (
             SUM(i.achieved) FILTER (WHERE i.target > 0 AND i.achieved IS NOT NULL)
             / NULLIF(SUM(i.target) FILTER (WHERE i.target > 0 AND i.achieved IS NOT NULL), 0)
@@ -2380,12 +2397,17 @@ router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), dashboardF
           s.id AS "stateId", s.name AS "stateName", s.name_ar AS "stateNameAr",
           COUNT(DISTINCT p.id)::int AS projects,
           COUNT(DISTINCT a.id)::int AS activities,
-          COALESCE((SELECT COUNT(*)::int FROM beneficiaries b WHERE b.state_id = s.id AND b.project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL AND sector = $1)), 0) AS beneficiaries,
+          (SELECT (COALESCE(SUM(pp.beneficiaries_male),0) + COALESCE(SUM(pp.beneficiaries_female),0) +
+                   COALESCE(SUM(pp.beneficiaries_boys),0) + COALESCE(SUM(pp.beneficiaries_girls),0))::int
+            FROM projects pp
+            JOIN project_states pps2 ON pps2.project_id = pp.id
+            WHERE pps2.state_id = s.id AND pp.deleted_at IS NULL AND pp.sector = $1
+          ) AS beneficiaries,
           COALESCE(AVG(a.progress_pct)::int, 0) AS "progressPct",
           COALESCE((SELECT COUNT(*)::int FROM risks r WHERE r.state_id = s.id AND r.project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL AND sector = $1) AND r.status ${ACTIVE_RISK_STATUS_SQL}), 0) AS "openRisks"
         FROM states s
         JOIN project_states ps ON ps.state_id = s.id
-        JOIN projects p ON p.id = ps.project_id AND p.deleted_at IS NULL AND p.sector = $1 AND p.status IN ('approved','active','coordination_approved','technically_approved')
+        JOIN projects p ON p.id = ps.project_id AND p.deleted_at IS NULL AND p.sector = $1 AND p.status = ANY(${ACTIVE_PROJECT_STATUSES_SQL})
         LEFT JOIN activities a ON a.project_id = p.id
         GROUP BY s.id, s.name ORDER BY projects DESC, s.name ASC
       `, [sector]),
@@ -2395,7 +2417,8 @@ router.get("/dashboard/sector-snapshot", requirePerm("reports.view"), dashboardF
         SELECT
           p.id, p.code, p.title, p.donor,
           COALESCE((SELECT AVG(a.progress_pct)::int FROM activities a WHERE a.project_id = p.id), 0) AS "progressPct",
-          COALESCE((SELECT COUNT(*)::int FROM beneficiaries b WHERE b.project_id = p.id), 0) AS beneficiaries,
+          (COALESCE(p.beneficiaries_male,0) + COALESCE(p.beneficiaries_female,0) +
+           COALESCE(p.beneficiaries_boys,0) + COALESCE(p.beneficiaries_girls,0))::int AS beneficiaries,
           (SELECT CASE
             WHEN p.budget_total > 0 AND COUNT(a.budget_spent) > 0
               THEN (SUM(a.budget_spent) / p.budget_total * 100)::int

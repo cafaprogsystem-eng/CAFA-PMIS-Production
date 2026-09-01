@@ -390,7 +390,14 @@
       "statesEmpty": "No active States are available for assignment.",
       "statesRetry": "Retry",
       "statesUnavailable": "State reference data is unavailable. Retry before saving.",
-      "assignedStateLocked": "Your assigned State is fixed for this project."
+      "assignedStateLocked": "Your assigned State is fixed for this project.",
+      "stateAllocationSection": "Budget & target distribution by state",
+      "stateAllocationHint": "Optional — distribute the total budget and beneficiary target across the selected states. Leave blank to skip.",
+      "stateAllocationBudget": "Budget allocation",
+      "stateAllocationBeneficiaries": "Beneficiary target",
+      "stateAllocationAllocated": "Allocated",
+      "stateAllocationOfTotal": "of {{total}} budget",
+      "stateAllocationExceeds": "Allocated total exceeds the project budget"
     },
     "donor": {
       "donorOrg": "Donor organisation",

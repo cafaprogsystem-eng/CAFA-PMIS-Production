@@ -303,6 +303,17 @@ const schema = z.object({
       path: ["reportingEndDate"],
     });
   }
+  // The End Date input's native `min` attribute has no effect at submit time
+  // (the form uses noValidate), and reporting dates only mirror start/end
+  // until a user customises them — so this was the only remaining path that
+  // could let a project save with its implementation period inverted.
+  if (data.startDate && data.endDate && data.startDate > data.endDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End Date cannot be before Start Date",
+      path: ["endDate"],
+    });
+  }
 });
 
 // Create mode: Scheduled Reporting Frequency is mandatory (server also enforces 400).
@@ -1089,7 +1100,7 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedKind, setSelectedKind] = useState(kinds[0]?.value ?? "other");
   // Override delete dialog state (operational projects, PM/SA only)
-  const [overrideDeleteDialog, setOverrideDeleteDialog] = useState<{ docId: number; fileName: string } | null>(null);
+  const [overrideDeleteDialog, setOverrideDeleteDialog] = useState<{ docId: number; fileName: string; objectPath: string } | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
   const [overrideReasonError, setOverrideReasonError] = useState("");
   const [isOverrideDeleting, setIsOverrideDeleting] = useState(false);
@@ -1122,13 +1133,16 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
     }
   };
 
-  const removeDoc = (fileName: string) => {
+  // Keyed by objectPath (unique per uploaded blob), not fileName — two
+  // documents in different categories (or even the same one) can share a
+  // display file name, and removing one must never also remove the other.
+  const removeDoc = (objectPath: string) => {
     const current = form.getValues("documents");
-    form.setValue("documents", current.filter(d => d.fileName !== fileName));
+    form.setValue("documents", current.filter(d => d.objectPath !== objectPath));
   };
 
-  const openOverrideDialog = (docId: number, fileName: string) => {
-    setOverrideDeleteDialog({ docId, fileName });
+  const openOverrideDialog = (docId: number, fileName: string, objectPath: string) => {
+    setOverrideDeleteDialog({ docId, fileName, objectPath });
     setOverrideReason("");
     setOverrideReasonError("");
   };
@@ -1160,7 +1174,7 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
         setOverrideReasonError(data.message ?? "Delete failed. Please try again.");
         return;
       }
-      removeDoc(overrideDeleteDialog.fileName);
+      removeDoc(overrideDeleteDialog.objectPath);
       toast({ title: "Document deleted", description: `"${overrideDeleteDialog.fileName}" has been removed from the project.` });
       closeOverrideDialog();
     } catch {
@@ -1188,7 +1202,7 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0"
-                  onClick={() => removeDoc(doc.fileName)}
+                  onClick={() => removeDoc(doc.objectPath)}
                   aria-label={`Remove ${doc.fileName}`}
                 >
                   <X className="h-3 w-3" aria-hidden="true" />
@@ -1202,7 +1216,7 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
                       variant="ghost"
                       size="sm"
                       className="h-6 w-6 p-0 text-amber-600 hover:text-amber-700"
-                      onClick={() => openOverrideDialog(doc.id!, doc.fileName)}
+                      onClick={() => openOverrideDialog(doc.id!, doc.fileName, doc.objectPath)}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -1490,9 +1504,19 @@ interface Props {
   open?: boolean;
   onClose: () => void;
   editProjectId?: number;
+  /**
+   * Prefill the create form from an existing project's full content (title,
+   * budget, outputs/indicators/activities, state allocations, etc.) without
+   * entering edit mode — editProjectId stays unset, so submit still POSTs a
+   * brand-new project through the normal create validation (required
+   * agreement number, reporting frequency, at least one output) instead of
+   * the incomplete 5-field payload the "Duplicate" action used to send
+   * directly to the API.
+   */
+  duplicateFromProjectId?: number;
 }
 
-export function ProjectRegistrationForm({ open = true, onClose, editProjectId }: Props) {
+export function ProjectRegistrationForm({ open = true, onClose, editProjectId, duplicateFromProjectId }: Props) {
   const { t } = useTranslation("projects");
   const { t: commonT } = useTranslation("common");
   const { toast } = useToast();
@@ -1525,13 +1549,16 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   // ── Edit mode: load existing draft ─────────────────────────────────────────
+  // Also fires for duplicateFromProjectId, which reuses the exact same fetch
+  // + mapProjectToFormValues plumbing to prefill a brand-new (non-edit) form.
+  const sourceProjectId = editProjectId ?? duplicateFromProjectId;
   const { data: editData, isLoading: isEditLoading } = useGetProject(
-    editProjectId ?? 0,
-    { query: { enabled: !!editProjectId, staleTime: 60_000 } } as Parameters<typeof useGetProject>[1],
+    sourceProjectId ?? 0,
+    { query: { enabled: !!sourceProjectId, staleTime: 60_000 } } as Parameters<typeof useGetProject>[1],
   );
   const { data: editStateAllocations } = useListProjectStateAllocations(
-    editProjectId ?? 0,
-    { query: { enabled: !!editProjectId, staleTime: 60_000 } } as Parameters<typeof useListProjectStateAllocations>[1],
+    sourceProjectId ?? 0,
+    { query: { enabled: !!sourceProjectId, staleTime: 60_000 } } as Parameters<typeof useListProjectStateAllocations>[1],
   );
   const editLoadedRef = useRef(false);
   // Guards the duplicate-check debounce while form.reset() is populating edit data.
@@ -1688,16 +1715,18 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   const freeLocalities = watch("localities");
   const sectors = watch("sectors");
   const donorId = watch("donorId");
+  const watchedStateAllocations = watch("stateAllocations");
+  const watchedBudgetTotal = watch("budgetTotal");
 
   useEffect(() => {
-    if (!isStateScopedAuthor || editProjectId) return;
+    // Duplicating reuses the source project's own location — a state-scoped
+    // author's own state must not silently override it.
+    if (!isStateScopedAuthor || editProjectId || duplicateFromProjectId) return;
+    const soleStateId = authorisedStateId && stateReference.isReady ? authorisedStateId : undefined;
     form.setValue("hasHqOperations", false, { shouldValidate: true });
-    form.setValue(
-      "stateIds",
-      authorisedStateId && stateReference.isReady ? [authorisedStateId] : [],
-      { shouldValidate: true },
-    );
-  }, [authorisedStateId, editProjectId, form, isStateScopedAuthor, stateReference.isReady]);
+    form.setValue("stateIds", soleStateId ? [soleStateId] : [], { shouldValidate: true });
+    form.setValue("stateAllocations", soleStateId ? [{ stateId: soleStateId }] : []);
+  }, [authorisedStateId, editProjectId, duplicateFromProjectId, form, isStateScopedAuthor, stateReference.isReady]);
 
   // ── Duplicate detection debounce ───────────────────────────────────────────
   const watchedAgreement = watch("agreementNumber");
@@ -1736,15 +1765,28 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
     }
   }, [duplicateResult?.matchType, forceCreate]);
 
-  // ── Reset form with loaded edit data ───────────────────────────────────────
+  // ── Reset form with loaded edit (or duplicate-source) data ─────────────────
   useEffect(() => {
-    if (!editProjectId || editLoadedRef.current) return;
+    if (!sourceProjectId || editLoadedRef.current) return;
     if (!editData) return;
     const allocs = ((editStateAllocations ?? []) as Array<Record<string, unknown>>);
     const mapped = mapProjectToFormValues(
       editData as Parameters<typeof mapProjectToFormValues>[0],
       allocs,
     );
+    if (duplicateFromProjectId && !editProjectId) {
+      // Duplicating: this becomes a brand-new project, not a copy of the
+      // source's identity. Documents belong to the source project's own
+      // storage and must not be silently claimed by the new one; activity
+      // ids are the source's own row ids and must not be sent as if they
+      // belonged to (not-yet-existing) rows on the new project.
+      mapped.title = `Copy of ${mapped.title}`;
+      mapped.documents = [];
+      mapped.outputs = mapped.outputs.map((out) => ({
+        ...out,
+        activities: out.activities.map(({ id: _sourceActivityId, budgetSpent: _sourceBudgetSpent, ...act }) => act),
+      }));
+    }
     // Block duplicate detection while form.reset() fires watchers (700ms debounce
     // + 300ms buffer = 1000ms). Cleared after that window so user changes still work.
     isInitialisingRef.current = true;
@@ -1754,7 +1796,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
     editLoadedRef.current = true;
     const t = setTimeout(() => { isInitialisingRef.current = false; }, 1000);
     return () => clearTimeout(t);
-  }, [editProjectId, editData, editStateAllocations, form]);
+  }, [sourceProjectId, editProjectId, duplicateFromProjectId, editData, editStateAllocations, form]);
 
   // RBAC helpers
   const userRole = me?.user?.role ?? "";
@@ -1812,8 +1854,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
 
   if (!open) return null;
 
-  // Show loading skeleton while fetching project for edit
-  if (editProjectId && isEditLoading) {
+  // Show loading skeleton while fetching project for edit (or duplicate-source)
+  if (sourceProjectId && isEditLoading) {
     return (
       <div aria-busy="true" aria-label={t("form.loadingAriaLabel")}>
         <span className="sr-only">{t("form.loadingAriaLabel")}</span>
@@ -1900,10 +1942,13 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
   const toggleState = (id: number) => {
     if (isStateScopedAuthor) return;
     const current = form.getValues("stateIds");
+    const currentAllocations = form.getValues("stateAllocations");
     if (current.includes(id)) {
       form.setValue("stateIds", current.filter(s => s !== id), { shouldValidate: true });
+      form.setValue("stateAllocations", currentAllocations.filter(a => a.stateId !== id));
     } else {
       form.setValue("stateIds", [...current, id], { shouldValidate: true });
+      form.setValue("stateAllocations", [...currentAllocations, { stateId: id }]);
     }
   };
 
@@ -2161,7 +2206,10 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
         }
       }
 
-      await queryClient.invalidateQueries({ queryKey: ["listProjects"] });
+      // "listProjects" never matched the generated hook's real query key
+      // (["/api/projects", ...]), so the projects list kept showing stale
+      // data until a manual reload after creating a project.
+      await queryClient.invalidateQueries();
       toast({ title: t("form.toasts.projectRegistered"), description: t("form.toasts.projectRegisteredDesc") });
       void projectDraft.clear();
       onClose();
@@ -2614,6 +2662,48 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
                   )} />
                 </div>
               </div>
+              {selectedStateIds.length > 0 && (
+                <div>
+                  <SectionHeading title={t("form.location.stateAllocationSection")} />
+                  <p className="text-xs text-muted-foreground mb-2">{t("form.location.stateAllocationHint")}</p>
+                  <div className="space-y-2">
+                    {selectedStateIds.map((stateId) => {
+                      const rowIndex = watchedStateAllocations.findIndex(a => a.stateId === stateId);
+                      if (rowIndex === -1) return null;
+                      const state = states.find(s => s.id === stateId);
+                      return (
+                        <div key={stateId} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr] gap-2 p-3 border rounded-md items-end">
+                          <div className="text-sm font-medium">
+                            {state ? <StateLabel state={state} /> : `#${stateId}`}
+                          </div>
+                          <FormField control={control} name={`stateAllocations.${rowIndex}.budgetAllocation`} render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">{t("form.location.stateAllocationBudget")}</FormLabel>
+                              <FormControl><Input type="number" min="0" {...field} value={field.value ?? ""} /></FormControl>
+                            </FormItem>
+                          )} />
+                          <FormField control={control} name={`stateAllocations.${rowIndex}.beneficiaryTarget`} render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">{t("form.location.stateAllocationBeneficiaries")}</FormLabel>
+                              <FormControl><Input type="number" min="0" {...field} value={field.value ?? ""} /></FormControl>
+                            </FormItem>
+                          )} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {(() => {
+                    const allocatedBudget = watchedStateAllocations.reduce((sum, a) => sum + (Number(a.budgetAllocation) || 0), 0);
+                    if (allocatedBudget <= 0 || !watchedBudgetTotal) return null;
+                    return (
+                      <p className={`text-xs mt-2 ${allocatedBudget > watchedBudgetTotal ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                        {t("form.location.stateAllocationAllocated")} {allocatedBudget.toLocaleString()} {t("form.location.stateAllocationOfTotal", { total: watchedBudgetTotal.toLocaleString() })}
+                        {allocatedBudget > watchedBudgetTotal && ` — ${t("form.location.stateAllocationExceeds")}`}
+                      </p>
+                    );
+                  })()}
+                </div>
+              )}
             </section>
 
             {/* ── Panel 3: Donor & Agreement ── */}
@@ -3163,7 +3253,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId }:
         try {
           await mergeProject.mutateAsync({ projectId: existing.id, data: mergePayload });
           toast({ title: t("form.toasts.projectUpdated"), description: t("form.toasts.projectUpdatedDesc", { code: existing.code }) });
-          queryClient.invalidateQueries({ queryKey: ["listProjects"] });
+          queryClient.invalidateQueries();
           setShowDuplicateModal(false);
           onClose();
         } catch {

@@ -122,13 +122,30 @@ function TransitionDialog({ projectId, action, label, open, onOpenChange }: {
           onOpenChange(false);
         },
         onError: (e: unknown) => {
-          const err = e as { response?: { data?: { error?: string; count?: number } } };
-          const code = err.response?.data?.error;
+          // ApiError (custom-fetch.ts) carries the parsed response body on
+          // `.data`, not `.response.data` — `.response` is the raw fetch
+          // Response object with no `.data` of its own. Reading the wrong
+          // path meant every one of these specific messages silently fell
+          // through to the generic String(e) fallback below.
+          const err = e as {
+            data?: {
+              error?: string; count?: number; detail?: string;
+              budgetTotal?: number; detailedCostTotal?: number;
+              beneficiariesTarget?: number; beneficiarySum?: number;
+            };
+          };
+          const code = err.data?.error;
           const msg = code === "unresolved_required_corrections"
-            ? `Cannot approve — ${err.response?.data?.count ?? 0} unresolved Required Correction(s). Resolve them first.`
+            ? `Cannot approve — ${err.data?.count ?? 0} unresolved Required Correction(s). Resolve them first.`
             : code === "comment_required_for_revision_or_reject"
             ? t("detail.reasonCommentRequired")
-            : String(e);
+            : code === "budget_breakdown_exceeds_total"
+            ? err.data?.detail ?? "Detailed costs exceed the approved Budget Total."
+            : code === "beneficiaries_breakdown_exceeds_target"
+            ? err.data?.detail ?? "Disaggregated beneficiaries exceed the Beneficiaries Target."
+            : code === "project_status_conflict"
+            ? "The project status has changed; please refresh and try again."
+            : err.data?.detail ?? String(e);
           toast({ title: t("detail.actionFailed"), description: msg, variant: "destructive" });
         },
       }
@@ -660,6 +677,12 @@ export default function ProjectDetailPage({
   }
 
   const { project, outputs, activities, indicators, risks, reports, beneficiariesReached, beneficiariesTarget, budgetTotal, budgetSpent, states, approvalHistory } = data;
+  // budgetSpent (the project's own budget ledger) is the single source of
+  // truth for "amount spent" everywhere on this page — including the KPI
+  // strip below, which used to show a Report-aggregated expenditure figure
+  // instead. The two could diverge, showing a different "spent" figure here
+  // than on the Budget tab for the same project.
+  const budgetUtilizationPct = budgetTotal > 0 ? Math.round((budgetSpent / budgetTotal) * 100) : null;
 
   const openReportingConfigurationEditor = () => {
     if (project.status === "draft") {
@@ -1068,8 +1091,8 @@ export default function ProjectDetailPage({
             <StatCard
               icon={DollarSign} iconBg="bg-amber-500"
               label={t("detail.burnRate")}
-              value={`${kpis.burnRatePct}%`}
-              sub={`${formatCurrency(kpis.totalActualExpenditure, projectCurrency)} ${t("detail.spentLabel").toLowerCase()}`}
+              value={budgetUtilizationPct !== null ? `${budgetUtilizationPct}%` : "—"}
+              sub={`${formatCurrency(budgetSpent, projectCurrency)} ${t("detail.spentLabel").toLowerCase()}`}
             />
             <StatCard
               icon={Users} iconBg="bg-emerald-500"
@@ -1727,7 +1750,7 @@ export default function ProjectDetailPage({
                   <CreateProjectRiskDialog
                     projectId={projectId}
                     projectStates={states as { id: number; name: string }[]}
-                    onCreated={() => qc.invalidateQueries({ queryKey: ["getProject", projectId] })}
+                    onCreated={() => qc.invalidateQueries({ queryKey: [`/api/projects/${projectId}`] })}
                   />
                 )}
                 <Link href="/risks" className="text-xs text-muted-foreground hover:text-primary">

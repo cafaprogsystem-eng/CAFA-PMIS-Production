@@ -365,7 +365,7 @@ describe("RFREQ-HIST — historical projects stay null", () => {
       if (/SELECT sector.*COALESCE\(sectors/i.test(sql)) {
         return Promise.resolve({ rows: [{ sector: "Health", sectors: [] }] });
       }
-      if (/COUNT\(\*\)::int AS reached/i.test(sql)) {
+      if (/AS reached/i.test(sql)) {
         return Promise.resolve({ rows: [{ reached: 0 }] });
       }
       if (/AS spent FROM activities/i.test(sql)) {

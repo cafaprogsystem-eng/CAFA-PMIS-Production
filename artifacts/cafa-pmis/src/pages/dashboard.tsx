@@ -34,6 +34,7 @@ import {
   useListProjects,
   useListPlans,
   useListReports,
+  useListDonors,
   useGetMe,
   customFetch,
   type PendingApprovals,
@@ -224,6 +225,13 @@ function FilterBar({
   const { t } = useTranslation("dashboard");
   const sectorList = restrictedSectors !== null ? restrictedSectors : [...SECTORS];
   const active = Object.values(filters).some(Boolean);
+  // The donor filter's query-building and fail-closed "unsupported filter"
+  // handling (unsupportedSecondaryFilters, in the Dashboard component below)
+  // already existed, but no control ever set filters.donor — this closes
+  // that gap without changing the shared fail-closed behaviour, which
+  // already applies identically to Sector today.
+  const { data: donorsData } = useListDonors();
+  const donorList = donorsData ?? [];
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-card px-4 py-2.5 shadow-[0_1px_3px_0_rgb(0,0,0,0.03)]">
@@ -237,12 +245,25 @@ function FilterBar({
         value={filters.sector ?? "all"}
         onValueChange={v => onChange({ ...filters, sector: v === "all" ? undefined : v })}
       >
-        <SelectTrigger className="h-10 w-40 text-xs border-border/60 bg-muted/30 hover:bg-muted/50 transition-colors">
+        <SelectTrigger aria-label={t("filters.allSectors")} className="h-10 w-40 text-xs border-border/60 bg-muted/30 hover:bg-muted/50 transition-colors">
           <SelectValue placeholder={t("filters.allSectors")} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">{t("filters.allSectors")}</SelectItem>
           {sectorList.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={filters.donor ?? "all"}
+        onValueChange={v => onChange({ ...filters, donor: v === "all" ? undefined : v })}
+      >
+        <SelectTrigger aria-label={t("filters.allDonors")} className="h-10 w-40 text-xs border-border/60 bg-muted/30 hover:bg-muted/50 transition-colors">
+          <SelectValue placeholder={t("filters.allDonors")} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">{t("filters.allDonors")}</SelectItem>
+          {donorList.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
         </SelectContent>
       </Select>
 
@@ -2295,23 +2316,32 @@ function RiskHorizontalChart({
 type MonthlyAchievementEntry = { month: string; achieved: number; target: number };
 
 function MonthlyTrendChart({
-  monthlyData, height, gradientSuffix,
+  monthlyData, height, gradientSuffix, isLoading,
+  titleKey = "sections.monthlyTrend",
+  descriptionKey = "sections.monthlyTrendDesc",
+  emptyMessageKey = "noData",
 }: {
   monthlyData: MonthlyAchievementEntry[] | undefined;
   height: number;
   gradientSuffix: string;
+  isLoading?: boolean;
+  titleKey?: string;
+  descriptionKey?: string;
+  emptyMessageKey?: string;
 }) {
   const { t } = useTranslation("dashboard");
   const entries = monthlyData ?? [];
   return (
     <ChartCard
       colSpan="col-span-4"
-      title={t("sections.monthlyTrend")}
-      description={t("sections.monthlyTrendDesc")}
+      title={t(titleKey)}
+      description={t(descriptionKey)}
     >
       <div style={{ height }}>
-        {entries.length === 0 ? (
-          <ChartEmptyState message={t("noData")} />
+        {isLoading ? (
+          <div className="h-full rounded-lg bg-muted/40 animate-pulse" />
+        ) : entries.length === 0 ? (
+          <ChartEmptyState message={t(emptyMessageKey)} />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={entries} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
@@ -4253,46 +4283,15 @@ export default function Dashboard() {
 
                 {/* Monthly Achievement Trend — 7/12 */}
                 <div className="col-span-12 lg:col-span-7">
-                  <ChartCard
-                    title={t("performanceTab.monthlyAchievementTrend")}
-                    description={t("performanceTab.compareTargets")}
-                  >
-                    <div style={{ height: 340 }}>
-                      {isSummaryLoading ? (
-                        <div className="h-full rounded-lg bg-muted/40 animate-pulse" />
-                      ) : (summary?.monthlyAchievement ?? []).length === 0 ? (
-                        <ChartEmptyState message={t("chartEmpty.monthlyAchievement")} />
-                      ) : (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart
-                            data={summary?.monthlyAchievement ?? []}
-                            margin={{ top: 10, right: 16, left: 0, bottom: 4 }}
-                          >
-                            <defs>
-                              <linearGradient id="colorAchievedPT" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%"  stopColor={CC.achievement} stopOpacity={0.10} />
-                                <stop offset="95%" stopColor={CC.achievement} stopOpacity={0} />
-                              </linearGradient>
-                              <linearGradient id="colorTargetPT" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%"  stopColor={CC.target} stopOpacity={0.07} />
-                                <stop offset="95%" stopColor={CC.target} stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
-                            <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickMargin={6} />
-                            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={fmtCompact} width={40} />
-                            <Tooltip
-                              contentStyle={TT.contentStyle} labelStyle={TT.labelStyle} itemStyle={TT.itemStyle}
-                              formatter={(value: number, name: string) => [fmt(value), name]}
-                            />
-                            <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }} />
-                            <Area type="monotone" dataKey="target"   name="Target"   stroke={CC.target}      strokeWidth={1.5} strokeDasharray="5 3" fillOpacity={1} fill="url(#colorTargetPT)"   dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
-                            <Area type="monotone" dataKey="achieved" name="Achieved" stroke={CC.achievement} strokeWidth={2}   fillOpacity={1} fill="url(#colorAchievedPT)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      )}
-                    </div>
-                  </ChartCard>
+                  <MonthlyTrendChart
+                    monthlyData={summary?.monthlyAchievement}
+                    height={340}
+                    gradientSuffix="PT"
+                    isLoading={isSummaryLoading}
+                    titleKey="performanceTab.monthlyAchievementTrend"
+                    descriptionKey="performanceTab.compareTargets"
+                    emptyMessageKey="chartEmpty.monthlyAchievement"
+                  />
                 </div>
 
                 {/* Sector Performance — 5/12 */}
@@ -5600,6 +5599,13 @@ export function ProjectBudgetPerformanceTable({
   const isTc  = role === "technical_coordinator";
   const isSpo = role === "state_program_officer";
   const { openRecord } = useRecordDetail();
+  // row.budgetBasis is compared against its raw English business-term values
+  // elsewhere (e.g. `row.budgetBasis === "Project-Level Budget"`), so only the
+  // display copy is translated here — the comparisons themselves are untouched.
+  const formatBudgetBasisLabel = (basis: string) =>
+    basis === "Project-Level Budget" ? t("budgetWorkspace.projectBudgetBasis")
+    : basis === "State Allocation" ? t("budgetWorkspace.stateAllocation")
+    : basis;
 
   // ── All hooks MUST be declared before any conditional return ──────────
   const [search,         setSearch]         = useState("");
@@ -5909,7 +5915,7 @@ export function ProjectBudgetPerformanceTable({
                       <UITooltip>
                         <UITooltipTrigger asChild>
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-                            {row.budgetBasis}
+                            {formatBudgetBasisLabel(row.budgetBasis)}
                             {((isTc || isSpo) && row.budgetBasis === "Project-Level Budget") && (
                               <Info className="h-3 w-3 opacity-40 shrink-0" aria-hidden="true" />
                             )}
@@ -5917,12 +5923,12 @@ export function ProjectBudgetPerformanceTable({
                         </UITooltipTrigger>
                         {isTc && row.budgetBasis === "Project-Level Budget" && (
                           <UITooltipContent side="top" className="max-w-[240px] text-xs">
-                            The displayed amount is the complete Project Budget and does not represent an exclusive Sector allocation.
+                            {t("budgetWorkspace.projectLevelBudgetTcTooltip")}
                           </UITooltipContent>
                         )}
                         {isSpo && row.budgetBasis === "Project-Level Budget" && (
                           <UITooltipContent side="top" className="max-w-[280px] text-xs">
-                            The displayed Budget and Expenditure are Project-level financial values and do not represent amounts allocated or spent exclusively in this State.
+                            {t("budgetWorkspace.projectLevelBudgetSpoTooltip")}
                           </UITooltipContent>
                         )}
                       </UITooltip>
@@ -6044,7 +6050,7 @@ export function ProjectBudgetPerformanceTable({
                       </div>
                       <div>
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailBudgetBasis")}</p>
-                        <p className="text-foreground">{row.budgetBasis}</p>
+                        <p className="text-foreground">{formatBudgetBasisLabel(row.budgetBasis)}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailCurrency")}</p>
@@ -6096,9 +6102,9 @@ export function ProjectBudgetPerformanceTable({
                       {/* Project-Level Expenditure — informational context for State Allocation rows only */}
                       {row.missingStateExpenditure && row.projectLevelSpent != null && (
                         <div>
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Project-Level Expenditure</p>
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectLevelExpenditureLabel")}</p>
                           <p className="tabular-nums text-muted-foreground">{fmtMoney(row.projectLevelSpent, row.currency)}</p>
-                          <p className="text-[9px] text-muted-foreground/70 mt-0.5 leading-tight">Complete Project — not exclusive to this State.</p>
+                          <p className="text-[9px] text-muted-foreground/70 mt-0.5 leading-tight">{t("budgetWorkspace.projectLevelExpenditureNote")}</p>
                         </div>
                       )}
                       {row.lastFinancialUpdate && (
@@ -6111,7 +6117,7 @@ export function ProjectBudgetPerformanceTable({
                       {row.missingStateExpenditure && (
                         <div className="col-span-2 sm:col-span-3 lg:col-span-4 pt-1">
                           <p className="text-[10px] text-amber-700 dark:text-amber-400 italic leading-snug">
-                            State-level Expenditure data is unavailable. Spent, Remaining Balance and Utilisation Rate are not shown for State Allocation rows.
+                            {t("budgetWorkspace.stateExpenditureUnavailableNote")}
                           </p>
                         </div>
                       )}

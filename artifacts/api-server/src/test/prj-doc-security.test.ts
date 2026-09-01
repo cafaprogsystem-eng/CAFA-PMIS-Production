@@ -378,7 +378,7 @@ describe("PRJ-DOC-SEC-09 — GET /projects/:id nested documents use the allow-li
       if (typeof sql === "string" && sql.includes("COALESCE(SUM(budget_spent)")) {
         return { rows: [{ spent: 0 }] };
       }
-      if (typeof sql === "string" && sql.includes("FROM beneficiaries")) {
+      if (typeof sql === "string" && sql.includes("AS reached")) {
         return { rows: [{ reached: 0 }] };
       }
       return { rows: [] };

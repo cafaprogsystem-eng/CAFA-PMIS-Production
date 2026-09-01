@@ -5,7 +5,6 @@ import {
   useListStates,
   useGetMe,
   useTransitionProject,
-  useCreateProject,
   type ListProjectsQueryResult,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -66,7 +65,7 @@ import { useRecordDetail } from "@/contexts/record-detail-context";
 import { useLocationContext } from "@/contexts/location-context";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
 
-const STATUSES = ["draft", "submitted", "state_reviewed", "technically_approved", "coordination_approved", "approved", "active", "closed", "rejected"];
+const STATUSES = ["draft", "submitted", "state_reviewed", "technically_approved", "coordination_approved", "approved", "active", "completed", "on_hold", "returned", "closed", "cancelled", "rejected"];
 
 const PROJECT_VIEWS = ["table", "card", "list", "compact", "kanban", "calendar", "map"] as const;
 
@@ -182,8 +181,8 @@ export default function ProjectsPage() {
 
   const qc = useQueryClient();
   const transitionMutation = useTransitionProject();
-  const createMutation = useCreateProject();
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; code: string; title: string } | null>(null);
+  const [duplicateSourceId, setDuplicateSourceId] = useState<number | null>(null);
   const canDelete = hasPerm(me?.permissions, "projects.delete");
   const canContinueEdit = hasPerm(me?.permissions, "projects.update");
   const continueEdit = useCallback(
@@ -201,21 +200,14 @@ export default function ProjectsPage() {
     }
   }
 
-  async function handleDuplicateProject(project: ListProjectsQueryResult[number]) {
-    try {
-      const payload = {
-        title: `Copy of ${project.title}`,
-        donor: project.donor,
-        sector: project.sector,
-        budgetTotal: project.budgetTotal,
-        endDate: project.endDate,
-      };
-      await createMutation.mutateAsync({ data: payload as never });
-      toast.success(t("createSuccess"));
-      qc.invalidateQueries();
-    } catch (e: unknown) {
-      toast.error((e as Error).message);
-    }
+  function handleDuplicateProject(project: ListProjectsQueryResult[number]) {
+    // Opens the full registration form prefilled from the source project
+    // (title, budget, outputs/indicators/activities, state allocations, ...)
+    // instead of POSTing a 5-field payload that was missing every field the
+    // create endpoint actually requires (agreement number, reporting
+    // frequency, at least one operational location, at least one output) —
+    // that always failed validation in practice.
+    setDuplicateSourceId(project.id);
   }
 
   const viewRecords: ViewRecord[] = useMemo(
@@ -240,14 +232,48 @@ export default function ProjectsPage() {
         stateNamesAr: p.stateNamesAr,
         onClick: (trigger) => openRecord("project", p.id, trigger),
         // Draft editing is a direct route, distinct from the read-only viewer.
-        actions: p.status === "draft" && canContinueEdit ? (
-          <ContinueEditingAction
-            recordTitle={p.title}
-            onClick={() => continueEdit(p.id)}
-          />
+        // Non-table views (Card/Kanban/Calendar/etc.) only ever render this
+        // `actions` slot, so it must carry the same Submit/Duplicate/Delete
+        // menu the table row has — otherwise those views have no way to
+        // submit or delete a project at all.
+        actions: (p.status === "draft" && canContinueEdit) || canDelete ? (
+          <div className="flex items-center gap-1">
+            {p.status === "draft" && canContinueEdit && (
+              <ContinueEditingAction
+                recordTitle={p.title}
+                onClick={() => continueEdit(p.id)}
+              />
+            )}
+            {canDelete && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("projectActionsAria")}>
+                    <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  {p.status === "draft" && (
+                    <DropdownMenuItem onClick={() => handleDirectSubmitProject(p)} className="gap-2">
+                      <Send className="h-3.5 w-3.5" /> {t("submit")}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => handleDuplicateProject(p)} className="gap-2">
+                    <Copy className="h-3.5 w-3.5" /> {t("duplicate")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setDeleteTarget({ id: p.id, code: p.code ?? "", title: p.title })}
+                    className="gap-2 text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete Project
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         ) : undefined,
       })),
-    [projects, openRecord, t, tCommon, canContinueEdit, continueEdit],
+    [projects, openRecord, t, tCommon, canContinueEdit, continueEdit, canDelete, handleDirectSubmitProject, handleDuplicateProject],
   );
 
   const hasFilters = !!(statusFilter || sectorFilter || stateFilter);
@@ -562,6 +588,26 @@ export default function ProjectsPage() {
           onOpenChange={(o) => !o && setDeleteTarget(null)}
         />
       )}
+
+      {/* ── Duplicate Project Dialog ── */}
+      <Dialog open={duplicateSourceId != null} onOpenChange={(o) => !o && setDuplicateSourceId(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
+          <div className="px-6 pt-6 pb-4 border-b shrink-0">
+            <DialogHeader>
+              <DialogTitle>{t("duplicate")}</DialogTitle>
+              <DialogDescription>{t("registerDesc")}</DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col">
+            {duplicateSourceId != null && (
+              <ProjectRegistrationForm
+                duplicateFromProjectId={duplicateSourceId}
+                onClose={() => setDuplicateSourceId(null)}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

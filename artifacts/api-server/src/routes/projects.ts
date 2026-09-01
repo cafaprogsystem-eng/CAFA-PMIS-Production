@@ -7,8 +7,9 @@ import {
   UpsertProjectStateAllocationsBody,
   CorrectProjectDonorBody,
 } from "@workspace/api-zod";
-import { logAudit, tcSectorRestriction, assertSectorAllowed, assertStateAllowed, requirePerm, permissionsFor, hasPerm } from "../middlewares/currentUser";
+import { logAudit, tcSectorRestriction, assertStateAllowed, requirePerm, permissionsFor, hasPerm } from "../middlewares/currentUser";
 import { getProjectDeletionMode, validateDeletionReason } from "../lib/project-deletion";
+import { hasFullOperationalAccess } from "../lib/accessControl";
 import { VALID_SECTOR_SET, ASSISTANCE_MODALITY_SET, validateSubSectorsMulti } from "../lib/sectors";
 import { unresolvedRequiredCorrections } from "./comments";
 import { notifyEntityActors, notifyEntityActorsDeduped, notifyNextApprover, createNotification, createNotificationDeduped, notifyByRole } from "../lib/notifications";
@@ -529,7 +530,8 @@ const projectSummarySelect = `
          p.budget_total::float AS "budgetTotal",
          COALESCE((SELECT SUM(a.budget_spent)::float FROM activities a WHERE a.project_id = p.id), 0) AS "budgetSpent",
          p.beneficiaries_target AS "beneficiariesTarget",
-         COALESCE((SELECT COUNT(*)::int FROM beneficiaries b WHERE b.project_id = p.id), 0) AS "beneficiariesReached",
+         (COALESCE(p.beneficiaries_male,0) + COALESCE(p.beneficiaries_female,0) +
+          COALESCE(p.beneficiaries_boys,0) + COALESCE(p.beneficiaries_girls,0))::int AS "beneficiariesReached",
          COALESCE((SELECT AVG(a.progress_pct)::int FROM activities a WHERE a.project_id = p.id), 0) AS "progressPct",
          p.management_level AS "managementLevel",
          p.has_hq_operations AS "hasHqOperations",
@@ -817,13 +819,12 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
     for (const d of body.documents ?? []) {
       if (!validProjectDocumentDescriptor(d, req.currentUser!.id)) {
         res.status(422).json({ error: "invalid_document_upload_descriptor" });
-        client.release(); return;
+        return;
       }
     }
 
     // Date range validation — end must not precede start
     if (body.startDate && body.endDate && new Date(body.endDate) < new Date(body.startDate)) {
-      client.release();
       res.status(400).json({
         error: "invalid_date_range",
         detail: "End Date cannot be before Start Date",
@@ -834,7 +835,6 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
 
     // Budget validation — must be zero or a positive number
     if ((body.budgetTotal ?? 0) < 0) {
-      client.release();
       res.status(400).json({
         error: "validation_error",
         detail: "budgetTotal: Budget must be zero or a positive number",
@@ -849,14 +849,12 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
     // budget_total = 0) before anything is written.
     for (const alloc of body.stateAllocations ?? []) {
       if ((alloc.budgetAllocation ?? 0) < 0) {
-        client.release();
         res.status(422).json({ error: "invalid_allocation", message: "Budget allocation cannot be negative." });
         return;
       }
     }
     const createAllocTotal = (body.stateAllocations ?? []).reduce((s, a) => s + (a.budgetAllocation ?? 0), 0);
     if (createAllocTotal > (body.budgetTotal ?? 0)) {
-      client.release();
       res.status(422).json({
         error: "over_allocation",
         message: `Total state allocations (${createAllocTotal.toFixed(2)}) would exceed the project budget (${(body.budgetTotal ?? 0).toFixed(2)}).`,
@@ -872,7 +870,6 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
       typeof rawReportingFrequency !== "string" ||
       !(SCHEDULED_FREQUENCIES as readonly string[]).includes(rawReportingFrequency)
     ) {
-      client.release();
       res.status(400).json({
         error: "invalid_reporting_frequency",
         field: "reportingFrequency",
@@ -895,7 +892,6 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
     // ── Sector validation — validate ALL sectors in the array ────────────────
     const invalidSecs = sectorsArr.filter(s => s && !VALID_SECTOR_SET.has(s));
     if (invalidSecs.length > 0) {
-      client.release();
       res.status(422).json({
         error: "invalid_sector",
         field: "sectors",
@@ -912,7 +908,6 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
       return false;
     });
     if (duplicateSectors.length > 0) {
-      client.release();
       res.status(422).json({
         error: "duplicate_sector",
         field: "sectors",
@@ -946,7 +941,6 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
     if (subSectors.length > 0 && uniqueSectors.length > 0) {
       const subErr = validateSubSectorsMulti(uniqueSectors, subSectors);
       if (subErr) {
-        client.release();
         res.status(422).json({ error: "invalid_sub_sector", field: "subSectors", code: "invalid_sub_sector", message: subErr });
         return;
       }
@@ -955,7 +949,6 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
     // Assistance modality validation (now from parsed Zod body)
     const assistanceModality = body.assistanceModality ?? null;
     if (assistanceModality && !ASSISTANCE_MODALITY_SET.has(assistanceModality)) {
-      client.release();
       res.status(422).json({
         error: "invalid_assistance_modality",
         field: "assistanceModality",
@@ -970,7 +963,6 @@ router.post("/projects", requirePerm("projects.create"), async (req, res, next) 
     {
       const hqOps = (req.body as Record<string, unknown>).hasHqOperations === true;
       if (!hqOps && (body.stateIds ?? []).length === 0) {
-        client.release();
         res.status(422).json({
           error: "no_operational_location",
           message: "A project must have at least one Operational Location: select HQ or at least one state.",
@@ -1514,7 +1506,6 @@ router.post("/projects/:projectId/merge", requirePerm("projects.update"), async 
       const invalidMergeSecs = sectors.filter((s: string) => !VALID_SECTOR_SET.has(s));
       if (invalidMergeSecs.length > 0) {
         await client.query("ROLLBACK");
-        client.release();
         res.status(422).json({ error: "invalid_sector", field: "sectors", code: "invalid_sector", message: `Unrecognised sector(s): ${invalidMergeSecs.join(", ")}` });
         return;
       }
@@ -1527,7 +1518,6 @@ router.post("/projects/:projectId/merge", requirePerm("projects.update"), async 
       });
       if (mergeDupSectors.length > 0) {
         await client.query("ROLLBACK");
-        client.release();
         res.status(422).json({ error: "duplicate_sector", field: "sectors", code: "duplicate_sector", message: `Duplicate sector(s): ${[...new Set(mergeDupSectors)].join(", ")}. Each sector must appear at most once.` });
         return;
       }
@@ -1687,7 +1677,12 @@ router.get("/projects/:projectId", async (req, res, next) => {
          WHERE r.project_id = $1 ORDER BY r.submitted_at DESC`,
         [projectId],
       ),
-      pool.query(`SELECT COUNT(*)::int AS reached FROM beneficiaries WHERE project_id = $1`, [projectId]),
+      pool.query(
+        `SELECT (COALESCE(beneficiaries_male,0) + COALESCE(beneficiaries_female,0) +
+                 COALESCE(beneficiaries_boys,0) + COALESCE(beneficiaries_girls,0))::int AS reached
+         FROM projects WHERE id = $1`,
+        [projectId],
+      ),
       pool.query(
         `SELECT s.id, s.name FROM project_states ps JOIN states s ON s.id = ps.state_id WHERE ps.project_id = $1`,
         [projectId],
@@ -1819,14 +1814,13 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
               COALESCE(sectors, '[]'::jsonb)::jsonb AS sectors FROM projects WHERE id = $1`,
       [projectId],
     );
-    if (check.rows.length === 0) { client.release(); res.status(404).json({ error: "Not found" }); return; }
+    if (check.rows.length === 0) { res.status(404).json({ error: "Not found" }); return; }
     const stateGuard = await assertStateAllowed(req, projectId);
     if (!stateGuard.ok) {
       res.status(stateGuard.status).json(stateGuard.body);
       return;
     }
     if (check.rows[0].status !== "draft") {
-      client.release();
       res.status(409).json({ error: "Only draft projects can be updated" });
       return;
     }
@@ -1835,7 +1829,7 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
       ...(Array.isArray(check.rows[0].sectors) ? check.rows[0].sectors : []),
     ])];
     const guard = assertEffectiveSectorAllowedForProject(req, effectiveSectorsForPatch);
-    if (!guard.ok) { client.release(); res.status(guard.status).json(guard.body); return; }
+    if (!guard.ok) { res.status(guard.status).json(guard.body); return; }
 
     const body = CreateProjectBody.parse(req.body);
     const isStateRole = ["state_program_officer", "state_office_manager"].includes(req.currentUser!.role);
@@ -1899,20 +1893,17 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
         (d.objectPath && existing && !matchesExistingProjectDocument(d, existing))
         || (!existing && !validProjectDocumentDescriptor(d, req.currentUser!.id))
       ) {
-        client.release();
         res.status(422).json({ error: "invalid_document_upload_descriptor" });
         return;
       }
     }
     if (body.startDate && body.endDate && new Date(body.endDate) < new Date(body.startDate)) {
-      client.release();
       res.status(400).json({ error: "invalid_date_range", detail: "End Date cannot be before Start Date" });
       return;
     }
 
     // Budget validation — must be zero or a positive number (parity with create)
     if ((body.budgetTotal ?? 0) < 0) {
-      client.release();
       res.status(400).json({
         error: "validation_error",
         detail: "budgetTotal: Budget must be zero or a positive number",
@@ -1926,7 +1917,6 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
       const rawHqOps = (req.body as Record<string, unknown>).hasHqOperations;
       const hqOps = rawHqOps === true;
       if (!hqOps && (body.stateIds ?? []).length === 0) {
-        client.release();
         res.status(422).json({
           error: "no_operational_location",
           message: "A project must have at least one Operational Location: select HQ or at least one state.",
@@ -1941,7 +1931,6 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
     // Validate ALL sectors (not just primary) — reject any retired/unsupported value
     const invalidPatchSecs = sectorsArr.filter((s: string) => s && !VALID_SECTOR_SET.has(s));
     if (invalidPatchSecs.length > 0) {
-      client.release();
       res.status(422).json({ error: "invalid_sector", field: "sectors", code: "invalid_sector", message: `Unrecognised sector(s): ${invalidPatchSecs.join(", ")}. Allowed: ${[...VALID_SECTOR_SET].join(", ")}` });
       return;
     }
@@ -1953,7 +1942,6 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
       return false;
     });
     if (patchDuplicates.length > 0) {
-      client.release();
       res.status(422).json({ error: "duplicate_sector", field: "sectors", code: "duplicate_sector", message: `Duplicate sector(s): ${[...new Set(patchDuplicates)].join(", ")}. Each sector must appear at most once.` });
       return;
     }
@@ -1961,11 +1949,10 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
     const patchSubSectors: string[] = body.subSectors ?? [];
     if (patchSubSectors.length > 0 && uniquePatchSectors.length > 0) {
       const subErr = validateSubSectorsMulti(uniquePatchSectors, patchSubSectors);
-      if (subErr) { client.release(); res.status(422).json({ error: "invalid_sub_sector", field: "subSectors", code: "invalid_sub_sector", message: subErr }); return; }
+      if (subErr) { res.status(422).json({ error: "invalid_sub_sector", field: "subSectors", code: "invalid_sub_sector", message: subErr }); return; }
     }
     const patchModality = body.assistanceModality ?? null;
     if (patchModality && !ASSISTANCE_MODALITY_SET.has(patchModality)) {
-      client.release();
       res.status(422).json({ error: "invalid_assistance_modality", field: "assistanceModality", code: "invalid_assistance_modality", message: `"${patchModality}" is not a recognised assistance modality.` });
       return;
     }
@@ -2075,7 +2062,6 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
       rawFreqPatch !== null &&
       (typeof rawFreqPatch !== "string" || !(SCHEDULED_FREQUENCIES as readonly string[]).includes(rawFreqPatch))
     ) {
-      client.release();
       res.status(400).json({
         error: "invalid_reporting_frequency",
         field: "reportingFrequency",
@@ -2131,6 +2117,23 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
       res.status(409).json({ error: "offline_conflict", code: "revision_mismatch", message: "The project changed while this draft was offline." });
       return;
     }
+
+    // Indicators (like Outputs) have no client-supplied id in the request
+    // body, so — unlike activities — they are always deleted and reinserted
+    // with fresh ids on every PATCH. Their `code` column ("IND-{output}.{n}")
+    // is deterministic from output/indicator position and is the only stable
+    // identity available; read the prior (code -> achieved) map before the
+    // delete so an ordinary content edit (title/target/unit change) doesn't
+    // silently zero out already-recorded indicator progress. Reordering or
+    // adding/removing an output ahead of an existing one will still shift the
+    // codes and lose the match — a known limit of position-based identity.
+    const existingIndicatorAchieved = await client.query<{ code: string; achieved: string }>(
+      "SELECT code, achieved FROM indicators WHERE project_id=$1",
+      [projectId],
+    );
+    const indicatorAchievedByCode = new Map<string, number>(
+      existingIndicatorAchieved.rows.map((row) => [row.code, Number(row.achieved)]),
+    );
 
     // Replace all nested data (activities handled separately below via upsert — PRJ-BD-03)
     await client.query("DELETE FROM indicators WHERE project_id=$1", [projectId]);
@@ -2225,10 +2228,12 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
       const outIndicators = out.indicators ?? [];
       for (let ii = 0; ii < outIndicators.length; ii++) {
         const ind = outIndicators[ii];
+        const indicatorCode = `IND-${outIdx}.${ii + 1}`;
+        const preservedAchieved = indicatorAchievedByCode.get(indicatorCode) ?? 0;
         const indRow = await client.query(
-          `INSERT INTO indicators (project_id, output_id, code, title, unit, target, sector)
-           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-          [projectId, outputId, `IND-${outIdx}.${ii + 1}`, ind.title, ind.unit ?? "count", ind.target ?? 0, primarySector],
+          `INSERT INTO indicators (project_id, output_id, code, title, unit, target, sector, achieved)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+          [projectId, outputId, indicatorCode, ind.title, ind.unit ?? "count", ind.target ?? 0, primarySector, preservedAchieved],
         );
         indicatorIds.push(indRow.rows[0].id as number);
       }
@@ -2406,7 +2411,8 @@ router.post("/projects/:projectId/transitions", async (req, res, next) => {
       }
     }
     const cur = await pool.query(
-      `SELECT status, sector, COALESCE(sectors, '[]'::jsonb)::jsonb AS sectors, management_level AS "managementLevel" FROM projects WHERE id = $1`,
+      `SELECT status, sector, COALESCE(sectors, '[]'::jsonb)::jsonb AS sectors, management_level AS "managementLevel"
+       FROM projects WHERE id = $1 AND deleted_at IS NULL`,
       [projectId],
     );
     if (cur.rows.length === 0) {
@@ -2467,6 +2473,63 @@ router.post("/projects/:projectId/transitions", async (req, res, next) => {
         res.status(409).json({ error: "missing_required_document", detail: "At least one Budget document is required before final approval." });
         return;
       }
+      // Gate 3: detailed cost breakdown must not exceed the approved total.
+      // A project may be saved as a draft with a mismatched breakdown (e.g.
+      // costs not itemised yet), but final approval is the point at which the
+      // budget is locked in, so an over-allocated breakdown must not slip
+      // through silently — the response carries both figures so the caller
+      // can show exactly how far over the total the breakdown is.
+      const costCheck = await pool.query(
+        `SELECT budget_total::float AS "budgetTotal",
+                COALESCE(direct_cost::float, 0) AS "directCost",
+                COALESCE(indirect_cost::float, 0) AS "indirectCost",
+                COALESCE(cafa_contribution::float, 0) AS "cafaContribution"
+         FROM projects WHERE id = $1`,
+        [projectId],
+      );
+      const costRow = costCheck.rows[0] as {
+        budgetTotal: number; directCost: number; indirectCost: number; cafaContribution: number;
+      };
+      const detailedCostTotal = costRow.directCost + costRow.indirectCost + costRow.cafaContribution;
+      if (detailedCostTotal > costRow.budgetTotal) {
+        res.status(409).json({
+          error: "budget_breakdown_exceeds_total",
+          detail: `Detailed costs (Direct + Indirect + CAFA Contribution = ${detailedCostTotal.toFixed(2)}) exceed the approved Budget Total (${costRow.budgetTotal.toFixed(2)}).`,
+          budgetTotal: costRow.budgetTotal,
+          detailedCostTotal,
+        });
+        return;
+      }
+      // Gate 4: disaggregated beneficiary counts must not exceed the target,
+      // mirroring the budget-breakdown gate above (allowed to mismatch while
+      // a draft; must not exceed the target at the point final approval locks
+      // the project's commitments in).
+      const beneficiaryCheck = await pool.query(
+        `SELECT beneficiaries_target AS "beneficiariesTarget",
+                COALESCE(beneficiaries_male, 0) AS "beneficiariesMale",
+                COALESCE(beneficiaries_female, 0) AS "beneficiariesFemale",
+                COALESCE(beneficiaries_boys, 0) AS "beneficiariesBoys",
+                COALESCE(beneficiaries_girls, 0) AS "beneficiariesGirls"
+         FROM projects WHERE id = $1`,
+        [projectId],
+      );
+      const beneficiaryRow = beneficiaryCheck.rows[0] as {
+        beneficiariesTarget: number | null;
+        beneficiariesMale: number; beneficiariesFemale: number; beneficiariesBoys: number; beneficiariesGirls: number;
+      };
+      const beneficiarySum =
+        beneficiaryRow.beneficiariesMale + beneficiaryRow.beneficiariesFemale
+        + beneficiaryRow.beneficiariesBoys + beneficiaryRow.beneficiariesGirls;
+      const beneficiaryTarget = beneficiaryRow.beneficiariesTarget ?? 0;
+      if (beneficiarySum > beneficiaryTarget) {
+        res.status(409).json({
+          error: "beneficiaries_breakdown_exceeds_target",
+          detail: `Disaggregated beneficiaries (Male + Female + Boys + Girls = ${beneficiarySum}) exceed the Beneficiaries Target (${beneficiaryTarget}).`,
+          beneficiariesTarget: beneficiaryTarget,
+          beneficiarySum,
+        });
+        return;
+      }
     }
 
     const commentText = String(body.comment ?? "").trim();
@@ -2475,27 +2538,58 @@ router.post("/projects/:projectId/transitions", async (req, res, next) => {
       return;
     }
 
-    const updated = await pool.query(
-      `UPDATE projects SET status = $1 WHERE id = $2 ${projectReturning}`,
-      [transition.to, projectId],
-    );
-    await pool.query(
-      `INSERT INTO approvals (entity_type, entity_id, action, from_status, to_status, actor_id, comment)
-       VALUES ('project', $1, $2, $3, $4, $5, $6)`,
-      [projectId, body.action, fromStatus, transition.to, req.currentUser.id, body.comment ?? null],
-    );
-
-    if (commentText && (body.action === "request_revision" || body.action === "reject")) {
-      await pool.query(
-        `INSERT INTO comments (entity_type, entity_id, comment_type, author_id, body)
-         VALUES ('project', $1, $2, $3, $4)`,
-        [
-          projectId,
-          body.action === "request_revision" ? "revision_request" : "rejection_reason",
-          req.currentUser.id,
-          commentText,
-        ],
+    // Atomic CAS transition (mirrors the PLAN-004 pattern in plans.ts): the
+    // UPDATE includes an AND status = $fromStatus predicate. If a concurrent
+    // transition on this same project already changed the status between our
+    // read above and this write — e.g. one actor approves while another
+    // rejects the same coordination_approved project at nearly the same
+    // moment — rowCount is 0 and we report a 409 conflict instead of
+    // silently letting whichever transition committed last win with no
+    // signal that the other one's approval/rejection was effectively lost.
+    // The approval record and optional comment are written in the same
+    // transaction, so a partial commit (status changed, no approval row) is
+    // impossible.
+    let updatedRow: Record<string, unknown> | undefined;
+    const transitionClient = await pool.connect();
+    try {
+      await transitionClient.query("BEGIN");
+      const casResult = await transitionClient.query(
+        `UPDATE projects SET status = $1 WHERE id = $2 AND status = $3 AND deleted_at IS NULL ${projectReturning}`,
+        [transition.to, projectId, fromStatus],
       );
+      if (casResult.rowCount === 0) {
+        await transitionClient.query("ROLLBACK");
+        res.status(409).json({
+          error: "project_status_conflict",
+          message: "The project status has changed; please refresh and try again.",
+        });
+        return;
+      }
+      updatedRow = casResult.rows[0];
+      await transitionClient.query(
+        `INSERT INTO approvals (entity_type, entity_id, action, from_status, to_status, actor_id, comment)
+         VALUES ('project', $1, $2, $3, $4, $5, $6)`,
+        [projectId, body.action, fromStatus, transition.to, req.currentUser.id, body.comment ?? null],
+      );
+
+      if (commentText && (body.action === "request_revision" || body.action === "reject")) {
+        await transitionClient.query(
+          `INSERT INTO comments (entity_type, entity_id, comment_type, author_id, body)
+           VALUES ('project', $1, $2, $3, $4)`,
+          [
+            projectId,
+            body.action === "request_revision" ? "revision_request" : "rejection_reason",
+            req.currentUser.id,
+            commentText,
+          ],
+        );
+      }
+      await transitionClient.query("COMMIT");
+    } catch (err) {
+      await transitionClient.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      transitionClient.release();
     }
 
     await logAudit({
@@ -2542,7 +2636,7 @@ router.post("/projects/:projectId/transitions", async (req, res, next) => {
       dedupeKey: `${transitionDedupeKey}:next-approver`,
     });
 
-    const enriched = await enrichProject(updated.rows[0], null);
+    const enriched = await enrichProject(updatedRow!, null);
     realtime.broadcastUpdate({
       module: "projects",
       action: body.action,
@@ -3152,8 +3246,7 @@ router.delete("/projects/:projectId/documents/:documentId", requirePerm("documen
       }
 
       if (txGate === "operational") {
-        const role = req.currentUser.role;
-        const isOverrideActor = role === "program_manager" || role === "super_admin";
+        const isOverrideActor = hasFullOperationalAccess(req.currentUser);
         if (!isOverrideActor) {
           await txClient.query("ROLLBACK");
           res.status(409).json({
@@ -3269,7 +3362,8 @@ router.get("/projects/:projectId/report-kpis", async (req, res, next) => {
     }>(`
       SELECT
         COUNT(*)::text AS "reportCount",
-        COALESCE(SUM(r.beneficiaries_male + r.beneficiaries_female + r.beneficiaries_boys + r.beneficiaries_girls), 0)::text AS "beneficiariesReached",
+        (COALESCE(SUM(r.beneficiaries_male),0) + COALESCE(SUM(r.beneficiaries_female),0) +
+         COALESCE(SUM(r.beneficiaries_boys),0) + COALESCE(SUM(r.beneficiaries_girls),0))::text AS "beneficiariesReached",
         COALESCE(SUM(r.planned_budget), 0)::text AS "totalPlannedBudget",
         COALESCE(SUM(r.actual_expenditure), 0)::text AS "totalActualExpenditure",
         MAX(r.period) AS "latestPeriod"
@@ -3584,27 +3678,12 @@ router.get("/projects/:projectId/budget", requirePerm("budget.view"), async (req
     if (!sectorGuardBudget.ok) { res.status(sectorGuardBudget.status).json(sectorGuardBudget.body); return; }
 
     // ── State-role security guard ─────────────────────────────────────────────
-    const role = req.currentUser?.role;
-    const isStateRole = role === "state_office_manager" || role === "state_program_officer";
-    if (isStateRole) {
-      const userStateId = req.currentUser?.stateId ?? null;
-      if (userStateId === null) {
-        res.status(403).json({ error: "forbidden", message: "You are not authorized to access this project budget." });
-        return;
-      }
-      // Project must belong to the user's state OR user must be assigned to it
-      const access = await pool.query(
-        `SELECT 1 FROM project_states ps WHERE ps.project_id = $1 AND ps.state_id = $2
-         UNION ALL
-         SELECT 1 FROM project_assignments pa WHERE pa.project_id = $1 AND pa.user_id = $3
-         LIMIT 1`,
-        [projectId, userStateId, req.currentUser!.id],
-      );
-      if (access.rows.length === 0) {
-        res.status(403).json({ error: "forbidden", message: "You are not authorized to access this project budget." });
-        return;
-      }
-    }
+    // Uses the same centralized guard as every other project route (state_office_manager
+    // scoped to project_states, state_program_officer scoped to their explicit
+    // project_assignments) instead of this endpoint's own independently-broader
+    // OR-of-both-tables check.
+    const stateGuardBudget = await assertStateAllowed(req, projectId);
+    if (!stateGuardBudget.ok) { res.status(stateGuardBudget.status).json(stateGuardBudget.body); return; }
     // ─────────────────────────────────────────────────────────────────────────
     const total = proj.rows[0].total as number;
     const outputs = await pool.query(
@@ -3623,7 +3702,10 @@ router.get("/projects/:projectId/budget", requirePerm("budget.view"), async (req
       const planned = acts.reduce((s, a) => s + Number(a.planned), 0);
       const spent = acts.reduce((s, a) => s + Number(a.spent), 0);
       const remaining = planned - spent;
-      const burn = planned > 0 ? Math.round((spent / planned) * 100) : 0;
+      // Null (not 0) when there's no valid planned amount to divide by —
+      // matches Dashboard's convention: a manufactured 0% would misread as
+      // "fully unspent" rather than "no budget recorded yet".
+      const burn = planned > 0 ? Math.round((spent / planned) * 100) : null;
       return {
         id: o.id,
         label: `${o.code} — ${o.title}`,
@@ -3642,14 +3724,21 @@ router.get("/projects/:projectId/budget", requirePerm("budget.view"), async (req
             planned: ap,
             spent: sp,
             remaining: ap - sp,
-            burnRatePct: ap > 0 ? Math.round((sp / ap) * 100) : 0,
+            burnRatePct: ap > 0 ? Math.round((sp / ap) * 100) : null,
           };
         }),
       };
     });
-    const spent = lines.reduce((s, l) => s + l.spent, 0);
+    // Sum ALL activities, not just those grouped under an existing output —
+    // activities.output_id is nullable by design (standalone activities with
+    // no output parent), and their spend was previously invisible to this
+    // total even though Dashboard's own budget queries (SUM(budget_spent)
+    // FROM activities, ungated by output) always included it. A project with
+    // spend on unlinked activities showed a lower "spent" and healthier burn
+    // rate here than on the Dashboard for the exact same project.
+    const spent = activities.rows.reduce((s, a) => s + Number(a.spent), 0);
     const remaining = total - spent;
-    const burnRatePct = total > 0 ? Math.round((spent / total) * 100) : 0;
+    const burnRatePct = total > 0 ? Math.round((spent / total) * 100) : null;
     // ── Monthly burn chart — deterministic, derived from activity date ranges ──
     // Distribute each activity's budget linearly across its planned_start → planned_end
     // window and accumulate per calendar month. This replaces the prior Math.random()
@@ -3678,10 +3767,10 @@ router.get("/projects/:projectId/budget", requirePerm("budget.view"), async (req
       monthly.push({ month: monthLabel, planned: Math.round(cumulPlanned), actual: Math.round(cumulActual) });
     }
     const alerts: Array<{ level: string; message: string }> = [];
-    if (burnRatePct > 80) alerts.push({ level: "high", message: `Burn rate at ${burnRatePct}% — review remaining activities` });
+    if (burnRatePct !== null && burnRatePct > 80) alerts.push({ level: "high", message: `Burn rate at ${burnRatePct}% — review remaining activities` });
     for (const line of lines) {
-      if (line.burnRatePct > 90) alerts.push({ level: "high", message: `${line.label} overspending (${line.burnRatePct}%)` });
-      else if (line.burnRatePct < 20 && total > 0) alerts.push({ level: "medium", message: `${line.label} under-utilized (${line.burnRatePct}%)` });
+      if (line.burnRatePct !== null && line.burnRatePct > 90) alerts.push({ level: "high", message: `${line.label} overspending (${line.burnRatePct}%)` });
+      else if (line.burnRatePct !== null && line.burnRatePct < 20 && total > 0) alerts.push({ level: "medium", message: `${line.label} under-utilized (${line.burnRatePct}%)` });
     }
     res.json({ projectId, total, spent, remaining, burnRatePct, lines, monthly, alerts });
   } catch (err) {

@@ -118,9 +118,6 @@ function primeTransitionProject(fromStatus: string, projectId = 77) {
           rows: [{ status: fromStatus, sector: "Health", sectors: ["Health"], managementLevel: "hq_managed" }],
         });
       }
-      if (sql.includes("UPDATE projects SET status")) {
-        return Promise.resolve({ rows: [{ id: projectId, status: "updated" }] });
-      }
       if (sql.includes("project_states ps") || sql.includes("project_assignments pa")) {
         // assertStateAllowed union query — allow
         return Promise.resolve({ rows: [{ "?column?": 1 }] });
@@ -128,10 +125,19 @@ function primeTransitionProject(fromStatus: string, projectId = 77) {
     }
     return Promise.resolve({ rows: [] });
   });
+  // The status UPDATE (PROJ-ZR CAS transition) runs on the connected
+  // transaction client, not the bare pool — see transitionClient in
+  // routes/projects.ts.
+  mockClientQuery.mockImplementation((sql: string) => {
+    if (typeof sql === "string" && sql.includes("UPDATE projects SET status")) {
+      return Promise.resolve({ rows: [{ id: projectId, status: "updated" }], rowCount: 1 });
+    }
+    return Promise.resolve({ rows: [] });
+  });
 }
 
 function updateProjectsStatusCalls() {
-  return mockQuery.mock.calls.filter(
+  return mockClientQuery.mock.calls.filter(
     (c) => typeof c[0] === "string" && (c[0] as string).includes("UPDATE projects SET status"),
   );
 }
@@ -159,37 +165,37 @@ describe("PRJ-GOV — stage-aware negative transitions", () => {
   it("PRJ-GOV-01  TC request_revision from submitted (technical stage) succeeds", async () => {
     const res = await doTransition(TC_USER, "request_revision", "submitted");
     expect(res.status).toBe(200);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["draft", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["draft", 77, "submitted"]);
   });
 
   it("PRJ-GOV-02  TC reject from state_reviewed (technical stage) succeeds", async () => {
     const res = await doTransition(TC_USER, "reject", "state_reviewed");
     expect(res.status).toBe(200);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77, "state_reviewed"]);
   });
 
   it("PRJ-GOV-03  SPC request_revision from technically_approved (coordination stage) succeeds", async () => {
     const res = await doTransition(SPC_USER, "request_revision", "technically_approved");
     expect(res.status).toBe(200);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["draft", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["draft", 77, "technically_approved"]);
   });
 
   it("PRJ-GOV-04  SPC reject from technically_approved (coordination stage) succeeds", async () => {
     const res = await doTransition(SPC_USER, "reject", "technically_approved");
     expect(res.status).toBe(200);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77, "technically_approved"]);
   });
 
   it("PRJ-GOV-05  PM request_revision from coordination_approved (final stage) succeeds", async () => {
     const res = await doTransition(PM_USER, "request_revision", "coordination_approved");
     expect(res.status).toBe(200);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["draft", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["draft", 77, "coordination_approved"]);
   });
 
   it("PRJ-GOV-06  PM reject from coordination_approved (final stage) succeeds", async () => {
     const res = await doTransition(PM_USER, "reject", "coordination_approved");
     expect(res.status).toBe(200);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77, "coordination_approved"]);
   });
 
   it("PRJ-GOV-07  SPC cannot perform technical_review (wrong stage) despite coordination authority", async () => {
@@ -210,7 +216,7 @@ describe("PRJ-GOV — stage-aware negative transitions", () => {
     const res = await doTransition(SPC_USER, "request_revision", "technically_approved");
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(77);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["draft", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["draft", 77, "technically_approved"]);
   });
 
   it("PRJ-GOV-10  Invalid source status fails with no workflow side effects", async () => {
@@ -233,13 +239,13 @@ describe("PRJ-GOV-FULL — PM / Super Admin Full Access", () => {
   it("PRJ-GOV-FULL-01  PM Full Access reject succeeds (technical stage)", async () => {
     const res = await doTransition(PM_USER, "reject", "submitted");
     expect(res.status).toBe(200);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77, "submitted"]);
   });
 
   it("PRJ-GOV-FULL-02  Super Admin Full Access reject succeeds (coordination stage)", async () => {
     const res = await doTransition(SA_USER, "reject", "technically_approved");
     expect(res.status).toBe(200);
-    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77]);
+    expect(updateProjectsStatusCalls()[0][1]).toEqual(["rejected", 77, "technically_approved"]);
   });
 
   it("PRJ-GOV-FULL-03  Full Access cannot jump an invalid workflow source status", async () => {

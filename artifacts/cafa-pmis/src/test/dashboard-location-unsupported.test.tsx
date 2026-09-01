@@ -63,6 +63,7 @@ vi.mock("@workspace/api-client-react", () => {
     useGetDashboardAttentionProjects: query, useGetDashboardLateReports: query, useListProjects: query,
     useListPlans: query, useListReports: query, useGetDashboardNotificationsSummary: query,
     useGetDashboardAgenda: query,
+    useListDonors: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
     customFetch: vi.fn(),
     getGetDonorPortfolioQueryKey: () => ["donor"], getGetDashboardSummaryQueryKey: () => ["summary"],
     getGetSectorPerformanceQueryKey: () => ["sector"], getGetProjectBudgetPerformanceQueryKey: () => ["budget"],
@@ -93,7 +94,7 @@ describe("Dashboard HQ location filter safety", () => {
     render(<Dashboard />);
     expect(screen.getByText("987")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("combobox"));
+    await userEvent.click(screen.getByRole("combobox", { name: "filters.allSectors" }));
     await userEvent.click(await screen.findByRole("option", { name: "Education" }));
 
     expect(screen.getByText("This metric does not support the current filters.")).toBeInTheDocument();
