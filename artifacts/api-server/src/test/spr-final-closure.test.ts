@@ -66,6 +66,7 @@ vi.mock("../lib/realtime.js", () => ({
 vi.mock("../lib/notifications.js", () => ({
   notifyEntityActorsDeduped: vi.fn().mockResolvedValue(undefined),
   notifyNextApprover:        vi.fn().mockResolvedValue(undefined),
+  createNotificationDeduped: vi.fn().mockResolvedValue(undefined),
 }));
 
 // requirePerm is a no-op so each suite targets the specific inner gate under test.

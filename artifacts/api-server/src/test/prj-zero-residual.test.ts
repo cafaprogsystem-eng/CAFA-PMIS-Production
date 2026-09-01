@@ -60,7 +60,10 @@ describe("PRJ-ZR-02 — Secure document download (proxied, no internal path leak
   it("streams through the storage abstraction with safe Content-Disposition and 404/503 handling", () => {
     expect(dl).toContain("downloadObject");
     expect(dl).toContain("Content-Disposition");
-    expect(dl).toContain("encodeURIComponent");
+    // Filename encoding now lives in the shared contentDispositionHeader()
+    // helper (lib/contentDisposition.ts), not inlined here — see
+    // FILES-CONTENT-DISPOSITION-UNIFIED for the encodeURIComponent coverage.
+    expect(dl).toContain("contentDispositionHeader");
     expect(dl).toContain('"storage_not_configured"');
     expect(dl).toContain("ObjectNotFoundError");
   });

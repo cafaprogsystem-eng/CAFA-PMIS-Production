@@ -14,27 +14,16 @@ import { assertAnySectorAllowed, assertPlanStateAllowed, isPlanCurrentlyEditable
 import { signUploadToken, UploadTokenError, verifyUploadToken } from "../lib/uploadToken";
 import { realtime } from "../lib/realtime";
 import { MAX_ATTACHMENT_BYTES } from "../lib/attachmentLimits";
+import { ALLOWED_ATTACHMENT_CONTENT_TYPES as ALLOWED_CONTENT_TYPES } from "../lib/attachmentContentTypes";
+import { contentDispositionHeader } from "../lib/contentDisposition";
 
 const router: IRouter = Router();
 const objectStorage = new ObjectStorageService();
 const UPLOAD_TTL_MS = 15 * 60 * 1000;
-const ALLOWED_CONTENT_TYPES = new Set([
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "text/plain",
-  "text/csv",
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "application/zip",
-  "application/x-zip-compressed",
-]);
+// ALLOWED_CONTENT_TYPES now comes from lib/attachmentContentTypes.ts — the
+// single source of truth shared with routes/storage.ts (this previously
+// silently rejected image/svg+xml and every audio MIME type that storage.ts
+// accepted).
 const SAFE_NAME_RE = /[/\\\u0000-\u001f\u007f]/;
 
 type ParentType = "plan" | "risk";
@@ -611,7 +600,7 @@ async function streamAttachment(req: Request, res: Response, attachmentId: strin
     const response = await objectStorage.downloadObject(file);
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
-    res.setHeader("Content-Disposition", `${disposition}; filename="${String(attachment.fileName).replace(/["\\\r\n]/g, "_")}"`);
+    res.setHeader("Content-Disposition", contentDispositionHeader(String(attachment.fileName), disposition));
     if (response.body) Readable.fromWeb(response.body as ReadableStream<Uint8Array>).pipe(res);
     else res.end();
   } catch (error) {

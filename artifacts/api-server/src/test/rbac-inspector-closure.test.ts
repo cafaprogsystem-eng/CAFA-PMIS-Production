@@ -152,11 +152,18 @@ describe("RBAC-PERM: canonical permission model invariants", () => {
   });
 
   it("keeps announcement creation aligned across frontend, canonical permissions and route", () => {
-    expect(messagesPage).toContain('new Set(["super_admin", "executive_director", "program_manager"])');
-    expect(messagesPage).not.toContain("senior_program_coordinator\"])");
+    expect(messagesPage).toContain('const ANNOUNCEMENT_ROLES = new Set(["super_admin", "executive_director", "program_manager"]);');
     expect(currentUser).toContain('["executive_director", "program_manager"].includes(role)');
     const conversationsRoute = readFileSync(new URL("../routes/conversations.ts", import.meta.url), "utf8");
-    expect(conversationsRoute).toContain('new Set(["super_admin", "executive_director", "program_manager"])');
+    expect(conversationsRoute).toContain('const ANNOUNCEMENT_ROLES = new Set(["super_admin", "executive_director", "program_manager"]);');
+    // Announcements stay PM+ only (deliberately narrower than message
+    // moderation's 4-role ADMIN_ROLES/MESSAGE_MODERATION_ROLES, which do
+    // include senior_program_coordinator) — checked against the
+    // ANNOUNCEMENT_ROLES declaration specifically, not any 3-role set in the
+    // file, so this doesn't false-positive against an unrelated 4-role set
+    // like MESSAGE_MODERATION_ROLES.
+    const announcementRolesLine = messagesPage.split("\n").find((line) => line.includes("const ANNOUNCEMENT_ROLES ="));
+    expect(announcementRolesLine).not.toContain("senior_program_coordinator");
   });
 
   it("communication create/send/member capabilities are granted to every canonical role", () => {

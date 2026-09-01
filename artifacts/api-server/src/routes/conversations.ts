@@ -25,6 +25,7 @@ import {
 } from "../lib/conversationAttachments";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
 import { UploadTokenError, verifyUploadToken } from "../lib/uploadToken";
+import { contentDispositionHeader } from "../lib/contentDisposition";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -132,12 +133,6 @@ function parsePositiveInt(raw: string | undefined): number | null {
   if (typeof raw !== "string" || !/^\d+$/.test(raw)) return null;
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
-}
-
-function attachmentContentDisposition(name: string, inline: boolean): string {
-  const safe = name.replace(/["\\\u0000-\u001f\u007f]/g, "_").trim() || "attachment";
-  const ascii = safe.replace(/[^\x20-\x7e]/g, "_");
-  return `${inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
 }
 
 async function getConvById(convId: number, user: ConversationAccessUser) {
@@ -535,6 +530,14 @@ router.post("/conversations", requirePerm("messages.create"), async (req, res, n
       } else if (targetRole) {
         recipientQuery += ` AND role=$${rp++}`;
         rParams.push(targetRole);
+      } else {
+        // Fail closed: no recognised target field was sent. Every other
+        // branch here narrows the recipient set explicitly; silently falling
+        // through to the unfiltered base query would broadcast to every
+        // active user in the system — the same blast radius as
+        // targetAll:true — for a caller (a future client, a script) that
+        // never asked for that.
+        res.status(400).json({ error: "announcement_target_required" }); return;
       }
       const recipients = await pool.query<{ id: number }>(recipientQuery, rParams);
       allMemberIds = [...new Set([userId, ...recipients.rows.map((r) => r.id)])];
@@ -639,6 +642,31 @@ router.post("/conversations", requirePerm("messages.create"), async (req, res, n
           }
         } else {
           await insertConversation();
+        }
+      }
+
+      if (!createdConversation) {
+        // Reusing an existing direct/project/state/sector conversation (found
+        // via its key table or, for legacy rows, the historical fallback
+        // query) never inserted allMemberIds — the requesting user plus any
+        // project/state/sector members auto-enrolled above — into
+        // conversation_members. A member who joined the project/state/sector
+        // after the conversation was first created (or the very requester,
+        // on their first visit) would get a 200 here but then 403 on the next
+        // GET, since conversation access requires actual membership. Sync the
+        // gap now, still inside the advisory-locked transaction so a
+        // concurrent create/reuse of the same conversation can't race this.
+        const existingMembers = await client.query<{ user_id: number }>(
+          `SELECT user_id FROM conversation_members WHERE conversation_id = $1`,
+          [convId],
+        );
+        const existingMemberIds = new Set(existingMembers.rows.map((row) => row.user_id));
+        const missingMemberIds = allMemberIds.filter((id) => !existingMemberIds.has(id));
+        for (const mid of missingMemberIds) {
+          await client.query(
+            `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2)`,
+            [convId, mid],
+          );
         }
       }
       await client.query("COMMIT");
@@ -1540,7 +1568,7 @@ router.get("/conversations/:id/messages/:messageId/attachments/:index", async (r
     );
     res.setHeader(
       "Content-Disposition",
-      attachmentContentDisposition(attachment.name, canRenderInline),
+      contentDispositionHeader(attachment.name, canRenderInline ? "inline" : "attachment"),
     );
     response.headers.forEach((value, key) => {
       if (!["content-type", "content-disposition"].includes(key.toLowerCase())) res.setHeader(key, value);
@@ -1564,9 +1592,14 @@ router.patch("/messages/:msgId", async (req, res, next) => {
     const userId = req.currentUser!.id;
     const msgId = parsePositiveInt(req.params.msgId as string);
     if (!msgId) { res.status(400).json({ error: "invalid_message_id" }); return; }
-    const { body } = req.body as { body: string };
+    const { body } = req.body as { body?: unknown };
 
-    if (body && body.length > 10_000) {
+    // A missing/empty body previously fell through to body.trim() below and
+    // threw a TypeError, surfaced as a generic 500 instead of a real 400.
+    if (typeof body !== "string" || !body.trim()) {
+      res.status(400).json({ error: "body_required" }); return;
+    }
+    if (body.length > 10_000) {
       res.status(400).json({ error: "message_too_long" }); return;
     }
 
@@ -1666,7 +1699,7 @@ router.delete("/messages/:msgId", async (req, res, next) => {
     if (!hasAccess) { res.status(403).json({ error: "forbidden" }); return; }
 
     const isSender = existing.rows[0].sender_id === userId;
-    const isAdmin = ["super_admin", "executive_director", "program_manager"].includes(req.currentUser!.role);
+    const isAdmin = isAdminRole(req.currentUser!.role);
 
     if (deletionType === "for_everyone") {
       // Only sender (or admin) may delete for everyone, within 15 minutes

@@ -127,12 +127,16 @@ const EXCLUDED_FILE_PATTERNS: ReadonlyArray<string> = [
  * The exact snapshot is intentionally immutable: any new, removed, or swapped
  * finding requires a review that refreshes this digest and the audit report.
  */
-const BASELINE_FINGERPRINT_COUNT = 7;
-const BASELINE_FINGERPRINT_SHA256 = "f72bfea77a56092d4a3ef0680cd954386c6c7ba0757a4d8316df47b557e2202d";
+// Refreshed after fixing the 4 "File Unavailable" hardcoded strings in
+// pages/files.tsx (1) and pages/messages.tsx (3) — Communication/File &
+// Archive review, item 18. The 3 remaining hits (activity-report-detail.tsx,
+// voice-note-panel.tsx, project-detail.tsx) are outside that review's scope.
+const BASELINE_FINGERPRINT_COUNT = 3;
+const BASELINE_FINGERPRINT_SHA256 = "ca42d88b9614f382267216c3a2097dcf31dfa6db5d13cc2e20b99cc58f43a405";
 const BASELINE_CATEGORY_COUNTS: Readonly<Record<string, number>> = {
   "aria-label": 0,
   "column-header": 0,
-  "jsx-text": 7,
+  "jsx-text": 3,
   "placeholder": 0,
   "title-attr": 0,
   "toast-call": 0,

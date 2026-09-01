@@ -1011,6 +1011,9 @@ export const programResourcesTable = pgTable("program_resources", {
   category: text("category").notNull(),
   // General / Cross-Cutting | Health | Nutrition | WASH | Education | Protection | Food Security & Livelihoods | Shelter & NFI
   sector: text("sector").notNull(),
+  // Optional: when set, a State Program Officer for this state may view a
+  // confidential/restricted resource even if they are not its uploader.
+  stateId: integer("state_id").references(() => statesTable.id),
   // Set by migration when a legacy sector value could not be deterministically resolved.
   migrationReviewNotes: text("migration_review_notes"),
   description: text("description"),

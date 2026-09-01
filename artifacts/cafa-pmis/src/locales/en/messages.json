@@ -67,6 +67,7 @@
   "closeLightbox": "Close lightbox",
   "openImage": "Open image {{name}}",
   "downloadAttachment": "Download attachment {{name}}",
+  "fileUnavailable": "File Unavailable",
   "playVoice": "Play voice message",
   "pauseVoice": "Pause voice message",
   "seekVoice": "Seek within voice message",

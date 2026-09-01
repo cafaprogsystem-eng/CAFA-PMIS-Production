@@ -122,6 +122,115 @@ async function loadEntityMeta(entityType: string, entityId: number): Promise<Ent
   return undefined;
 }
 
+/**
+ * @mention used to resolve any `@username` in the comment body against ALL
+ * active users org-wide, with zero check that the mentioned person actually
+ * has any relationship to (or view authority over) the entity being
+ * commented on — so mentioning a guessed/enumerated username silently
+ * disclosed the entity's existence and a working deep link to a
+ * stateId/sector they were never authorised to see.
+ *
+ * routes/conversations.ts already gets this right for its own @mention
+ * feature ("mentionedUserIds are validated by the send-message handler and
+ * contain only active conversation members. Never resolve identities from
+ * text.") — this mirrors that principle for comments: a resolved username
+ * only becomes a notification recipient when they pass the SAME visibility
+ * rule that gates a direct GET of the entity (the "all other org-wide roles
+ * pass; only technical_coordinator is sector-scoped and only
+ * state_program_officer/state_office_manager are state-scoped" rule already
+ * used by resolveReportViewAccess and the reportScopeSql/projectScopeSql/
+ * planScopeSql family in routes/files.ts).
+ */
+export async function authorizedMentionRecipientIds(
+  entityType: string,
+  entityId: number,
+  usernames: string[],
+  excludeUserId: number,
+): Promise<number[]> {
+  const ORG_WIDE_CLAUSE = `u.role NOT IN ('technical_coordinator', 'state_program_officer', 'state_office_manager')`;
+  const SECTOR_CLAUSE = (sectorExpr: string) => `
+    (u.role = 'technical_coordinator' AND ${sectorExpr} IS NOT NULL AND EXISTS (
+      SELECT 1 FROM unnest(string_to_array(u.sector, ',')) AS seg(val) WHERE trim(seg.val) = ${sectorExpr}
+    ))`;
+
+  if (entityType === "project") {
+    const { rows } = await pool.query<{ id: number }>(
+      `SELECT u.id FROM users u, projects p
+       WHERE p.id = $1 AND u.username = ANY($2::text[]) AND u.status = 'active' AND u.id != $3
+         AND (
+           ${ORG_WIDE_CLAUSE}
+           OR ${SECTOR_CLAUSE("p.sector")}
+           OR (u.role IN ('state_program_officer','state_office_manager') AND u.state_id IS NOT NULL
+               AND EXISTS (SELECT 1 FROM project_states ps WHERE ps.project_id = p.id AND ps.state_id = u.state_id))
+         )`,
+      [entityId, usernames, excludeUserId],
+    );
+    return rows.map((r) => r.id);
+  }
+  if (entityType === "report") {
+    const { rows } = await pool.query<{ id: number }>(
+      `SELECT u.id
+       FROM users u, (
+         SELECT r.state_id,
+                CASE
+                  WHEN r.report_type = 'project' THEN p.sector
+                  WHEN r.report_type = 'activity' THEN CASE WHEN r.project_id IS NULL THEN act.sector ELSE p.sector END
+                  ELSE COALESCE(NULLIF(r.sector,''), p.sector)
+                END AS sector
+         FROM reports r
+         LEFT JOIN projects p ON p.id = r.project_id
+         LEFT JOIN activities act ON act.id = r.activity_id
+         WHERE r.id = $1
+       ) rc
+       WHERE u.username = ANY($2::text[]) AND u.status = 'active' AND u.id != $3
+         AND (
+           ${ORG_WIDE_CLAUSE}
+           OR ${SECTOR_CLAUSE("rc.sector")}
+           OR (u.role IN ('state_program_officer','state_office_manager') AND rc.state_id IS NOT NULL
+               AND u.state_id = rc.state_id)
+         )`,
+      [entityId, usernames, excludeUserId],
+    );
+    return rows.map((r) => r.id);
+  }
+  if (entityType === "plan") {
+    const { rows } = await pool.query<{ id: number }>(
+      `SELECT u.id
+       FROM users u, plans pl LEFT JOIN projects p ON p.id = pl.project_id
+       WHERE pl.id = $1 AND u.username = ANY($2::text[]) AND u.status = 'active' AND u.id != $3
+         AND (
+           ${ORG_WIDE_CLAUSE}
+           OR ${SECTOR_CLAUSE("COALESCE(NULLIF(pl.sector,''), p.sector)")}
+           OR (u.role IN ('state_program_officer','state_office_manager')
+               AND pl.location_type IS DISTINCT FROM 'hq' AND pl.state_id IS NOT NULL
+               AND u.state_id = pl.state_id)
+         )`,
+      [entityId, usernames, excludeUserId],
+    );
+    return rows.map((r) => r.id);
+  }
+  if (entityType === "risk") {
+    // RISK-BD-07: standalone risks (no project) carry no sector/state data
+    // anywhere, so neither the TC-sector nor the SPO/SOM-state branch can
+    // ever match one — only org-wide roles may be mentioned on it, exactly
+    // like the equivalent risks.ts view-scope rule.
+    const { rows } = await pool.query<{ id: number }>(
+      `SELECT u.id
+       FROM users u, risks r LEFT JOIN projects p ON p.id = r.project_id
+       WHERE r.id = $1 AND u.username = ANY($2::text[]) AND u.status = 'active' AND u.id != $3
+         AND (
+           ${ORG_WIDE_CLAUSE}
+           OR ${SECTOR_CLAUSE("p.sector")}
+           OR (u.role IN ('state_program_officer','state_office_manager') AND r.state_id IS NOT NULL
+               AND u.state_id = r.state_id)
+         )`,
+      [entityId, usernames, excludeUserId],
+    );
+    return rows.map((r) => r.id);
+  }
+  return [];
+}
+
 // RISK-001: state scope for risk comments — mirrors PATCH /risks/:riskId and
 // GET /risks/:riskId/history. State roles (SPO/SOM) may only touch comments on
 // risks in their own state; a state user with a null stateId fails closed.
@@ -475,17 +584,16 @@ router.post("/comments", async (req, res, next) => {
       }
     }
 
-    // @mention notifications — parse @username patterns and notify each mentioned user
+    // @mention notifications — parse @username patterns and notify each
+    // mentioned user, but only those actually authorised to view this entity
+    // (see authorizedMentionRecipientIds above).
     const mentionMatches = [...text.matchAll(/@([\w.]+)/g)];
     if (mentionMatches.length > 0) {
       const usernames = [...new Set(mentionMatches.map(m => m[1]))];
-      const { rows: mentionedUsers } = await pool.query<{ id: number }>(
-        `SELECT id FROM users WHERE username = ANY($1::text[]) AND status = 'active' AND id != $2`,
-        [usernames, req.currentUser.id],
-      );
-      for (const mu of mentionedUsers) {
+      const authorizedIds = await authorizedMentionRecipientIds(entityType, entityId, usernames, req.currentUser.id);
+      for (const recipientId of authorizedIds) {
         await createNotificationDeduped({
-          userId: mu.id,
+          userId: recipientId,
           kind: "mention",
           entityType,
           entityId,

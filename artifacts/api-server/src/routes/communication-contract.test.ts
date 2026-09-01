@@ -652,3 +652,116 @@ describe("COMM-CONTRACT-09 — Current conversation types represented", () => {
     },
   );
 });
+
+/* ─────────────────── COMM-CONTRACT-10 Reused-conversation membership sync ── */
+
+describe("COMM-CONTRACT-10 — reusing an existing project/state/sector conversation syncs newly-computed membership", () => {
+  it("inserts the requester and freshly auto-enrolled project members that are missing from conversation_members", async () => {
+    const insertedMemberIds: number[] = [];
+
+    mockPoolQuery.mockImplementation((sql: string) => {
+      if (sql.includes("FROM projects WHERE id=")) return { rows: [{ sector: "Health" }], rowCount: 1 };
+      // Auto-enrollment: the project now has two active assignees — the
+      // requester (7, already a member) and a newly-assigned user (99).
+      if (sql.includes("FROM project_assignments pa")) return { rows: [{ user_id: 7 }, { user_id: 99 }], rowCount: 2 };
+      if (sql.includes("FROM users WHERE id = ANY")) return { rows: [], rowCount: 0 };
+      // Final re-fetch of the reused conversation for the response body.
+      if (sql.includes("FROM conversations c WHERE c.id=$1")) {
+        return {
+          rows: [{
+            id: 55, type: "project", name: null, projectId: 10, stateId: null, sector: "Health",
+            createdById: 7, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            memberCount: 2, unreadCount: 0, lastMessageBody: null, lastMessageAt: null, lastMessageSenderName: null,
+          }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    mockClientQuery.mockImplementation((sql: string, params?: unknown[]) => {
+      if (sql.startsWith("BEGIN") || sql.startsWith("COMMIT") || sql.startsWith("ROLLBACK")) return {};
+      if (sql.includes("pg_advisory_xact_lock")) return {};
+      // The project conversation already exists — reuse via its key, the
+      // exact path that previously skipped syncing conversation_members.
+      if (sql.includes("FROM organisational_conversation_keys")) return { rows: [{ conversation_id: 55 }], rowCount: 1 };
+      // Only the requester is currently a member; 99 was assigned since.
+      if (sql.includes("SELECT user_id FROM conversation_members WHERE conversation_id")) {
+        return { rows: [{ user_id: 7 }], rowCount: 1 };
+      }
+      if (sql.includes("INSERT INTO conversation_members")) {
+        insertedMemberIds.push(params![1] as number);
+        return {};
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const r = await supertest(makeApp())
+      .post("/conversations")
+      .send({ type: "project", projectId: 10, memberIds: [] });
+
+    expect(r.status).toBe(200);
+    // The newly-assigned project member is synced in...
+    expect(insertedMemberIds).toContain(99);
+    // ...but the requester, already a member, is not redundantly re-inserted.
+    expect(insertedMemberIds).not.toContain(7);
+  });
+});
+
+/* ─────────────────── COMM-CONTRACT-11 Announcement targeting fails closed ── */
+
+describe("COMM-CONTRACT-11 — announcement targeting fails closed with no target field", () => {
+  it("rejects an announcement with none of targetAll/targetStateId/targetSector/targetRole set, instead of broadcasting to every active user", async () => {
+    const PM = { ...MEMBER, id: 8, role: "program_manager" as const, name: "PM User" };
+    // If this ever silently fell through to the base recipient query, this
+    // implementation would answer it — the test must fail loudly if the
+    // fail-closed guard is ever removed.
+    mockPoolQuery.mockImplementation((sql: string) => {
+      if (sql.includes("FROM users WHERE status='active'") && !sql.includes(" AND ")) {
+        throw new Error("must not query the unfiltered active-user base set — fail-closed guard was bypassed");
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const r = await supertest(makeApp(PM)).post("/conversations").send({
+      type: "announcement",
+      name: "Untargeted announcement",
+      memberIds: [],
+    });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe("announcement_target_required");
+  });
+
+  it("still succeeds when targetAll is explicitly set (existing behaviour unchanged)", async () => {
+    const PM = { ...MEMBER, id: 8, role: "program_manager" as const, name: "PM User" };
+    mockPoolQuery.mockImplementation((sql: string) => {
+      if (sql.includes("FROM users WHERE status='active'")) return { rows: [{ id: 8 }, { id: 99 }], rowCount: 2 };
+      if (sql.includes("FROM conversations c WHERE c.id=$1")) {
+        return {
+          rows: [{
+            id: 999, type: "announcement", name: "Targeted announcement", projectId: null, stateId: null, sector: null,
+            createdById: 8, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            memberCount: 2, unreadCount: 0, lastMessageBody: null, lastMessageAt: null, lastMessageSenderName: null,
+          }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    mockClientQuery.mockImplementation((sql: string) => {
+      if (sql.startsWith("BEGIN") || sql.startsWith("COMMIT")) return {};
+      if (sql.includes("INSERT INTO conversations")) return { rows: [{ id: 999 }] };
+      return { rows: [], rowCount: 0 };
+    });
+
+    const r = await supertest(makeApp(PM)).post("/conversations").send({
+      type: "announcement",
+      name: "Targeted announcement",
+      targetAll: true,
+      memberIds: [],
+    });
+
+    expect(r.status).toBe(201);
+  });
+});

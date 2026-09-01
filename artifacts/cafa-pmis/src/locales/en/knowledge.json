@@ -592,6 +592,9 @@
       "confidential": "Confidential",
       "restricted": "Restricted"
     },
+    "state": "Associated State (optional)",
+    "stateHint": "If set, a State Program Officer for this state can view this file even when it is Confidential or Restricted.",
+    "noSpecificState": "No specific state",
     "retentionYears": "Retention (Years)",
     "tags": "Tags (comma-separated)",
     "tagsPlaceholder": "e.g., report, quarterly, finance",
@@ -627,6 +630,8 @@
     "detailDescription": "Safe file details and preview.",
     "previewTitle": "Preview of {{name}}",
     "previewUnavailable": "Preview is unavailable for this file type. Download the file to open it.",
+    "fileUnavailable": "File Unavailable",
+    "fileUnavailableDesc": "This file is retained for review but cannot be opened or downloaded.",
     "actionSuccess": "File updated successfully",
     "actionFailed": "The file action could not be completed",
     "confirmAction": "Confirm",

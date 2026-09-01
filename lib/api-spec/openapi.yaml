@@ -3685,6 +3685,9 @@ components:
         createdAt: { type: ["string", "null"] }
         uploadedByName: { type: ["string", "null"] }
         confidentiality: { type: ["string", "null"] }
+        stateId: { type: ["integer", "null"] }
+        stateName: { type: ["string", "null"] }
+        stateNameAr: { type: ["string", "null"] }
         retentionYears: { type: ["integer", "null"] }
         tags:
           type: array

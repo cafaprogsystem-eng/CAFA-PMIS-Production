@@ -61,9 +61,20 @@ router.get("/notifications", async (req, res, next) => {
         OFFSET $${params.push(offset) && params.length}`,
       params,
     );
+    // Scoped to the same `module` filter as the list above (but never
+    // `unreadOnly`, which reflects the currently-selected tab, not the
+    // module scope) — otherwise this count silently disagreed with what the
+    // Unread tab's own module-filtered query actually returns, e.g. showing
+    // "12" in the badge while filtering to Risks turned up only 3 rows.
+    const unreadConditions = ["user_id = $1", "read_at IS NULL"];
+    const unreadParams: unknown[] = [req.currentUser.id];
+    if (module) {
+      unreadParams.push(module);
+      unreadConditions.push(`entity_type = $${unreadParams.length}`);
+    }
     const unread = await pool.query<{ n: number }>(
-      `SELECT COUNT(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL`,
-      [req.currentUser.id],
+      `SELECT COUNT(*)::int AS n FROM notifications WHERE ${unreadConditions.join(" AND ")}`,
+      unreadParams,
     );
     // Historical rows retain their stored value; presentation maps only known
     // legacy aliases so clients receive the current taxonomy without a rewrite.

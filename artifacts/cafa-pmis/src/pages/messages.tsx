@@ -338,6 +338,11 @@ function ReactionsBar({ reactions, myId, onToggle }: {
 }
 
 /* ─── MessageBubble ───────────────────────────────────────────────── */
+// Mirrors conversations.ts's ADMIN_ROLES/isAdminRole: the same roles that can
+// rename a conversation or add/remove members can also delete any message
+// for everyone (and bypass the 15-minute window) — the backend already
+// allows this; this constant just exposes the matching control in the UI.
+const MESSAGE_MODERATION_ROLES = new Set(["super_admin", "executive_director", "program_manager", "senior_program_coordinator"]);
 const BUBBLE_PIN_ROLES = new Set(["super_admin","executive_director","program_manager","senior_program_coordinator","technical_coordinator"]);
 
 function renderMentions(text: string) {
@@ -371,7 +376,8 @@ function MessageBubble({
   const isDeleted = !!msg.deletedAt && msg.deletionType !== "for_me";
   const withinWindow = Date.now() - new Date(msg.createdAt).getTime() < 15 * 60 * 1000;
   const canEdit = isOwn && withinWindow && !isDeleted;
-  const canDeleteForEveryone = isOwn && withinWindow;
+  const isModerator = MESSAGE_MODERATION_ROLES.has(myRole);
+  const canDeleteForEveryone = isModerator || (isOwn && withinWindow);
   const canPin = BUBBLE_PIN_ROLES.has(myRole);
   const isForwarded = !!msg.forwardedFromId;
 
@@ -461,7 +467,7 @@ function MessageBubble({
               {images.length > 0 && (
                 <div className={cn("mt-1.5 grid gap-1", images.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
                   {images.map((att, i) => att.availabilityStatus === "unavailable" ? (
-                    <div key={i} role="status" className="flex min-h-24 items-center justify-center rounded-lg border border-warning/30 bg-warning/5 px-3 text-xs text-muted-foreground">File Unavailable</div>
+                    <div key={i} role="status" className="flex min-h-24 items-center justify-center rounded-lg border border-warning/30 bg-warning/5 px-3 text-xs text-muted-foreground">{t("fileUnavailable")}</div>
                   ) : (
                     <button key={i} type="button" className="relative rounded-lg overflow-hidden cursor-pointer group/img focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       onClick={() => onLightbox(att.url)} aria-label={t("openImage", { name: att.name })}>
@@ -477,14 +483,14 @@ function MessageBubble({
 
               {/* Voice attachments */}
               {voices.map((att, i) => att.availabilityStatus === "unavailable" ? (
-                <div key={i} role="status" className="mt-1.5 rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-2 text-xs text-muted-foreground">File Unavailable</div>
+                <div key={i} role="status" className="mt-1.5 rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-2 text-xs text-muted-foreground">{t("fileUnavailable")}</div>
               ) : <VoicePlayer key={i} url={att.url} duration={att.duration} isOwn={isOwn} />)}
 
               {/* File attachments */}
               {files.map((att, i) => att.availabilityStatus === "unavailable" ? (
                 <div key={i} role="status"
                   className={cn("flex items-center gap-2 mt-1.5 px-2.5 py-2 rounded-lg text-xs", isOwn ? "bg-white/10 text-white/70" : "bg-muted/50 border border-border text-muted-foreground")}>
-                  <span className="text-base shrink-0">{fileIcon(att.name)}</span><span className="truncate">File Unavailable</span>
+                  <span className="text-base shrink-0">{fileIcon(att.name)}</span><span className="truncate">{t("fileUnavailable")}</span>
                 </div>
               ) : (
                 <a key={i} href={att.url} target="_blank" rel="noreferrer" download aria-label={t("downloadAttachment", { name: att.name })}
@@ -582,7 +588,7 @@ function MessageBubble({
               className="gap-2 text-destructive focus:text-destructive">
               <Trash2 className="h-3.5 w-3.5" /> {t("deleteForMe")}
             </DropdownMenuItem>
-            {isOwn && (
+            {(isOwn || isModerator) && (
               <DropdownMenuItem
                 onClick={() => { if (canDeleteForEveryone) { onDeleteForEveryone(msg.id); setMenuOpen(false); } }}
                 disabled={!canDeleteForEveryone}

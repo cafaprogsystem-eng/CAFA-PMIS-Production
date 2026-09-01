@@ -63,6 +63,7 @@
   "closeLightbox": "إغلاق عرض الصورة",
   "openImage": "فتح الصورة {{name}}",
   "downloadAttachment": "تنزيل المرفق {{name}}",
+  "fileUnavailable": "الملف غير متاح",
   "playVoice": "تشغيل الرسالة الصوتية",
   "pauseVoice": "إيقاف الرسالة الصوتية مؤقتاً",
   "seekVoice": "تقديم أو إرجاع الرسالة الصوتية",

@@ -314,15 +314,19 @@ export const ATTACHMENT_SURFACES: readonly AttachmentSurface[] = [
     providerDependency: "Central object storage.",
   },
   {
+    // routes/drive.ts (the previous entry here) is dead code — it is never
+    // imported or mounted in routes/index.ts. The live path, confirmed via
+    // components/drive-attachment-panel.tsx, is the operation-based
+    // upload/finalize flow in routes/attachments.ts (parentType: "risk").
     surface: "Risks",
     renderedIn: "Risk detail attachment panel",
-    upload: "POST /drive/upload with module=risks",
-    metadata: "drive_files: legacy Drive-named metadata; provider identity is an S3 object key",
-    previewDownload: "GET /drive/files/:id/download",
-    lifecycle: "Drive attachment active/archived/deleted and replace routes; delete archives the S3 object best effort.",
-    parentAuthorisation: "Canonical parent risk state/sector plus risks.update for mutations; DTO strips provider internals.",
+    upload: "POST /attachments/upload-descriptors → POST /attachments/operations/:operationId/finalize (parentType: risk)",
+    metadata: "attachments: file name, MIME, size, object path, keyed by (parent_type='risk', parent_id)",
+    previewDownload: "GET /attachments/:attachmentId/download, GET /attachments/:attachmentId/preview",
+    lifecycle: "POST /attachments/:attachmentId/archive; DELETE /attachments/:attachmentId (best-effort object cleanup).",
+    parentAuthorisation: "Canonical parent risk state/sector scope plus risks.update for mutations; DTO strips provider internals.",
     offlinePolicy: ONLINE_ONLY_NO_METADATA,
-    providerDependency: "AWS S3-compatible storage through the drive_files façade; no Google Drive API.",
+    providerDependency: "Central object storage (ObjectStorageService) — same provider-neutral upload contract as Plans.",
   },
   {
     surface: "Project reports",

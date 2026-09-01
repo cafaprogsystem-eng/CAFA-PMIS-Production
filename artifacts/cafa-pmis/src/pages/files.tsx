@@ -38,6 +38,7 @@ import { canManageArchiveLifecycle } from "@/lib/file-archive-lifecycle";
 import type { ArchiveLifecycleItem } from "@/lib/file-archive-lifecycle";
 import { MAIN_SECTORS } from "@/lib/sectors";
 import { ViewModeSwitcher } from "@/components/view-modes/view-mode-switcher";
+import { getLinkedStateLabel } from "@/components/state-label";
 
 export type ArchiveItem = {
   source: "resource" | "project" | "plan" | "report";
@@ -61,6 +62,9 @@ export type ArchiveItem = {
   createdAt: string;
   uploadedByName: string | null;
   confidentiality: "public" | "internal" | "confidential" | "restricted";
+  stateId: number | null;
+  stateName: string | null;
+  stateNameAr: string | null;
   retentionYears: number | null;
   tags: string[];
   sourceKind: string | null;
@@ -306,12 +310,23 @@ function confidentialityVariant(confidentiality: ArchiveItem["confidentiality"])
 }
 
 function UploadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { t } = useTranslation("knowledge");
+  const { t, i18n } = useTranslation("knowledge");
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [stateId, setStateId] = useState("");
+  const { data: statesData } = useQuery<Array<{ id: number; name: string; nameAr?: string | null }>>({
+    queryKey: ["states-list"],
+    queryFn: async () => {
+      const response = await fetch("/api/states", { credentials: "include" });
+      if (!response.ok) throw new Error("states_load_failed");
+      return response.json();
+    },
+    enabled: open,
+  });
+  const states = Array.isArray(statesData) ? statesData : [];
   const [classification, setClassification] = useState("");
   const [confidentiality, setConfidentiality] = useState("internal");
   const [sector, setSector] = useState("");
@@ -358,6 +373,7 @@ function UploadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title, description, classification, confidentiality, sector, retentionYears,
+          stateId: stateId ? Number(stateId) : undefined,
           tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
           objectPath: descriptor.objectPath, uploadToken: descriptor.uploadToken, fileName: file.name, contentType: file.type || "application/octet-stream",
         }),
@@ -371,7 +387,7 @@ function UploadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
       await queryClient.invalidateQueries({ queryKey: ["files"] });
       toast.success(t("fileArchive.uploadSuccess"));
       removeFile();
-      setTitle(""); setDescription(""); setClassification(""); setConfidentiality("internal"); setSector(""); setRetentionYears(""); setTags("");
+      setTitle(""); setDescription(""); setClassification(""); setConfidentiality("internal"); setSector(""); setStateId(""); setRetentionYears(""); setTags("");
       onOpenChange(false);
     },
     onError: (uploadError) => {
@@ -441,6 +457,21 @@ function UploadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
                 <Label htmlFor="archive-retention">{t("fileArchive.retentionYears")}</Label>
                 <Input id="archive-retention" type="number" min="1" max="100" value={retentionYears} onChange={(event) => setRetentionYears(event.target.value)} />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="archive-state">{t("fileArchive.state")}</Label>
+              <Select value={stateId || "none"} onValueChange={(value) => setStateId(value === "none" ? "" : value)}>
+                <SelectTrigger id="archive-state" aria-label={t("fileArchive.state")}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("fileArchive.noSpecificState")}</SelectItem>
+                  {states.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {i18n.language?.toLowerCase().startsWith("ar") ? (s.nameAr?.trim() || s.name) : s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("fileArchive.stateHint")}</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="archive-tags">{t("fileArchive.tags")}</Label>
@@ -539,8 +570,8 @@ function DetailDialog({ item, onOpenChange }: { item: ArchiveItem | null; onOpen
         {isUnavailable ? (
           <div role="status" className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-md border border-warning/30 bg-warning/5 text-center">
             <FileArchive className="h-8 w-8 text-warning" />
-            <p className="text-sm font-medium text-foreground">File Unavailable</p>
-            <p className="text-xs text-muted-foreground">This file is retained for review but cannot be opened or downloaded.</p>
+            <p className="text-sm font-medium text-foreground">{t("fileArchive.fileUnavailable")}</p>
+            <p className="text-xs text-muted-foreground">{t("fileArchive.fileUnavailableDesc")}</p>
           </div>
         ) : canPreview && previewUrl ? (
           <iframe title={t("fileArchive.previewTitle", { name: item.name })} src={previewUrl} className="h-[45vh] w-full rounded-md border bg-muted" />
@@ -564,6 +595,9 @@ function DetailDialog({ item, onOpenChange }: { item: ArchiveItem | null; onOpen
           <div><dt className="text-muted-foreground">{t("fileArchive.updated")}</dt><dd>{formatDate(item.updatedAt, i18n.language === "ar" ? "ar" : "en-GB")}</dd></div>
           <div><dt className="text-muted-foreground">{t("fileArchive.source")}</dt><dd>{t(`fileArchive.sourceValues.${item.sourceKind}`, { defaultValue: item.sourceLabel ?? "—" })}{item.relatedRecordTitle ? ` · ${item.relatedRecordTitle}` : ""}</dd></div>
           <div><dt className="text-muted-foreground">{t("fileArchive.confidentiality")}</dt><dd>{t(`fileArchive.confidentialityValues.${item.confidentiality}`)}</dd></div>
+          {item.stateId != null && (
+            <div><dt className="text-muted-foreground">{t("fileArchive.state")}</dt><dd>{getLinkedStateLabel(item, i18n.language)}</dd></div>
+          )}
           <div><dt className="text-muted-foreground">{t("fileArchive.retentionYears")}</dt><dd>{item.retentionYears ?? "—"}</dd></div>
           <div><dt className="text-muted-foreground">{t("fileArchive.tags")}</dt><dd>{item.tags.length ? item.tags.join(", ") : "—"}</dd></div>
           <div className="col-span-2"><dt className="text-muted-foreground">{t("fileArchive.versionHistory")}</dt><dd>{item.versionLabel ?? "—"}</dd></div>

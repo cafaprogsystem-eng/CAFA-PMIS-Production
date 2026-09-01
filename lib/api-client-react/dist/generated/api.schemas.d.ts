@@ -1329,6 +1329,12 @@ export interface ArchiveFile {
     /** @nullable */
     confidentiality?: string | null;
     /** @nullable */
+    stateId?: number | null;
+    /** @nullable */
+    stateName?: string | null;
+    /** @nullable */
+    stateNameAr?: string | null;
+    /** @nullable */
     retentionYears?: number | null;
     tags: string[];
     /** @nullable */

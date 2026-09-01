@@ -10953,6 +10953,9 @@ export declare const ListArchiveFilesResponse: zod.ZodObject<{
         createdAt: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         uploadedByName: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         confidentiality: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+        stateId: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
+        stateName: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+        stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         retentionYears: zod.ZodOptional<zod.ZodNullable<zod.ZodNumber>>;
         tags: zod.ZodArray<zod.ZodString, "many">;
         sourceKind: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
@@ -10970,6 +10973,9 @@ export declare const ListArchiveFilesResponse: zod.ZodObject<{
         source: "project" | "report" | "plan" | "resource" | "drive";
         canManageArchiveLifecycle: boolean;
         tags: string[];
+        stateId?: number | null | undefined;
+        stateName?: string | null | undefined;
+        stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         createdAt?: string | null | undefined;
         updatedAt?: string | null | undefined;
@@ -10999,6 +11005,9 @@ export declare const ListArchiveFilesResponse: zod.ZodObject<{
         source: "project" | "report" | "plan" | "resource" | "drive";
         canManageArchiveLifecycle: boolean;
         tags: string[];
+        stateId?: number | null | undefined;
+        stateName?: string | null | undefined;
+        stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         createdAt?: string | null | undefined;
         updatedAt?: string | null | undefined;
@@ -11033,6 +11042,9 @@ export declare const ListArchiveFilesResponse: zod.ZodObject<{
         source: "project" | "report" | "plan" | "resource" | "drive";
         canManageArchiveLifecycle: boolean;
         tags: string[];
+        stateId?: number | null | undefined;
+        stateName?: string | null | undefined;
+        stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         createdAt?: string | null | undefined;
         updatedAt?: string | null | undefined;
@@ -11067,6 +11079,9 @@ export declare const ListArchiveFilesResponse: zod.ZodObject<{
         source: "project" | "report" | "plan" | "resource" | "drive";
         canManageArchiveLifecycle: boolean;
         tags: string[];
+        stateId?: number | null | undefined;
+        stateName?: string | null | undefined;
+        stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         createdAt?: string | null | undefined;
         updatedAt?: string | null | undefined;

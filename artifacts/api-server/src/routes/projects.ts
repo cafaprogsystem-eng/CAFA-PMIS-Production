@@ -12,7 +12,8 @@ import { getProjectDeletionMode, validateDeletionReason } from "../lib/project-d
 import { hasFullOperationalAccess } from "../lib/accessControl";
 import { VALID_SECTOR_SET, ASSISTANCE_MODALITY_SET, validateSubSectorsMulti } from "../lib/sectors";
 import { unresolvedRequiredCorrections } from "./comments";
-import { notifyEntityActors, notifyEntityActorsDeduped, notifyNextApprover, createNotification, createNotificationDeduped, notifyByRole } from "../lib/notifications";
+import { notifyEntityActors, notifyEntityActorsDeduped, notifyNextApprover, createNotification, createNotificationDeduped } from "../lib/notifications";
+import { contentDispositionHeader } from "../lib/contentDisposition";
 import { realtime } from "../lib/realtime";
 import { SCHEDULED_FREQUENCIES, type ScheduledFrequency } from "../lib/reportConstants";
 import { deleteStorageObjectSafely } from "../lib/objectStorage";
@@ -2825,9 +2826,8 @@ router.get("/projects/:projectId/documents/:documentId/download", requirePerm("d
       const normalizedPath = rawPath.startsWith("/objects/") ? rawPath : `/objects/${rawPath}`;
       const storageFile = await objectStorageService.getObjectEntityFile(normalizedPath);
       const storageResponse = await objectStorageService.downloadObject(storageFile);
-      const safeFileName = String(doc.fileName ?? "download").replace(/["\r\n]/g, "");
       res.setHeader("Content-Type", storageResponse.headers.get("Content-Type") || doc.contentType || "application/octet-stream");
-      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(safeFileName)}"`);
+      res.setHeader("Content-Disposition", contentDispositionHeader(doc.fileName, "attachment"));
       const contentLength = storageResponse.headers.get("Content-Length");
       if (contentLength) res.setHeader("Content-Length", contentLength);
       if (!storageResponse.body) { res.status(502).json({ error: "storage_unavailable" }); return; }

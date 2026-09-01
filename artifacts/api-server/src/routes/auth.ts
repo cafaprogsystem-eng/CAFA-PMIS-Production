@@ -449,7 +449,7 @@ router.post("/auth/reset-password", async (req, res, next) => {
       entityType: "user",
       entityId: row.userId,
       message: "Your password was successfully changed. If this was not you, contact your administrator.",
-      link: "/users",
+      link: "/profile",
       dedupeKey: `password-changed:${row.id}`,
       mandatory: true,
       suppressEmail: true,

@@ -283,7 +283,7 @@ function kindDefinition(kind: NotificationKind): NotificationKindDefinition {
   return NOTIFICATION_KIND_REGISTRY[kind];
 }
 
-function isInQuietHours(q: NotificationPreferences["quietHours"]): boolean {
+export function isInQuietHours(q: NotificationPreferences["quietHours"]): boolean {
   if (!q.enabled) return false;
   try {
     const now = new Date();
@@ -294,7 +294,13 @@ function isInQuietHours(q: NotificationPreferences["quietHours"]): boolean {
       hour12: false,
     });
     const { start, end } = q;
-    return start <= end
+    // start === end falls into the wrap-around branch below, which then
+    // reduces to "timeStr >= start || timeStr < start" — true for every
+    // possible timeStr. That's the correct reading of a zero-width window on
+    // a 24-hour clock (the arc from a point back to itself covers the whole
+    // day), so a user who set identical start/end times gets an always-quiet
+    // window instead of one that silently never engages.
+    return start < end
       ? timeStr >= start && timeStr < end
       : timeStr >= start || timeStr < end;
   } catch {

@@ -7,6 +7,7 @@ import { nextResourceFileVersion } from "../lib/resourceFileVersion";
 import { UploadTokenError, verifyUploadToken } from "../lib/uploadToken";
 import { realtime } from "../lib/realtime";
 import { MAX_ATTACHMENT_BYTES } from "../lib/attachmentLimits";
+import { contentDispositionHeader } from "../lib/contentDisposition";
 
 /**
  * Filing & Archive is a metadata registry over authoritative attachments.
@@ -51,12 +52,6 @@ function integer(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function contentDisposition(name: string | null | undefined, download: boolean): string {
-  const safe = String(name ?? "download").replace(/[/\\\u0000-\u001f\u007f"]/g, "_").trim() || "download";
-  const ascii = safe.replace(/[^\x20-\x7e]/g, "_");
-  return `${download ? "attachment" : "inline"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
-}
-
 function archiveManager(req: Request): boolean {
   return !!req.currentUser && ARCHIVE_MANAGERS.has(req.currentUser.role);
 }
@@ -69,6 +64,58 @@ function archiveViewEnabled(req: Request): boolean {
   return !!req.currentUser && (
     archiveManager(req) || hasPerm(permissionsFor(req.currentUser), "documents.view")
   );
+}
+
+/**
+ * Confidentiality gate for direct-upload program_resources.
+ *
+ * "public"/"internal" remain visible to anyone holding program_resources.view
+ * (today, every authenticated role). "confidential"/"restricted" are visible
+ * only to:
+ *   - the file's own uploader,
+ *   - an ARCHIVE_MANAGERS role (super_admin, executive_director,
+ *     program_manager) — the same administrative-override group this file
+ *     already uses to bypass project/plan/report scope checks, or
+ *   - a State Program Officer, when the resource is tagged with their own
+ *     state (program_resources.state_id) — resources with no state tag stay
+ *     restricted to uploader + archive managers only.
+ * Appends param(s) and returns the SQL fragment to AND into the resource
+ * branch's WHERE clause.
+ */
+export function resourceConfidentialitySql(req: Request, params: unknown[]): string {
+  if (archiveManager(req)) return "TRUE";
+  const user = req.currentUser;
+  const uploaderIdx = params.push(user?.id ?? -1);
+  const stateClause =
+    user?.role === "state_program_officer" && user.stateId != null
+      ? ` OR pr.state_id = $${params.push(user.stateId)}`
+      : "";
+  return `(COALESCE(dre.confidentiality, pr.confidentiality, 'internal') NOT IN ('confidential', 'restricted')
+           OR pr.uploaded_by_id = $${uploaderIdx}${stateClause})`;
+}
+
+/**
+ * Sector scope for direct-upload program_resources.
+ *
+ * Previously program_resources.sector was purely a display/filter tag — a
+ * Technical Coordinator scoped to one sector could see and download a
+ * resource tagged with any other sector, unlike every other record type in
+ * this file (projectScopeSql/planScopeSql/reportScopeSql all restrict a TC to
+ * their own assigned sector(s)). Only technical_coordinator is sector-scoped
+ * here, matching that same convention — no other role is restricted by
+ * sector. "General / Cross-Cutting" is a deliberate not-sector-specific
+ * taxonomy value (it is not one of the 7 sectors a TC can ever be assigned
+ * to — see MAIN_SECTORS on the frontend), so it stays visible to every TC
+ * rather than becoming permanently invisible to all of them.
+ */
+export function resourceSectorScopeSql(req: Request, params: unknown[]): string {
+  if (archiveManager(req)) return "TRUE";
+  const user = req.currentUser;
+  if (user?.role !== "technical_coordinator") return "TRUE";
+  const sectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : [];
+  if (!sectors.length) return "FALSE";
+  params.push(sectors);
+  return `(pr.sector = ANY($${params.length}::text[]) OR pr.sector = 'General / Cross-Cutting')`;
 }
 
 export function projectScopeSql(req: Request, params: unknown[], alias = "p"): string {
@@ -159,11 +206,15 @@ function baseProjectionSql(req: Request, params: unknown[]): string {
       pr.updated_at AS "updatedAt", pr.created_at AS "createdAt",
       u.name AS "uploadedByName", COALESCE(dre.confidentiality, pr.confidentiality, 'internal') AS confidentiality,
       COALESCE(dre.retention_years, pr.retention_years) AS "retentionYears", COALESCE(dre.tags, '[]'::jsonb) AS tags,
-       'direct_upload'::text AS "sourceKind", 'Direct upload'::text AS "sourceLabel", NULL::text AS "relatedRecordTitle"
+       'direct_upload'::text AS "sourceKind", 'Direct upload'::text AS "sourceLabel", NULL::text AS "relatedRecordTitle",
+      s.id AS "stateId", s.name AS "stateName", s.name_ar AS "stateNameAr"
     FROM program_resources pr
     LEFT JOIN users u ON u.id = pr.uploaded_by_id
     LEFT JOIN document_registry_entries dre ON dre.source_kind = 'resource' AND dre.source_id = pr.id
+    LEFT JOIN states s ON s.id = pr.state_id
     WHERE ${resourcePermission(req, "program_resources.view") ? "TRUE" : "FALSE"}
+      AND ${resourceConfidentialitySql(req, params)}
+      AND ${resourceSectorScopeSql(req, params)}
     UNION ALL
     SELECT
       'project'::text AS source, pd.id, pd.file_name AS name, pd.file_name AS "fileName",
@@ -174,7 +225,8 @@ function baseProjectionSql(req: Request, params: unknown[]): string {
       pd.uploaded_at AS "createdAt", u.name AS "uploadedByName",
       COALESCE(dre.confidentiality, 'internal') AS confidentiality, dre.retention_years AS "retentionYears",
        COALESCE(dre.tags, '[]'::jsonb) AS tags, 'project_attachment'::text AS "sourceKind", 'Project attachment'::text AS "sourceLabel",
-      concat_ws(' — ', p.code, p.title) AS "relatedRecordTitle"
+      concat_ws(' — ', p.code, p.title) AS "relatedRecordTitle",
+      NULL::integer AS "stateId", NULL::text AS "stateName", NULL::text AS "stateNameAr"
     FROM project_documents pd
     JOIN projects p ON p.id = pd.project_id
     LEFT JOIN users u ON u.id = pd.uploaded_by_id
@@ -191,7 +243,8 @@ function baseProjectionSql(req: Request, params: unknown[]): string {
       pa.uploaded_at AS "createdAt", u.name AS "uploadedByName",
       COALESCE(dre.confidentiality, 'internal') AS confidentiality, dre.retention_years AS "retentionYears",
        COALESCE(dre.tags, '[]'::jsonb) AS tags, 'plan_attachment'::text AS "sourceKind", 'Plan attachment'::text AS "sourceLabel",
-      concat_ws(' — ', pl.code, pl.title) AS "relatedRecordTitle"
+      concat_ws(' — ', pl.code, pl.title) AS "relatedRecordTitle",
+      NULL::integer AS "stateId", NULL::text AS "stateName", NULL::text AS "stateNameAr"
     FROM plan_attachments pa
     JOIN plans pl ON pl.id = pa.plan_id
     LEFT JOIN projects p ON p.id = pl.project_id
@@ -212,7 +265,8 @@ function baseProjectionSql(req: Request, params: unknown[]): string {
       ra.uploaded_at AS "createdAt", u.name AS "uploadedByName",
       COALESCE(dre.confidentiality, 'internal') AS confidentiality, dre.retention_years AS "retentionYears",
        COALESCE(dre.tags, '[]'::jsonb) AS tags, 'report_attachment'::text AS "sourceKind", 'Report attachment'::text AS "sourceLabel",
-      r.title AS "relatedRecordTitle"
+      r.title AS "relatedRecordTitle",
+      NULL::integer AS "stateId", NULL::text AS "stateName", NULL::text AS "stateNameAr"
     FROM report_attachments ra
     JOIN reports r ON r.id = ra.report_id
     LEFT JOIN projects p ON p.id = r.project_id
@@ -246,6 +300,9 @@ function publicItem(row: Record<string, unknown>) {
     createdAt: row.createdAt,
     uploadedByName: row.uploadedByName,
     confidentiality: row.confidentiality,
+    stateId: row.stateId,
+    stateName: row.stateName,
+    stateNameAr: row.stateNameAr,
     retentionYears: row.retentionYears,
     tags: Array.isArray(row.tags) ? row.tags : [],
     sourceKind: row.sourceKind,
@@ -393,15 +450,44 @@ router.get("/files/classifications", async (req, res, next) => {
 async function privateItem(req: Request, source: ArchiveSource, id: number): Promise<PrivateItem | null> {
   if (source === "resource") {
     if (!resourcePermission(req, "program_resources.view")) return null;
-    const result = await pool.query<{ id: number; object_path: string; file_name: string; content_type: string | null; availability_status: string }>(
-      `SELECT id, object_path, file_name, content_type, availability_status FROM program_resources WHERE id = $1`,
+    const result = await pool.query<{
+      id: number; object_path: string; file_name: string; content_type: string | null;
+      availability_status: string; confidentiality: string; uploaded_by_id: number | null; state_id: number | null;
+      sector: string | null;
+    }>(
+      `SELECT pr.id, pr.object_path, pr.file_name, pr.content_type, pr.availability_status,
+              COALESCE(dre.confidentiality, pr.confidentiality, 'internal') AS confidentiality,
+              pr.uploaded_by_id, pr.state_id, pr.sector
+       FROM program_resources pr
+       LEFT JOIN document_registry_entries dre ON dre.source_kind = 'resource' AND dre.source_id = pr.id
+       WHERE pr.id = $1`,
       [id],
     );
-    return result.rows[0] ? {
-      source, id, objectPath: result.rows[0].object_path,
-      fileName: result.rows[0].file_name, contentType: result.rows[0].content_type,
-      availabilityStatus: result.rows[0].availability_status,
-    } : null;
+    const row = result.rows[0];
+    if (!row) return null;
+    // Same rule as the listing query's resourceConfidentialitySql: confidential/
+    // restricted files are readable only by their uploader, an archive manager,
+    // or (when the resource carries a state tag) a State Program Officer for
+    // that same state. Return null (→ 404, same as "not found") rather than
+    // 403, so a restricted file's existence isn't distinguishable from a
+    // nonexistent one.
+    const isRestricted = row.confidentiality === "confidential" || row.confidentiality === "restricted";
+    const user = req.currentUser!;
+    const isScopedSpo = user.role === "state_program_officer" && user.stateId != null && user.stateId === row.state_id;
+    if (isRestricted && !archiveManager(req) && row.uploaded_by_id !== user.id && !isScopedSpo) return null;
+    // Same rule as the listing query's resourceSectorScopeSql: a TC may only
+    // view a resource in their own sector(s), or one tagged as the
+    // not-sector-specific "General / Cross-Cutting" value.
+    if (
+      user.role === "technical_coordinator" && !archiveManager(req) &&
+      row.sector !== "General / Cross-Cutting" &&
+      !(user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []).includes(row.sector ?? "")
+    ) return null;
+    return {
+      source, id, objectPath: row.object_path,
+      fileName: row.file_name, contentType: row.content_type,
+      availabilityStatus: row.availability_status,
+    };
   }
   if (!archiveViewEnabled(req)) return null;
   if (source === "plan") {
@@ -437,7 +523,7 @@ async function streamArchiveItem(req: Request, res: Response, source: ArchiveSou
     // changes. Never let a browser reuse an older binary for that stable proxy
     // URL after a replacement or archive/restore lifecycle transition.
     res.setHeader("Cache-Control", "private, no-store");
-    res.setHeader("Content-Disposition", contentDisposition(item.fileName, download));
+    res.setHeader("Content-Disposition", contentDispositionHeader(item.fileName, download ? "attachment" : "inline"));
     await logAudit({ userId: req.currentUser!.id, action: download ? "file_archive_downloaded" : "file_archive_previewed", module: "files", entityId: id });
     if (response.body) Readable.fromWeb(response.body as ReadableStream<Uint8Array>).pipe(res);
     else res.end();
@@ -473,6 +559,8 @@ router.post("/files/upload", async (req: Request, res: Response, next: NextFunct
     const classification = String(req.body?.classification ?? "").trim();
     const sector = String(req.body?.sector ?? "").trim();
     const confidentiality = String(req.body?.confidentiality ?? "internal").trim();
+    const stateIdRaw = req.body?.stateId;
+    const stateId = stateIdRaw === undefined || stateIdRaw === null || stateIdRaw === "" ? null : Number(stateIdRaw);
     const retentionRaw = String(req.body?.retentionYears ?? "").trim();
     const retentionYears = retentionRaw ? Number(retentionRaw) : null;
     const objectPath = String(req.body?.objectPath ?? "");
@@ -490,6 +578,7 @@ router.post("/files/upload", async (req: Request, res: Response, next: NextFunct
     if (!CLASSIFICATION_SET.has(classification)) { res.status(422).json({ error: "invalid_classification" }); return; }
     if (!RESOURCE_SECTORS.has(sector)) { res.status(422).json({ error: "invalid_sector" }); return; }
     if (!CONFIDENTIALITY_VALUES.has(confidentiality)) { res.status(422).json({ error: "invalid_confidentiality" }); return; }
+    if (stateId !== null && (!Number.isInteger(stateId) || stateId <= 0)) { res.status(422).json({ error: "invalid_state_id" }); return; }
     if (!objectPath.startsWith("/objects/uploads/") || !fileName || fileName.length > 255 || /[/\\\u0000-\u001f\u007f]/.test(fileName)) {
       res.status(422).json({ error: "invalid_upload_descriptor" }); return;
     }
@@ -515,6 +604,10 @@ router.post("/files/upload", async (req: Request, res: Response, next: NextFunct
       res.status(422).json({ error: "invalid_tags" }); return;
     }
     tags = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
+    if (stateId !== null) {
+      const stateCheck = await pool.query(`SELECT 1 FROM states WHERE id = $1`, [stateId]);
+      if (stateCheck.rowCount === 0) { res.status(422).json({ error: "invalid_state_id" }); return; }
+    }
     let verified: { size: number; contentType?: string };
     try {
       verified = await objectStorage.getObjectEntityMetadata(objectPath);
@@ -537,10 +630,10 @@ router.post("/files/upload", async (req: Request, res: Response, next: NextFunct
       inserted = await client.query<{ id: number }>(
         `INSERT INTO program_resources
           (title, category, sector, description, tags, file_name, content_type, file_size, object_path,
-           uploaded_by_id, confidentiality, retention_years)
-         VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+           uploaded_by_id, confidentiality, retention_years, state_id)
+         VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
         [title, classification, sector, description || null, JSON.stringify(tags), fileName, contentType, verified.size,
-          finalObjectPath, req.currentUser!.id, confidentiality, retentionYears],
+          finalObjectPath, req.currentUser!.id, confidentiality, retentionYears, stateId],
       );
       await client.query(
         `INSERT INTO document_registry_entries
@@ -571,7 +664,7 @@ router.patch("/files/resource/:id", async (req, res, next) => {
     const id = integer(req.params.id);
     if (!id) { res.status(404).json({ error: "file_not_found" }); return; }
     if (!resourcePermission(req, "program_resources.edit")) { res.status(403).json({ error: "forbidden" }); return; }
-    const { status, title, category, sector, description, versionNumber, effectiveDate, tags } = req.body ?? {};
+    const { status, title, category, sector, description, versionNumber, effectiveDate, tags, stateId } = req.body ?? {};
     if (status !== undefined && !["active", "archived"].includes(status)) { res.status(422).json({ error: "invalid_status" }); return; }
     if (category !== undefined && !CLASSIFICATION_SET.has(category)) { res.status(422).json({ error: "invalid_category" }); return; }
     if (sector !== undefined && !RESOURCE_SECTORS.has(sector)) { res.status(422).json({ error: "invalid_sector" }); return; }
@@ -580,14 +673,25 @@ router.patch("/files/resource/:id", async (req, res, next) => {
     if (versionNumber !== undefined && (!Number.isInteger(versionNumber) || versionNumber < 1 || versionNumber > 100_000)) { res.status(422).json({ error: "invalid_version_number" }); return; }
     if (effectiveDate !== undefined && (typeof effectiveDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) || Number.isNaN(new Date(`${effectiveDate}T00:00:00.000Z`).getTime()) || new Date(`${effectiveDate}T00:00:00.000Z`).toISOString().slice(0, 10) !== effectiveDate)) { res.status(422).json({ error: "invalid_effective_date" }); return; }
     if (tags !== undefined && (!Array.isArray(tags) || tags.length > 50 || tags.some((tag) => typeof tag !== "string" || !tag.trim() || tag.length > 100))) { res.status(422).json({ error: "invalid_tags" }); return; }
+    // stateId is nullable/optional: absent → leave untouched; null/"" → explicitly
+    // clear the state tag; otherwise → must be a real states.id.
+    const stateIdTouched = stateId !== undefined;
+    let normalizedStateId: number | null = null;
+    if (stateIdTouched && stateId !== null && stateId !== "") {
+      normalizedStateId = Number(stateId);
+      if (!Number.isInteger(normalizedStateId) || normalizedStateId <= 0) { res.status(422).json({ error: "invalid_state_id" }); return; }
+      const stateCheck = await pool.query(`SELECT 1 FROM states WHERE id = $1`, [normalizedStateId]);
+      if (stateCheck.rowCount === 0) { res.status(422).json({ error: "invalid_state_id" }); return; }
+    }
     const updated = await pool.query(
       `UPDATE program_resources SET
         title = COALESCE($1, title), category = COALESCE($2, category), sector = COALESCE($3, sector),
         description = COALESCE($4, description), version_number = COALESCE($5, version_number),
         effective_date = COALESCE($6::date, effective_date), tags = COALESCE($7, tags),
-        status = COALESCE($8, status), updated_at = NOW()
+        status = COALESCE($8, status), state_id = CASE WHEN $10::boolean THEN $11::integer ELSE state_id END,
+        updated_at = NOW()
        WHERE id = $9 RETURNING id`,
-      [title?.trim() || null, category ?? null, sector ?? null, description ?? null, versionNumber ?? null, effectiveDate ?? null, tags ?? null, status ?? null, id],
+      [title?.trim() || null, category ?? null, sector ?? null, description ?? null, versionNumber ?? null, effectiveDate ?? null, tags ?? null, status ?? null, id, stateIdTouched, normalizedStateId],
     );
     if (!updated.rows.length) { res.status(404).json({ error: "file_not_found" }); return; }
     await logAudit({ userId: req.currentUser!.id, action: `file_archive_resource_${status ?? "updated"}`, module: "files", entityId: id });
@@ -702,12 +806,35 @@ router.delete("/files/resource/:id", async (req, res, next) => {
     const id = integer(req.params.id);
     if (!id) { res.status(404).json({ error: "file_not_found" }); return; }
     if (!resourcePermission(req, "program_resources.delete")) { res.status(403).json({ error: "forbidden" }); return; }
-    const deleted = await pool.query<{ id: number; object_path: string | null }>(`DELETE FROM program_resources WHERE id = $1 RETURNING id, object_path`, [id]);
-    if (!deleted.rows.length) { res.status(404).json({ error: "file_not_found" }); return; }
+    const client = await pool.connect();
+    let deletedRow: { id: number; object_path: string | null } | undefined;
+    try {
+      await client.query("BEGIN");
+      // The registry is a dependent index, not a document owner (same pattern
+      // as projects.ts/reports.ts) — remove its entry in the same transaction
+      // before removing the row it indexes, so a direct-upload delete never
+      // leaves an orphaned document_registry_entries row behind.
+      await client.query(
+        `DELETE FROM document_registry_entries WHERE source_kind = 'resource' AND source_id = $1`,
+        [id],
+      );
+      const deleted = await client.query<{ id: number; object_path: string | null }>(
+        `DELETE FROM program_resources WHERE id = $1 RETURNING id, object_path`,
+        [id],
+      );
+      deletedRow = deleted.rows[0];
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+    if (!deletedRow) { res.status(404).json({ error: "file_not_found" }); return; }
     await logAudit({ userId: req.currentUser!.id, action: "file_archive_resource_deleted", module: "files", entityId: id });
-    if (deleted.rows[0].object_path) {
+    if (deletedRow.object_path) {
       try {
-        await objectStorage.deleteObject(deleted.rows[0].object_path);
+        await objectStorage.deleteObject(deletedRow.object_path);
       } catch {
         // The record is no longer addressable. Preserve an explicit audit trail
         // so an administrator can reconcile a provider-side cleanup failure.

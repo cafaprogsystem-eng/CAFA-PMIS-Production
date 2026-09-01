@@ -3723,6 +3723,21 @@ BEGIN
 END $$;
 `,
   },
+  {
+    name: "062_program_resources_state_id",
+    sql: /* sql */ `
+-- Migration 062: optional State association for direct-upload program_resources.
+--
+-- Direct-upload archive files previously had no state concept at all (only a
+-- sector), so the confidentiality gate added alongside this migration had no
+-- way to grant a State Program Officer access to a confidential/restricted
+-- file relevant to their own state. This column is nullable: a resource with
+-- no state stays scoped to its uploader + archive-manager roles only, exactly
+-- as before.
+ALTER TABLE program_resources
+  ADD COLUMN IF NOT EXISTS state_id INTEGER REFERENCES states(id);
+`,
+  },
 
 ];
 

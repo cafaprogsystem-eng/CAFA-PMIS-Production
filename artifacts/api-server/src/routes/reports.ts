@@ -12,7 +12,7 @@ import {
 } from "../middlewares/currentUser";
 import { VALID_SECTOR_SET } from "../lib/sectors";
 import { unresolvedRequiredCorrections } from "./comments";
-import { notifyEntityActorsDeduped, notifyNextApprover } from "../lib/notifications";
+import { notifyEntityActorsDeduped, notifyNextApprover, createNotificationDeduped } from "../lib/notifications";
 import { realtime } from "../lib/realtime";
 import { assertActiveState } from "../lib/state-master";
 import {
@@ -29,6 +29,7 @@ import {
   getProjectActivityWorkflow,
 } from "../lib/reportConstants";
 import { assertCanViewReport, assertAttachmentMutationAllowed, hasActiveTcForSector, hasActiveSpoForState, getReportSectorForAuth } from "../lib/reportAuth";
+import { contentDispositionHeader } from "../lib/contentDisposition";
 import { hasFullOperationalAccess } from "../lib/accessControl";
 import {
   PMR_COMP_SUBMITTED_STATUSES,
@@ -3896,6 +3897,7 @@ router.post(
         status: fromStatus,
         reportType,
         stateId: reportStateId,
+        projectId: reportProjectId,
         workflowPath,
         authorId,
       } = cur.rows[0] as {
@@ -4431,6 +4433,31 @@ router.post(
         mandatory:
           body.action === "reject" || body.action === "request_revision",
       }).catch(() => {});
+      // Standalone program_state reports (no project) have no
+      // project_assignments row for actorsForEntity("report", …) to resolve —
+      // only the report's own author/submitter would ever hear about a
+      // status change. Mirror routes/risks.ts's standalone-state-notify
+      // pattern (used for both risk creation and risk status changes):
+      // directly reach every other active SPO/SOM in the report's own state.
+      if (reportType === "program_state" && !reportProjectId && reportStateId) {
+        const stateUsers = await pool.query<{ id: number }>(
+          `SELECT id FROM users WHERE role IN ('state_program_officer', 'state_office_manager') AND state_id = $1 AND status = 'active'`,
+          [reportStateId],
+        );
+        for (const u of stateUsers.rows) {
+          if (u.id !== req.currentUser.id) {
+            createNotificationDeduped({
+              userId: u.id,
+              kind: kindMap[body.action] ?? "system",
+              entityType: "report",
+              entityId: reportId,
+              message: `Report transitioned ${fromStatus} → ${toStatus} by ${req.currentUser.name}${commentText ? `: ${commentText}` : ""}`,
+              link: reportLink,
+              dedupeKey: transitionDedupeKey,
+            }).catch(() => {});
+          }
+        }
+      }
       // ── HQSR routing path (HQSR-BD-1/BD-6) ───────────────────────────────
       // For hq_sector submits, the immutable workflow_path (frozen at creation,
       // Migration 019) identifies the SPC fallback — resilient to later role
@@ -4537,10 +4564,7 @@ router.get(
         const response = await objectStorageService.downloadObject(objectFile);
         res.status(response.status);
         if (contentType) res.setHeader("Content-Type", contentType);
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename="${encodeURIComponent(fileName)}"`,
-        );
+        res.setHeader("Content-Disposition", contentDispositionHeader(fileName, "attachment"));
         response.headers.forEach((value, key) => {
           if (!["content-type", "content-disposition"].includes(key.toLowerCase())) {
             res.setHeader(key, value);
