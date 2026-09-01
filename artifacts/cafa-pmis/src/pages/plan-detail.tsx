@@ -35,6 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PLAN_TRANSITIONS, PLAN_TRANSITION_PERMS } from "@workspace/plan-transitions";
 
 const PLAN_TYPES = ["monthly", "quarterly", "annual", "action", "operational", "emergency", "custom"] as const;
 const ACTIVITY_STATUSES = ["planned", "in_progress", "completed", "delayed", "cancelled"] as const;
@@ -174,24 +175,34 @@ type PlanFormData = {
   activities: ActivityFormData[];
 };
 
-// TRANSITIONS: labels are translated at render time using t("transitions.X")
+// TRANSITIONS: labels are translated at render time using t("transitions.X").
+// from/perm are derived from the shared @workspace/plan-transitions table — the exact
+// same table routes/plans.ts enforces server-side — instead of a hand-maintained copy
+// that could (and once did) silently drift from the real backend rules. Display order
+// and the purely visual bits (requiresComment, button variant) remain frontend-only.
+const TRANSITION_ORDER = [
+  "submit", "technical_review", "coordination_review", "final_approve",
+  "activate", "start", "mark_delayed", "complete", "archive",
+  "request_revision", "reject", "cancel",
+] as const;
+const REQUIRES_COMMENT_ACTIONS = new Set(["request_revision", "reject"]);
+const TRANSITION_VARIANTS: Partial<Record<string, "default" | "destructive" | "outline">> = {
+  mark_delayed: "outline",
+  archive: "outline",
+  request_revision: "outline",
+  reject: "destructive",
+  cancel: "destructive",
+};
 const TRANSITIONS: Array<{
   action: string; from: string[]; perm: string;
   requiresComment?: boolean; variant?: "default" | "destructive" | "outline";
-}> = [
-  { action: "submit", from: ["draft"], perm: "plans.create" },
-  { action: "technical_review", from: ["submitted"], perm: "projects.approve.technical" },
-  { action: "coordination_review", from: ["technically_approved"], perm: "plans.approve.coordination" },
-  { action: "final_approve", from: ["coordination_approved"], perm: "plans.approve.final" },
-  { action: "activate", from: ["approved"], perm: "plans.update" },
-  { action: "start", from: ["active"], perm: "plans.update" },
-  { action: "mark_delayed", from: ["active", "in_progress"], perm: "plans.update", variant: "outline" },
-  { action: "complete", from: ["active", "in_progress", "delayed"], perm: "plans.update" },
-  { action: "archive", from: ["completed", "cancelled"], perm: "plans.update", variant: "outline" },
-  { action: "request_revision", from: ["submitted", "technically_approved", "coordination_approved"], perm: "projects.approve.technical", requiresComment: true, variant: "outline" },
-  { action: "reject", from: ["submitted", "technically_approved", "coordination_approved"], perm: "projects.approve.technical", requiresComment: true, variant: "destructive" },
-  { action: "cancel", from: ["draft", "submitted", "technically_approved", "coordination_approved", "approved", "active", "in_progress", "delayed"], perm: "plans.update", variant: "destructive" },
-];
+}> = TRANSITION_ORDER.map((action) => ({
+  action,
+  from: PLAN_TRANSITIONS[action].from,
+  perm: PLAN_TRANSITION_PERMS[action],
+  requiresComment: REQUIRES_COMMENT_ACTIONS.has(action) || undefined,
+  variant: TRANSITION_VARIANTS[action],
+}));
 
 // Free-text locality tag input with smart matching suggestions
 function LocalityTagInput({

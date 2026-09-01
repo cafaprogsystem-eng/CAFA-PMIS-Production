@@ -152,7 +152,9 @@
     "period": "الفترة",
     "budget": "الميزانية",
     "progress": "التقدم",
-    "plan": "الخطة"
+    "plan": "الخطة",
+    "actions": "الإجراءات",
+    "actionsAria": "إجراءات الخطة"
   },
   "emptyTable": "لم يُعثر على خطط",
   "emptyTableHint": "انقر {{newPlan}} لإنشاء أول خطة.",

@@ -152,7 +152,9 @@
     "period": "Period",
     "budget": "Budget",
     "progress": "Progress",
-    "plan": "Plan"
+    "plan": "Plan",
+    "actions": "Actions",
+    "actionsAria": "Plan actions"
   },
   "emptyTable": "No plans found",
   "emptyTableHint": "Click {{newPlan}} to create the first one.",

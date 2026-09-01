@@ -226,6 +226,18 @@
     "code": "الرمز",
     "donor": "الجهة المانحة",
     "status": "الحالة",
-    "budget": "الميزانية"
+    "budget": "الميزانية",
+    "generatedLabel": "تاريخ الإنشاء",
+    "eyebrowProjectReport": "منظمة كافا للتنمية — تقرير الميزانية",
+    "eyebrowSectorReport": "منظمة كافا للتنمية — تقرير ميزانية القطاع",
+    "budgetAlertsHeading": "تنبيهات الميزانية",
+    "budgetBreakdownHeading": "تفصيل الميزانية حسب المخرج والنشاط",
+    "noActivitiesShort": "لا توجد أنشطة",
+    "incompleteActivitiesCount": "{{count}} نشاط غير مكتمل",
+    "sectorBudgetDisclaimer": "ميزانيات القطاعات تعتمد على القطاع الرئيسي لكل مشروع. القطاعات الإضافية لا تحصل على تخصيص ميزانية تلقائي. الأرقام المالية لا تُجمع بين عملات مختلفة.",
+    "projectsInSectorHeading": "المشاريع في هذا القطاع ({{count}})",
+    "overallocatedBadge": "{{count}} تخصيص زائد",
+    "projectCount_one": "{{count}} مشروع",
+    "projectCount_other": "{{count}} مشروع"
   }
 }

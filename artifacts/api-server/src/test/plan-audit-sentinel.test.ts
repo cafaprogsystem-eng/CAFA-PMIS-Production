@@ -218,6 +218,7 @@ describe("PLAN-AUDIT-02: Access matrix — real permissionsFor()", async () => {
     expect(perms).toContain("plans.create");
     expect(perms).toContain("plans.update");
     expect(perms).toContain("projects.approve.technical");
+    expect(perms).toContain("plans.approve.technical");
     expect(perms).toContain("plans.reopen");
     expect(perms).not.toContain("plans.delete");
     expect(perms).not.toContain("plans.approve.coordination");
@@ -305,9 +306,9 @@ describe("PLAN-AUDIT-03: Transition map integrity — real PLAN_TRANSITIONS", as
     expect(PLAN_TRANSITION_PERMS.final_approve).toBe("plans.approve.final");
   });
 
-  it("03-07: reject and request_revision share projects.approve.technical", () => {
-    expect(PLAN_TRANSITION_PERMS.reject).toBe("projects.approve.technical");
-    expect(PLAN_TRANSITION_PERMS.request_revision).toBe("projects.approve.technical");
+  it("03-07: reject and request_revision share plans.approve.technical", () => {
+    expect(PLAN_TRANSITION_PERMS.reject).toBe("plans.approve.technical");
+    expect(PLAN_TRANSITION_PERMS.request_revision).toBe("plans.approve.technical");
   });
 
   it("03-08: operational transitions require plans.update", () => {

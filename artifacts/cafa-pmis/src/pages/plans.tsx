@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useLocationContext } from "@/contexts/location-context";
 import { useTranslation } from "react-i18next";
 import { StateLabel, getLinkedStateLabel } from "@/components/state-label";
@@ -9,6 +11,7 @@ import {
   useListStates,
   useGetMe,
   useGetPlanningDashboard,
+  useDeletePlan,
 } from "@workspace/api-client-react";
 import { CreatePlanRegistrationDialog } from "@/components/create-plan-registration-dialog";
 import type {
@@ -43,6 +46,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StatCard } from "@/components/ui/stat-card";
 import React from "react";
 import {
@@ -62,6 +71,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
+  MoreHorizontal,
+  Trash2,
 } from "lucide-react";
 import { formatDate, formatStatusLabel, formatPlanType, hasPerm, statusBadgeVariant, formatLocation } from "@/lib/format";
 import { AttachmentCountBadge } from "@/components/drive-attachment-panel";
@@ -609,6 +620,24 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
     [setLocation],
   );
 
+  // Delete is a separate, explicitly-granted permission — plans.update does not imply it.
+  // Same contract as plan-detail.tsx's single-Plan delete action, now also reachable from
+  // every list/board/calendar view instead of only the full detail page.
+  const canDelete = hasPerm(me?.permissions, "*") || hasPerm(me?.permissions, "plans.delete");
+  const qc = useQueryClient();
+  const deleteMutation = useDeletePlan({
+    mutation: {
+      onSuccess: () => { toast.success(t("toast.planDeleted")); qc.invalidateQueries(); },
+      onError: (e: Error) => toast.error(e.message),
+    },
+  });
+  const handleDeletePlan = useCallback(
+    (p: { id: number; title: string }) => {
+      if (confirm(t("detail.deletePlanConfirm"))) deleteMutation.mutate({ planId: p.id });
+    },
+    [deleteMutation, t],
+  );
+
   const moduleKey = lockedType ? `plans_${lockedType}` : "plans";
   const [viewMode, setViewMode] = useViewMode(moduleKey, [...PLAN_VIEWS], "table");
 
@@ -734,16 +763,38 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
           onClick: (trigger) => openRecord("plan", p.id, trigger),
           // Continue Editing is separate from View and is available only for
           // drafts when the existing plans.update permission allows editing.
+          // Delete now reaches every view mode, not just the full detail page.
           actions:
-            canEditDrafts && p.status === "draft" ? (
-              <ContinueEditingAction
-                recordTitle={p.title}
-                onClick={() => continueEdit(p.id)}
-              />
+            (canEditDrafts && p.status === "draft") || canDelete ? (
+              <div className="flex items-center gap-1">
+                {canEditDrafts && p.status === "draft" && (
+                  <ContinueEditingAction
+                    recordTitle={p.title}
+                    onClick={() => continueEdit(p.id)}
+                  />
+                )}
+                {canDelete && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("table.actionsAria")}>
+                        <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem
+                        onClick={() => handleDeletePlan(p)}
+                        className="gap-2 text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> {t("detail.deletePlanMenu")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             ) : undefined,
         };
       }),
-    [paginatedPlans, t, i18n.language, openRecord, canEditDrafts, continueEdit],
+    [paginatedPlans, t, i18n.language, openRecord, canEditDrafts, continueEdit, canDelete, handleDeletePlan],
   );
 
   // ── Derived values (useMemo before any conditional early return)
@@ -1054,13 +1105,15 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                    {/* Actions — overflow menu; Delete now reaches the table view too (spec §23-parity) */}
+                    <TableHead className="w-10 text-end">{t("table.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {/* Empty state — distinguishes filtered-empty from scope-empty */}
                   {totalCount === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-10">
+                      <TableCell colSpan={9} className="text-center py-10">
                         {isFiltered ? (
                           <div className="flex flex-col items-center gap-2 text-muted-foreground">
                             <CalendarClock className="h-8 w-8 opacity-30" />
@@ -1207,6 +1260,26 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
+                          )}
+                        </TableCell>
+                        {/* Actions — overflow menu; Delete now reaches the table view too (spec §23-parity) */}
+                        <TableCell className="text-end" onClick={(e) => e.stopPropagation()}>
+                          {canDelete && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("table.actionsAria")}>
+                                  <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem
+                                  onClick={() => handleDeletePlan(p)}
+                                  className="gap-2 text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" /> {t("detail.deletePlanMenu")}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
                         </TableCell>
                       </TableRow>

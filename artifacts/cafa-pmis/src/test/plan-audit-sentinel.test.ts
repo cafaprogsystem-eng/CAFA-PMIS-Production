@@ -168,7 +168,7 @@ function permissionsFor(role: Role): string[] {
 
   // TC technical review role (sector-scoped at endpoint)
   if (role === "technical_coordinator") {
-    perms.push("plans.create", "plans.update", "projects.approve.technical");
+    perms.push("plans.create", "plans.update", "projects.approve.technical", "plans.approve.technical");
   }
 
   // State roles
@@ -676,7 +676,7 @@ describe("PLAN-AUDIT-06: Submission and workflow contract", () => {
   it("06-07: submit permission is plans.create (original author submits own plan)", () => {
     const PLAN_TRANSITION_PERMS: Record<string, string> = {
       submit: "plans.create",
-      technical_review: "projects.approve.technical",
+      technical_review: "plans.approve.technical",
       coordination_review: "plans.approve.coordination",
       final_approve: "plans.approve.final",
       activate: "plans.update",
@@ -685,12 +685,12 @@ describe("PLAN-AUDIT-06: Submission and workflow contract", () => {
       complete: "plans.update",
       cancel: "plans.update",
       archive: "plans.update",
-      reject: "projects.approve.technical",
-      request_revision: "projects.approve.technical",
+      reject: "plans.approve.technical",
+      request_revision: "plans.approve.technical",
     };
     expect(PLAN_TRANSITION_PERMS.submit).toBe("plans.create");
     expect(PLAN_TRANSITION_PERMS.final_approve).toBe("plans.approve.final");
-    expect(PLAN_TRANSITION_PERMS.reject).toBe("projects.approve.technical");
+    expect(PLAN_TRANSITION_PERMS.reject).toBe("plans.approve.technical");
   });
 
   it("06-08: submit requires at least one complete-ready activity (Save & Finish gate)", () => {

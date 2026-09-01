@@ -3056,7 +3056,7 @@ describe("Plan Deletion Permission — explicit plans.delete authorisation", () 
     // plans.delete is not used by any transition
     const PLAN_TRANSITION_PERMS: Record<string, string> = {
       submit: "plans.create",
-      technical_review: "projects.approve.technical",
+      technical_review: "plans.approve.technical",
       coordination_review: "plans.approve.coordination",
       final_approve: "plans.approve.final",
       activate: "plans.update",

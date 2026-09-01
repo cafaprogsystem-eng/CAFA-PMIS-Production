@@ -62,7 +62,7 @@ describe("canonical plan and risk attachment contract", () => {
   it("derives all plan/risk authority from the parent, not caller metadata", () => {
     expect(attachments).toContain("async function assertCanonicalParent(");
     expect(attachments).toContain("assertAnySectorAllowed(req, parent.sectors)");
-    expect(attachments).toContain("assertStateAllowed(req, parent.stateId, parent.locationType)");
+    expect(attachments).toContain("assertPlanStateAllowed(req, parent.stateId, parent.locationType)");
     expect(attachments).toContain("assertSectorAllowed(req, row.sector)");
     expect(attachments).toContain('router.get("/risks/:riskId/attachments"');
     expect(attachments).toContain("WHERE a.id = $1");

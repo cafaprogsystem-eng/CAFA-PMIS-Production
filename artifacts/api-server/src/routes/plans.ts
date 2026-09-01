@@ -12,8 +12,8 @@ import {
   createRegistrationSession,
   validateRegistrationSession,
   closeRegistrationSession,
-  revokeRegistrationSessionsByPlan,
 } from "../lib/plan-registration-session";
+import { PLAN_TRANSITIONS, PLAN_TRANSITION_PERMS } from "@workspace/plan-transitions";
 
 const router: IRouter = Router();
 
@@ -112,20 +112,11 @@ export async function isPlanCurrentlyEditable(
   return !POST_APPROVAL_LOCKED_STATUSES.has(status);
 }
 
-export const PLAN_TRANSITIONS: Record<string, { from: string[]; to: string }> = {
-  submit: { from: ["draft"], to: "submitted" },
-  technical_review: { from: ["submitted"], to: "technically_approved" },
-  coordination_review: { from: ["technically_approved"], to: "coordination_approved" },
-  final_approve: { from: ["coordination_approved"], to: "approved" },
-  activate: { from: ["approved"], to: "active" },
-  start: { from: ["active"], to: "in_progress" },
-  mark_delayed: { from: ["active", "in_progress"], to: "delayed" },
-  complete: { from: ["active", "in_progress", "delayed"], to: "completed" },
-  cancel: { from: ["draft", "submitted", "technically_approved", "coordination_approved", "approved", "active", "in_progress", "delayed"], to: "cancelled" },
-  archive: { from: ["completed", "cancelled"], to: "archived" },
-  reject: { from: ["submitted", "technically_approved", "coordination_approved"], to: "rejected" },
-  request_revision: { from: ["submitted", "technically_approved", "coordination_approved"], to: "draft" },
-};
+// PLAN_TRANSITIONS/PLAN_TRANSITION_PERMS now live in the shared @workspace/plan-transitions
+// package (imported above) so the frontend (plan-detail.tsx) derives its workflow action
+// buttons from the exact same table this route enforces, instead of hand-maintaining a
+// parallel copy that could silently drift.
+export { PLAN_TRANSITIONS, PLAN_TRANSITION_PERMS };
 
 export const PLAN_TYPES = new Set(["monthly", "quarterly", "annual", "action", "operational", "emergency", "custom"]);
 export const PLAN_FREQUENCIES = new Set(["weekly", "monthly", "quarterly", "annual", "on_demand"]);
@@ -206,8 +197,13 @@ export function assertAnySectorAllowed(
 /**
  * Returns a 403 response body if a state-scoped role is accessing a plan outside their state.
  * HQ plans (locationType="hq" or stateId=null) always deny state-scoped roles.
+ *
+ * Synchronous equality check against the Plan's already-known stateId/locationType — distinct
+ * from middlewares/currentUser.ts's assertStateAllowed(req, projectId), which is async and looks
+ * up a Project's state via project_states/project_assignments. The two were identically named
+ * despite checking different things, which is exactly the kind of mix-up this name avoids.
  */
-export function assertStateAllowed(
+export function assertPlanStateAllowed(
   req: import("express").Request,
   planStateId: number | null,
   planLocationType?: string | null,
@@ -276,10 +272,24 @@ export const planSummarySelect = `
   ) pa_agg ON pa_agg.plan_id = pl.id
 `;
 
-async function generatePlanCode(stateId: number): Promise<string> {
-  const s = await pool.query<{ code: string }>(`SELECT code FROM states WHERE id = $1`, [stateId]);
+type PlanCodeClient = { query: <T>(sql: string, params?: unknown[]) => Promise<{ rows: T[] }> };
+
+/**
+ * Generates a sequential code for State plans: CAFA-PLAN-{stateCode}-NNN.
+ *
+ * Must be called with the open transaction client that will also perform the
+ * INSERT, AFTER "BEGIN". A transaction-scoped pg_advisory_xact_lock keyed to
+ * the per-state code namespace serialises concurrent creates so two requests
+ * for the same State cannot both compute the same MAX+1 sequence — the same
+ * pattern used for projects.code (PRJ-008/PRJ-018). The lock releases
+ * automatically at COMMIT/ROLLBACK. Migration 061 adds a plans_code_unique
+ * DB constraint as a defence-in-depth backstop.
+ */
+async function generatePlanCode(client: PlanCodeClient, stateId: number): Promise<string> {
+  const s = await client.query<{ code: string }>(`SELECT code FROM states WHERE id = $1`, [stateId]);
   const stateCode = s.rows[0]?.code ?? "XX";
-  const last = await pool.query<{ code: string }>(
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`plan_code_${stateCode}`]);
+  const last = await client.query<{ code: string }>(
     `SELECT code FROM plans WHERE code LIKE $1 ORDER BY id DESC LIMIT 1`,
     [`CAFA-PLAN-${stateCode}-%`],
   );
@@ -291,9 +301,14 @@ async function generatePlanCode(stateId: number): Promise<string> {
   return `CAFA-PLAN-${stateCode}-${String(next).padStart(3, "0")}`;
 }
 
-/** Generates a sequential code for HQ plans: CAFA-PLAN-HQ-NNN. */
-async function generateHqPlanCode(): Promise<string> {
-  const last = await pool.query<{ code: string }>(
+/**
+ * Generates a sequential code for HQ plans: CAFA-PLAN-HQ-NNN.
+ * Same concurrency-safety contract as generatePlanCode above (must run inside
+ * the open transaction, after BEGIN, using the shared "plan_code_HQ" lock key).
+ */
+async function generateHqPlanCode(client: PlanCodeClient): Promise<string> {
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, ["plan_code_HQ"]);
+  const last = await client.query<{ code: string }>(
     `SELECT code FROM plans WHERE code LIKE 'CAFA-PLAN-HQ-%' ORDER BY id DESC LIMIT 1`,
   );
   let next = 1;
@@ -831,7 +846,7 @@ router.get("/plans/dashboard", async (req, res, next) => {
 
     // Short-circuit: TC with no sector assignment sees nothing
     if (tcSectors !== null && tcSectors.length === 0) {
-      const empty = { total: 0, active: 0, delayed: 0, completed: 0, draft: 0, budgetPlanned: 0, budgetActual: 0, burnRatePct: 0, riskCount: 0, activitiesTotal: 0, activitiesCompleted: 0 };
+      const empty = { total: 0, active: 0, delayed: 0, completed: 0, draft: 0, budgetPlanned: 0, budgetActual: 0, burnRatePct: null, currency: null, currencyMixed: false, budgetByCurrency: [], riskCount: 0, activitiesTotal: 0, activitiesCompleted: 0 };
       res.json({ totals: empty, byState: [], bySector: [], byType: [], upcomingDeadlines: [], delayedActivities: [] });
       return;
     }
@@ -862,7 +877,7 @@ router.get("/plans/dashboard", async (req, res, next) => {
       stateCond  ? ` AND ${stateCond}` : "",
     ].join("");
 
-    const [totals, byState, bySector, byType, upcoming, delayed, riskCount, activityRollup] = await Promise.all([
+    const [totals, byState, bySector, byType, upcoming, delayed, riskCount, activityRollup, budgetByCurrencyRows] = await Promise.all([
       pool.query<{ status: string; n: number }>(
         `SELECT pl.status, COUNT(*)::int AS n ${baseFrom} GROUP BY pl.status`, params,
       ),
@@ -922,24 +937,60 @@ router.get("/plans/dashboard", async (req, res, next) => {
          LEFT JOIN projects p ON p.id = pl.project_id
          ${whereClause}`, params,
       ),
-      pool.query<{ total: number; completed: number; planned: number; actual: number }>(
+      pool.query<{ total: number; completed: number }>(
         `SELECT COUNT(*)::int AS total,
-                COALESCE(SUM(CASE WHEN pa.status = 'completed' THEN 1 ELSE 0 END), 0)::int AS completed,
+                COALESCE(SUM(CASE WHEN pa.status = 'completed' THEN 1 ELSE 0 END), 0)::int AS completed
+         FROM plan_activities pa
+         JOIN plans pl ON pl.id = pa.plan_id
+         LEFT JOIN projects p ON p.id = pl.project_id
+         ${whereClause}`, params,
+      ),
+      // PLAN-CURRENCY-MIX: budget totals grouped by Plan currency — mirrors the
+      // per-currency breakdown used by /dashboard's project budget summary
+      // (DEFECT-05). Activity rows carry no currency of their own; it is
+      // inherited from the parent Plan (pl.currency), so a Plan without a
+      // currency set yet (draft) contributes nothing here — same as
+      // /dashboard's own currency-scoped breakdown query.
+      pool.query<{ currency: string; planned: number; actual: number }>(
+        `SELECT pl.currency,
                 COALESCE(SUM(pa.budget_planned)::float, 0) AS planned,
                 COALESCE(SUM(pa.budget_actual)::float, 0) AS actual
          FROM plan_activities pa
          JOIN plans pl ON pl.id = pa.plan_id
          LEFT JOIN projects p ON p.id = pl.project_id
-         ${whereClause}`, params,
+         ${whereClause}${whereClause ? " AND" : " WHERE"} pl.currency IS NOT NULL AND pl.currency <> ''
+         GROUP BY pl.currency
+         ORDER BY planned DESC`, params,
       ),
     ]);
 
     const statusMap: Record<string, number> = {};
     for (const r of totals.rows) statusMap[r.status] = r.n;
     const totalCount = Object.values(statusMap).reduce((a, b) => a + b, 0);
-    const planned = activityRollup.rows[0]?.planned ?? 0;
-    const actual = activityRollup.rows[0]?.actual ?? 0;
-    const burnRatePct = planned > 0 ? Math.round((actual / planned) * 100) : 0;
+
+    // PLAN-CURRENCY-MIX: never sum budget_planned/budget_actual across
+    // heterogeneous currencies into one figure (same defect class fixed for
+    // /dashboard's project budget summary — DEFECT-05). budgetPlanned/
+    // budgetActual/burnRatePct are only meaningful — and only returned — when
+    // every contributing Plan shares one currency.
+    const budgetByCurrency = budgetByCurrencyRows.rows.map((r) => {
+      const p = Number(r.planned ?? 0);
+      const a = Number(r.actual ?? 0);
+      return {
+        currency: r.currency,
+        budgetPlanned: p,
+        budgetActual: a,
+        // Null convention matches budget-presentation.ts's projectBurnRate:
+        // a burn rate only has meaning when its own planned amount is positive.
+        burnRatePct: p > 0 ? Math.round((a / p) * 100) : null,
+      };
+    });
+    const currencies = budgetByCurrency.map((r) => r.currency);
+    const currencyMixed = currencies.length > 1;
+    const currency = currencies.length === 1 ? currencies[0] : null;
+    const planned = currencyMixed ? null : (budgetByCurrency[0]?.budgetPlanned ?? 0);
+    const actual = currencyMixed ? null : (budgetByCurrency[0]?.budgetActual ?? 0);
+    const burnRatePct = currencyMixed ? null : (planned != null && planned > 0 ? Math.round(((actual ?? 0) / planned) * 100) : null);
 
     // awaitingApproval: plans in the approval pipeline (submitted → technically_approved → coordination_approved)
     const awaitingApproval =
@@ -960,6 +1011,9 @@ router.get("/plans/dashboard", async (req, res, next) => {
         budgetPlanned: planned,
         budgetActual: actual,
         burnRatePct,
+        currency,
+        currencyMixed,
+        budgetByCurrency,
         riskCount: riskCount.rows[0]?.n ?? 0,
         activitiesTotal: activityRollup.rows[0]?.total ?? 0,
         activitiesCompleted: activityRollup.rows[0]?.completed ?? 0,
@@ -1090,7 +1144,7 @@ router.get("/plans/duplicate-check", requirePerm("plans.create"), async (req, re
         // State plan without a stateId — fail-closed for safety.
         res.json({ matchType: "none" }); return;
       }
-      const stateGuardCheck = assertStateAllowed(req, stateId, null);
+      const stateGuardCheck = assertPlanStateAllowed(req, stateId, null);
       if (!stateGuardCheck.ok) {
         // Out-of-scope actor — return no data (not 403, to avoid enumeration).
         res.json({ matchType: "none" }); return;
@@ -1207,7 +1261,7 @@ router.get("/plans/:planId", async (req, res, next) => {
     if (meta === undefined) { res.status(404).json({ error: "plan_not_found" }); return; }
     const sectorGuard = assertAnySectorAllowed(req, meta.sectors);
     if (!sectorGuard.ok) { res.status(sectorGuard.status).json(sectorGuard.body); return; }
-    const stateGuard = assertStateAllowed(req, meta.stateId, meta.locationType);
+    const stateGuard = assertPlanStateAllowed(req, meta.stateId, meta.locationType);
     if (!stateGuard.ok) { res.status(stateGuard.status).json(stateGuard.body); return; }
     const plan = await getPlanById(planId);
     if (!plan) { res.status(404).json({ error: "plan_not_found" }); return; }
@@ -1253,7 +1307,7 @@ router.post("/plans", requirePerm("plans.create"), async (req, res, next) => {
       }
 
       // State roles may only create plans within their own assigned state.
-      const stateGuardCreate = assertStateAllowed(req, stateId, null);
+      const stateGuardCreate = assertPlanStateAllowed(req, stateId, null);
       if (!stateGuardCreate.ok) { res.status(stateGuardCreate.status).json(stateGuardCreate.body); return; }
     }
 
@@ -1341,7 +1395,6 @@ router.post("/plans", requirePerm("plans.create"), async (req, res, next) => {
     // no active session survives COMMIT (Path B — no draft exists yet).
     const doCloseOnCreate = body.closeRegistration === true;
 
-    const code = isHqPlan ? await generateHqPlanCode() : await generatePlanCode(stateId);
     const objectives = Array.isArray(body.objectives) ? body.objectives : [];
     const activities: ActivityInput[] = Array.isArray(body.activities) ? body.activities : [];
     const localities = normalisePlanLocalities(body.localities);
@@ -1511,6 +1564,11 @@ router.post("/plans", requirePerm("plans.create"), async (req, res, next) => {
         const actRiskErr = await validateRiskReference(rawAct.riskId == null ? null : Number(rawAct.riskId), client);
         if (actRiskErr) throw new PlanValidationError(actRiskErr, "activities.riskId");
       }
+      // PLAN-CODE-RACE: generated last, inside this same transaction, so the
+      // advisory lock it acquires is held right up to this INSERT and released
+      // only at COMMIT/ROLLBACK — no window for a second concurrent create to
+      // compute the same sequence number.
+      const code = isHqPlan ? await generateHqPlanCode(client) : await generatePlanCode(client, stateId);
       const planRes = await client.query<{ id: number }>(
         `INSERT INTO plans (code, title, plan_type, frequency, project_id, state_id, locality_id,
                             localities, sector, sectors, responsible_name, responsible_user_id,
@@ -1657,6 +1715,18 @@ router.post("/plans", requirePerm("plans.create"), async (req, res, next) => {
         res.status(422).json({ error: "end_date_before_start_date" });
         return;
       }
+      // Unique violation on plans.code (constraint added in migration 061).
+      // The advisory lock in generatePlanCode/generateHqPlanCode already
+      // prevents this in normal operation — this is a defence-in-depth
+      // backstop, surfaced as a clean 409 rather than a raw SQL error.
+      if (
+        typeof err === "object" && err !== null &&
+        (err as { code?: string }).code === "23505" &&
+        String((err as { constraint?: string }).constraint ?? "").includes("plans_code_unique")
+      ) {
+        res.status(409).json({ error: "plan_code_conflict" });
+        return;
+      }
       throw err;
     } finally {
       client.release();
@@ -1693,7 +1763,7 @@ router.patch("/plans/:planId", async (req, res, next) => {
     if (meta === undefined) { res.status(404).json({ error: "plan_not_found" }); return; }
     const guard = assertAnySectorAllowed(req, meta.sectors);
     if (!guard.ok) { res.status(guard.status).json(guard.body); return; }
-    const stateGuard = assertStateAllowed(req, meta.stateId, meta.locationType);
+    const stateGuard = assertPlanStateAllowed(req, meta.stateId, meta.locationType);
     if (!stateGuard.ok) { res.status(stateGuard.status).json(stateGuard.body); return; }
 
     // ── Resolve registration-session eligibility ──────────────────────────────
@@ -1795,7 +1865,7 @@ router.patch("/plans/:planId", async (req, res, next) => {
         // Authorisation must cover the destination as well as the Plan's current
         // State. Otherwise a state-scoped editor could move an authorised Plan
         // into another State by relying only on the source-state guard above.
-        const targetStateGuard = assertStateAllowed(req, patchStateId, meta.locationType);
+        const targetStateGuard = assertPlanStateAllowed(req, patchStateId, meta.locationType);
         if (!targetStateGuard.ok) {
           res.status(targetStateGuard.status).json(targetStateGuard.body);
           return;
@@ -1976,7 +2046,11 @@ router.patch("/plans/:planId", async (req, res, next) => {
       // check could block on the completion transaction's activity locks and then
       // write an incomplete or new activity into a freshly completed plan.
     const baseRevision = req.header("x-base-revision");
-    const needsPlanLock = datesChanged || (patchNewRespId !== undefined) || Array.isArray(body.activities) || Boolean(baseRevision);
+    // Budget-affecting fields also need the plan row locked: without it, a plain
+    // PATCH that changes budgetPlanned/currency/activities once the Plan is past
+    // Draft could bypass the budget-invariant re-check below entirely.
+    const budgetFieldsChanged = body.budgetPlanned !== undefined || body.currency !== undefined || Array.isArray(body.activities);
+    const needsPlanLock = datesChanged || (patchNewRespId !== undefined) || Array.isArray(body.activities) || Boolean(baseRevision) || budgetFieldsChanged;
       if (needsPlanLock) {
         const lockedPlan = await client.query<{
           start_date: Date | string | null;
@@ -1985,12 +2059,14 @@ router.patch("/plans/:planId", async (req, res, next) => {
           status: string;
           last_final_approved_at: Date | string | null;
           updated_at: Date | string;
+          currency: string | null;
+          budget_planned: number | null;
         }>(
-          `SELECT start_date, end_date, responsible_user_id, status, last_final_approved_at, updated_at
+          `SELECT start_date, end_date, responsible_user_id, status, last_final_approved_at, updated_at, currency, budget_planned
            FROM plans WHERE id = $1 FOR UPDATE`,
           [planId],
         );
-        const lockedRow = lockedPlan.rows[0] ?? { start_date: null, end_date: null, responsible_user_id: null, status: "draft", last_final_approved_at: null, updated_at: new Date(0) };
+        const lockedRow = lockedPlan.rows[0] ?? { start_date: null, end_date: null, responsible_user_id: null, status: "draft", last_final_approved_at: null, updated_at: new Date(0), currency: null, budget_planned: null };
         if (baseRevision && new Date(lockedRow.updated_at).getTime() !== new Date(baseRevision).getTime()) {
           await client.query("ROLLBACK");
           res.status(409).json({ error: "offline_conflict", code: "revision_mismatch", message: "The plan changed while this draft was offline." });
@@ -2045,6 +2121,46 @@ router.patch("/plans/:planId", async (req, res, next) => {
             : lockedEnd;
           const txDateErr = validatePlanDates(rawEffStart, rawEffEnd);
           if (txDateErr) throw new PlanValidationError(txDateErr);
+        }
+
+        // ── Budget invariant re-check for ordinary (non Save & Finish) edits ────
+        // validatePlanBudgetReadiness previously only ran at creation/closeRegistration
+        // and at the submit transition. A plain PATCH changing budgetPlanned/currency/
+        // activities once the Plan is past Draft (i.e. already submitted) skipped it
+        // entirely, letting a coordinator/TC silently break "activities total ≤ plan
+        // budget" after submission. This re-runs the same shared check — using the
+        // row locked above — without imposing the full Save & Finish completeness
+        // requirements (locations, complete-activity, at-least-one-activity), which
+        // only apply when the caller explicitly closes registration.
+        if (closeRegistration !== true && budgetFieldsChanged && lockedRow.status !== "draft") {
+          const postSubmitCurrency = body.currency !== undefined
+            ? String(body.currency ?? "")
+            : (lockedRow.currency ?? "");
+          const postSubmitBudgetPlanned = body.budgetPlanned !== undefined
+            ? Number(body.budgetPlanned ?? NaN)
+            : (lockedRow.budget_planned ?? NaN);
+          let postSubmitActTotal: number;
+          if (Array.isArray(body.activities)) {
+            postSubmitActTotal = (body.activities as ActivityInput[]).reduce((s, raw) => {
+              const v = Number(raw.budgetPlanned ?? 0);
+              return s + (Number.isFinite(v) && v >= 0 ? v : 0);
+            }, 0);
+          } else {
+            const persistedActBudgets = await client.query<{ budget_planned: number | null }>(
+              `SELECT budget_planned FROM plan_activities WHERE plan_id = $1`,
+              [planId],
+            );
+            postSubmitActTotal = persistedActBudgets.rows.reduce((s, row) => {
+              const v = Number(row.budget_planned ?? 0);
+              return s + (Number.isFinite(v) && v >= 0 ? v : 0);
+            }, 0);
+          }
+          const postSubmitBudgetIssue = validatePlanBudgetReadiness(
+            postSubmitCurrency,
+            postSubmitBudgetPlanned,
+            postSubmitActTotal,
+          );
+          if (postSubmitBudgetIssue) throw new CloseRegistrationError(postSubmitBudgetIssue);
         }
       }
 
@@ -2302,17 +2418,29 @@ router.patch("/plans/:planId", async (req, res, next) => {
           [planId, req.currentUser.id, tokenHash],
         );
       }
-      // Sector-scope re-validation runs INSIDE the transaction so an unauthorised
-      // sector move is rolled back, never committed. It covers sector, sectors and
-      // projectId changes and reads the updated row via the transaction client —
-      // a TC cannot reassign a plan to sectors outside their own assignment.
-      if (body.sector !== undefined || body.sectors !== undefined || body.projectId !== undefined) {
+      // Sector-scope AND State-scope re-validation both run INSIDE the transaction
+      // so an unauthorised move is rolled back, never committed — reading the
+      // updated row via the transaction client, not the stale pre-transaction
+      // `meta` snapshot the earlier guards used. Sector covers sector, sectors and
+      // projectId changes: a TC cannot reassign a plan to sectors outside their
+      // own assignment. State covers stateId changes: a state-scoped editor's
+      // authorisation for the destination State must hold against the row as it
+      // actually commits, not as it read moments before BEGIN.
+      if (body.sector !== undefined || body.sectors !== undefined || body.projectId !== undefined || body.stateId !== undefined) {
         const proposedMeta = await getPlanMeta(planId, client);
         const postGuard = assertAnySectorAllowed(req, proposedMeta?.sectors ?? []);
         if (!postGuard.ok) {
           await client.query("ROLLBACK");
           res.status(postGuard.status).json(postGuard.body);
           return;
+        }
+        if (body.stateId !== undefined) {
+          const postStateGuard = assertPlanStateAllowed(req, proposedMeta?.stateId ?? null, proposedMeta?.locationType ?? null);
+          if (!postStateGuard.ok) {
+            await client.query("ROLLBACK");
+            res.status(postStateGuard.status).json(postStateGuard.body);
+            return;
+          }
         }
       }
       await client.query("COMMIT");
@@ -2417,7 +2545,7 @@ router.delete("/plans/:planId", requirePerm("plans.delete", "You do not have per
     if (meta === undefined) { res.status(404).json({ error: "plan_not_found" }); return; }
     const guard = assertAnySectorAllowed(req, meta.sectors);
     if (!guard.ok) { res.status(guard.status).json(guard.body); return; }
-    const stateGuard = assertStateAllowed(req, meta.stateId, meta.locationType);
+    const stateGuard = assertPlanStateAllowed(req, meta.stateId, meta.locationType);
     if (!stateGuard.ok) { res.status(stateGuard.status).json(stateGuard.body); return; }
     let deletionAudience: Awaited<ReturnType<typeof realtime.captureOperationalAudience>> | undefined;
     // ── Durable delete: DB first, storage post-COMMIT ────────────────────────
@@ -2568,21 +2696,6 @@ router.delete("/plans/:planId", requirePerm("plans.delete", "You do not have per
   } catch (err) { next(err); }
 });
 
-export const PLAN_TRANSITION_PERMS: Record<string, string> = {
-  submit: "plans.create",
-  technical_review: "projects.approve.technical",
-  coordination_review: "plans.approve.coordination",
-  final_approve: "plans.approve.final",
-  activate: "plans.update",
-  start: "plans.update",
-  mark_delayed: "plans.update",
-  complete: "plans.update",
-  cancel: "plans.update",
-  archive: "plans.update",
-  reject: "projects.approve.technical",
-  request_revision: "projects.approve.technical",
-};
-
 router.post("/plans/:planId/transitions", async (req, res, next) => {
   try {
     if (!req.currentUser) { res.status(401).json({ error: "unauthorized" }); return; }
@@ -2605,7 +2718,7 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
     const meta = await getPlanMeta(planId);
     const sectorGuard = assertAnySectorAllowed(req, meta?.sectors ?? []);
     if (!sectorGuard.ok) { res.status(sectorGuard.status).json(sectorGuard.body); return; }
-    const stateGuard = assertStateAllowed(req, cur.rows[0].stateId as number);
+    const stateGuard = assertPlanStateAllowed(req, cur.rows[0].stateId as number);
     if (!stateGuard.ok) { res.status(stateGuard.status).json(stateGuard.body); return; }
     const fromStatus = cur.rows[0].status as string;
     if (!transition.from.includes(fromStatus)) {
@@ -2709,7 +2822,7 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
             lockedSectorGuard.status,
           );
         }
-        const lockedStateGuard = assertStateAllowed(req, lockedPlan.stateId as number);
+        const lockedStateGuard = assertPlanStateAllowed(req, lockedPlan.stateId as number);
         if (!lockedStateGuard.ok) {
           throw new SubmitError(lockedStateGuard.body.error, lockedStateGuard.status);
         }
@@ -3081,7 +3194,7 @@ router.post("/plans/:planId/reopen", requirePerm("plans.reopen", "You do not hav
 
     const sectorGuard = assertAnySectorAllowed(req, meta.sectors);
     if (!sectorGuard.ok) { res.status(sectorGuard.status).json(sectorGuard.body); return; }
-    const stateGuard = assertStateAllowed(req, meta.stateId, meta.locationType);
+    const stateGuard = assertPlanStateAllowed(req, meta.stateId, meta.locationType);
     if (!stateGuard.ok) { res.status(stateGuard.status).json(stateGuard.body); return; }
 
     // ─── PLAN-006: Reopen lock inside transaction ─────────────────────────────

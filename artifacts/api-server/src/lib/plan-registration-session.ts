@@ -13,7 +13,10 @@
  *  – Any of three events permanently revokes the session:
  *      1. Save & Finish   — closeRegistrationSession() called atomically in PATCH.
  *      2. Cancel/Close    — closeRegistrationSession() called from the close endpoint.
- *      3. Submit          — revokeRegistrationSessionsByPlan() called in transitions.
+ *      3. Submit          — the transitions route inlines the same UPDATE via its own
+ *                            transaction client (not this module's revokeRegistrationSessionsByPlan
+ *                            helper, which only accepts the shared pool) so the revoke commits
+ *                            atomically with the status transition.
  *  – creator + draft status + zero approvals is NOT a sufficient substitute.
  *  – A missing, expired, or closed session always yields a 403; the raw token is
  *    the only client-held proof that a session is active.

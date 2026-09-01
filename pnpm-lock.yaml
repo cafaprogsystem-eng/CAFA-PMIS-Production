@@ -206,6 +206,9 @@ importers:
       '@workspace/integrations-openai-ai-server':
         specifier: workspace:*
         version: link:../../lib/integrations-openai-ai-server
+      '@workspace/plan-transitions':
+        specifier: workspace:*
+        version: link:../../lib/plan-transitions
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -469,6 +472,9 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
+      '@workspace/plan-transitions':
+        specifier: workspace:*
+        version: link:../../lib/plan-transitions
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -810,6 +816,8 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.6.2
+
+  lib/plan-transitions: {}
 
   scripts:
     devDependencies:
@@ -5101,7 +5109,7 @@ packages:
     engines: {node: '>=6.0.0'}
 
   npm-run-path@6.0.0:
-    resolution: {integrity: sha512-9qny7Z9DsQU8Ou39ERsPU4OZQlSTP47ShQzuKZ6PRXpYLtIFgl/DEBYEXKlvcEa+9tHVcK8CF81Y2V72qaZhWA==, tarball: https://registry.npmjs.org/npm-run-path/-/npm-run-path-6.0.0.tgz}
+    resolution: {integrity: sha512-9qny7Z9DsQU8Ou39ERsPU4OZQlSTP47ShQzuKZ6PRXpYLtIFgl/DEBYEXKlvcEa+9tHVcK8CF81Y2V72qaZhWA==}
     engines: {node: '>=18'}
 
   object-assign@4.1.1:

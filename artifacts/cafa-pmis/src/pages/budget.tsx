@@ -11,6 +11,7 @@ import {
   getGetProjectBudgetPerformanceQueryKey,
   useListProjects,
   useGetProjectBudget,
+  useListProjectStateAllocations,
   useGetMe,
   useGetSectorBudget,
   useListStates,
@@ -113,9 +114,9 @@ function printBudgetPdf(data: BudgetPdfData) {
   <div class="header">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
-        <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.65;margin-bottom:8px">CAFA Development Organisation — Budget Report</div>
+        <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.65;margin-bottom:8px">${t("report.eyebrowProjectReport")}</div>
         <h1>${data.projectCode} — ${data.projectTitle}</h1>
-        <div class="sub">${[data.donor, data.sector].filter(Boolean).join(" · ")} · Generated: ${now}</div>
+        <div class="sub">${[data.donor, data.sector].filter(Boolean).join(" · ")} · ${t("report.generatedLabel")}: ${now}</div>
       </div>
       <div style="text-align:right">
         <div style="font-size:11px;opacity:.65">${t("report.burnRate")}</div>
@@ -131,9 +132,9 @@ function printBudgetPdf(data: BudgetPdfData) {
     <div class="kpi"><div class="label">${t("report.utilisation")}</div><div class="value" style="color:${burnColor}">${burnText}</div></div>
   </div>
 
-  ${data.alerts.length > 0 ? `<h3 style="margin-bottom:8px">⚠ Budget Alerts</h3>${alertRows}` : ""}
+  ${data.alerts.length > 0 ? `<h3 style="margin-bottom:8px">⚠ ${t("report.budgetAlertsHeading")}</h3>${alertRows}` : ""}
 
-  <h3 style="margin:20px 0 0">Budget Breakdown by Output &amp; Activity</h3>
+  <h3 style="margin:20px 0 0">${t("report.budgetBreakdownHeading")}</h3>
   <table>
     <thead><tr><th>${t("report.lineItem")}</th><th style="text-align:right">${t("report.planned")}</th><th style="text-align:right">${t("report.spent")}</th><th style="text-align:right">${t("report.remaining")}</th><th style="text-align:right">${t("report.burnRate")}</th></tr></thead>
     <tbody>${lineRows}</tbody>
@@ -158,6 +159,12 @@ interface ExcelExportData {
   currency?: string;   // ISO 4217 code
   data: BudgetPdfData;
   sectorEntries?: SectorBudgetEntry[];
+  stateAllocations?: Array<{
+    stateName: string;
+    budgetAllocation: number;
+    beneficiaryTarget: number;
+    notes?: string | null;
+  }>;
 }
 
 async function downloadWorkbook(sheets: BudgetWorkbookSheet[], filename: string) {
@@ -173,6 +180,7 @@ async function exportBudgetExcel(opts: ExcelExportData) {
       donor: opts.donor,
       sector: opts.sector,
       currency: resolveProjectCurrency(opts.currency),
+      stateAllocations: opts.stateAllocations,
     }),
     `budget-${opts.projectCode.replace(/[^a-zA-Z0-9]/g, "-")}-${new Date().toISOString().slice(0, 10)}.xlsx`,
   );
@@ -227,7 +235,7 @@ function printSectorPdf(entry: SectorBudgetEntry, sectorProjects: Array<{ id: nu
       <td style="padding:6px 8px;text-align:right">${fmtAmt(c.activitySpent, c.currency)}</td>
       <td style="padding:6px 8px;text-align:right">${fmtAmt(c.remaining, c.currency)}</td>
       <td style="padding:6px 8px;text-align:right">${fmtPct(c.utilisationPct)}</td>
-      <td style="padding:6px 8px;text-align:center">${c.overallocatedProjectCount > 0 ? `<span style="color:#dc2626">${c.overallocatedProjectCount} overallocated</span>` : "—"}</td>
+      <td style="padding:6px 8px;text-align:center">${c.overallocatedProjectCount > 0 ? `<span style="color:#dc2626">${t("report.overallocatedBadge", { count: c.overallocatedProjectCount })}</span>` : "—"}</td>
     </tr>`
   ).join("");
 
@@ -235,8 +243,8 @@ function printSectorPdf(entry: SectorBudgetEntry, sectorProjects: Array<{ id: nu
     `<tr><td style="padding:6px 8px;font-weight:500">${p.title}</td><td style="padding:6px 8px;color:#64748b">${p.code ?? "—"}</td><td style="padding:6px 8px;color:#64748b">${p.donor ?? "—"}</td><td style="padding:6px 8px;text-align:center"><span style="padding:2px 8px;border-radius:12px;font-size:11px;background:#e2e8f0">${(p.status ?? "").replace(/_/g, " ")}</span></td><td style="padding:6px 8px;text-align:right;font-weight:600">${p.budgetTotal != null ? p.budgetTotal.toLocaleString("en-US", { maximumFractionDigits: 0 }) : "—"}</td></tr>`
   ).join("") || `<tr><td colspan="5" style="padding:12px 8px;text-align:center;color:#94a3b8">${t("report.noProjectsInSector")}</td></tr>`;
 
-  const incompleteLabel = entry.totalActivityCount === null ? "No activities" :
-    `${entry.incompleteActivityCount ?? 0} incomplete`;
+  const incompleteLabel = entry.totalActivityCount === null ? t("report.noActivitiesShort") :
+    t("report.incompleteActivitiesCount", { count: entry.incompleteActivityCount ?? 0 });
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sector Budget — ${entry.sector}</title>
   <style>body{font-family:Arial,sans-serif;margin:0;padding:32px;color:#1e293b;font-size:13px}
@@ -253,18 +261,18 @@ function printSectorPdf(entry: SectorBudgetEntry, sectorProjects: Array<{ id: nu
   </style></head><body>
   <div class="header">
     <div>
-      <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.65;margin-bottom:8px">CAFA Development Organisation — Sector Budget Report</div>
+      <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;opacity:.65;margin-bottom:8px">${t("report.eyebrowSectorReport")}</div>
       <h1>${entry.sector}</h1>
-      <div class="sub">${entry.projectCount} project${entry.projectCount !== 1 ? "s" : ""} · ${incompleteLabel} activities · Generated: ${now}</div>
+      <div class="sub">${t("report.projectCount", { count: entry.projectCount })} · ${incompleteLabel} · ${t("report.generatedLabel")}: ${now}</div>
     </div>
   </div>
-  <p class="note">Sector Budgets use each Project's Primary Sector. Additional Sectors do not receive automatic budget allocation. Financial figures are not cross-summed across currencies.</p>
+  <p class="note">${t("report.sectorBudgetDisclaimer")}</p>
   <h3 style="margin:0 0 4px">${t("report.financialSummaryByCurrency")}</h3>
   <table>
     <thead><tr><th>${t("report.currency")}</th><th>${t("report.projects")}</th><th>${t("report.totalBudget")}</th><th>${t("report.activityPlanned")}</th><th>${t("report.spent")}</th><th>${t("report.remainingBudget")}</th><th>${t("report.utilisation")}</th><th>${t("report.exceptions")}</th></tr></thead>
     <tbody>${currencyRows}</tbody>
   </table>
-  <h3 style="margin:20px 0 8px">Projects in this Sector (${entry.projectCount})</h3>
+  <h3 style="margin:20px 0 8px">${t("report.projectsInSectorHeading", { count: entry.projectCount })}</h3>
   <table>
     <thead><tr><th>${t("report.projectTitle")}</th><th>${t("report.code")}</th><th>${t("report.donor")}</th><th>${t("report.status")}</th><th style="text-align:right">${t("report.budget")}</th></tr></thead>
     <tbody>${projectRows}</tbody>
@@ -341,6 +349,7 @@ interface ProjectInfo { code: string; title: string; donor?: string; sector?: st
 function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; projectInfo?: ProjectInfo }) {
   const { t } = useTranslation("budget");
   const { data, isLoading } = useGetProjectBudget(projectId);
+  const { data: stateAllocations } = useListProjectStateAllocations(projectId);
 
   if (isLoading || !data) {
     return <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
@@ -371,6 +380,7 @@ function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; proj
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => exportBudgetExcel({
             projectCode: pdfData.projectCode, projectTitle: pdfData.projectTitle,
             donor: pdfData.donor, sector: pdfData.sector, currency: pdfData.currency, data: pdfData,
+            stateAllocations,
           })}>
             <FileSpreadsheet className="h-3.5 w-3.5 text-success" /> {t("export.exportExcel")}
           </Button>

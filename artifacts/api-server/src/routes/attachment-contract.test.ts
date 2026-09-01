@@ -83,7 +83,7 @@ describe("canonical Plan and Risk attachment contract", () => {
 
   it("derives plan and risk access from parents and keeps proxy unavailable responses redacted", () => {
     expect(route).toContain("assertAnySectorAllowed(req, parent.sectors)");
-    expect(route).toContain("assertStateAllowed(req, parent.stateId, parent.locationType)");
+    expect(route).toContain("assertPlanStateAllowed(req, parent.stateId, parent.locationType)");
     expect(route).toContain("assertSectorAllowed(req, row.sector)");
     expect(route).toContain('hasPerm(permissionsFor(req.currentUser!), "risks.update")');
     expect(route).toContain('requiredPermission: "plans.view"');

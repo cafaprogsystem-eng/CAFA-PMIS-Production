@@ -515,7 +515,10 @@ describe("PLAN-DUP-SOFT: Irregular types — no hard block, creation always perm
 
   irregularTypes.forEach((planType, idx) => {
     it(`${typeTestIds[idx]}: ${planType} plan creates despite similar existing → 201`, async () => {
-      // For irregular types the advisory lock and hard check are NOT called.
+      // For irregular types the PLAN-BD-2 duplicate-guard advisory lock (its
+      // distinctive multi-param CASE-expression key) is NOT called. A separate,
+      // type-independent plan-code allocation lock still fires on every create
+      // (PLAN-CODE-RACE) — that one is intentionally unconditional.
       const client = mockTransactionClient((sql) => {
         if (sql.includes("INSERT INTO plans")) return { rows: [PLAN_INSERT_RESULT], rowCount: 1 };
         return null;
@@ -529,8 +532,8 @@ describe("PLAN-DUP-SOFT: Irregular types — no hard block, creation always perm
       });
 
       expect(res.status).toBe(201);
-      // Advisory lock must NOT have been called for irregular types
-      expect(clientCalledWith(client, "pg_advisory_xact_lock")).toBe(false);
+      // Duplicate-guard advisory lock must NOT have been called for irregular types
+      expect(client.calls.some((c) => c.sql.includes("pg_advisory_xact_lock") && c.sql.includes("CASE"))).toBe(false);
     });
   });
 

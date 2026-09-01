@@ -13,6 +13,9 @@
       "path": "./lib/api-zod"
     },
     {
+      "path": "./lib/plan-transitions"
+    },
+    {
       "path": "./lib/integrations-openai-ai-server"
     }
   ]

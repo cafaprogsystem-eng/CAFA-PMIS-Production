@@ -62,7 +62,18 @@ vi.mock("@workspace/api-client-react", () => ({
     isLoading: false,
     isError: false,
   }),
+  useDeletePlan: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  };
+});
+
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 vi.mock("wouter", () => ({
   useLocation: () => ["/plans", setLocation],

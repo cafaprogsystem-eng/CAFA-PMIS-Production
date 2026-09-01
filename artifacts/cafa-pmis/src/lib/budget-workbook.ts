@@ -31,6 +31,12 @@ export interface ProjectBudgetWorkbookInput {
     }>;
   }>;
   alerts: Array<{ level: string; message: string }>;
+  stateAllocations?: Array<{
+    stateName: string;
+    budgetAllocation: number;
+    beneficiaryTarget: number;
+    notes?: string | null;
+  }>;
 }
 
 export interface SectorBudgetWorkbookInput {
@@ -101,7 +107,14 @@ export function buildProjectBudgetWorkbook(input: ProjectBudgetWorkbookInput): B
 
   const allocationRows: WorkbookCell[][] = [
     ["State", `Budget Allocation${currencyLabel}`, "Beneficiary Target", "Notes"],
-    ["No state allocations recorded yet", "", "", ""],
+    ...(input.stateAllocations && input.stateAllocations.length > 0
+      ? input.stateAllocations.map((allocation): WorkbookCell[] => [
+          allocation.stateName,
+          fmt(allocation.budgetAllocation),
+          allocation.beneficiaryTarget,
+          allocation.notes ?? "",
+        ])
+      : [["No state allocations recorded yet", "", "", ""]]),
   ];
 
   const activityHeaders: WorkbookCell[] = [

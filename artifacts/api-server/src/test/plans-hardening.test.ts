@@ -463,7 +463,7 @@ describe("PLAN-HARD-TR: Transition concurrency — CAS & PLAN-016", () => {
 
   it("PLAN-HARD-TR-12: Viewer cannot trigger any transition → 403 (no transition permissions)", async () => {
     // requirePerm is bypassed in the mock; the permission check inside the route body runs.
-    // Viewer does not have 'projects.approve.technical', so technical_review must be denied.
+    // Viewer does not have 'plans.approve.technical', so technical_review must be denied.
     setupStatusQuery("submitted");
 
     const app = await buildApp({ ...VIEWER });

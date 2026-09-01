@@ -3696,6 +3696,33 @@ CREATE INDEX IF NOT EXISTS monthly_report_reminder_deliveries_due_idx
   ON monthly_report_reminder_deliveries (status, next_attempt_at);
 `,
   },
+  {
+    name: "061_plans_code_unique",
+    sql: /* sql */ `
+-- Migration 061: defence-in-depth uniqueness for plans.code.
+--
+-- generatePlanCode/generateHqPlanCode now serialise allocation with a
+-- transaction-scoped pg_advisory_xact_lock (same pattern as PRJ-008/PRJ-018
+-- for projects.code), which already prevents two concurrent creates from
+-- computing the same MAX+1 sequence. This constraint is the same belt-and-
+-- braces backstop projects.code carries (migration adding
+-- projects_code_unique): a residual duplicate can only reach here from a
+-- source that bypasses the lock (e.g. direct data import), and must fail
+-- loudly rather than silently coexist.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+     WHERE t.relname = 'plans'
+       AND c.conname = 'plans_code_unique'
+  ) THEN
+    ALTER TABLE plans
+      ADD CONSTRAINT plans_code_unique UNIQUE (code);
+  END IF;
+END $$;
+`,
+  },
 
 ];
 

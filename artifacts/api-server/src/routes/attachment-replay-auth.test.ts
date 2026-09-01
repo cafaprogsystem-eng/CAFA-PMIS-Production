@@ -47,7 +47,7 @@ vi.mock("../middlewares/currentUser", () => ({
 }));
 vi.mock("./plans", () => ({
   assertAnySectorAllowed: () => ({ ok: true }),
-  assertStateAllowed: () => ({ ok: true }),
+  assertPlanStateAllowed: () => ({ ok: true }),
   isPlanCurrentlyEditable: mockPlanEditable,
 }));
 

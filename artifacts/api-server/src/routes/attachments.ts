@@ -10,7 +10,7 @@ import {
   isStorageConfigured,
 } from "../lib/objectStorage";
 import { hasPerm, logAudit, permissionsFor, assertSectorAllowed } from "../middlewares/currentUser";
-import { assertAnySectorAllowed, assertStateAllowed, isPlanCurrentlyEditable } from "./plans";
+import { assertAnySectorAllowed, assertPlanStateAllowed, isPlanCurrentlyEditable } from "./plans";
 import { signUploadToken, UploadTokenError, verifyUploadToken } from "../lib/uploadToken";
 import { realtime } from "../lib/realtime";
 import { MAX_ATTACHMENT_BYTES } from "../lib/attachmentLimits";
@@ -122,7 +122,7 @@ async function assertCanonicalParent(
     };
     const sectorGuard = assertAnySectorAllowed(req, parent.sectors);
     if (!sectorGuard.ok) return sectorGuard;
-    const stateGuard = assertStateAllowed(req, parent.stateId, parent.locationType);
+    const stateGuard = assertPlanStateAllowed(req, parent.stateId, parent.locationType);
     if (!stateGuard.ok) return stateGuard;
     if (mutation) {
       const canUpdate = hasPerm(permissionsFor(req.currentUser!), "plans.update") ||

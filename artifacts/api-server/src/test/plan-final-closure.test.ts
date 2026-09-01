@@ -535,12 +535,17 @@ describe("PLAN-FINAL-11: pg_advisory_xact_lock acquired inside BEGIN transaction
     expect(advisoryLockCalled).toBe(true);
   });
 
-  it("Advisory lock SQL is NOT emitted for irregular plan type (action)", async () => {
+  it("PLAN-BD-2 duplicate-guard advisory lock is NOT emitted for irregular plan type (action) — the separate plan-code allocation lock still is", async () => {
+    // Two independent pg_advisory_xact_lock calls now exist: the PLAN-BD-2
+    // duplicate-guard lock (structured types only, distinguishable by its
+    // multi-param CASE-expression key) and the plan-code allocation lock
+    // (generatePlanCode/generateHqPlanCode, fires on every create). Only the
+    // former is type-gated.
     setupListQuery();
-    let advisoryLockCalled = false;
+    let duplicateGuardLockCalled = false;
     mockClient((sql) => {
       if (sql.includes("pg_advisory_xact_lock")) {
-        advisoryLockCalled = true;
+        if (sql.includes("CASE")) duplicateGuardLockCalled = true;
         return { rows: [] };
       }
       if (sql.includes("INSERT INTO plans")) return { rows: [{ id: 56 }], rowCount: 1 };
@@ -552,7 +557,7 @@ describe("PLAN-FINAL-11: pg_advisory_xact_lock acquired inside BEGIN transaction
       planType: "action",
       startDate: "2026-02-01", endDate: "2026-02-28",
     });
-    expect(advisoryLockCalled).toBe(false);
+    expect(duplicateGuardLockCalled).toBe(false);
   });
 });
 

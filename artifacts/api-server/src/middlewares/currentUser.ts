@@ -399,6 +399,7 @@ export function permissionsFor(user: CurrentUser): string[] {
   if (role === "technical_coordinator") {
     perms.push(
       "projects.approve.technical",
+      "plans.approve.technical",
       "reports.create",
       "reports.update",
       "reports.delete",

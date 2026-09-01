@@ -226,6 +226,18 @@
     "code": "Code",
     "donor": "Donor",
     "status": "Status",
-    "budget": "Budget"
+    "budget": "Budget",
+    "generatedLabel": "Generated",
+    "eyebrowProjectReport": "CAFA Development Organisation — Budget Report",
+    "eyebrowSectorReport": "CAFA Development Organisation — Sector Budget Report",
+    "budgetAlertsHeading": "Budget Alerts",
+    "budgetBreakdownHeading": "Budget Breakdown by Output & Activity",
+    "noActivitiesShort": "No activities",
+    "incompleteActivitiesCount": "{{count}} incomplete activities",
+    "sectorBudgetDisclaimer": "Sector Budgets use each Project's Primary Sector. Additional Sectors do not receive automatic budget allocation. Financial figures are not cross-summed across currencies.",
+    "projectsInSectorHeading": "Projects in this Sector ({{count}})",
+    "overallocatedBadge": "{{count}} overallocated",
+    "projectCount_one": "{{count}} project",
+    "projectCount_other": "{{count}} projects"
   }
 }
