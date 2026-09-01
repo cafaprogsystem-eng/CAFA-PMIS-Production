@@ -2350,8 +2350,18 @@ export declare const ListStatesResponseItem: zod.ZodObject<{
     operationalStatus: zod.ZodEnum<["active", "inactive"]>;
     officeStatus: zod.ZodEnum<["present", "absent", "unknown"]>;
     officeAddress: zod.ZodNullable<zod.ZodString>;
-    managerName: zod.ZodNullable<zod.ZodString>;
+    officeManagers: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodNumber;
+        name: zod.ZodString;
+    }, "strip", zod.ZodTypeAny, {
+        id: number;
+        name: string;
+    }, {
+        id: number;
+        name: string;
+    }>, "many">;
     localitiesCount: zod.ZodNumber;
+    updatedAt: zod.ZodOptional<zod.ZodDate>;
 }, "strip", zod.ZodTypeAny, {
     code: string;
     id: number;
@@ -2360,8 +2370,12 @@ export declare const ListStatesResponseItem: zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
+    updatedAt?: Date | undefined;
 }, {
     code: string;
     id: number;
@@ -2370,8 +2384,12 @@ export declare const ListStatesResponseItem: zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
+    updatedAt?: Date | undefined;
 }>;
 export declare const ListStatesResponse: zod.ZodArray<zod.ZodObject<{
     id: zod.ZodNumber;
@@ -2381,8 +2399,18 @@ export declare const ListStatesResponse: zod.ZodArray<zod.ZodObject<{
     operationalStatus: zod.ZodEnum<["active", "inactive"]>;
     officeStatus: zod.ZodEnum<["present", "absent", "unknown"]>;
     officeAddress: zod.ZodNullable<zod.ZodString>;
-    managerName: zod.ZodNullable<zod.ZodString>;
+    officeManagers: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodNumber;
+        name: zod.ZodString;
+    }, "strip", zod.ZodTypeAny, {
+        id: number;
+        name: string;
+    }, {
+        id: number;
+        name: string;
+    }>, "many">;
     localitiesCount: zod.ZodNumber;
+    updatedAt: zod.ZodOptional<zod.ZodDate>;
 }, "strip", zod.ZodTypeAny, {
     code: string;
     id: number;
@@ -2391,8 +2419,12 @@ export declare const ListStatesResponse: zod.ZodArray<zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
+    updatedAt?: Date | undefined;
 }, {
     code: string;
     id: number;
@@ -2401,8 +2433,12 @@ export declare const ListStatesResponse: zod.ZodArray<zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
+    updatedAt?: Date | undefined;
 }>, "many">;
 /**
  * Only State-registry administrators may create States. Manager assignment is read-only and remains owned by User Management.
@@ -2448,9 +2484,19 @@ export declare const GetStateResponse: zod.ZodObject<{
     code: zod.ZodString;
     operationalStatus: zod.ZodEnum<["active", "inactive"]>;
     officeStatus: zod.ZodEnum<["present", "absent", "unknown"]>;
-    managerName: zod.ZodNullable<zod.ZodString>;
+    officeManagers: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodNumber;
+        name: zod.ZodString;
+    }, "strip", zod.ZodTypeAny, {
+        id: number;
+        name: string;
+    }, {
+        id: number;
+        name: string;
+    }>, "many">;
     officeAddress: zod.ZodNullable<zod.ZodString>;
     localitiesCount: zod.ZodNumber;
+    updatedAt: zod.ZodOptional<zod.ZodDate>;
     localities: zod.ZodArray<zod.ZodObject<{
         id: zod.ZodNumber;
         name: zod.ZodString;
@@ -2488,7 +2534,10 @@ export declare const GetStateResponse: zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
     localities: {
         id: number;
@@ -2501,6 +2550,7 @@ export declare const GetStateResponse: zod.ZodObject<{
         title: string;
         sector?: string | null | undefined;
     }[];
+    updatedAt?: Date | undefined;
 }, {
     code: string;
     id: number;
@@ -2509,7 +2559,10 @@ export declare const GetStateResponse: zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
     localities: {
         id: number;
@@ -2522,6 +2575,7 @@ export declare const GetStateResponse: zod.ZodObject<{
         title: string;
         sector?: string | null | undefined;
     }[];
+    updatedAt?: Date | undefined;
 }>;
 /**
  * Only name, code, and office address are editable here. Manager assignment remains read-only and owned by User Management.
@@ -2566,8 +2620,18 @@ export declare const UpdateStateResponse: zod.ZodObject<{
     operationalStatus: zod.ZodEnum<["active", "inactive"]>;
     officeStatus: zod.ZodEnum<["present", "absent", "unknown"]>;
     officeAddress: zod.ZodNullable<zod.ZodString>;
-    managerName: zod.ZodNullable<zod.ZodString>;
+    officeManagers: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodNumber;
+        name: zod.ZodString;
+    }, "strip", zod.ZodTypeAny, {
+        id: number;
+        name: string;
+    }, {
+        id: number;
+        name: string;
+    }>, "many">;
     localitiesCount: zod.ZodNumber;
+    updatedAt: zod.ZodOptional<zod.ZodDate>;
 }, "strip", zod.ZodTypeAny, {
     code: string;
     id: number;
@@ -2576,8 +2640,12 @@ export declare const UpdateStateResponse: zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
+    updatedAt?: Date | undefined;
 }, {
     code: string;
     id: number;
@@ -2586,8 +2654,12 @@ export declare const UpdateStateResponse: zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
+    updatedAt?: Date | undefined;
 }>;
 /**
  * Only State-registry administrators may make a confirmed, audited lifecycle change. No related records are created, reassigned, or deleted.
@@ -2625,8 +2697,18 @@ export declare const UpdateStateLifecycleResponse: zod.ZodObject<{
     operationalStatus: zod.ZodEnum<["active", "inactive"]>;
     officeStatus: zod.ZodEnum<["present", "absent", "unknown"]>;
     officeAddress: zod.ZodNullable<zod.ZodString>;
-    managerName: zod.ZodNullable<zod.ZodString>;
+    officeManagers: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodNumber;
+        name: zod.ZodString;
+    }, "strip", zod.ZodTypeAny, {
+        id: number;
+        name: string;
+    }, {
+        id: number;
+        name: string;
+    }>, "many">;
     localitiesCount: zod.ZodNumber;
+    updatedAt: zod.ZodOptional<zod.ZodDate>;
 }, "strip", zod.ZodTypeAny, {
     code: string;
     id: number;
@@ -2635,8 +2717,12 @@ export declare const UpdateStateLifecycleResponse: zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
+    updatedAt?: Date | undefined;
 }, {
     code: string;
     id: number;
@@ -2645,8 +2731,12 @@ export declare const UpdateStateLifecycleResponse: zod.ZodObject<{
     nameAr: string;
     operationalStatus: "active" | "inactive";
     officeAddress: string | null;
-    managerName: string | null;
+    officeManagers: {
+        id: number;
+        name: string;
+    }[];
     localitiesCount: number;
+    updatedAt?: Date | undefined;
 }>;
 /**
  * @summary Read State Program Report snapshot data for an existing State

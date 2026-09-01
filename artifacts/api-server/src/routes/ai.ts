@@ -299,6 +299,7 @@ router.delete("/ai/history", async (req, res, next) => {
   try {
     const user = req.currentUser!;
     await pool.query(`DELETE FROM ai_chat_messages WHERE user_id = $1`, [user.id]);
+    await logAudit({ userId: user.id, action: "delete_history", module: "ai", entityId: user.id });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

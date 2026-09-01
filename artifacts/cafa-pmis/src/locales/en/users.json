@@ -117,6 +117,9 @@
     "requiredFieldNull": "A required field was missing",
     "dbError": "A database error occurred — please try again",
     "failedToSave": "Failed to save user",
+    "cannotModifyOwnAccess": "You cannot change your own role, status, state, or sector from this screen.",
+    "cannotChangeOwnStatus": "You cannot deactivate, suspend, or reactivate your own account.",
+    "cannotDeleteSelf": "You cannot delete your own account.",
     "errorCode": "Error: {{code}}"
   },
   "tabs": {

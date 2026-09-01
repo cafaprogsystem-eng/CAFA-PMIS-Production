@@ -9,7 +9,7 @@ const state = {
   operationalStatus: "active" as const,
   officeStatus: "unknown" as const,
   officeAddress: null,
-  managerName: null,
+  officeManagers: [],
   localitiesCount: 0,
 };
 

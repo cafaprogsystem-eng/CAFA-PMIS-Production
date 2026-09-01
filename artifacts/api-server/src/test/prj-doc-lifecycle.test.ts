@@ -184,8 +184,7 @@ function setupDeleteTxSuccess(status: string) {
     .mockResolvedValueOnce({ rows: [] })                      // BEGIN
     .mockResolvedValueOnce({ rows: [{ status }] })            // SELECT status FOR UPDATE
     .mockResolvedValueOnce({ rows: [DELETED_DOC_ROW] })       // DELETE … RETURNING
-    .mockResolvedValueOnce({ rows: [] })                      // INSERT audit_log
-    .mockResolvedValueOnce({ rows: [] });                     // COMMIT
+    .mockResolvedValueOnce({ rows: [] });                     // COMMIT (audit write goes through the mocked logAudit(), not a raw query)
 }
 
 /**
@@ -230,11 +229,16 @@ function setupDeleteTxOverrideSuccess(status: string) {
   setupDeleteTxSuccess(status);
 }
 
-/** Return the audit INSERT call from mockClientQuery, if any. */
-function findAuditInsert() {
-  return mockClientQuery.mock.calls.find(
-    (args) => typeof args[0] === "string" && args[0].includes("INSERT INTO audit_log"),
-  );
+/**
+ * Return the mocked logAudit() call (opts, client), if the route wrote an audit entry.
+ * Imported dynamically — not statically — because this file's
+ * `vi.mock("../middlewares/currentUser.js", ...)` factory closes over
+ * `mockQuery`/`mockClientQuery` declared further down this file; a static
+ * import would hoist above those consts and throw a TDZ ReferenceError.
+ */
+async function findAuditInsert() {
+  const { logAudit } = await import("../middlewares/currentUser.js");
+  return vi.mocked(logAudit).mock.calls[0];
 }
 
 /** Return whether DELETE FROM project_documents appeared in the TX client calls. */
@@ -434,7 +438,7 @@ describe("PRJ-DOC-LIFE — Document lifecycle gates", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error).toBe("project_documents_frozen");
-    expect(findAuditInsert()).toBeUndefined();
+    expect(await findAuditInsert()).toBeUndefined();
   });
 
   it("PRJ-DOC-LIFE-12: Active project behaves same as approved (operational) for non-override actor", async () => {
@@ -486,10 +490,9 @@ describe("PRJ-DOC-AUDIT — Transactional audit on delete", () => {
       .delete("/api/projects/1/documents/42")
       .send({ overrideReason: "Correcting document error" });
 
-    const auditInsert = findAuditInsert();
+    const auditInsert = await findAuditInsert();
     expect(auditInsert).toBeDefined();
-    // $2 = action param
-    expect(auditInsert![1][1]).toBe("document_delete_override");
+    expect(auditInsert![0].action).toBe("document_delete_override");
   });
 
   it("PRJ-DOC-AUDIT-02: Audit row contains actor, reason, projectId, document label", async () => {
@@ -502,17 +505,17 @@ describe("PRJ-DOC-AUDIT — Transactional audit on delete", () => {
       .delete("/api/projects/1/documents/42")
       .send({ overrideReason });
 
-    const auditInsert = findAuditInsert();
+    const auditInsert = await findAuditInsert();
     expect(auditInsert).toBeDefined();
-    const params = auditInsert![1] as unknown[];
-    expect(params[0]).toBe(PM_USER.id);                     // user_id
-    expect(params[1]).toBe("document_delete_override");      // action
-    expect(params[2]).toBe("projects");                      // module
-    expect(params[3]).toBe(1);                              // entity_id = projectId
-    expect(String(params[4])).toContain("test.pdf");         // old_value = doc label with filename
-    expect(params[5]).toBe(overrideReason);                  // new_value = override reason
-    expect(params[6]).toBe(true);                            // used_override
-    expect(params[7]).toBe(overrideReason);                  // override_reason
+    const opts = auditInsert![0];
+    expect(opts.userId).toBe(PM_USER.id);
+    expect(opts.action).toBe("document_delete_override");
+    expect(opts.module).toBe("projects");
+    expect(opts.entityId).toBe(1);                          // entity_id = projectId
+    expect(String(opts.oldValue)).toContain("test.pdf");     // old_value = doc label with filename
+    expect(opts.newValue).toBe(overrideReason);
+    expect(opts.usedOverride).toBe(true);
+    expect(opts.overrideReason).toBe(overrideReason);
   });
 
   it("PRJ-DOC-AUDIT-02b: Normal (mutable) delete uses document_delete and document label as old_value", async () => {
@@ -522,13 +525,13 @@ describe("PRJ-DOC-AUDIT — Transactional audit on delete", () => {
     const app = await buildApp(PM_USER);
     await request(app).delete("/api/projects/1/documents/42");
 
-    const auditInsert = findAuditInsert();
+    const auditInsert = await findAuditInsert();
     expect(auditInsert).toBeDefined();
-    const params = auditInsert![1] as unknown[];
-    expect(params[1]).toBe("document_delete");
-    expect(String(params[4])).toContain("test.pdf"); // preserves filename in audit
-    expect(params[6]).toBe(false);                   // used_override = false
-    expect(params[7]).toBeNull();                    // override_reason = null
+    const opts = auditInsert![0];
+    expect(opts.action).toBe("document_delete");
+    expect(String(opts.oldValue)).toContain("test.pdf"); // preserves filename in audit
+    expect(opts.usedOverride).toBe(false);
+    expect(opts.overrideReason).toBeNull();
   });
 
   it("PRJ-DOC-AUDIT-03: Failed override (400 — no reason) → no audit INSERT written", async () => {
@@ -541,7 +544,7 @@ describe("PRJ-DOC-AUDIT — Transactional audit on delete", () => {
       .send({ overrideReason: "" });
 
     // TX opened but rolled back before audit INSERT
-    expect(findAuditInsert()).toBeUndefined();
+    expect(await findAuditInsert()).toBeUndefined();
   });
 
   it("PRJ-DOC-AUDIT-03b: Failed override (409 — non-override actor) → no audit INSERT written", async () => {
@@ -551,7 +554,7 @@ describe("PRJ-DOC-AUDIT — Transactional audit on delete", () => {
     const app = await buildApp(TC_USER);
     await request(app).delete("/api/projects/1/documents/42");
 
-    expect(findAuditInsert()).toBeUndefined();
+    expect(await findAuditInsert()).toBeUndefined();
   });
 
   it("PRJ-DOC-AUDIT-04: Failed status-gated delete → DELETE FROM project_documents NOT executed", async () => {
@@ -638,7 +641,7 @@ describe("PRJ-DOC-CONCURRENT — Concurrency safety", () => {
 
     expect(res.status).toBe(404);
     // No audit INSERT — the document was not actually deleted in this TX
-    expect(findAuditInsert()).toBeUndefined();
+    expect(await findAuditInsert()).toBeUndefined();
     // ROLLBACK was issued to close the TX cleanly
     const sqlCalls = mockClientQuery.mock.calls.map((a) => String(a[0]));
     expect(sqlCalls).toContain("ROLLBACK");
@@ -725,13 +728,11 @@ describe("Pre-approval status regression", () => {
     const app = await buildApp(PM_USER);
     await request(app).delete("/api/projects/1/documents/42");
 
-    const auditInsert = mockClientQuery.mock.calls.find(
-      (args) => typeof args[0] === "string" && args[0].includes("INSERT INTO audit_log"),
-    );
+    const auditInsert = await findAuditInsert();
     expect(auditInsert).toBeDefined();
-    const params = auditInsert![1] as unknown[];
-    expect(params[1]).toBe("document_delete");
-    expect(params[6]).toBe(false); // usedOverride = false
-    expect(params[7]).toBeNull();  // overrideReason = null
+    const opts = auditInsert![0];
+    expect(opts.action).toBe("document_delete");
+    expect(opts.usedOverride).toBe(false); // usedOverride = false
+    expect(opts.overrideReason).toBeNull();  // overrideReason = null
   });
 });

@@ -10,6 +10,14 @@ const router: IRouter = Router();
  * States are master data, not a performance dashboard. This is deliberately
  * limited to canonical State fields and truthful reference information.
  */
+// Office managers are resolved live from users (role=state_office_manager,
+// state_id=s.id, status='active') rather than the dead states.manager_user_id
+// column: more than one active State Office Manager can be assigned to the
+// same State at once (no uniqueness constraint enforces otherwise), so a
+// single manager_user_id foreign key could never represent that correctly.
+// A denormalised single-value column would either silently pick one winner
+// or require a business rule ("only one SOM per State") this system has
+// never actually enforced.
 const registrySql = `
   SELECT
     s.id,
@@ -19,10 +27,14 @@ const registrySql = `
     s.operational_status AS "operationalStatus",
     s.office_status AS "officeStatus",
     s.office_address AS "officeAddress",
-    u.name AS "managerName",
+    s.updated_at AS "updatedAt",
+    COALESCE((
+      SELECT json_agg(json_build_object('id', u.id, 'name', u.name) ORDER BY u.name)
+      FROM users u
+      WHERE u.role = 'state_office_manager' AND u.state_id = s.id AND u.status = 'active'
+    ), '[]'::json) AS "officeManagers",
     (SELECT COUNT(*)::int FROM localities l WHERE l.state_id = s.id) AS "localitiesCount"
   FROM states s
-  LEFT JOIN users u ON u.id = s.manager_user_id
 `;
 
 const STATE_ADMIN_ROLES = new Set([
@@ -295,7 +307,7 @@ router.post("/states", async (req, res, next) => {
                  office_status AS "officeStatus", office_address AS "officeAddress"`,
       [name, nameAr, code, officeAddress],
     );
-    const state = { ...rows[0], managerName: null, localitiesCount: 0 };
+    const state = { ...rows[0], officeManagers: [] as Array<{ id: number; name: string }>, localitiesCount: 0 };
     await logAudit({
       userId: req.currentUser!.id,
       action: "create",
@@ -350,15 +362,27 @@ router.patch("/states/:stateId", async (req, res, next) => {
       res.status(409).json({ error: "canonical_state_registry_only" });
       return;
     }
+    // Opt-in optimistic-concurrency guard, same pattern as risks/plans/reports:
+    // a caller that sends x-base-revision (the updatedAt it last read) is
+    // rejected with 409 if the row has moved since — two admins editing the
+    // same State's registry fields at once no longer silently clobber each
+    // other. Absent the header, behaviour is unchanged.
+    const params: unknown[] = [name, nameAr, code, officeAddress, stateId];
+    const baseRevision = req.header("x-base-revision");
+    if (baseRevision) params.push(baseRevision);
     const updated = await pool.query(
       `UPDATE states
-       SET name = $1, name_ar = $2, code = $3, office_address = $4
-       WHERE id = $5
+       SET name = $1, name_ar = $2, code = $3, office_address = $4, updated_at = NOW()
+       WHERE id = $5${baseRevision ? ` AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $6::timestamptz)` : ""}
        RETURNING id, name, name_ar AS "nameAr", code, operational_status AS "operationalStatus",
-                 office_status AS "officeStatus", office_address AS "officeAddress"`,
-      [name, nameAr, code, officeAddress, stateId],
+                 office_status AS "officeStatus", office_address AS "officeAddress", updated_at AS "updatedAt"`,
+      params,
     );
-    const state = { ...updated.rows[0], managerName: null, localitiesCount: 0 };
+    if (baseRevision && updated.rowCount === 0) {
+      res.status(409).json({ error: "offline_conflict", code: "revision_mismatch", message: "The state changed since this form was loaded." });
+      return;
+    }
+    const state = { ...updated.rows[0], officeManagers: [] as Array<{ id: number; name: string }>, localitiesCount: 0 };
     await logAudit({
       userId: req.currentUser!.id,
       action: "update",
@@ -417,7 +441,7 @@ router.patch("/states/:stateId/lifecycle", async (req, res, next) => {
                 office_address AS "officeAddress"`,
       [operationalStatus ?? null, officeStatus ?? null, stateId],
     );
-    const state = { ...result.rows[0], managerName: null, localitiesCount: 0 };
+    const state = { ...result.rows[0], officeManagers: [] as Array<{ id: number; name: string }>, localitiesCount: 0 };
     if (
       state.operationalStatus !== before.rows[0].operationalStatus ||
       state.officeStatus !== before.rows[0].officeStatus

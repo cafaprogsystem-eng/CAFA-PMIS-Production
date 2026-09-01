@@ -44,7 +44,13 @@ export default function StateDetailPage({ params }: { params: { stateId: string 
         <CardContent>
           <dl className="grid gap-5 sm:grid-cols-5">
             <div><dt className="text-sm text-muted-foreground">{t("stateDetailPage.officeAddress")}</dt><dd className="mt-1 font-medium">{data.officeAddress ?? "—"}</dd></div>
-            <div><dt className="text-sm text-muted-foreground">{t("stateDetailPage.manager")}</dt><dd className="mt-1 font-medium">{data.managerName ?? t("stateDetailPage.noManager")}</dd><p className="mt-1 text-xs text-muted-foreground">{t("stateDetailPage.managerReadOnly")}</p></div>
+            <div>
+              <dt className="text-sm text-muted-foreground">{t("stateDetailPage.manager")}</dt>
+              <dd className="mt-1 font-medium">
+                {data.officeManagers.length > 0 ? data.officeManagers.map((manager) => manager.name).join(", ") : t("stateDetailPage.noManager")}
+              </dd>
+              <p className="mt-1 text-xs text-muted-foreground">{t("stateDetailPage.managerReadOnly")}</p>
+            </div>
             <div><dt className="text-sm text-muted-foreground">{t("stateDetailPage.localities")}</dt><dd className="mt-1 font-medium">{data.localitiesCount}</dd></div>
             <div><dt className="text-sm text-muted-foreground">{t("statesPage.operationalStatus")}</dt><dd className="mt-1 font-medium">{t(`statesPage.status.${data.operationalStatus}`)}</dd></div>
             <div><dt className="text-sm text-muted-foreground">{t("statesPage.officeStatus")}</dt><dd className="mt-1 font-medium">{t(`statesPage.office.${data.officeStatus}`)}</dd></div>

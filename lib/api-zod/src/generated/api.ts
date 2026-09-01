@@ -1306,8 +1306,23 @@ export const ListStatesResponseItem = zod
       .string()
       .max(listStatesResponseOfficeAddressMax)
       .nullable(),
-    managerName: zod.string().nullable(),
+    officeManagers: zod
+      .array(
+        zod.object({
+          id: zod.number(),
+          name: zod.string(),
+        }),
+      )
+      .describe(
+        "Every active state_office_manager user currently assigned to this State, resolved live from users (more than one may be assigned at once — there is no one-manager-per-State constraint).",
+      ),
     localitiesCount: zod.number(),
+    updatedAt: zod.coerce
+      .date()
+      .optional()
+      .describe(
+        "Round-trip as the x-base-revision request header on PATCH \/states\/{stateId} for optimistic-concurrency conflict detection.",
+      ),
   })
   .describe(
     "Canonical Sudan State master-data record. Geographic identity, operational eligibility, and office presence are separate facts; it has no delete lifecycle.",
@@ -1354,9 +1369,19 @@ export const GetStateResponse = zod.object({
   code: zod.string().max(getStateResponseCodeMax),
   operationalStatus: zod.enum(["active", "inactive"]),
   officeStatus: zod.enum(["present", "absent", "unknown"]),
-  managerName: zod.string().nullable(),
+  officeManagers: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        name: zod.string(),
+      }),
+    )
+    .describe(
+      "Every active state_office_manager user currently assigned to this State, resolved live from users (more than one may be assigned at once).",
+    ),
   officeAddress: zod.string().nullable(),
   localitiesCount: zod.number(),
+  updatedAt: zod.coerce.date().optional(),
   localities: zod.array(
     zod.object({
       id: zod.number(),
@@ -1418,8 +1443,23 @@ export const UpdateStateResponse = zod
       .string()
       .max(updateStateResponseOfficeAddressMax)
       .nullable(),
-    managerName: zod.string().nullable(),
+    officeManagers: zod
+      .array(
+        zod.object({
+          id: zod.number(),
+          name: zod.string(),
+        }),
+      )
+      .describe(
+        "Every active state_office_manager user currently assigned to this State, resolved live from users (more than one may be assigned at once — there is no one-manager-per-State constraint).",
+      ),
     localitiesCount: zod.number(),
+    updatedAt: zod.coerce
+      .date()
+      .optional()
+      .describe(
+        "Round-trip as the x-base-revision request header on PATCH \/states\/{stateId} for optimistic-concurrency conflict detection.",
+      ),
   })
   .describe(
     "Canonical Sudan State master-data record. Geographic identity, operational eligibility, and office presence are separate facts; it has no delete lifecycle.",
@@ -1460,8 +1500,23 @@ export const UpdateStateLifecycleResponse = zod
       .string()
       .max(updateStateLifecycleResponseOfficeAddressMax)
       .nullable(),
-    managerName: zod.string().nullable(),
+    officeManagers: zod
+      .array(
+        zod.object({
+          id: zod.number(),
+          name: zod.string(),
+        }),
+      )
+      .describe(
+        "Every active state_office_manager user currently assigned to this State, resolved live from users (more than one may be assigned at once — there is no one-manager-per-State constraint).",
+      ),
     localitiesCount: zod.number(),
+    updatedAt: zod.coerce
+      .date()
+      .optional()
+      .describe(
+        "Round-trip as the x-base-revision request header on PATCH \/states\/{stateId} for optimistic-concurrency conflict detection.",
+      ),
   })
   .describe(
     "Canonical Sudan State master-data record. Geographic identity, operational eligibility, and office presence are separate facts; it has no delete lifecycle.",

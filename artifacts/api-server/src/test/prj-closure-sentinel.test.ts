@@ -376,7 +376,6 @@ describe("PRJ-CLOSE-07: Approved project PM delete override requires reason + au
       .mockResolvedValueOnce({ rows: [] })  // BEGIN
       .mockResolvedValueOnce({ rows: [{ status: "approved" }] }) // SELECT FOR UPDATE
       .mockResolvedValueOnce({ rows: [{ file_name: "test.pdf", kind: "other", category: "optional", drive_file_id: null }] }) // DELETE RETURNING
-      .mockResolvedValueOnce({ rows: [] })  // INSERT audit_log
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
     const app = await buildApp(PM_USER);
@@ -386,13 +385,16 @@ describe("PRJ-CLOSE-07: Approved project PM delete override requires reason + au
 
     expect(res.status).toBe(204);
 
-    // Verify audit_log INSERT was called with document_delete_override
-    const auditCall = mockClientQuery.mock.calls.find(
-      (args: unknown[]) => typeof args[0] === "string" && (args[0] as string).includes("INSERT INTO audit_log"),
+    // logAudit() is mocked at module level in this file (see vi.mock above),
+    // so the write is verified via the shared helper's call, not a raw SQL scan.
+    // Imported dynamically (not statically) so this file's `vi.mock("../middlewares/currentUser.js", ...)`
+    // factory — which closes over `mockQuery`/`mockClientQuery` declared further down this file — still
+    // runs after those consts are initialised; a static import would hoist above them and throw a TDZ error.
+    const { logAudit } = await import("../middlewares/currentUser.js");
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "document_delete_override", usedOverride: true }),
+      expect.anything(),
     );
-    expect(auditCall).toBeDefined();
-    const auditParams = auditCall![1] as unknown[];
-    expect(auditParams).toContain("document_delete_override");
   });
 });
 

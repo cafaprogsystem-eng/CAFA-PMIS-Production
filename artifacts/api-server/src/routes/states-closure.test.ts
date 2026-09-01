@@ -179,6 +179,64 @@ describe("States Administration closure", () => {
     }));
   });
 
+  it("STATE-FUNC-06 accepts an x-base-revision that matches the current updated_at", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ name: "Northern State", nameAr: "الولاية الشمالية", code: "NOR", officeAddress: null }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 19, name: "Northern State", nameAr: "الولاية الشمالية", code: "NOR", officeAddress: "Address", updatedAt: "2026-01-01T00:00:00.000Z" }],
+        rowCount: 1,
+      });
+
+    const response = await request(appFor("program_manager"))
+      .patch("/states/19")
+      .set("x-base-revision", "2026-01-01T00:00:00.000Z")
+      .send({ name: "Northern State", nameAr: "الولاية الشمالية", code: "NOR", officeAddress: "Address" });
+
+    expect(response.status).toBe(200);
+    expect(mockQuery).toHaveBeenLastCalledWith(
+      expect.stringContaining("date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $6::timestamptz)"),
+      ["Northern State", "الولاية الشمالية", "NOR", "Address", 19, "2026-01-01T00:00:00.000Z"],
+    );
+  });
+
+  it("STATE-FUNC-06 rejects a stale x-base-revision with a clear 409, not a silent overwrite", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ name: "Northern State", nameAr: "الولاية الشمالية", code: "NOR", officeAddress: null }] })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    const response = await request(appFor("program_manager"))
+      .patch("/states/19")
+      .set("x-base-revision", "2020-01-01T00:00:00.000Z")
+      .send({ name: "Northern State", nameAr: "الولاية الشمالية", code: "NOR", officeAddress: "Address" });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ error: "offline_conflict", code: "revision_mismatch", message: "The state changed since this form was loaded." });
+    expect(mockLogAudit).not.toHaveBeenCalled();
+  });
+
+  it("STATE-OFFICE-MGR-01 resolves office managers live from users instead of the dead manager_user_id column", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        id: 4, name: "Gezira State", nameAr: "ولاية الجزيرة", code: "GZR",
+        operationalStatus: "active", officeStatus: "unknown", officeAddress: null,
+        // More than one active State Office Manager for the same State — this
+        // is exactly why manager_user_id (a single FK) could never represent
+        // reality correctly.
+        officeManagers: [{ id: 5, name: "Fatima" }, { id: 6, name: "Yusuf" }],
+        localitiesCount: 2,
+      }],
+    });
+
+    const response = await request(appFor("program_manager")).get("/states");
+
+    expect(response.status).toBe(200);
+    expect(response.body[0].officeManagers).toEqual([{ id: 5, name: "Fatima" }, { id: 6, name: "Yusuf" }]);
+    const [sql] = mockQuery.mock.calls[0] as [string];
+    expect(sql).toContain("u.role = 'state_office_manager' AND u.state_id = s.id AND u.status = 'active'");
+    expect(sql).not.toContain("manager_user_id");
+    expect(sql).not.toContain("LEFT JOIN users u ON u.id = s.manager_user_id");
+  });
+
   it("STATE-FUNC-05 ships the normalised identity guard and State-only generated API surface", () => {
     const migrations = readFileSync(new URL("../lib/run-migrations.ts", import.meta.url), "utf8");
     const generatedClient = readFileSync(new URL("../../../../lib/api-client-react/src/generated/api.ts", import.meta.url), "utf8");

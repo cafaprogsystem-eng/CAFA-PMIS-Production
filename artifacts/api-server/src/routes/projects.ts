@@ -327,31 +327,28 @@ router.post("/projects/:projectId/development-test-retirement", requirePerm("pro
     const deletionAudience = await realtime.captureOperationalAudience?.("project", project.id, client);
 
     const now = new Date();
-    await client.query(
-      `INSERT INTO audit_log
-        (user_id, action, module, entity_id, old_value, new_value)
-       VALUES ($1, 'development_test_retired', 'projects', $2, $3, $4)`,
-      [
-        req.currentUser!.id,
-        project.id,
-        JSON.stringify({
-          id: project.id,
-          code: project.code,
-          title: project.title,
-          status: project.status,
-          donor: project.donor,
-          donorId: project.donor_id,
-        }),
-        JSON.stringify({
-          retirement: "development test-data cleanup",
-          deletionMode: "soft",
-          deletedBy: req.currentUser!.id,
-          deletedByName: req.currentUser!.name,
-          reason,
-          timestamp: now.toISOString(),
-        }),
-      ],
-    );
+    await logAudit({
+      userId: req.currentUser!.id,
+      action: "development_test_retired",
+      module: "projects",
+      entityId: project.id,
+      oldValue: JSON.stringify({
+        id: project.id,
+        code: project.code,
+        title: project.title,
+        status: project.status,
+        donor: project.donor,
+        donorId: project.donor_id,
+      }),
+      newValue: JSON.stringify({
+        retirement: "development test-data cleanup",
+        deletionMode: "soft",
+        deletedBy: req.currentUser!.id,
+        deletedByName: req.currentUser!.name,
+        reason,
+        timestamp: now.toISOString(),
+      }),
+    }, client);
     await client.query(
       `UPDATE projects
           SET deleted_at = $1, deleted_by = $2, deletion_reason = $3, deletion_mode = 'soft'
@@ -485,12 +482,14 @@ router.post("/projects/:projectId/donor-correction", requirePerm("projects.donor
       res.status(409).json({ error: "project_changed" });
       return;
     }
-    await client.query(
-      `INSERT INTO audit_log
-        (user_id, action, module, entity_id, old_value, new_value)
-       VALUES ($1, 'donor_corrected', 'projects', $2, $3, $4)`,
-      [req.currentUser!.id, projectId, oldValue, newValue],
-    );
+    await logAudit({
+      userId: req.currentUser!.id,
+      action: "donor_corrected",
+      module: "projects",
+      entityId: projectId,
+      oldValue,
+      newValue,
+    }, client);
     await client.query("COMMIT");
 
     const result = updated.rows[0];
@@ -1778,13 +1777,14 @@ router.patch("/projects/:projectId/reporting-coverage", async (req, res, next) =
     }
     await client.query(`UPDATE projects SET reporting_start_date=$1, reporting_end_date=$2, updated_at=NOW() WHERE id=$3`,
       [coverage.start, coverage.end, projectId]);
-    await client.query(
-      `INSERT INTO audit_log (user_id, action, module, entity_id, old_value, new_value)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [req.currentUser!.id, "reporting_coverage_updated", "projects", projectId,
-        JSON.stringify({ reportingStartDate: project.reportingStartDate, reportingEndDate: project.reportingEndDate }),
-        JSON.stringify({ reportingStartDate: coverage.start, reportingEndDate: coverage.end })],
-    );
+    await logAudit({
+      userId: req.currentUser!.id,
+      action: "reporting_coverage_updated",
+      module: "projects",
+      entityId: projectId,
+      oldValue: JSON.stringify({ reportingStartDate: project.reportingStartDate, reportingEndDate: project.reportingEndDate }),
+      newValue: JSON.stringify({ reportingStartDate: coverage.start, reportingEndDate: coverage.end }),
+    }, client);
     await client.query("COMMIT");
     transactionOpen = false;
     res.json({ projectId, reportingStartDate: coverage.start, reportingEndDate: coverage.end });
@@ -3014,24 +3014,21 @@ router.delete("/projects/:projectId", requirePerm("projects.delete"), async (req
     }
 
     // 9. Write audit event BEFORE deletion — must survive permanent delete.
-    await client.query(
-      `INSERT INTO audit_log (user_id, action, module, entity_id, old_value, new_value)
-       VALUES ($1, $2, 'projects', $3, $4, $5)`,
-      [
-        userId,
-        mode === "permanent" ? "permanent_delete" : "soft_delete",
-        projectId,
-        JSON.stringify({ code: project.code, title: project.title, status: project.status }),
-        JSON.stringify({
-          deletedBy: userId,
-          deletedByName: req.currentUser.name,
-          deletedByRole: req.currentUser.role,
-          deletionMode: mode,
-          reason: cleanReason,
-          timestamp: now.toISOString(),
-        }),
-      ],
-    );
+    await logAudit({
+      userId,
+      action: mode === "permanent" ? "permanent_delete" : "soft_delete",
+      module: "projects",
+      entityId: projectId,
+      oldValue: JSON.stringify({ code: project.code, title: project.title, status: project.status }),
+      newValue: JSON.stringify({
+        deletedBy: userId,
+        deletedByName: req.currentUser.name,
+        deletedByRole: req.currentUser.role,
+        deletionMode: mode,
+        reason: cleanReason,
+        timestamp: now.toISOString(),
+      }),
+    }, client);
 
     let canonicalAttachmentPaths: string[] = [];
 
@@ -3291,21 +3288,16 @@ router.delete("/projects/:projectId/documents/:documentId", requirePerm("documen
       // Document identity preserved in audit even after the row is gone
       const docLabel = `${deletedDoc.file_name} (${deletedDoc.kind})`;
 
-      await txClient.query(
-        `INSERT INTO audit_log
-           (user_id, action, module, entity_id, old_value, new_value, used_override, override_reason)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          req.currentUser.id,
-          isDeleteOverride ? "document_delete_override" : "document_delete",
-          "projects",
-          projectId,
-          docLabel,
-          isDeleteOverride ? deleteOverrideReason : null,
-          isDeleteOverride,
-          isDeleteOverride ? deleteOverrideReason : null,
-        ],
-      );
+      await logAudit({
+        userId: req.currentUser.id,
+        action: isDeleteOverride ? "document_delete_override" : "document_delete",
+        module: "projects",
+        entityId: projectId,
+        oldValue: docLabel,
+        newValue: isDeleteOverride ? deleteOverrideReason : null,
+        usedOverride: isDeleteOverride,
+        overrideReason: isDeleteOverride ? deleteOverrideReason : null,
+      }, txClient);
 
       await txClient.query("COMMIT");
     } catch (txErr) {

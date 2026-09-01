@@ -137,6 +137,39 @@ describe("audit workspace API", () => {
     expect(JSON.stringify(userHistory.body)).not.toContain("opaque-value-that-must-never-be-returned");
   });
 
+  it("surfaces State/username/scope changes for users while still hiding raw numeric IDs", async () => {
+    mockQuery.mockImplementation((sql: string) => {
+      if (sql.includes("COUNT(*)::text AS total")) return Promise.resolve({ rows: [{ total: "1", created: "0", updated: "1", deleted: "0", approved: "0" }] });
+      return Promise.resolve({ rows: [{
+        id: 10, userName: "Admin", userEmail: "admin@example.test", userRole: "Administrator",
+        action: "update", module: "users", entityId: 2, entityReference: "Colleague",
+        timestamp: "2026-08-21T09:00:00.000Z", usedOverride: false,
+        oldValue: JSON.stringify({ username: "old.user", scope: "state", state: "Khartoum", stateId: 7 }),
+        newValue: JSON.stringify({ username: "new.user", scope: "org", state: "Kassala", stateId: 12 }),
+      }] });
+    });
+    const response = await appAs(user()).get("/audit-log?entityType=users");
+    expect(response.status).toBe(200);
+    expect(response.body.items[0].changes).toEqual(expect.arrayContaining([
+      { field: "username", before: "old.user", after: "new.user" },
+      { field: "scope", before: "state", after: "org" },
+      { field: "state", before: "Khartoum", after: "Kassala" },
+    ]));
+    expect(response.body.items[0].changes.some((c: { field: string }) => c.field === "stateId")).toBe(false);
+  });
+
+  it("resolves entity references for auth, comments, notifications, files, and manual modules", async () => {
+    await appAs(user()).get("/audit-log");
+    const dataQuery = String(mockQuery.mock.calls.find(([sql]) => String(sql).includes("entity_reference"))?.[0]);
+    for (const module of ["auth", "comments", "notifications", "files", "manual", "manual_chapter", "manual_section", "manual_sop"]) {
+      expect(dataQuery).toContain(`WHEN a.module = '${module}'`);
+    }
+    expect(dataQuery).toContain("program_resources pr");
+    expect(dataQuery).toContain("plan_attachments pa");
+    expect(dataQuery).toContain("training_videos tv");
+    expect(dataQuery).toContain("training_certificates tc");
+  });
+
   it("rejects malformed and contradictory filters before querying records", async () => {
     const malformed = await appAs(user()).get("/audit-log?dateFrom=2026-02-30");
     expect(malformed.status).toBe(400);

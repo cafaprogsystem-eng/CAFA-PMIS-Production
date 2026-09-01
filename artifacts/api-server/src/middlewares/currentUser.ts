@@ -601,19 +601,33 @@ export function permissionsFor(user: CurrentUser): string[] {
   return Array.from(new Set(perms));
 }
 
-export async function logAudit(opts: {
-  userId: number | null;
-  action: string;
-  module: string;
-  entityId?: number | null;
-  oldValue?: string | null;
-  newValue?: string | null;
-  /** Set to true when PM/super_admin used Full Operational Access override (e.g. self-review). */
-  usedOverride?: boolean;
-  /** Required human-readable reason when usedOverride is true. */
-  overrideReason?: string | null;
-}) {
-  await pool.query(
+/**
+ * Minimal structural type for a transactional query client.
+ * Satisfied by both the shared `pool` and the PoolClient returned by
+ * pool.connect() — lets a caller inside a transaction pass its own client so
+ * the audit row commits/rolls back atomically with the rest of the write.
+ */
+interface TransactionalClient {
+  query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }>;
+}
+
+export async function logAudit(
+  opts: {
+    userId: number | null;
+    action: string;
+    module: string;
+    entityId?: number | null;
+    oldValue?: string | null;
+    newValue?: string | null;
+    /** Set to true when PM/super_admin used Full Operational Access override (e.g. self-review). */
+    usedOverride?: boolean;
+    /** Required human-readable reason when usedOverride is true. */
+    overrideReason?: string | null;
+  },
+  /** Pass the open transaction's client to write the audit row inside it; defaults to the shared pool. */
+  client?: TransactionalClient,
+) {
+  await (client ?? pool).query(
     `INSERT INTO audit_log (user_id, action, module, entity_id, old_value, new_value, used_override, override_reason)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [

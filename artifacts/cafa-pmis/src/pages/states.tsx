@@ -40,11 +40,28 @@ import {
 const STATE_ADMIN_ROLES = new Set(["super_admin", "executive_director", "program_manager"]);
 const blankForm: StateInput = { name: "", nameAr: "", code: "", officeAddress: null };
 
-function errorMessage(error: unknown, fallback: string): string {
+/**
+ * More than one active State Office Manager can be assigned to the same
+ * State at once (no uniqueness constraint prevents it), so this renders the
+ * live list resolved from users rather than a single denormalised name.
+ */
+function officeManagerLabel(managers: Array<{ id: number; name: string }> | undefined, fallback: string): string {
+  if (!managers || managers.length === 0) return fallback;
+  return managers.map((manager) => manager.name).join(", ");
+}
+
+function errorMessage(error: unknown, fallback: string, revisionConflictMessage?: string): string {
   if (typeof error === "object" && error && "data" in error) {
     const data = (error as { data?: unknown }).data;
-    if (typeof data === "object" && data && "error" in data && (data as { error?: string }).error === "state_identity_conflict") {
-      return fallback;
+    if (typeof data === "object" && data && "error" in data) {
+      const errorCode = (data as { error?: string }).error;
+      const conflictCode = (data as { code?: string }).code;
+      // Frontend owns the translated copy — never display the server's raw
+      // English message field directly.
+      if (errorCode === "offline_conflict" && conflictCode === "revision_mismatch" && revisionConflictMessage) {
+        return revisionConflictMessage;
+      }
+      if (errorCode === "state_identity_conflict") return fallback;
     }
   }
   return fallback;
@@ -60,7 +77,13 @@ function StateDialog({
   const { t } = useTranslation("planning");
   const queryClient = useQueryClient();
   const createState = useCreateState();
-  const updateState = useUpdateState();
+  // Round-trips the State row's own updatedAt as x-base-revision so two
+  // admins editing the same State at once get a clear conflict instead of
+  // one silently clobbering the other (same opt-in pattern used by
+  // risks/plans/reports).
+  const updateState = useUpdateState(
+    record?.updatedAt ? { request: { headers: { "x-base-revision": record.updatedAt } } } : undefined,
+  );
   const [form, setForm] = useState<StateInput>(
     record ? { name: record.name, nameAr: record.nameAr, code: record.code, officeAddress: record.officeAddress } : blankForm,
   );
@@ -111,7 +134,7 @@ function StateDialog({
         ? (error as { data?: { fields?: Record<string, string> } }).data
         : undefined;
       if (data?.fields) setFieldErrors(data.fields);
-      toast.error(errorMessage(error, t("statesPage.saveFailed")));
+      toast.error(errorMessage(error, t("statesPage.saveFailed"), t("statesPage.revisionConflict")));
     }
   };
 
@@ -179,7 +202,7 @@ function StateDialog({
             {record && (
               <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
                 <p className="font-medium">{t("statesPage.manager")}</p>
-                <p className="mt-1 text-muted-foreground">{record.managerName ?? t("statesPage.noManager")}</p>
+                <p className="mt-1 text-muted-foreground">{officeManagerLabel(record.officeManagers, t("statesPage.noManager"))}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{t("statesPage.managerReadOnly")}</p>
               </div>
             )}
@@ -238,9 +261,9 @@ function StateRows({
                   </TableCell>
                   <TableCell className="font-mono text-xs">{state.code}</TableCell>
                   <TableCell>{t(`statesPage.status.${state.operationalStatus}`)}</TableCell>
-                  <TableCell>{state.officeStatus}</TableCell>
+                  <TableCell>{t(`statesPage.office.${state.officeStatus}`)}</TableCell>
                   <TableCell className="max-w-xs truncate text-muted-foreground">{state.officeAddress ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{state.managerName ?? t("statesPage.noManager")}</TableCell>
+                  <TableCell className="text-muted-foreground">{officeManagerLabel(state.officeManagers, t("statesPage.noManager"))}</TableCell>
                   <TableCell className="text-end">{state.localitiesCount}</TableCell>
                   {canManage && (
                     <TableCell className="text-end">
@@ -270,7 +293,7 @@ function StateRows({
                 <span className="rounded border border-border px-2 py-0.5 font-mono text-xs">{state.code}</span>
               </div>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-                <div><dt className="text-xs text-muted-foreground">{t("statesPage.manager")}</dt><dd>{state.managerName ?? t("statesPage.noManager")}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">{t("statesPage.manager")}</dt><dd>{officeManagerLabel(state.officeManagers, t("statesPage.noManager"))}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">{t("statesPage.localities")}</dt><dd>{state.localitiesCount}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">{t("statesPage.operationalStatus")}</dt><dd>{t(`statesPage.status.${state.operationalStatus}`)}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">{t("statesPage.officeStatus")}</dt><dd>{t(`statesPage.office.${state.officeStatus}`)}</dd></div>
@@ -301,7 +324,7 @@ export default function StatesPage() {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return states ?? [];
     return (states ?? []).filter((state) =>
-      [state.name, state.nameAr, state.code, state.officeAddress, state.managerName]
+      [state.name, state.nameAr, state.code, state.officeAddress, ...(state.officeManagers?.map((manager) => manager.name) ?? [])]
         .filter(Boolean)
         .some((value) => value!.toLocaleLowerCase().includes(query)),
     );

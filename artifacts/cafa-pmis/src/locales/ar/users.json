@@ -36,7 +36,11 @@
     "duplicateInvitation": "توجد دعوة نشطة معلقة لهذا البريد الإلكتروني. ألغِ الدعوة الحالية أو أعد إرسالها.",
     "passwordRequired": "كلمة المرور مطلوبة", "uniqueConstraintViolation": "حقل فريد (البريد الإلكتروني أو اسم المستخدم) مستخدم بالفعل",
     "foreignKeyViolation": "مرجع الولاية المعيّنة غير صالح", "requiredFieldNull": "حقل مطلوب مفقود", "dbError": "حدث خطأ في قاعدة البيانات — حاول مرة أخرى",
-    "failedToSave": "تعذر حفظ المستخدم", "errorCode": "خطأ: {{code}}"
+    "failedToSave": "تعذر حفظ المستخدم",
+    "cannotModifyOwnAccess": "لا يمكنك تغيير دورك أو حالتك أو ولايتك أو قطاعك من هذه الشاشة.",
+    "cannotChangeOwnStatus": "لا يمكنك إيقاف تفعيل حسابك أو تعليقه أو إعادة تفعيله بنفسك.",
+    "cannotDeleteSelf": "لا يمكنك حذف حسابك الخاص.",
+    "errorCode": "خطأ: {{code}}"
   },
   "tabs": { "allUsers": "جميع المستخدمين", "passwordResets": "إعادات تعيين كلمة المرور", "invitations": "الدعوات" },
   "usersByRole": "المستخدمون حسب الدور", "usersByState": "المستخدمون حسب الولاية", "searchPlaceholder": "ابحث بالاسم أو البريد أو اسم المستخدم…",

@@ -562,6 +562,10 @@ export declare const StateRecordOfficeStatus: {
     readonly absent: "absent";
     readonly unknown: "unknown";
 };
+export interface StateOfficeManager {
+    id: number;
+    name: string;
+}
 /**
  * Canonical Sudan State master-data record. Geographic identity, operational eligibility, and office presence are separate facts; it has no delete lifecycle.
  */
@@ -580,9 +584,11 @@ export interface StateRecord {
      * @nullable
      */
     officeAddress: string | null;
-    /** @nullable */
-    managerName: string | null;
+    /** Every active state_office_manager user currently assigned to this State, resolved live from users (more than one may be assigned at once — there is no one-manager-per-State constraint). */
+    officeManagers: StateOfficeManager[];
     localitiesCount: number;
+    /** Round-trip as the x-base-revision request header on PATCH /states/{stateId} for optimistic-concurrency conflict detection. */
+    updatedAt?: string;
 }
 export interface StateInput {
     /**
@@ -690,11 +696,12 @@ export interface StateProfile {
     code: string;
     operationalStatus: StateProfileOperationalStatus;
     officeStatus: StateProfileOfficeStatus;
-    /** @nullable */
-    managerName: string | null;
+    /** Every active state_office_manager user currently assigned to this State, resolved live from users (more than one may be assigned at once). */
+    officeManagers: StateOfficeManager[];
     /** @nullable */
     officeAddress: string | null;
     localitiesCount: number;
+    updatedAt?: string;
     localities: Locality[];
     projects: StateReferenceProject[];
 }

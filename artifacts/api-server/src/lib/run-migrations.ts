@@ -3738,6 +3738,18 @@ ALTER TABLE program_resources
   ADD COLUMN IF NOT EXISTS state_id INTEGER REFERENCES states(id);
 `,
   },
+  {
+    name: "063_states_updated_at",
+    sql: /* sql */ `
+-- Migration 063: updated_at on states, so PATCH /states/:stateId can support
+-- the same opt-in x-base-revision optimistic-concurrency check already used
+-- by risks/plans/reports (two admins editing the same State's registry
+-- fields at once previously had no conflict detection at all — the second
+-- write would silently clobber the first).
+ALTER TABLE states
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+`,
+  },
 
 ];
 

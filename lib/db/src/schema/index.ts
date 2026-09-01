@@ -55,6 +55,7 @@ export const statesTable = pgTable("states", {
   // Read-only from State Administration; assignment stays owned by User Management.
   managerUserId: integer("manager_user_id"),
   officeAddress: text("office_address"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const localitiesTable = pgTable("localities", {

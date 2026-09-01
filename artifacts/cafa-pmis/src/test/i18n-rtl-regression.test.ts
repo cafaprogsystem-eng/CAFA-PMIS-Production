@@ -533,7 +533,6 @@ describe("Business-module RTL production guardrails", () => {
     "pages/manual.tsx",
     "pages/manual-faq.tsx",
     "pages/manual-chapter.tsx",
-    "pages/program-resources.tsx",
     "pages/ai-settings.tsx",
     "pages/plan-detail.tsx",
     "components/calendar-widget.tsx",

@@ -37,7 +37,7 @@ describe("STATE-VIS State registry workspace", () => {
 
   it("STATE-VIS-01 renders truthful registry columns and hides mutation controls for non-administrators", () => {
     hooks.list.mockReturnValue({
-      data: [{ id: 1, name: "North", code: "NO", officeAddress: "Main Office", managerName: "Amina", localitiesCount: 3 }],
+      data: [{ id: 1, name: "North", code: "NO", officeAddress: "Main Office", officeManagers: [{ id: 9, name: "Amina" }], localitiesCount: 3 }],
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
@@ -62,7 +62,7 @@ describe("STATE-VIS State registry workspace", () => {
 
   it("STATE-VIS-03 exposes a labelled keyboard-searchable State registry with a distinct no-results state", () => {
     hooks.list.mockReturnValue({
-      data: [{ id: 1, name: "North", code: "NO", officeAddress: null, managerName: null, localitiesCount: 0 }],
+      data: [{ id: 1, name: "North", code: "NO", officeAddress: null, officeManagers: [], localitiesCount: 0 }],
       isLoading: false,
       isError: false,
       refetch: vi.fn(),

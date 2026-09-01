@@ -108,14 +108,18 @@ function boundedInteger(raw: unknown, fallback: number, min: number, max: number
   return Number.isSafeInteger(value) && value >= min && value <= max ? value : null;
 }
 
-function auditUserSnapshot(user: Record<string, unknown>) {
+// The Audit Log's changes diff hides any raw "...Id" field (SENSITIVE_KEY /
+// id-suffix filter in audit.ts) since a bare numeric ID is meaningless to a
+// reader without a lookup — so this snapshot carries the resolved State
+// *name* under "state", not the state_id foreign key, to be displayable.
+function auditUserSnapshot(user: Record<string, unknown>, stateName: string | null) {
   return {
     name: user.name,
     email: user.email,
     username: user.username ?? null,
     role: user.role,
     scope: user.scope,
-    stateId: user.state_id ?? user.stateId ?? null,
+    state: stateName,
     sector: user.sector ?? null,
     status: user.status,
   };
@@ -684,7 +688,7 @@ router.post("/users", requirePerm("users.manage"), async (req, res, next) => {
         action: "create",
         module: "users",
         entityId: id,
-        newValue: JSON.stringify({ name, email, username, role, stateId, status: sendInvite ? "invited" : status }),
+        newValue: JSON.stringify({ name, email, username, role, state: stateName, status: sendInvite ? "invited" : status }),
       });
       req.log.info({ userId: id }, "[users:create] PASS step:audit_log");
     } catch (auditErr) {
@@ -1041,8 +1045,36 @@ router.patch("/users/:id", requirePerm("users.manage"), requireValidUserId, asyn
 
     const sets = keys.map((k, i) => `${k} = $${i + 2}`);
     sets.push(`updated_at = NOW()`);
-    await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id = $1`, [id, ...keys.map((k) => next_[k])]);
-    const authorizationChanged = ["role", "scope", "state_id", "sector", "status"].some((key) => key in next_);
+    try {
+      await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id = $1`, [id, ...keys.map((k) => next_[k])]);
+    } catch (dbErr) {
+      // The pre-check above (lines ~1021-1034) has the same TOCTOU race as
+      // POST /users always had: two concurrent PATCHes changing different
+      // users to the same new email/username can both pass the SELECT-based
+      // pre-check before either UPDATE commits. Mirror POST /users' handling
+      // of the resulting 23505 instead of letting it fall through to a raw
+      // 500 from the generic error handler.
+      const pg = dbErr as { code?: string; constraint?: string; detail?: string };
+      if (pg.code === "23505") {
+        const onEmail = pg.constraint?.includes("email") || pg.detail?.includes("email");
+        res.status(409).json({ error: onEmail ? "email_taken" : "username_taken" });
+        return;
+      }
+      throw dbErr;
+    }
+    // next_.sector (and often next_.state_id) is ALWAYS derived above
+    // regardless of what this request actually touched (role→sector/state_id
+    // reconciliation runs unconditionally), so checking mere key presence in
+    // next_ made authorizationChanged true for every PATCH, even a plain name
+    // or phone edit — forcing publishUserDirectoryChange's realtime broadcast
+    // to treat it as a real permission change every time. Compare the final
+    // derived value against what actually existed before instead.
+    const authorizationChanged =
+      (next_.role !== undefined && next_.role !== existing.role) ||
+      (next_.scope !== undefined && next_.scope !== existing.scope) ||
+      stateAssignmentChanged ||
+      next_.sector !== existing.sector ||
+      (next_.status !== undefined && next_.status !== existing.status);
     await publishUserDirectoryChange(
       id,
       next_.status !== undefined ? "status_changed" : "updated",
@@ -1050,13 +1082,21 @@ router.patch("/users/:id", requirePerm("users.manage"), requireValidUserId, asyn
     );
     if (next_.status !== undefined && next_.status !== "active") realtime.disconnectUser(id);
 
+    const stateIdsToName = [...new Set([existingStateId, finalStateId].filter((v): v is number => v != null))];
+    const stateNameById = stateIdsToName.length
+      ? new Map((await pool.query<{ id: number; name: string }>(
+          `SELECT id, name FROM states WHERE id = ANY($1::int[])`,
+          [stateIdsToName],
+        )).rows.map((r) => [r.id, r.name]))
+      : new Map<number, string>();
+
     await logAudit({
       userId: req.currentUser?.id ?? null,
       action: "update",
       module: "users",
       entityId: id,
-      oldValue: JSON.stringify(auditUserSnapshot(existing)),
-      newValue: JSON.stringify(auditUserSnapshot({ ...existing, ...next_ })),
+      oldValue: JSON.stringify(auditUserSnapshot(existing, existingStateId != null ? (stateNameById.get(existingStateId) ?? null) : null)),
+      newValue: JSON.stringify(auditUserSnapshot({ ...existing, ...next_ }, finalStateId != null ? (stateNameById.get(Number(finalStateId)) ?? null) : null)),
     });
 
     const out = await pool.query(
@@ -1097,8 +1137,8 @@ router.post("/users/:id/status", requirePerm("users.manage"), requireValidUserId
       action: "status_change",
       module: "users",
       entityId: id,
-      oldValue: JSON.stringify(auditUserSnapshot(existing)),
-      newValue: JSON.stringify(auditUserSnapshot({ ...existing, status })),
+      oldValue: JSON.stringify(auditUserSnapshot(existing, null)),
+      newValue: JSON.stringify(auditUserSnapshot({ ...existing, status }, null)),
     });
 
     // Dispatch status-change notification emails (fire-and-forget; non-fatal).

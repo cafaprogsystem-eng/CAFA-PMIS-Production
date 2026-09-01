@@ -140,11 +140,13 @@ describe("development test project retirement", () => {
 
     const auditCall = mockClientQuery.mock.calls.find((call) => String(call[0]).includes("INSERT INTO audit_log"));
     expect(auditCall?.[1]?.[0]).toBe(SUPER_ADMIN.id);
-    expect(auditCall?.[1]?.[1]).toBe(19);
-    expect(JSON.parse(String(auditCall?.[1]?.[2]))).toMatchObject({
+    expect(auditCall?.[1]?.[1]).toBe("development_test_retired");
+    expect(auditCall?.[1]?.[2]).toBe("projects");
+    expect(auditCall?.[1]?.[3]).toBe(19);
+    expect(JSON.parse(String(auditCall?.[1]?.[4]))).toMatchObject({
       id: 19, code: "CAFA-MPLQLM3M", title: "TX Test", status: "submitted", donor: "Test", donorId: null,
     });
-    expect(JSON.parse(String(auditCall?.[1]?.[3]))).toMatchObject({
+    expect(JSON.parse(String(auditCall?.[1]?.[5]))).toMatchObject({
       retirement: "development test-data cleanup",
       deletionMode: "soft",
       deletedBy: SUPER_ADMIN.id,

@@ -2943,7 +2943,7 @@ components:
     StateRecord:
       type: object
       description: Canonical Sudan State master-data record. Geographic identity, operational eligibility, and office presence are separate facts; it has no delete lifecycle.
-      required: [id, name, nameAr, code, operationalStatus, officeStatus, officeAddress, managerName, localitiesCount]
+      required: [id, name, nameAr, code, operationalStatus, officeStatus, officeAddress, officeManagers, localitiesCount]
       properties:
         id: { type: integer }
         name: { type: string, maxLength: 120 }
@@ -2952,8 +2952,12 @@ components:
         operationalStatus: { type: string, enum: [active, inactive] }
         officeStatus: { type: string, enum: [present, absent, unknown] }
         officeAddress: { type: ["string", "null"], maxLength: 500 }
-        managerName: { type: ["string", "null"] }
+        officeManagers:
+          type: array
+          description: "Every active state_office_manager user currently assigned to this State, resolved live from users (more than one may be assigned at once — there is no one-manager-per-State constraint)."
+          items: { $ref: "#/components/schemas/StateOfficeManager" }
         localitiesCount: { type: integer }
+        updatedAt: { type: string, format: date-time, description: "Round-trip as the x-base-revision request header on PATCH /states/{stateId} for optimistic-concurrency conflict detection." }
 
     StateInput:
       type: object
@@ -3014,9 +3018,16 @@ components:
         id: { type: integer }
         name: { type: string }
 
+    StateOfficeManager:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+
     StateProfile:
       type: object
-      required: [id, name, nameAr, code, operationalStatus, officeStatus, officeAddress, managerName, localitiesCount, localities, projects]
+      required: [id, name, nameAr, code, operationalStatus, officeStatus, officeAddress, officeManagers, localitiesCount, localities, projects]
       properties:
         id: { type: integer }
         name: { type: string, maxLength: 120 }
@@ -3024,9 +3035,13 @@ components:
         code: { type: string, maxLength: 24 }
         operationalStatus: { type: string, enum: [active, inactive] }
         officeStatus: { type: string, enum: [present, absent, unknown] }
-        managerName: { type: ["string", "null"] }
+        officeManagers:
+          type: array
+          description: "Every active state_office_manager user currently assigned to this State, resolved live from users (more than one may be assigned at once)."
+          items: { $ref: "#/components/schemas/StateOfficeManager" }
         officeAddress: { type: ["string", "null"] }
         localitiesCount: { type: integer }
+        updatedAt: { type: string, format: date-time }
         localities:
           type: array
           items: { $ref: "#/components/schemas/Locality" }

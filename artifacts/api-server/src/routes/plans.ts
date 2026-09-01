@@ -2930,11 +2930,14 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
         );
 
         // §10 Audit log — inlined via transaction client for atomicity.
-        await submitClient.query(
-          `INSERT INTO audit_log (user_id, action, module, entity_id, old_value, new_value)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [req.currentUser.id, action, "plans", planId, lockedPlan.status, transition.to],
-        );
+        await logAudit({
+          userId: req.currentUser.id,
+          action,
+          module: "plans",
+          entityId: planId,
+          oldValue: lockedPlan.status,
+          newValue: transition.to,
+        }, submitClient);
 
         await submitClient.query("COMMIT");
       } catch (err) {
@@ -3097,11 +3100,14 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
       }
 
       // Audit log — inside transaction for internal consistency.
-      await transitionClient.query(
-        `INSERT INTO audit_log (user_id, action, module, entity_id, old_value, new_value)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [req.currentUser.id, action, "plans", planId, fromStatus, transition.to],
-      );
+      await logAudit({
+        userId: req.currentUser.id,
+        action,
+        module: "plans",
+        entityId: planId,
+        oldValue: fromStatus,
+        newValue: transition.to,
+      }, transitionClient);
 
       await transitionClient.query("COMMIT");
     } catch (err) {

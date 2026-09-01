@@ -20,6 +20,7 @@ const DISPLAYABLE_CHANGE_FIELDS = new Set([
   "budget", "budgettotal", "amount", "planned", "actual", "progress", "priority",
   "risklevel", "likelihood", "impact", "mitigation", "description", "category",
   "type", "frequency", "visibility", "active", "approved", "approvalstatus", "role",
+  "username", "scope",
 ]);
 
 function safeText(value: unknown): string | null {
@@ -91,6 +92,37 @@ const entityReferenceSql = `
     )
     WHEN a.module = 'states' THEN (
       SELECT s.name FROM states s WHERE s.id = a.entity_id
+    )
+    WHEN a.module = 'auth' THEN (
+      SELECT COALESCE(u3.name, u3.email, 'User') FROM users u3 WHERE u3.id = a.entity_id
+    )
+    WHEN a.module = 'comments' THEN (
+      SELECT LEFT(c.body, 80) FROM comments c WHERE c.id = a.entity_id
+    )
+    WHEN a.module = 'notifications' THEN (
+      SELECT LEFT(n.message, 80) FROM notifications n WHERE n.id = a.entity_id
+    )
+    -- "files" entity_id is written from two independent id spaces (program_resources
+    -- for /files/resource/:id, plan_attachments for /files/plan/:id) that are never
+    -- distinguished in the audit row itself, so an id could in principle collide
+    -- across both; COALESCE is a best-effort reference, not a guaranteed-unique one.
+    WHEN a.module = 'files' THEN COALESCE(
+      (SELECT pr.title FROM program_resources pr WHERE pr.id = a.entity_id),
+      (SELECT pa.file_name FROM plan_attachments pa WHERE pa.id = a.entity_id)
+    )
+    -- Same caveat as "files": training_videos and training_certificates share the "manual" module.
+    WHEN a.module = 'manual' THEN COALESCE(
+      (SELECT tv.title FROM training_videos tv WHERE tv.id = a.entity_id),
+      (SELECT tc.certificate_id FROM training_certificates tc WHERE tc.id = a.entity_id)
+    )
+    WHEN a.module = 'manual_chapter' THEN (
+      SELECT mc.title FROM manual_chapters mc WHERE mc.id = a.entity_id
+    )
+    WHEN a.module = 'manual_section' THEN (
+      SELECT ms.title FROM manual_sections ms WHERE ms.id = a.entity_id
+    )
+    WHEN a.module = 'manual_sop' THEN (
+      SELECT msp.process_name FROM manual_sops msp WHERE msp.id = a.entity_id
     )
     ELSE NULL
   END

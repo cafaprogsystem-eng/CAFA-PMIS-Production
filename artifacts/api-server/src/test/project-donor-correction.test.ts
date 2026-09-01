@@ -121,11 +121,13 @@ describe("project donor correction", () => {
     expect(updateCall?.[1]).toEqual(["UNICEF", 5, 19]);
     const auditCall = mockClientQuery.mock.calls.find((call) => String(call[0]).includes("INSERT INTO audit_log"));
     expect(auditCall?.[1]?.[0]).toBe(SUPER_ADMIN.id);
-    expect(auditCall?.[1]?.[1]).toBe(19);
-    expect(JSON.parse(String(auditCall?.[1]?.[2]))).toEqual({
+    expect(auditCall?.[1]?.[1]).toBe("donor_corrected");
+    expect(auditCall?.[1]?.[2]).toBe("projects");
+    expect(auditCall?.[1]?.[3]).toBe(19);
+    expect(JSON.parse(String(auditCall?.[1]?.[4]))).toEqual({
       donor: "Test", donorId: null, provenance: "unlinked_free_text",
     });
-    expect(JSON.parse(String(auditCall?.[1]?.[3]))).toMatchObject({
+    expect(JSON.parse(String(auditCall?.[1]?.[5]))).toMatchObject({
       donor: "UNICEF", donorId: 5, reason: "Registry review confirmed UNICEF as the donor.",
     });
     const operations = mockClientQuery.mock.calls.map((call) => String(call[0]));

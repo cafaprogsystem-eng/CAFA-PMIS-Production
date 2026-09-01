@@ -19,6 +19,11 @@ export const USER_API_ERROR_KEYS: Record<string, string> = {
   user_already_active: "alreadyActive",
   user_not_invited: "notInvited",
   duplicate_active_invitation: "duplicateInvitation",
+  email_taken: "emailExists",
+  username_taken: "usernameExists",
+  cannot_modify_own_access: "cannotModifyOwnAccess",
+  cannot_change_own_status: "cannotChangeOwnStatus",
+  cannot_delete_self: "cannotDeleteSelf",
 };
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
