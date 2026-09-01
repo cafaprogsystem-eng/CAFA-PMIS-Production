@@ -4438,7 +4438,9 @@ components:
             planned: { type: number }
             actual: { type: number }
             remaining: { type: number }
-            burnRatePct: { type: integer }
+            burnRatePct:
+              type: ["integer", "null"]
+              description: "Null when planned is zero or unavailable — matches the same convention used elsewhere (Dashboard, Plans)"
         activities:
           type: array
           items:

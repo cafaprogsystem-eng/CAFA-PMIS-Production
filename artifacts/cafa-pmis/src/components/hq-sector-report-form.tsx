@@ -41,6 +41,7 @@ import {
 } from "@/lib/offline/report-drafts";
 import { isOfflineQueuedError } from "@/lib/offline/fetch-interceptor";
 import { useSyncContext } from "@/contexts/sync-context";
+import { sanitizeReportAttachments, buildReportPeriodLabel } from "@/lib/report-form-payload-shared";
 import {
   authorizationFingerprint,
   canViewHqSectorSnapshot,
@@ -625,6 +626,11 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
   const [technicalRatings, setTechnicalRatings] = useState<TechnicalRating[]>([]);
   const [indicatorComments, setIndicatorComments] = useState<IndicatorComment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Accessible error summary — same mechanism as program-state-report-form.tsx,
+  // unified here instead of relying on toast alone (a transient toast is not
+  // reliably announced/focus-managed for screen-reader users).
+  const [formError, setFormError] = useState<string | null>(null);
+  const errorSummaryRef = useRef<HTMLDivElement>(null);
   const [createdReportId, setCreatedReportId] = useState<number | null>(null);
   const [pendingVoiceNote, setPendingVoiceNote] = useState<PendingNote | null>(null);
 
@@ -922,34 +928,59 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
     }
   }
 
-  // Payload builder — submitMode=true enforces support validation
-  function buildPayload(values: BasicValues, submitMode: boolean) {
-    if (!values.sector) { toast.error(t("hqForm.errSelectSector")); return null; }
+  /** Surfaces a validation error in the accessible error summary region and
+   *  moves focus to it so keyboard and screen-reader users are informed —
+   *  same mechanism as program-state-report-form.tsx's raiseFormError. */
+  function raiseFormError(msg: string) {
+    setFormError(msg);
+    // Defer focus so the DOM update completes before we try to focus.
+    setTimeout(() => errorSummaryRef.current?.focus(), 0);
+  }
+
+  // ── Shared submit-readiness validation (HQSR-003 client mirror) ─────────────
+  // Used by BOTH the create-and-submit path (via buildPayload) and the resubmit
+  // path (onSubmitReport's edit-mode branch, which otherwise only calls
+  // buildPatchPayload — a deliberately validation-free content-only PATCH —
+  // before invoking the submit transition). Previously only the create path
+  // validated client-side; a resubmission could reach the server with blank
+  // required fields or zero support requests, discovered only by the server's
+  // 422 instead of an immediate, specific error.
+  //
+  // onError: optional callback invoked with the validation message so callers
+  // can surface an accessible error summary in addition to the toast — unified
+  // with program-state-report-form.tsx's buildPayload, which took this same
+  // fail(msg) shape while this function only toasted.
+  function validateSubmitReadiness(values: BasicValues, requireSupport: boolean, onError?: (msg: string) => void): boolean {
+    function fail(msg: string) { toast.error(msg); onError?.(msg); return false; }
+    if (!values.sector) return fail(t("hqForm.errSelectSector"));
     if (values.frequency === "on_demand") {
-      if (!values.periodStart) { toast.error(t("hqForm.errPeriodStartRequired")); return null; }
-      if (!values.periodEnd) { toast.error(t("hqForm.errPeriodEndRequired")); return null; }
-      if (!values.onDemandReason) { toast.error(t("hqForm.errReasonRequired")); return null; }
+      if (!values.periodStart) return fail(t("hqForm.errPeriodStartRequired"));
+      if (!values.periodEnd) return fail(t("hqForm.errPeriodEndRequired"));
+      if (!values.onDemandReason) return fail(t("hqForm.errReasonRequired"));
     }
-    if (!values.title.trim()) { toast.error(t("hqForm.errTitleRequired")); return null; }
-    if (!values.technicalAnalysis.trim()) { toast.error(t("hqForm.errTechnicalAnalysisRequired")); return null; }
-    if (!values.keyFindings.trim()) { toast.error(t("hqForm.errKeyFindingsRequired")); return null; }
-    if (!values.qualityAssessment.trim()) { toast.error(t("hqForm.errQualityAssessmentRequired")); return null; }
-    if (!values.technicalChallenges.trim()) { toast.error(t("hqForm.errTechChallengesRequired")); return null; }
-    if (!values.recommendations.trim()) { toast.error(t("hqForm.errRecommendationsRequired")); return null; }
-    if (!values.strategicPriorities.trim()) { toast.error(t("hqForm.errStrategicPrioritiesRequired")); return null; }
-    if (!values.lessonsLearned.trim()) { toast.error(t("hqForm.errLessonsLearnedRequired")); return null; }
-    if (!values.sectorOutlook.trim()) { toast.error(t("hqForm.errSectorOutlookRequired")); return null; }
+    if (!values.title.trim()) return fail(t("hqForm.errTitleRequired"));
+    if (!values.technicalAnalysis.trim()) return fail(t("hqForm.errTechnicalAnalysisRequired"));
+    if (!values.keyFindings.trim()) return fail(t("hqForm.errKeyFindingsRequired"));
+    if (!values.qualityAssessment.trim()) return fail(t("hqForm.errQualityAssessmentRequired"));
+    if (!values.technicalChallenges.trim()) return fail(t("hqForm.errTechChallengesRequired"));
+    if (!values.recommendations.trim()) return fail(t("hqForm.errRecommendationsRequired"));
+    if (!values.strategicPriorities.trim()) return fail(t("hqForm.errStrategicPrioritiesRequired"));
+    if (!values.lessonsLearned.trim()) return fail(t("hqForm.errLessonsLearnedRequired"));
+    if (!values.sectorOutlook.trim()) return fail(t("hqForm.errSectorOutlookRequired"));
+    const cleanSupport = supportRequests.filter((r) => r.supportType && r.description.trim());
+    if (requireSupport && cleanSupport.length === 0) return fail(t("hqForm.errSupportRequired"));
+    return true;
+  }
+
+  // Payload builder — submitMode=true enforces support validation
+  function buildPayload(values: BasicValues, submitMode: boolean, onError?: (msg: string) => void) {
+    if (!validateSubmitReadiness(values, submitMode, onError)) return null;
 
     const cleanSupport = supportRequests.filter((r) => r.supportType && r.description.trim());
-    if (submitMode && cleanSupport.length === 0) {
-      toast.error(t("hqForm.errSupportRequired"));
-      return null;
-    }
-
     const cleanObs = stateObservations.filter((o) => o.stateId !== "" && o.technicalObservation.trim());
     const cleanRatings = technicalRatings.filter((r) => r.entityLabel.trim() && r.reason.trim());
     const cleanIndComments = indicatorComments.filter((c) => c.indicatorName.trim());
-    const cleanAttachments = attachments.filter((d) => d.attachmentId || d.objectPath).map(({ tempId: _t, uploading: _u, file: _file, ...rest }) => rest);
+    const cleanAttachments = sanitizeReportAttachments(attachments);
 
     // Build risks from linked existing risks
     const linkedRiskItems = sectorRisks
@@ -963,18 +994,21 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         riskStatus: r.status,
       }));
 
-    let period: string;
     let reportingMonthVal: number | undefined;
-    if (values.frequency === "quarterly") {
-      period = `${values.reportingYear}-Q${values.quarter}`;
-    } else if (values.frequency === "annual") {
-      period = String(values.reportingYear);
-    } else if (values.frequency === "on_demand") {
-      period = `${values.periodStart} to ${values.periodEnd}`;
-    } else {
+    if (values.frequency !== "quarterly" && values.frequency !== "annual" && values.frequency !== "on_demand") {
       reportingMonthVal = values.reportingMonth;
-      period = `${values.reportingYear}-${String(values.reportingMonth).padStart(2, "0")}`;
     }
+    const period = buildReportPeriodLabel(
+      {
+        frequency: values.frequency,
+        reportingYear: values.reportingYear,
+        quarter: values.quarter,
+        reportingMonth: values.reportingMonth,
+        periodStart: values.periodStart,
+        periodEnd: values.periodEnd,
+      },
+      "range",
+    );
 
     // HQSR-004: The create payload must NEVER include top-level stateId or
     // projectId — HQ Sector Reports carry no State/Project linkage (the server
@@ -1030,7 +1064,7 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
     const cleanObs = stateObservations.filter((o) => o.stateId !== "" && o.technicalObservation.trim());
     const cleanRatings = technicalRatings.filter((r) => r.entityLabel.trim() && r.reason.trim());
     const cleanIndComments = indicatorComments.filter((c) => c.indicatorName.trim());
-    const cleanAttachments = attachments.filter((d) => d.attachmentId || d.objectPath).map(({ tempId: _t, uploading: _u, file: _file, ...rest }) => rest);
+    const cleanAttachments = sanitizeReportAttachments(attachments);
     const linkedRiskItems = sectorRisks
       .filter((r) => linkedRiskIds.includes(r.id))
       .map((r) => ({
@@ -1051,11 +1085,17 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
       typeof r.id === "number" && linkedRiskIds.includes(r.id) && !presentIds.has(r.id));
     const allRiskItems = [...linkedRiskItems, ...preservedRisks];
 
-    let period: string;
-    if (values.frequency === "quarterly") period = `${values.reportingYear}-Q${values.quarter}`;
-    else if (values.frequency === "annual") period = String(values.reportingYear);
-    else if (values.frequency === "on_demand") period = `${values.periodStart} to ${values.periodEnd}`;
-    else period = `${values.reportingYear}-${String(values.reportingMonth).padStart(2, "0")}`;
+    const period = buildReportPeriodLabel(
+      {
+        frequency: values.frequency,
+        reportingYear: values.reportingYear,
+        quarter: values.quarter,
+        reportingMonth: values.reportingMonth,
+        periodStart: values.periodStart,
+        periodEnd: values.periodEnd,
+      },
+      "range",
+    );
 
     return {
       title: values.title.trim(),
@@ -1114,6 +1154,10 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
   }
 
   const [isSaving, setIsSaving] = useState(false);
+  // Unified with program-state-report-form.tsx's hasNoAttachments.
+  const hasNoAttachments = attachments.filter(
+    (attachment) => !attachment.uploading && (attachment.file || attachment.objectPath || attachment.attachmentId),
+  ).length === 0;
 
   const onSaveDraft = form.handleSubmit(async (values) => {
     if (!isOnline && attachments.some((attachment) => attachment.file)) {
@@ -1140,7 +1184,7 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         await localDraft.remove();
         return; // stay in edit mode — same identity, same reportId
       }
-      const builtPayload = buildPayload(values, false);
+      const builtPayload = buildPayload(values, false, raiseFormError);
       if (!builtPayload) { if (offlineOperationId) await localDraft.saveNow(); return; }
       const payload = { ...builtPayload, _draftKey: localDraft.storageKey, _syncOperationId: offlineOperationId };
       const created = await createMutation.mutateAsync({ data: payload as never });
@@ -1168,10 +1212,20 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
       toast.error(t("sync.internetRequired", { ns: "common" }));
       return;
     }
+    // Unified with program-state-report-form.tsx: warn (not block) before
+    // submitting with zero supporting documents.
+    if (hasNoAttachments) {
+      if (!window.confirm(t("hqForm.noAttachmentsConfirm"))) return;
+    }
     setIsSaving(true);
     try {
       let reportId: number;
       if ((isEditMode && existingReport) || createdReportId) {
+        // Resubmission — validate BEFORE patching. buildPatchPayload deliberately
+        // performs no field validation (it also serves plain content-save PATCHes
+        // that must not hard-validate like a submit does), so this is the only
+        // client-side gate a resubmission gets before hitting the server's 422.
+        if (!validateSubmitReadiness(values, true, raiseFormError)) return;
         // HQSR-005: PATCH latest content first; if it fails, do NOT transition.
         try {
           if (!(await patchExistingReport(values))) return;
@@ -1181,7 +1235,7 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         }
         reportId = existingReport?.id ?? createdReportId!;
       } else {
-        const builtPayload = buildPayload(values, true);
+        const builtPayload = buildPayload(values, true, raiseFormError);
         if (!builtPayload) return;
         const payload = { ...builtPayload, _draftKey: localDraft.storageKey };
         const created = await createMutation.mutateAsync({ data: payload as never });
@@ -1231,6 +1285,7 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
               error={localDraft.stored?.lastError}
               onDiscard={() => { void localDraft.remove(); onClose(); }}
               className="mt-2"
+              isStale={localDraft.isStale}
             />
           )}
           {!isOnline && (
@@ -1240,6 +1295,23 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
             </p>
           )}
         </div>
+
+        {/* ── Accessible error summary region ─────────────────────────────── */}
+        {/* Shown after a validation failure so keyboard/screen-reader users
+            land on a clear, focused description of what went wrong. Unified
+            with program-state-report-form.tsx's identical region. */}
+        {formError && (
+          <div
+            ref={errorSummaryRef}
+            role="alert"
+            aria-live="assertive"
+            tabIndex={-1}
+            className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+          >
+            <p className="font-medium mb-1">{t("hqForm.correctErrorsBeforeContinuing")}</p>
+            <p>{formError}</p>
+          </div>
+        )}
 
         {/* ── Returned-for-revision banner (HQSR-005) ─────────────────────────── */}
         {isReturnedForRevision && existingReport && (

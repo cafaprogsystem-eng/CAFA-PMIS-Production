@@ -169,6 +169,7 @@
     "duplicate": "Duplicate",
     "deleteDraft": "Delete Draft",
     "duplicateAsDraft": "Duplicate as Draft",
+    "copyOfTitle": "Copy of {{title}}",
     "noScopeEmpty": "No {{type}} are available in your current scope.",
     "noFilterMatch": "No {{type}} match the selected filters."
   },
@@ -435,7 +436,44 @@
     "coordinationUpdatesPlaceholder": "Describe relevant coordination updates…",
     "communityFeedbackPlaceholder": "Summarise relevant community or participant feedback…",
     "noActivitiesHintPrefix": "No activities yet — click",
-    "noActivitiesHintSuffix": "."
+    "noActivitiesHintSuffix": ".",
+    "indicatorProgressTitle": "Indicator Progress",
+    "indicatorProgressSubtitle": "(this reporting period)",
+    "thisPeriodAchievementAria": "This period achievement — {{name}}",
+    "remarksOptional": "Remarks (optional)",
+    "remarksAria": "Remarks — {{name}}",
+    "projectRisksTitle": "Project Risks",
+    "projectRisksSubtitle": "(from Risk Register — status updates sync back)",
+    "loadingRisks": "Loading risks…",
+    "noLinkedRisks": "No risks are linked to this project yet. Add them from the Risk Register.",
+    "riskStatusUpdateFailed": "Failed to update risk status",
+    "activityNameAria": "Activity Name — {{label}}",
+    "achievementSummaryAria": "Achievement Summary — {{label}}",
+    "actualExpenditureAria": "Actual Expenditure (This Period) — {{label}}",
+    "exceptionReasonAria": "Exception / Reason for Unplanned Activity — {{label}}",
+    "activityStatusAria": "Activity Status — {{label}}",
+    "implementationPercentAria": "% of Implementation — {{label}}",
+    "varianceReasonAria": "Reason for Variance — {{label}}",
+    "menBeneficiariesAria": "Men beneficiaries — {{label}}",
+    "womenBeneficiariesAria": "Women beneficiaries — {{label}}",
+    "boysBeneficiariesAria": "Boys beneficiaries — {{label}}",
+    "girlsBeneficiariesAria": "Girls beneficiaries — {{label}}",
+    "totalBeneficiariesThisPeriodAria": "Total beneficiaries this period — {{label}}",
+    "challengesAria": "Challenges — {{label}}",
+    "mitigationMeasuresAria": "Mitigation Measures — {{label}}",
+    "nextStepsAria": "Next Steps — {{label}}",
+    "outputAria": "Output — {{label}}",
+    "milestoneAria": "Milestone — {{label}}",
+    "removeRowAria": "Remove {{label}}",
+    "removeActivityNamedAria": "Remove \"{{name}}\"",
+    "removeActivityNumberedAria": "Remove activity {{number}}",
+    "downloadFileAria": "Download {{fileName}}",
+    "removeFileAria": "Remove {{fileName}}",
+    "documentTypeForAria": "Document type for {{fileName}}",
+    "openReportAria": "Open report: {{title}}",
+    "acceptedFormatsWithSize": "Accepted formats: PDF, Word, Excel, images (JPG, PNG). Maximum 20 MB per file.",
+    "acceptedFormatsCsv": "Accepted formats: PDF, Word, Excel, CSV, images (JPG, PNG).",
+    "attachDocument": "Attach document"
   },
   "wizard": {
     "step2": {
@@ -742,6 +780,8 @@
     "addCommentAriaLabel": "Add comment on {{section}}"
   },
   "hqForm": {
+    "correctErrorsBeforeContinuing": "Please correct the following before continuing:",
+    "noAttachmentsConfirm": "No supporting documents uploaded. Supporting evidence (photos, attendance sheets, field notes) is strongly recommended.\n\nSubmit without attachments?",
     "unavailable": "Unavailable",
     "formTitle": "HQ Sector Report",
     "titleRevise": "Revise HQ Sector Report",
@@ -1049,7 +1089,8 @@
     "planned": "Planned",
     "spent": "Spent",
     "remaining": "Remaining",
-    "burn": "Burn"
+    "burn": "Burn",
+    "loadError": "Could not load reference data for this report."
   },
   "consolidated": {
     "activitiesImplemented": "Activities Implemented",

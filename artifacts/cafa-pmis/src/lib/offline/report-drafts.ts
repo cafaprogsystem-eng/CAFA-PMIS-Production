@@ -7,6 +7,20 @@ import { cn } from "@/lib/utils";
 
 export type ReportDraftType = ReportDraftSnapshot["reportType"];
 
+/**
+ * A local draft untouched for this long is flagged stale: the reporting
+ * period it targets, or the user's access to its project/state/sector, may
+ * have changed since the last save. The server re-validates everything on
+ * actual submit regardless — this is purely an early, visible warning so a
+ * user resuming very old offline content notices before investing more time
+ * in a period/scope that may no longer be valid.
+ */
+export const DRAFT_STALE_AFTER_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export function isDraftStale(updatedAt: number, now: number = Date.now()): boolean {
+  return now - updatedAt > DRAFT_STALE_AFTER_MS;
+}
+
 export interface ReportDraftStoreOptions<T> {
   /** A stable identity for one editor (for example project:new or report:42). */
   draftKey: string;
@@ -215,6 +229,7 @@ export function useOfflineReportDraft<T>({
   return {
     stored,
     hasLocalDraft: Boolean(stored),
+    isStale: stored ? isDraftStale(stored.updatedAt) : false,
     status,
     storageKey,
     saveNow: () => saveReportDraft(
@@ -256,12 +271,16 @@ export function OfflineReportDraftStatus({
   error,
   onDiscard,
   className,
+  isStale = false,
 }: {
   status: ReportDraftStatus;
   savedAt?: number;
   error?: string | null;
   onDiscard?: () => void;
   className?: string;
+  /** True when the draft hasn't been touched in over DRAFT_STALE_AFTER_MS —
+   *  see useOfflineReportDraft's isStale. */
+  isStale?: boolean;
 }) {
   const { t, i18n } = useTranslation("common");
   const label = t(`sync.status.${status}`, { defaultValue: status });
@@ -294,6 +313,15 @@ export function OfflineReportDraftStatus({
             t("sync.discardLocalDraft"),
           )
           : null,
+      )
+      : null,
+    // Staleness is a softer, secondary warning — skip it when the recovery
+    // banner above is already showing to avoid stacking two alerts.
+    !needsRecovery && isStale
+      ? createElement(
+        "div",
+        { role: "alert", className: "rounded border border-warning/30 bg-warning/10 p-2 text-warning" },
+        t("sync.staleDraftWarning", { days: Math.floor(DRAFT_STALE_AFTER_MS / (24 * 60 * 60 * 1000)) }),
       )
       : null,
   );

@@ -10,6 +10,7 @@ import {
   type ActivityValidationContext,
   type ActivityFormValues,
 } from "@/lib/activityReportValidation";
+import { getProjectActivityWorkflow, REPORT_WORKFLOWS, getRevisionPerm } from "@workspace/report-transitions";
 import { useTranslation } from "react-i18next";
 import { StateLabel } from "@/components/state-label";
 import { useForm } from "react-hook-form";
@@ -95,6 +96,7 @@ import type { KanbanColumn } from "@/components/view-modes/kanban-board";
 import { ActivityReportViewer } from "@/components/activity-report-viewer";
 import { RecordDetailModal } from "@/components/record-detail-modal";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
+import { ReportPaginationFooter } from "@/components/report-pagination-footer";
 import {
   OfflineReportDraftStatus,
   reportDraftKey,
@@ -141,6 +143,29 @@ export function canResumeReportDraft(
   // super-admin retain their server-defined Full Operational Access override;
   // everyone else may only resume their own draft.
   return hasPerm(permissions, "reports.update")
+    && (hasFullOperationalAccess(currentUser) || isOwnDraft);
+}
+
+/**
+ * Mirrors DELETE /reports/:reportId's actual authorisation rule (routes/reports.ts):
+ * requirePerm("reports.delete"), status must be "draft", and the caller must be
+ * either the original author or hold Full Operational Access. This is a DEDICATED
+ * check — reports.delete is a separate permission from reports.update and must
+ * never be inferred from it, even though every role that currently holds one also
+ * holds the other (a future permission split would otherwise show/hide Delete
+ * incorrectly relative to what the backend actually allows).
+ */
+export function canDeleteReportDraft(
+  report: Report,
+  permissions: string[] | undefined,
+  currentUser: { id?: number; role?: string } | undefined,
+): boolean {
+  if (report.status !== "draft") return false;
+  const record = report as unknown as { authorId?: number | null };
+  const isOwnDraft = record.authorId !== null
+    && record.authorId !== undefined
+    && record.authorId === currentUser?.id;
+  return hasPerm(permissions, "reports.delete")
     && (hasFullOperationalAccess(currentUser) || isOwnDraft);
 }
 
@@ -289,6 +314,24 @@ function WorkflowBlock({ workflow }: { workflow: WorkflowDisplay }) {
 }
 
 // Display status options (user-facing) → backend statuses they map to.
+//
+// ⚠ Every entry here currently maps to exactly ONE backend status. The
+// `bs.length === 1` checks below (query building, author/activity facets) only
+// pass `query.status` to the server when that holds; GET /reports's own status
+// filter is single-value equality (`r.status = $N` — no array/CSV support), so
+// a group with more than one value would silently skip the server-side filter
+// while the client-side re-filter (the `reports` useMemo below) still narrows
+// what's rendered. Because the server's LIMIT/OFFSET pagination would have
+// already run on the UNFILTERED-by-status set, reportsRaw.total/totalPages
+// would then describe a different population than what's on screen — page
+// counts and "X of Y" labels would stop matching the visible rows, and no
+// client-side trick can fix that (the discarded rows outside the current
+// server page window can never be recovered here).
+//
+// Do NOT add a multi-value group here without FIRST adding real multi-status
+// (array/CSV) support to GET /reports's status filter (reports.ts) — mirroring
+// how Plans/Projects handle their own multi-value KPI-aggregate filters — so
+// the server's own pagination reflects the full status-group population.
 const STATUS_GROUPS: Record<string, string[]> = {
   draft: ["draft"],
   submitted: ["submitted"],
@@ -779,9 +822,19 @@ function transitionsFor(
   }> = [];
 
   const isProjectOrActivity = reportType === "project" || reportType === "activity";
-  // Resolve authoring path — conservative default is state_authored (TC review mandatory)
-  const isStateAuthored = isProjectOrActivity && workflowPath !== "technical_authored";
-  const isTechAuthored  = isProjectOrActivity && workflowPath === "technical_authored";
+  // Single source of truth (@workspace/report-transitions) — the exact same
+  // tables and functions routes/reports.ts enforces server-side. Which
+  // actions even exist for this report (e.g. technical_review only appears
+  // for the state-authored Project/Activity path) falls out of which table
+  // getProjectActivityWorkflow/REPORT_WORKFLOWS resolves; no separate
+  // isStateAuthored/isTechAuthored/isHqsrSpcFallback branching is needed here
+  // anymore — that hand-maintained duplicate of the backend's rules was
+  // exactly what let HQSR's "spc_fallback" coordination-review permission
+  // drift out of sync (it required reports.approve.final here long after the
+  // backend generalised to always require reports.approve.coordination).
+  const workflow = isProjectOrActivity
+    ? getProjectActivityWorkflow(workflowPath)
+    : (REPORT_WORKFLOWS[reportType ?? ""] ?? REPORT_WORKFLOWS.program_state);
 
   // ── Submit (all types) ───────────────────────────────────────────────────
   // SPR-003/004: a fallback SOM holds only the narrow reports.program_state.create
@@ -794,78 +847,38 @@ function transitionsFor(
       isOwnReport === true &&
       !hasPerm(perms, "reports.create") &&
       hasPerm(perms, "reports.program_state.create");
-    const submitPerm = somOwnSprSubmit ? "reports.program_state.create" : "reports.create";
+    const submitPerm = somOwnSprSubmit ? "reports.program_state.create" : workflow.submit.perm;
     all.push({ action: "submit", label: "Submit Report", translationKey: "submitReport", perm: submitPerm, icon: Send });
   }
 
-  // ── State-authored Project/Activity: SPO → TC → SPC → PM ────────────────
-  // Also handles historical records in "state_reviewed" (old 5-step workflow).
-  // No new report enters state_reviewed — this is historical compatibility only.
-  if (isStateAuthored) {
-    // submitted / state_reviewed: TC performs Technical Review
-    // state_reviewed is a historical status; TC progresses it to technically_approved.
-    if (status === "submitted" || status === "state_reviewed") {
-      all.push({ action: "technical_review", label: "Technical Review", translationKey: "approval.technicalReview", perm: "reports.approve.technical", icon: ArrowRight });
-    }
-    // technically_approved: SPC performs Coordination Review
-    if (status === "technically_approved") {
-      all.push({ action: "coordination_review", label: "Coordination Review", translationKey: "approval.coordinationReview", perm: "reports.approve.coordination", icon: ArrowRight });
-    }
-    // Reject / return for revision — perm depends on who the active reviewer is
-    if (status === "submitted" || status === "state_reviewed") {
-      all.push({ action: "request_revision", label: "Return for Revision", translationKey: "approval.returnForRevision", perm: "reports.approve.technical", icon: RotateCcw, variant: "outline" });
-      all.push({ action: "reject", label: "Reject", translationKey: "approval.reject", perm: "reports.approve.technical", icon: XCircle, variant: "destructive" });
-    } else if (["technically_approved", "coordination_approved"].includes(status)) {
-      all.push({ action: "request_revision", label: "Return for Revision", translationKey: "approval.returnForRevision", perm: "reports.approve.coordination", icon: RotateCcw, variant: "outline" });
-      all.push({ action: "reject", label: "Reject", translationKey: "approval.reject", perm: "reports.approve.coordination", icon: XCircle, variant: "destructive" });
-    }
+  // ── Technical Review — only exists in the state-authored Project/Activity
+  // table (also covers historical "state_reviewed" records, old 5-step workflow).
+  if (workflow.technical_review?.from.includes(status)) {
+    all.push({ action: "technical_review", label: "Technical Review", translationKey: "approval.technicalReview", perm: workflow.technical_review.perm, icon: ArrowRight });
   }
 
-  // ── Technical-authored Project/Activity: TC → SPC → PM ──────────────────
-  if (isTechAuthored) {
-    // submitted: SPC performs Coordination Review directly (no Technical Review step)
-    if (status === "submitted") {
-      all.push({ action: "coordination_review", label: "Coordination Review", translationKey: "approval.coordinationReview", perm: "reports.approve.coordination", icon: ArrowRight });
-    }
-    if (["submitted", "coordination_approved"].includes(status)) {
-      all.push({ action: "request_revision", label: "Return for Revision", translationKey: "approval.returnForRevision", perm: "reports.approve.coordination", icon: RotateCcw, variant: "outline" });
-      all.push({ action: "reject", label: "Reject", translationKey: "approval.reject", perm: "reports.approve.coordination", icon: XCircle, variant: "destructive" });
-    }
+  // ── Coordination Review ──────────────────────────────────────────────────
+  if (workflow.coordination_review?.from.includes(status)) {
+    all.push({ action: "coordination_review", label: "Coordination Review", translationKey: "approval.coordinationReview", perm: workflow.coordination_review.perm, icon: ArrowRight });
   }
 
-  // ── Simple chain: State Programme Report / HQ Sector Report ─────────────
-  if (!isProjectOrActivity) {
-    // HQSR coordination reviewer split (HQSR-BD-1/BD-6):
-    //  - TC-authored hq_sector (workflow_path NULL) → SPC coordination-reviews
-    //    via reports.approve.coordination (PM lacks that perm, so PM never
-    //    sees the action — matching the server rule).
-    //  - SPC-authored fallback hq_sector (immutable workflow_path =
-    //    'spc_fallback') → PM is the coordination reviewer via a narrow
-    //    server-side exception; gate on reports.approve.final so PM sees the
-    //    actions and SPC (the author) does not.
-    // super_admin (wildcard perms) always passes the hasPerm filter below.
-    const isHqsrSpcFallback =
-      reportType === "hq_sector" && workflowPath === "spc_fallback";
-    const coordPerm = isHqsrSpcFallback
-      ? "reports.approve.final"
-      : "reports.approve.coordination";
-    if (status === "submitted") {
-      all.push({ action: "coordination_review", label: "Coordination Review", translationKey: "approval.coordinationReview", perm: coordPerm, icon: ArrowRight });
-    }
-    if (["submitted", "coordination_approved"].includes(status)) {
-      all.push({ action: "request_revision", label: "Return for Revision", translationKey: "approval.returnForRevision", perm: coordPerm, icon: RotateCcw, variant: "outline" });
-      all.push({ action: "reject", label: "Reject", translationKey: "approval.reject", perm: coordPerm, icon: XCircle, variant: "destructive" });
-    }
+  // ── Reject / Return for Revision — the active reviewer (and therefore the
+  // required permission) depends on the current status and workflow path;
+  // getRevisionPerm resolves this exactly as routes/reports.ts does.
+  if (workflow.request_revision?.from.includes(status)) {
+    const revisionPerm = getRevisionPerm(reportType ?? "", status, workflowPath);
+    all.push({ action: "request_revision", label: "Return for Revision", translationKey: "approval.returnForRevision", perm: revisionPerm, icon: RotateCcw, variant: "outline" });
+    all.push({ action: "reject", label: "Reject", translationKey: "approval.reject", perm: revisionPerm, icon: XCircle, variant: "destructive" });
   }
 
   // ── Final Approval: PM only — always from coordination_approved ──────────
-  if (status === "coordination_approved") {
-    all.push({ action: "final_approve", label: "Programme Manager Approve", translationKey: "approval.programmeManagerApprove", perm: "reports.approve.final", icon: CheckCircle2 });
+  if (workflow.final_approve?.from.includes(status)) {
+    all.push({ action: "final_approve", label: "Programme Manager Approve", translationKey: "approval.programmeManagerApprove", perm: workflow.final_approve.perm, icon: CheckCircle2 });
   }
 
   // ── Archive ──────────────────────────────────────────────────────────────
-  if (["approved", "rejected"].includes(status)) {
-    all.push({ action: "archive", label: "Archive", translationKey: "approval.archive", perm: "reports.approve.final", icon: Archive, variant: "outline" });
+  if (workflow.archive?.from.includes(status)) {
+    all.push({ action: "archive", label: "Archive", translationKey: "approval.archive", perm: workflow.archive.perm, icon: Archive, variant: "outline" });
   }
 
   return all.filter((a) => hasPerm(perms, a.perm));
@@ -1155,8 +1168,16 @@ function SummaryCards({ lockedType }: { lockedType: string }) {
 
 function ReportAggregatesView({ reportId }: { reportId: number }) {
   const { t } = useTranslation("reports");
-  const { data, isLoading } = useGetReportAggregates(reportId);
+  const { data, isLoading, isError } = useGetReportAggregates(reportId);
   if (isLoading) return <Skeleton className="h-32" />;
+  if (isError) {
+    return (
+      <div className="flex items-center gap-2 rounded border border-dashed p-3 text-xs text-muted-foreground">
+        <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+        {t("aggregates.loadError")}
+      </div>
+    );
+  }
   if (!data) return null;
   const b = data.beneficiaries;
   const bg = data.budget;
@@ -1181,7 +1202,7 @@ function ReportAggregatesView({ reportId }: { reportId: number }) {
             <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.planned")}</p><p className="font-medium"><bdi dir="ltr">{formatCurrency(bg.planned)}</bdi></p></div>
             <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.spent")}</p><p className="font-medium"><bdi dir="ltr">{formatCurrency(bg.actual)}</bdi></p></div>
             <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.remaining")}</p><p className="font-medium"><bdi dir="ltr">{formatCurrency(bg.remaining)}</bdi></p></div>
-            <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.burn")}</p><p className="font-medium"><bdi dir="ltr">{bg.burnRatePct}%</bdi></p></div>
+            <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.burn")}</p><p className="font-medium"><bdi dir="ltr">{bg.burnRatePct == null ? "—" : `${bg.burnRatePct}%`}</bdi></p></div>
           </div>
         </div>
       </CardContent>
@@ -1545,7 +1566,11 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
   });
   const activityFacetOptions = activityFacetData?.activities ?? [];
 
-  // Client-side filter when display status maps to multiple backend values (e.g. Under Review).
+  // Client-side filter when display status maps to multiple backend values.
+  // Currently a no-op — every STATUS_GROUPS entry maps to exactly one backend
+  // status today, so query.status above is always set and the server already
+  // did this filtering. See the pagination-mismatch warning on STATUS_GROUPS's
+  // own definition before ever adding a multi-value group here.
   const reports = useMemo(() => {
     const items = reportsRaw?.items;
     if (!items) return items;
@@ -2650,7 +2675,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
         ? `${dupReportingYear}-${String(dupReportingMonth).padStart(2, "0")}`
         : report.period;
       const payload = {
-        title: `Copy of ${report.title}`,
+        title: t("list.copyOfTitle", { title: report.title }),
         kind: dupKind,
         reportType: lockedType,
         sector: report.sector,
@@ -3580,15 +3605,52 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
           stateNames: r.stateName ? [r.stateName] : [],
           stateNamesAr: r.stateNameAr ? [r.stateNameAr] : [],
           onClick: (trigger) => openReportDetail(r, trigger),
-          actions: canResumeReportDraft(r, perms, me?.user) ? (
-            <ContinueEditingAction
-              recordTitle={r.title}
-              onClick={() => startDraftEditing(r)}
-            />
+          // Submit/Duplicate/Delete now reach every view mode (Card/List/Compact/
+          // Kanban), not just the Table view — matching the same parity fix
+          // already applied to Projects and Plans.
+          actions: (canResumeReportDraft(r, perms, me?.user) || canDeleteReportDraft(r, perms, me?.user)) ? (
+            <div className="flex items-center gap-1">
+              {canResumeReportDraft(r, perms, me?.user) && (
+                <ContinueEditingAction
+                  recordTitle={r.title}
+                  onClick={() => startDraftEditing(r)}
+                />
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("formExtra.moreActions")}>
+                    <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  {canResumeReportDraft(r, perms, me?.user) && (
+                    <>
+                      <DropdownMenuItem onClick={() => handleDirectSubmit(r)} className="gap-2">
+                        <Send className="h-3.5 w-3.5" /> {t("list.submit")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDuplicateReport(r)} className="gap-2">
+                        <Copy className="h-3.5 w-3.5" /> {t("list.duplicate")}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {canDeleteReportDraft(r, perms, me?.user) && (
+                    <>
+                      {canResumeReportDraft(r, perms, me?.user) && <DropdownMenuSeparator />}
+                      <DropdownMenuItem
+                        onClick={() => setDeleteTarget(r)}
+                        className="gap-2 text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> {t("list.deleteDraft")}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ) : undefined,
         };
       }),
-    [reports, lockedType, openReportDetail, perms, me?.user, startDraftEditing, t, i18n.language],
+    [reports, lockedType, openReportDetail, perms, me?.user, startDraftEditing, t, i18n.language, handleDirectSubmit, handleDuplicateReport],
   );
 
   const yearOptions = useMemo(() => {
@@ -3702,6 +3764,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                           resetForm();
                         }}
                         className="pt-2"
+                        isStale={localDraft.isStale}
                       />
                     )}
                   </DialogHeader>
@@ -5023,7 +5086,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   {planned != null && <BudgetStatusBadge planned={planned} actual={actualNum} />}
-                                  <Button type="button" size="sm" variant="ghost" aria-label={`Remove ${rowLabel}`} onClick={() => { setActivities((cur) => cur.filter((_, idx) => idx !== i)); setIsFormDirty(true); }}>
+                                  <Button type="button" size="sm" variant="ghost" aria-label={t("formExtra.removeRowAria", { label: rowLabel })} onClick={() => { setActivities((cur) => cur.filter((_, idx) => idx !== i)); setIsFormDirty(true); }}>
                                     <Trash2 className="h-3 w-3 text-destructive" />
                                   </Button>
                                 </div>
@@ -5033,7 +5096,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               {!a.activityId && (
                                 <div>
                                   <Label className="text-xs">Activity Name *</Label>
-                                  <Input aria-label={`Activity Name — ${rowLabel}`} aria-required="true" aria-invalid={!!fieldErrors[`act-${i}-name`] || undefined} aria-describedby={fieldErrors[`act-${i}-name`] ? `err-act-${i}-name` : undefined} value={a.name} onChange={(e) => { updateActivity(i, { name: e.target.value }); setIsFormDirty(true); }} />
+                                  <Input aria-label={t("formExtra.activityNameAria", { label: rowLabel })} aria-required="true" aria-invalid={!!fieldErrors[`act-${i}-name`] || undefined} aria-describedby={fieldErrors[`act-${i}-name`] ? `err-act-${i}-name` : undefined} value={a.name} onChange={(e) => { updateActivity(i, { name: e.target.value }); setIsFormDirty(true); }} />
                                   {fieldErrors[`act-${i}-name`] && (
                                     <p id={`err-act-${i}-name`} role="alert" className="text-xs text-destructive mt-1">{fieldErrors[`act-${i}-name`]}</p>
                                   )}
@@ -5047,7 +5110,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                     Exception / Reason for Unplanned Activity <span className="text-destructive">*</span>
                                   </Label>
                                   <Input
-                                    aria-label={`Exception / Reason for Unplanned Activity — ${rowLabel}`}
+                                    aria-label={t("formExtra.exceptionReasonAria", { label: rowLabel })}
                                     aria-required="true"
                                     aria-invalid={!!fieldErrors[`act-${i}-unplannedReason`] || undefined}
                                     aria-describedby={fieldErrors[`act-${i}-unplannedReason`] ? `err-act-${i}-unplannedReason` : undefined}
@@ -5073,7 +5136,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   <Label className="text-xs">Actual Expenditure (This Period) *</Label>
                                   <Input
                                     type="number" min={0} step="0.01" inputMode="decimal"
-                                    aria-label={`Actual Expenditure (This Period) — ${rowLabel}`}
+                                    aria-label={t("formExtra.actualExpenditureAria", { label: rowLabel })}
                                     aria-required="true"
                                     aria-invalid={!!fieldErrors[`act-${i}-actualExpenditure`] || undefined}
                                     aria-describedby={fieldErrors[`act-${i}-actualExpenditure`] ? `err-act-${i}-actualExpenditure` : undefined}
@@ -5113,7 +5176,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                     value={a.varianceReason ?? ""}
                                     onValueChange={(val) => { updateActivity(i, { varianceReason: val }); setIsFormDirty(true); }}
                                   >
-                                    <SelectTrigger className="h-8" aria-label={`Reason for Variance — ${rowLabel}`} aria-required="true" aria-invalid={!!fieldErrors[`act-${i}-varianceReason`] || undefined} aria-describedby={fieldErrors[`act-${i}-varianceReason`] ? `err-act-${i}-varianceReason` : undefined}><SelectValue placeholder={t("form.selectReason")} /></SelectTrigger>
+                                    <SelectTrigger className="h-8" aria-label={t("formExtra.varianceReasonAria", { label: rowLabel })} aria-required="true" aria-invalid={!!fieldErrors[`act-${i}-varianceReason`] || undefined} aria-describedby={fieldErrors[`act-${i}-varianceReason`] ? `err-act-${i}-varianceReason` : undefined}><SelectValue placeholder={t("form.selectReason")} /></SelectTrigger>
                                     <SelectContent>
                                       {["Procurement Delay","Activity Rescheduled","Market Price Increase","Additional Beneficiaries Reached","Cost Saving","Security Constraints","Access Constraints","Other"].map((r) => (
                                         <SelectItem key={r} value={r}>{r}</SelectItem>
@@ -5132,7 +5195,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 <Textarea
                                   rows={3}
                                   className="resize-y"
-                                  aria-label={`Achievement Summary — ${rowLabel}`}
+                                  aria-label={t("formExtra.achievementSummaryAria", { label: rowLabel })}
                                   aria-required="true"
                                   aria-invalid={!!fieldErrors[`act-${i}-achievementSummary`] || undefined}
                                   aria-describedby={fieldErrors[`act-${i}-achievementSummary`] ? `err-act-${i}-achievementSummary` : undefined}
@@ -5149,11 +5212,11 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               <div>
                                 <Label className="text-xs">Beneficiary Reach This Period *</Label>
                                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-1">
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.men")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={`Men beneficiaries — ${rowLabel}`} aria-invalid={!!fieldErrors[`act-${i}-ben-men`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-men`] ? `err-act-${i}-ben-men` : undefined} value={a.beneficiariesMen ?? ""} onChange={(e) => updateActivity(i, { beneficiariesMen: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.women")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={`Women beneficiaries — ${rowLabel}`} aria-invalid={!!fieldErrors[`act-${i}-ben-women`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-women`] ? `err-act-${i}-ben-women` : undefined} value={a.beneficiariesWomen ?? ""} onChange={(e) => updateActivity(i, { beneficiariesWomen: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.boys")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={`Boys beneficiaries — ${rowLabel}`} aria-invalid={!!fieldErrors[`act-${i}-ben-boys`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-boys`] ? `err-act-${i}-ben-boys` : undefined} value={a.beneficiariesBoys ?? ""} onChange={(e) => updateActivity(i, { beneficiariesBoys: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.girls")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={`Girls beneficiaries — ${rowLabel}`} aria-invalid={!!fieldErrors[`act-${i}-ben-girls`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-girls`] ? `err-act-${i}-ben-girls` : undefined} value={a.beneficiariesGirls ?? ""} onChange={(e) => updateActivity(i, { beneficiariesGirls: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.totalThisPeriod")}</Label><Input aria-label={`Total beneficiaries this period — ${rowLabel}`} value={(Number(a.beneficiariesMen || 0) + Number(a.beneficiariesWomen || 0) + Number(a.beneficiariesBoys || 0) + Number(a.beneficiariesGirls || 0)).toLocaleString()} readOnly className="h-8 bg-muted font-medium" /></div>
+                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.men")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={t("formExtra.menBeneficiariesAria", { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-men`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-men`] ? `err-act-${i}-ben-men` : undefined} value={a.beneficiariesMen ?? ""} onChange={(e) => updateActivity(i, { beneficiariesMen: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
+                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.women")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={t("formExtra.womenBeneficiariesAria", { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-women`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-women`] ? `err-act-${i}-ben-women` : undefined} value={a.beneficiariesWomen ?? ""} onChange={(e) => updateActivity(i, { beneficiariesWomen: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
+                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.boys")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={t("formExtra.boysBeneficiariesAria", { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-boys`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-boys`] ? `err-act-${i}-ben-boys` : undefined} value={a.beneficiariesBoys ?? ""} onChange={(e) => updateActivity(i, { beneficiariesBoys: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
+                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.girls")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={t("formExtra.girlsBeneficiariesAria", { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-girls`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-girls`] ? `err-act-${i}-ben-girls` : undefined} value={a.beneficiariesGirls ?? ""} onChange={(e) => updateActivity(i, { beneficiariesGirls: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
+                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.totalThisPeriod")}</Label><Input aria-label={t("formExtra.totalBeneficiariesThisPeriodAria", { label: rowLabel })} value={(Number(a.beneficiariesMen || 0) + Number(a.beneficiariesWomen || 0) + Number(a.beneficiariesBoys || 0) + Number(a.beneficiariesGirls || 0)).toLocaleString()} readOnly className="h-8 bg-muted font-medium" /></div>
                                 </div>
                                 {(["men", "women", "boys", "girls"] as const).map((benKey) =>
                                   fieldErrors[`act-${i}-ben-${benKey}`] ? (
@@ -5169,13 +5232,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 <div>
                                   <Label className="text-xs">{t("formExtra.activityStatus")}</Label>
                                   <Select value={a.status} onValueChange={(val) => updateActivity(i, { status: val })}>
-                                    <SelectTrigger className="h-8" aria-label={`Activity Status — ${rowLabel}`}><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="h-8" aria-label={t("formExtra.activityStatusAria", { label: rowLabel })}><SelectValue /></SelectTrigger>
                                     <SelectContent>{ACTIVITY_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                                   </Select>
                                 </div>
                                 <div>
                                   <Label className="text-xs">% of Implementation</Label>
-                                  <Input type="number" min={0} max={100} inputMode="numeric" aria-label={`% of Implementation — ${rowLabel}`} value={a.percent} onChange={(e) => updateActivity(i, { percent: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" />
+                                  <Input type="number" min={0} max={100} inputMode="numeric" aria-label={t("formExtra.implementationPercentAria", { label: rowLabel })} value={a.percent} onChange={(e) => updateActivity(i, { percent: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" />
                                 </div>
                               </div>
 
@@ -5183,16 +5246,16 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               <div className="grid grid-cols-1 gap-2">
                                 <div>
                                   <Label className="text-xs text-muted-foreground">{t("formExtra.challenges")} <span className="font-normal">({t("form.optional")})</span></Label>
-                                  <Textarea rows={1} aria-label={`Challenges — ${rowLabel}`} value={a.challenges ?? ""} onChange={(e) => updateActivity(i, { challenges: e.target.value })} placeholder={t("formExtra.challengesPlaceholder")} />
+                                  <Textarea rows={1} aria-label={t("formExtra.challengesAria", { label: rowLabel })} value={a.challenges ?? ""} onChange={(e) => updateActivity(i, { challenges: e.target.value })} placeholder={t("formExtra.challengesPlaceholder")} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                   <div>
                                     <Label className="text-xs text-muted-foreground">{t("formExtra.mitigationMeasures")}</Label>
-                                    <Textarea rows={1} aria-label={`Mitigation Measures — ${rowLabel}`} value={a.mitigationMeasures ?? ""} onChange={(e) => updateActivity(i, { mitigationMeasures: e.target.value })} placeholder={t("formExtra.mitigationPlaceholder")} />
+                                    <Textarea rows={1} aria-label={t("formExtra.mitigationMeasuresAria", { label: rowLabel })} value={a.mitigationMeasures ?? ""} onChange={(e) => updateActivity(i, { mitigationMeasures: e.target.value })} placeholder={t("formExtra.mitigationPlaceholder")} />
                                   </div>
                                   <div>
                                     <Label className="text-xs text-muted-foreground">{t("formExtra.nextSteps")}</Label>
-                                    <Textarea rows={1} aria-label={`Next Steps — ${rowLabel}`} value={a.nextSteps ?? ""} onChange={(e) => updateActivity(i, { nextSteps: e.target.value })} placeholder={t("formExtra.nextStepsPlaceholder")} />
+                                    <Textarea rows={1} aria-label={t("formExtra.nextStepsAria", { label: rowLabel })} value={a.nextSteps ?? ""} onChange={(e) => updateActivity(i, { nextSteps: e.target.value })} placeholder={t("formExtra.nextStepsPlaceholder")} />
                                   </div>
                                 </div>
                               </div>
@@ -5208,12 +5271,12 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                           <div key={i} className="rounded border p-3 space-y-2 bg-muted/20">
                             <div className="flex items-center justify-between">
                               <p className="text-xs font-medium">Activity #{i + 1}</p>
-                              <Button type="button" size="sm" variant="ghost" aria-label={a.name ? `Remove "${a.name}"` : `Remove activity ${i + 1}`} onClick={() => setActivities((cur) => cur.filter((_, idx) => idx !== i))}>
+                              <Button type="button" size="sm" variant="ghost" aria-label={a.name ? t("formExtra.removeActivityNamedAria", { name: a.name }) : t("formExtra.removeActivityNumberedAria", { number: i + 1 })} onClick={() => setActivities((cur) => cur.filter((_, idx) => idx !== i))}>
                                 <Trash2 className="h-3 w-3 text-destructive" />
                               </Button>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
-                              <div className="col-span-2"><Label className="text-xs">{t("formExtra.activityName")}</Label><Input aria-label={`Activity Name — Activity ${i + 1}`} value={a.name} onChange={(e) => updateActivity(i, { name: e.target.value })} /></div>
+                              <div className="col-span-2"><Label className="text-xs">{t("formExtra.activityName")}</Label><Input aria-label={t("formExtra.activityNameAria", { label: t("stateForm.activityLabel", { number: i + 1 }) })} value={a.name} onChange={(e) => updateActivity(i, { name: e.target.value })} /></div>
                               {activityFields.includes("relatedProjectId") && (
                                 <div>
                                   <Label className="text-xs">{t("formExtra.relatedProject")}</Label>
@@ -5241,8 +5304,8 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   </Select>
                                 </div>
                               )}
-                              <div><Label className="text-xs">{t("formExtra.output")}</Label><Input aria-label={`Output — Activity ${i + 1}`} value={a.output} onChange={(e) => updateActivity(i, { output: e.target.value })} /></div>
-                              <div><Label className="text-xs">{t("formExtra.milestone")}</Label><Input aria-label={`Milestone — Activity ${i + 1}`} value={a.milestone} onChange={(e) => updateActivity(i, { milestone: e.target.value })} /></div>
+                              <div><Label className="text-xs">{t("formExtra.output")}</Label><Input aria-label={t("formExtra.outputAria", { label: t("stateForm.activityLabel", { number: i + 1 }) })} value={a.output} onChange={(e) => updateActivity(i, { output: e.target.value })} /></div>
+                              <div><Label className="text-xs">{t("formExtra.milestone")}</Label><Input aria-label={t("formExtra.milestoneAria", { label: t("stateForm.activityLabel", { number: i + 1 }) })} value={a.milestone} onChange={(e) => updateActivity(i, { milestone: e.target.value })} /></div>
                               <div>
                                 <Label className="text-xs">{t("formExtra.status")}</Label>
                                 <Select value={a.status} onValueChange={(val) => updateActivity(i, { status: val })}>
@@ -5252,7 +5315,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               </div>
                               <div>
                                 <Label className="text-xs">% of Implementation</Label>
-                                <Input type="number" min={0} max={100} inputMode="numeric" aria-label={`% of Implementation — Activity ${i + 1}`} value={a.percent} onChange={(e) => updateActivity(i, { percent: e.target.value === "" ? "" : Number(e.target.value) })} />
+                                <Input type="number" min={0} max={100} inputMode="numeric" aria-label={t("formExtra.implementationPercentAria", { label: t("stateForm.activityLabel", { number: i + 1 }) })} value={a.percent} onChange={(e) => updateActivity(i, { percent: e.target.value === "" ? "" : Number(e.target.value) })} />
                               </div>
                               {activityFields.includes("budget") && (
                                 <div>
@@ -5277,11 +5340,15 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                   {isProject && indicatorProgressEntries.length > 0 && (
                     <section className={activeSection === "rp-section-activities" ? "space-y-3" : "hidden"}>
                       <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
-                        <Target className="h-4 w-4" /> Indicator Progress
-                        <span className="text-xs font-normal text-muted-foreground">(this reporting period)</span>
+                        <Target className="h-4 w-4" /> {t("formExtra.indicatorProgressTitle")}
+                        <span className="text-xs font-normal text-muted-foreground">{t("formExtra.indicatorProgressSubtitle")}</span>
                       </h4>
                       {indicatorProgressEntries.map((entry, idx) => {
-                        const progressPct = entry.target > 0 ? Math.round(((entry.cumAchieved + Number(entry.currentAchievement || 0)) / entry.target) * 100) : 0;
+                        // Null (not 0) when there's no valid target to divide by — matches
+                        // budget-presentation.ts's projectBurnRate convention used everywhere
+                        // else, so "no target configured" is never displayed as "0%" (which
+                        // would imply severe under-performance rather than "not measurable").
+                        const progressPct = entry.target > 0 ? Math.round(((entry.cumAchieved + Number(entry.currentAchievement || 0)) / entry.target) * 100) : null;
                         return (
                           <div key={entry.indicatorId} className="rounded border p-3 space-y-2 bg-muted/10">
                             <p className="text-sm font-medium">{entry.name}{entry.unit ? ` (${entry.unit})` : ""}</p>
@@ -5300,23 +5367,23 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   type="number"
                                   min={0}
                                   inputMode="numeric"
-                                  aria-label={`This period achievement — ${entry.name}`}
+                                  aria-label={t("formExtra.thisPeriodAchievementAria", { name: entry.name })}
                                   className="w-full text-center font-medium bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-primary rounded"
                                   value={entry.currentAchievement}
                                   onChange={(e) => setIndicatorProgressEntries((cur) => cur.map((x, i) => i === idx ? { ...x, currentAchievement: e.target.value === "" ? "" : Number(e.target.value) } : x))}
                                   placeholder="0"
                                 />
                               </div>
-                              <div className={`rounded border p-1.5 ${progressPct >= 100 ? "bg-success/10 border-success/20" : progressPct >= 60 ? "bg-warning/10 border-warning/20" : "bg-destructive/10 border-destructive/20"}`}>
+                              <div className={`rounded border p-1.5 ${progressPct == null ? "bg-muted/30 border-muted" : progressPct >= 100 ? "bg-success/10 border-success/20" : progressPct >= 60 ? "bg-warning/10 border-warning/20" : "bg-destructive/10 border-destructive/20"}`}>
                                 <p className="text-muted-foreground">{t("formExtra.progress")}</p>
-                                <p className={`font-semibold ${progressPct >= 100 ? "text-success" : progressPct >= 60 ? "text-warning" : "text-destructive"}`}>{progressPct}%</p>
+                                <p className={`font-semibold ${progressPct == null ? "text-muted-foreground" : progressPct >= 100 ? "text-success" : progressPct >= 60 ? "text-warning" : "text-destructive"}`}>{progressPct == null ? "—" : `${progressPct}%`}</p>
                               </div>
                             </div>
                             <div>
-                              <Label className="text-xs text-muted-foreground">Remarks (optional)</Label>
+                              <Label className="text-xs text-muted-foreground">{t("formExtra.remarksOptional")}</Label>
                               <Input
                                 className="h-8 text-xs"
-                                aria-label={`Remarks — ${entry.name}`}
+                                aria-label={t("formExtra.remarksAria", { name: entry.name })}
                                 value={entry.remarks}
                                 onChange={(e) => setIndicatorProgressEntries((cur) => cur.map((x, i) => i === idx ? { ...x, remarks: e.target.value } : x))}
                                 placeholder={t("formExtra.remarksPlaceholder")}
@@ -5553,13 +5620,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                     <section className={activeSection === "rp-section-challenges" ? "space-y-3" : "hidden"}>
                       <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-warning" />
-                        Project Risks
-                        <span className="text-xs font-normal text-muted-foreground">(from Risk Register — status updates sync back)</span>
+                        {t("formExtra.projectRisksTitle")}
+                        <span className="text-xs font-normal text-muted-foreground">{t("formExtra.projectRisksSubtitle")}</span>
                       </h4>
                       {!projectLinkedRisksRaw ? (
-                        <p className="text-xs text-muted-foreground">Loading risks…</p>
+                        <p className="text-xs text-muted-foreground">{t("formExtra.loadingRisks")}</p>
                       ) : projectLinkedRisksRaw.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-2">No risks are linked to this project yet. Add them from the Risk Register.</p>
+                        <p className="text-sm text-muted-foreground py-2">{t("formExtra.noLinkedRisks")}</p>
                       ) : (
                         <div className="space-y-2">
                           {(projectLinkedRisksRaw as ProjectRisk[]).map((risk) => {
@@ -5603,21 +5670,24 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                       onClick={async () => {
                                         setSavingRiskId(risk.id);
                                         try {
-                                          await fetch(`/api/risks/${risk.id}`, {
+                                          const res = await fetch(`/api/risks/${risk.id}`, {
                                             method: "PATCH",
                                             headers: { "Content-Type": "application/json" },
                                             credentials: "include",
                                             body: JSON.stringify({ status: riskStatusEdits[risk.id] }),
                                           });
+                                          if (!res.ok) { const e = await res.json() as { error?: string }; throw new Error(e.error ?? t("formExtra.riskStatusUpdateFailed")); }
                                           qc.invalidateQueries({ queryKey: ["risks", "for-report"] });
                                           setRiskStatusEdits((prev) => { const n = { ...prev }; delete n[risk.id]; return n; });
                                           toast.success(t("formExtra.riskStatusUpdated"));
+                                        } catch (e: unknown) {
+                                          toast.error(e instanceof Error ? e.message : t("formExtra.riskStatusUpdateFailed"));
                                         } finally {
                                           setSavingRiskId(null);
                                         }
                                       }}
                                     >
-                                      {savingRiskId === risk.id ? "Saving…" : "Save"}
+                                      {savingRiskId === risk.id ? t("savingData", { ns: "common" }) : t("save", { ns: "common" })}
                                     </Button>
                                   )}
                                 </div>
@@ -5909,7 +5979,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       title={`Download ${att.fileName}`}
-                                      aria-label={`Download ${att.fileName}`}
+                                      aria-label={t("formExtra.downloadFileAria", { fileName: att.fileName })}
                                       className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent shrink-0"
                                     >
                                       <Download className="h-3 w-3 text-muted-foreground" />
@@ -5917,7 +5987,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   <Button
                                       type="button" size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0"
                                       title={`Remove ${att.fileName}`}
-                                      aria-label={`Remove ${att.fileName}`}
+                                      aria-label={t("formExtra.removeFileAria", { fileName: att.fileName })}
                                       onClick={async () => {
                                         if (!editingReport) return;
                                         try {
@@ -5953,7 +6023,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 <Button
                                   type="button" size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0"
                                   onClick={() => setSupportingDocs((cur) => cur.filter((_, i) => i !== idx))}
-                                  aria-label={`Remove ${doc.file.name}`}
+                                  aria-label={t("formExtra.removeFileAria", { fileName: doc.file.name })}
                                   title={`Remove ${doc.file.name}`}
                                 >
                                   <Trash2 className="h-3 w-3 text-destructive" />
@@ -5980,7 +6050,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               }}
                             />
                           </label>
-                          <p id="pmr-file-formats" className="text-xs text-muted-foreground">Accepted formats: PDF, Word, Excel, images (JPG, PNG). Maximum 20 MB per file.</p>
+                          <p id="pmr-file-formats" className="text-xs text-muted-foreground">{t("formExtra.acceptedFormatsWithSize")}</p>
                           {supportingDocs.length > 0 ? (
                             <p className="text-xs text-muted-foreground">Files will be uploaded when you save or submit the report. Max 20 MB per file.</p>
                           ) : (
@@ -6102,14 +6172,14 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 <p className="text-xs text-muted-foreground">{(doc.file.size / 1024).toFixed(1)} KB</p>
                               </div>
                               <Select value={doc.docType} onValueChange={(val) => setSupportingDocs((cur) => cur.map((d, i) => i === idx ? { ...d, docType: val } : d))}>
-                                <SelectTrigger className="w-44 h-7 text-xs" aria-label={`Document type for ${doc.file.name}`}><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="w-44 h-7 text-xs" aria-label={t("formExtra.documentTypeForAria", { fileName: doc.file.name })}><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   {["Progress Photos", "Field Visit Report", "Beneficiary Data", "Financial Record", "Meeting Minutes", "Monitoring Form", "Other"].map((t) => (
                                     <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
-                              <Button type="button" size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0" aria-label={`Remove ${doc.file.name}`} title={`Remove ${doc.file.name}`} onClick={() => setSupportingDocs((cur) => cur.filter((_, i) => i !== idx))}>
+                              <Button type="button" size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0" aria-label={t("formExtra.removeFileAria", { fileName: doc.file.name })} title={t("formExtra.removeFileAria", { fileName: doc.file.name })} onClick={() => setSupportingDocs((cur) => cur.filter((_, i) => i !== idx))}>
                                 <Trash2 className="h-3 w-3 text-destructive" />
                               </Button>
                             </div>
@@ -6117,8 +6187,8 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                           <div className={cn(docsNoSupport ? "opacity-50 pointer-events-none" : "")}>
                             <label className="flex items-center gap-2 cursor-pointer text-sm text-primary hover:underline w-fit">
                               <Paperclip className="h-4 w-4" aria-hidden="true" />
-                              Attach document
-                              <span id="rp-file-formats" className="sr-only">Accepted formats: PDF, Word, Excel, CSV, images (JPG, PNG).</span>
+                              {t("formExtra.attachDocument")}
+                              <span id="rp-file-formats" className="sr-only">{t("formExtra.acceptedFormatsCsv")}</span>
                               <input
                                 id="rp-file-input"
                                 type="file"
@@ -6599,7 +6669,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                           }}
                           tabIndex={0}
                           role="button"
-                          aria-label={`Open report: ${r.title}`}
+                          aria-label={t("formExtra.openReportAria", { title: r.title })}
                           className="cursor-pointer hover:bg-muted/50 transition-colors"
                         >
                           {/* §26 column order: Report (title+period) · Status · [Activity] · Project · State · Sector · Frequency · Prepared By */}
@@ -6654,12 +6724,14 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             title={r.authorName ?? r.submittedByName ?? undefined}
                           >{r.authorName ?? r.submittedByName}</TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()} className="py-2">
-                            {canResumeReportDraft(r, perms, me?.user) && (
+                            {(canResumeReportDraft(r, perms, me?.user) || canDeleteReportDraft(r, perms, me?.user)) && (
                               <div className="flex items-center gap-1">
-                                <ContinueEditingAction
-                                  recordTitle={r.title}
-                                  onClick={() => startDraftEditing(r)}
-                                />
+                                {canResumeReportDraft(r, perms, me?.user) && (
+                                  <ContinueEditingAction
+                                    recordTitle={r.title}
+                                    onClick={() => startDraftEditing(r)}
+                                  />
+                                )}
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("formExtra.moreActions")}>
@@ -6667,19 +6739,29 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="w-40">
-                                    <DropdownMenuItem onClick={() => handleDirectSubmit(r)} className="gap-2">
-                                      <Send className="h-3.5 w-3.5" /> {t("list.submit")}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDuplicateReport(r)} className="gap-2">
-                                      <Copy className="h-3.5 w-3.5" /> {t("list.duplicate")}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() => setDeleteTarget(r)}
-                                      className="gap-2 text-destructive focus:text-destructive"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" /> {t("list.deleteDraft")}
-                                    </DropdownMenuItem>
+                                    {canResumeReportDraft(r, perms, me?.user) && (
+                                      <>
+                                        <DropdownMenuItem onClick={() => handleDirectSubmit(r)} className="gap-2">
+                                          <Send className="h-3.5 w-3.5" /> {t("list.submit")}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleDuplicateReport(r)} className="gap-2">
+                                          <Copy className="h-3.5 w-3.5" /> {t("list.duplicate")}
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
+                                    {/* reports.delete is a dedicated permission — never inferred from
+                                        reports.update — so this item is gated independently. */}
+                                    {canDeleteReportDraft(r, perms, me?.user) && (
+                                      <>
+                                        {canResumeReportDraft(r, perms, me?.user) && <DropdownMenuSeparator />}
+                                        <DropdownMenuItem
+                                          onClick={() => setDeleteTarget(r)}
+                                          className="gap-2 text-destructive focus:text-destructive"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" /> {t("list.deleteDraft")}
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>
@@ -6706,24 +6788,17 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
           </CardContent>
           {/* §21–22: Result count — always visible; pagination controls appear only when > 1 page */}
           {reportsRaw && reportsRaw.total > 0 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground">
-              <span className="tabular-nums">
-                {reportsRaw.totalPages > 1
-                  ? t("pagination.showing", { from: (page - 1) * PAGE_SIZE + 1, to: Math.min(page * PAGE_SIZE, reportsRaw.total), total: reportsRaw.total, type: meta.label })
-                  : t("pagination.totalCount", { total: reportsRaw.total, type: meta.label })}
-              </span>
-              {reportsRaw.totalPages > 1 && (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                    {t("pagination.previous")}
-                  </Button>
-                  <span className="text-xs">{t("pagination.pageOf", { page, total: reportsRaw.totalPages })}</span>
-                  <Button variant="outline" size="sm" disabled={page >= reportsRaw.totalPages} onClick={() => setPage((p) => p + 1)}>
-                    {t("pagination.next")}
-                  </Button>
-                </div>
-              )}
-            </div>
+            <ReportPaginationFooter
+              total={reportsRaw.total}
+              totalPages={reportsRaw.totalPages}
+              page={page}
+              pageSize={PAGE_SIZE}
+              label={meta.label}
+              onPrev={() => setPage((p) => p - 1)}
+              onNext={() => setPage((p) => p + 1)}
+              className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground"
+              t={t}
+            />
           )}
         </Card>
       ) : isLoading ? (
@@ -6771,20 +6846,17 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
           />
           {/* §21–22: Result count + pagination for card view */}
           {reportsRaw && reportsRaw.total > 0 && (
-            <div className="flex items-center justify-between text-sm text-muted-foreground pt-1">
-              <span className="tabular-nums">
-                {reportsRaw.totalPages > 1
-                  ? t("pagination.showing", { from: (page - 1) * PAGE_SIZE + 1, to: Math.min(page * PAGE_SIZE, reportsRaw.total), total: reportsRaw.total, type: meta.label })
-                  : t("pagination.totalCount", { total: reportsRaw.total, type: meta.label })}
-              </span>
-              {reportsRaw.totalPages > 1 && (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t("pagination.previous")}</Button>
-                  <span className="text-xs">{t("pagination.pageOf", { page, total: reportsRaw.totalPages })}</span>
-                  <Button variant="outline" size="sm" disabled={page >= reportsRaw.totalPages} onClick={() => setPage((p) => p + 1)}>{t("pagination.next")}</Button>
-                </div>
-              )}
-            </div>
+            <ReportPaginationFooter
+              total={reportsRaw.total}
+              totalPages={reportsRaw.totalPages}
+              page={page}
+              pageSize={PAGE_SIZE}
+              label={meta.label}
+              onPrev={() => setPage((p) => p - 1)}
+              onNext={() => setPage((p) => p + 1)}
+              className="flex items-center justify-between text-sm text-muted-foreground pt-1"
+              t={t}
+            />
           )}
         </>
       ) : viewMode === "list" ? (
@@ -6817,20 +6889,17 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
             </CardContent>
           </Card>
           {reportsRaw && reportsRaw.total > 0 && (
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span className="tabular-nums">
-                {reportsRaw.totalPages > 1
-                  ? t("pagination.showing", { from: (page - 1) * PAGE_SIZE + 1, to: Math.min(page * PAGE_SIZE, reportsRaw.total), total: reportsRaw.total, type: meta.label })
-                  : t("pagination.totalCount", { total: reportsRaw.total, type: meta.label })}
-              </span>
-              {reportsRaw.totalPages > 1 && (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t("pagination.previous")}</Button>
-                  <span className="text-xs">{t("pagination.pageOf", { page, total: reportsRaw.totalPages })}</span>
-                  <Button variant="outline" size="sm" disabled={page >= reportsRaw.totalPages} onClick={() => setPage((p) => p + 1)}>{t("pagination.next")}</Button>
-                </div>
-              )}
-            </div>
+            <ReportPaginationFooter
+              total={reportsRaw.total}
+              totalPages={reportsRaw.totalPages}
+              page={page}
+              pageSize={PAGE_SIZE}
+              label={meta.label}
+              onPrev={() => setPage((p) => p - 1)}
+              onNext={() => setPage((p) => p + 1)}
+              className="flex items-center justify-between text-sm text-muted-foreground"
+              t={t}
+            />
           )}
         </>
       ) : viewMode === "compact" ? (
@@ -6863,20 +6932,17 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
             </CardContent>
           </Card>
           {reportsRaw && reportsRaw.total > 0 && (
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span className="tabular-nums">
-                {reportsRaw.totalPages > 1
-                  ? t("pagination.showing", { from: (page - 1) * PAGE_SIZE + 1, to: Math.min(page * PAGE_SIZE, reportsRaw.total), total: reportsRaw.total, type: meta.label })
-                  : t("pagination.totalCount", { total: reportsRaw.total, type: meta.label })}
-              </span>
-              {reportsRaw.totalPages > 1 && (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t("pagination.previous")}</Button>
-                  <span className="text-xs">{t("pagination.pageOf", { page, total: reportsRaw.totalPages })}</span>
-                  <Button variant="outline" size="sm" disabled={page >= reportsRaw.totalPages} onClick={() => setPage((p) => p + 1)}>{t("pagination.next")}</Button>
-                </div>
-              )}
-            </div>
+            <ReportPaginationFooter
+              total={reportsRaw.total}
+              totalPages={reportsRaw.totalPages}
+              page={page}
+              pageSize={PAGE_SIZE}
+              label={meta.label}
+              onPrev={() => setPage((p) => p - 1)}
+              onNext={() => setPage((p) => p + 1)}
+              className="flex items-center justify-between text-sm text-muted-foreground"
+              t={t}
+            />
           )}
         </>
       ) : viewMode === "kanban" ? (

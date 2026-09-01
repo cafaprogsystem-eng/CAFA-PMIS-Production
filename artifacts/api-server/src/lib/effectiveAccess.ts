@@ -323,7 +323,11 @@ export async function resolveEffectiveAccess(
         ]),
         resolveAction("create", "Create risks", perms, [{ key: "risks.create", scopeNote: orgWide ? "" : stateScopeNote }]),
         resolveAction("update", "Update risks", perms, [{ key: "risks.update", scopeNote: "" }]),
-        resolveAction("delete", "Delete risks", perms, [{ key: "risks.delete", scopeNote: "record scope and lifecycle conditions still apply" }]),
+        // RISK-BD-05: individual risks are never directly deletable by any role —
+        // a risk is only ever removed as a cascade side effect of permanently
+        // deleting its linked Project (see routes/risks.ts, RISK-DEL-14). No
+        // "Delete risks" action belongs here; risks.delete is not a real,
+        // reachable capability and must not be advertised as one.
         resolveAction("administer_risks", "Administer risk register", perms, [{ key: "risks.admin", scopeNote: "" }]),
       ],
     },

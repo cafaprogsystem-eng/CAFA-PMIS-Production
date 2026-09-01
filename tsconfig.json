@@ -16,6 +16,9 @@
       "path": "./lib/plan-transitions"
     },
     {
+      "path": "./lib/report-transitions"
+    },
+    {
       "path": "./lib/integrations-openai-ai-server"
     }
   ]

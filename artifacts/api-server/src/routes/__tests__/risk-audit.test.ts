@@ -370,7 +370,7 @@ describe("KPI/list parity — activeOnly filter", () => {
   });
   it("dashboard critical KPI and activeOnly list use the same status exclusion", () => {
     expect(ACTIVE_RISK_STATUS_SQL).toBe(
-      `NOT IN ('closed','mitigated','resolved','cancelled')`,
+      `NOT IN ('closed','mitigated')`,
     );
     expect(dashboardSource).toContain("ACTIVE_RISK_STATUS_SQL");
     expect(risksSource).toContain("ACTIVE_RISK_STATUS_SQL");

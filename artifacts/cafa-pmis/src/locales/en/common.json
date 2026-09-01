@@ -364,6 +364,7 @@
     "draftSyncRecovery": "Your local draft is safe. Review the error, correct the fields, and save again when connected.",
     "conflictRecovery": "The server version changed while you were offline. Keep this copy for reference, then discard it and reopen the server draft before continuing.",
     "discardLocalDraft": "Discard local copy",
+    "staleDraftWarning": "This local draft hasn't been touched in over {{days}} days. Double-check the reporting period and scope are still correct before continuing — they may have changed since you last saved.",
     "untitledDraft": "Untitled report draft",
     "draftAlreadyPending": "A saved copy is already waiting to sync. Wait for it to finish before saving another copy.",
     "status": {

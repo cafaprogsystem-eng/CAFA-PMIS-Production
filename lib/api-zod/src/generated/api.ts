@@ -3891,7 +3891,12 @@ export const GetReportAggregatesResponse = zod.object({
     planned: zod.number(),
     actual: zod.number(),
     remaining: zod.number(),
-    burnRatePct: zod.number(),
+    burnRatePct: zod
+      .number()
+      .nullable()
+      .describe(
+        "Null when planned is zero or unavailable — matches the same convention used elsewhere (Dashboard, Plans)",
+      ),
   }),
   activities: zod.array(
     zod.object({

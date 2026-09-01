@@ -10,7 +10,6 @@
   "loadErrorDesc": "حدث خطأ أثناء جلب سجل المخاطر. يرجى المحاولة مرة أخرى.",
   "registerSuccess": "تم تسجيل المخاطرة",
   "updateSuccess": "تم تحديث المخاطرة",
-  "deleteSuccess": "تم حذف المخاطرة",
   "projectRemoved": "[تم حذف المشروع]",
   "levels": {
     "low": "منخفض",

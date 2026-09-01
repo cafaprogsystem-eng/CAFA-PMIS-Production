@@ -243,7 +243,17 @@ router.get("/risks", riskReadGuard, async (req, res, next) => {
       filters.push(`${riskLevelSQL} = $${params.length}`);
     }
 
-    // TC sector restriction
+    // TC sector restriction — deliberately project-only, by design (RISK-BD-07).
+    // Risks have no sector column of their own (r.category is a risk TAXONOMY —
+    // Operational/Security/Financial/… — not a project-style sector), and
+    // r.plan_id/r.plan_activity_id are never populated by any live code path
+    // (POST /risks accepts only projectId; plans.ts only ever NULLs these two
+    // columns on delete), so there is no Plans-style sector fallback chain to
+    // resolve for a standalone risk — there is no sector data recorded for one
+    // anywhere in the system. A TC's mandate is inherently project/sector-bound,
+    // so a risk with no project link is intentionally visible only to non-
+    // sector-scoped roles (PM/SPC/ED/SPO/SOM), not TCs. Confirmed as expected
+    // behaviour, not a gap to close, during the Reports/Risk Register review.
     const tcSectors = tcSectorRestriction(req);
     if (tcSectors) {
       params.push(tcSectors);

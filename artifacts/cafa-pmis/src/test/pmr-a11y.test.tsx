@@ -79,25 +79,27 @@ describe("PMR-A11Y source wiring (reports.tsx)", () => {
   });
 
   it("PMR-A11Y-06: Repeated activity fields carry row context via rowLabel, remove buttons named", () => {
+    // rowLabel itself is still a plain positional fallback (not user-facing chrome
+    // text); the wrapper phrases around it were moved to i18n (formExtra.*Aria).
     expect(src).toContain("const rowLabel = a.name || (a.isUnplanned ? `Unplanned Activity ${i + 1}` : `Activity ${i + 1}`);");
-    expect(src).toContain("aria-label={`Remove ${rowLabel}`}");
-    expect(src).toContain("aria-label={`Activity Name — ${rowLabel}`}");
-    expect(src).toContain("aria-label={`Achievement Summary — ${rowLabel}`}");
-    expect(src).toContain("aria-label={`Actual Expenditure (This Period) — ${rowLabel}`}");
-    expect(src).toContain("aria-label={`Exception / Reason for Unplanned Activity — ${rowLabel}`}");
-    expect(src).toContain("aria-label={`Activity Status — ${rowLabel}`}");
-    expect(src).toContain("aria-label={`% of Implementation — ${rowLabel}`}");
-    expect(src).toContain("aria-label={`Challenges — ${rowLabel}`}");
-    expect(src).toContain("aria-label={`Mitigation Measures — ${rowLabel}`}");
-    expect(src).toContain("aria-label={`Next Steps — ${rowLabel}`}");
+    expect(src).toContain('aria-label={t("formExtra.removeRowAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.activityNameAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.achievementSummaryAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.actualExpenditureAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.exceptionReasonAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.activityStatusAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.implementationPercentAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.challengesAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.mitigationMeasuresAria", { label: rowLabel })}');
+    expect(src).toContain('aria-label={t("formExtra.nextStepsAria", { label: rowLabel })}');
     // simple (non-project) grid remove button also named
-    expect(src).toContain('aria-label={a.name ? `Remove "${a.name}"` : `Remove activity ${i + 1}`}');
+    expect(src).toContain('aria-label={a.name ? t("formExtra.removeActivityNamedAria", { name: a.name }) : t("formExtra.removeActivityNumberedAria", { number: i + 1 })}');
   });
 
   it("PMR-A11Y-07: Activity numeric inputs use inputMode numeric/decimal", () => {
-    expect(src).toMatch(/inputMode="decimal"\s*\n\s*aria-label=\{`Actual Expenditure/);
-    expect(src).toContain('inputMode="numeric" aria-label={`% of Implementation — ${rowLabel}`}');
-    expect(src).toContain('inputMode="numeric" aria-label={`Men beneficiaries — ${rowLabel}`}');
+    expect(src).toMatch(/inputMode="decimal"\s*\n\s*aria-label=\{t\("formExtra\.actualExpenditureAria"/);
+    expect(src).toContain('inputMode="numeric" aria-label={t("formExtra.implementationPercentAria", { label: rowLabel })}');
+    expect(src).toContain('inputMode="numeric" aria-label={t("formExtra.menBeneficiariesAria", { label: rowLabel })}');
   });
 
   it("PMR-A11Y-08: Beneficiary inputs — htmlFor/id association and row-context aria-labels", () => {
@@ -112,14 +114,14 @@ describe("PMR-A11Y source wiring (reports.tsx)", () => {
       expect(src).toContain(`id="rp-benef-${k}"`);
     }
     // per-activity row beneficiaries
-    for (const g of ["Men", "Women", "Boys", "Girls"]) {
-      expect(src).toContain(`aria-label={\`${g} beneficiaries — \${rowLabel}\`}`);
+    for (const key of ["men", "women", "boys", "girls"]) {
+      expect(src).toContain(`aria-label={t("formExtra.${key}BeneficiariesAria", { label: rowLabel })}`);
     }
-    expect(src).toContain("aria-label={`Total beneficiaries this period — ${rowLabel}`}");
+    expect(src).toContain('aria-label={t("formExtra.totalBeneficiariesThisPeriodAria", { label: rowLabel })}');
   });
 
   it("PMR-A11Y-09: Variance reason — row-contextual aria-label and aria-required when required", () => {
-    expect(src).toContain("aria-label={`Reason for Variance — ${rowLabel}`} aria-required=\"true\"");
+    expect(src).toContain('aria-label={t("formExtra.varianceReasonAria", { label: rowLabel })} aria-required="true"');
   });
 
   it("PMR-A11Y-10: Progress narrative loop — error association (id + aria-describedby)", () => {
@@ -145,18 +147,18 @@ describe("PMR-A11Y source wiring (reports.tsx)", () => {
     // activity-style attachments section
     expect(src).toContain('id="pmr-file-input"');
     expect(src).toContain('aria-describedby="pmr-file-formats"');
-    expect(src).toMatch(/id="pmr-file-formats"[^>]*>Accepted formats/);
+    expect(src).toMatch(/id="pmr-file-formats"[^>]*>\{t\("formExtra\.acceptedFormatsWithSize"\)\}/);
     // project/state/HQ attachments section
     expect(src).toContain('id="rp-file-input"');
     expect(src).toContain('aria-describedby="rp-file-formats"');
-    expect(src).toMatch(/id="rp-file-formats"[^>]*sr-only[^>]*>Accepted formats/);
+    expect(src).toMatch(/id="rp-file-formats"[^>]*sr-only[^>]*>\{t\("formExtra\.acceptedFormatsCsv"\)\}/);
   });
 
   it("PMR-A11Y-14: Attachment remove buttons and doc-type selects have accessible names", () => {
-    expect(src).toContain("aria-label={`Remove ${att.fileName}`}");
-    const removeDoc = (src.match(/aria-label=\{`Remove \$\{doc\.file\.name\}`\}/g) ?? []).length;
+    expect(src).toContain('aria-label={t("formExtra.removeFileAria", { fileName: att.fileName })}');
+    const removeDoc = (src.match(/aria-label=\{t\("formExtra\.removeFileAria", \{ fileName: doc\.file\.name \}\)\}/g) ?? []).length;
     expect(removeDoc).toBeGreaterThanOrEqual(2); // pending list + secondary remove button
-    expect(src).toContain("aria-label={`Document type for ${doc.file.name}`}");
+    expect(src).toContain('aria-label={t("formExtra.documentTypeForAria", { fileName: doc.file.name })}');
   });
 
   it("PMR-A11Y-15: Voice note Play/Pause has aria-label (form-voice-recorder.tsx)", () => {

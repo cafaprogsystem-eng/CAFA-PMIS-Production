@@ -28,7 +28,7 @@ import {
   operationalPopulationSQL,
   getProjectActivityWorkflow,
 } from "../lib/reportConstants";
-import { assertCanViewReport, assertAttachmentMutationAllowed, hasActiveTcForSector, hasActiveSpoForState } from "../lib/reportAuth";
+import { assertCanViewReport, assertAttachmentMutationAllowed, hasActiveTcForSector, hasActiveSpoForState, getReportSectorForAuth } from "../lib/reportAuth";
 import { hasFullOperationalAccess } from "../lib/accessControl";
 import {
   PMR_COMP_SUBMITTED_STATUSES,
@@ -71,54 +71,6 @@ async function reportDeepLink(reportId: number): Promise<string> {
           ? "activity"
           : "project";
   return `/reports/${slug}?open=${reportId}`;
-}
-
-/**
- * Returns the authoritative sector for a Report — used by TC scope checks.
- *
- * Security rule (spec §3):
- *   Project Reports  → return p.sector ONLY (Project Primary Sector is authoritative).
- *                      Fail-closed: if the project has no sector, return null so TC is denied.
- *                      NEVER fall back to r.sector — a stale historical value must not widen access.
- *   All other types  → return COALESCE(NULLIF(r.sector,''), p.sector) for backwards-compatible
- *                      behaviour (hq_sector reports carry their own authoritative sector in r.sector).
- *
- * Display formula (spec §3 "Display ≠ Security"):
- *   Keep COALESCE for UI/export presentation; this helper is only called for security checks.
- */
-async function getReportSector(reportId: number): Promise<string | null | undefined> {
-  const r = await pool.query<{
-    reportType: string | null;
-    projectId: number | null;
-    projectSector: string | null;
-    activitySector: string | null;
-    effectiveSector: string | null;
-  }>(
-    `SELECT r.report_type                           AS "reportType",
-            r.project_id                            AS "projectId",
-            p.sector                                AS "projectSector",
-            act.sector                              AS "activitySector",
-            COALESCE(NULLIF(r.sector,''), p.sector) AS "effectiveSector"
-     FROM reports r
-     LEFT JOIN projects    p   ON p.id   = r.project_id
-     LEFT JOIN activities  act ON act.id = r.activity_id
-     WHERE r.id = $1`,
-    [reportId],
-  );
-  if (r.rows.length === 0) return undefined;
-  const { reportType, projectId, projectSector, activitySector, effectiveSector } = r.rows[0];
-  // Project Reports: TC scope is based exclusively on the linked Project Primary Sector.
-  if (reportType === "project") return projectSector;
-  // Activity Reports: source-aware.
-  //   Project-linked: Project Primary Sector is the ONLY authority.
-  //   Standalone (project_id IS NULL): activity.sector is the ONLY authority.
-  // Fail-closed: null sector → assertSectorAllowed will deny TC access.
-  if (reportType === "activity") {
-    return projectId === null ? activitySector : projectSector;
-  }
-  // Other types (hq_sector carries its own authoritative sector; program_state has no
-  // TC sector scope enforced here). Use the effective sector for backwards-compat.
-  return effectiveSector;
 }
 
 /**
@@ -2629,7 +2581,7 @@ router.get("/reports/:reportId", requirePerm("reports.view"), async (req, res, n
       res.status(400).json({ error: "invalid report id" });
       return;
     }
-    const sector = await getReportSector(reportId);
+    const sector = await getReportSectorForAuth(reportId);
     if (sector === undefined) {
       res.status(404).json({ error: "report not found" });
       return;
@@ -2773,7 +2725,7 @@ router.patch(
         return;
       }
 
-      const sector = await getReportSector(reportId);
+      const sector = await getReportSectorForAuth(reportId);
       const guard = assertSectorAllowed(req, sector ?? null);
       if (!guard.ok) {
         res.status(guard.status).json(guard.body);
@@ -3052,7 +3004,7 @@ router.get(
       }
 
       // Enforce sector scope (same as GET /reports/:reportId)
-      const sector = await getReportSector(reportId);
+      const sector = await getReportSectorForAuth(reportId);
       if (sector === undefined) {
         res.status(404).json({ error: "report not found" });
         return;
@@ -3101,11 +3053,15 @@ router.get(
            FROM beneficiaries WHERE project_id = $1`,
           [projectId],
         ),
+        // `project_budgets` never existed in the tracked schema — this query used to
+        // throw on every real call. activities.budget_planned/budget_spent is the
+        // canonical project-budget source used everywhere else (GET /projects/:id/budget,
+        // dashboard.ts), so it's used here too.
         pool.query<{ planned: string; actual: string }>(
           `SELECT
-             COALESCE(SUM(amount),0)           AS planned,
-             COALESCE(SUM(amount_spent),0)     AS actual
-           FROM project_budgets WHERE project_id = $1`,
+             COALESCE(SUM(budget_planned),0)   AS planned,
+             COALESCE(SUM(budget_spent),0)     AS actual
+           FROM activities WHERE project_id = $1`,
           [projectId],
         ),
         pool.query(
@@ -3152,7 +3108,9 @@ router.get(
           planned,
           actual,
           remaining: planned - actual,
-          burnRatePct: planned > 0 ? Math.round((actual / planned) * 100) : 0,
+          // Null (not 0) when there's no valid planned amount to divide by — matches
+          // budget-presentation.ts's projectBurnRate convention used everywhere else.
+          burnRatePct: planned > 0 ? Math.round((actual / planned) * 100) : null,
         },
         activities: actRow.rows,
         indicators: indRow.rows.map((r) => ({
@@ -4151,7 +4109,7 @@ router.post(
       }
 
       // ── Sector scope check ────────────────────────────────────────────────
-      const sector = await getReportSector(reportId);
+      const sector = await getReportSectorForAuth(reportId);
       const guard = assertSectorAllowed(req, sector ?? null);
       if (!guard.ok) {
         await client.query("ROLLBACK");

@@ -57,7 +57,7 @@ describe("Dashboard source-population reconciliation", () => {
 
   it("matches Risk activeOnly and covered-State source populations", () => {
     expect(ACTIVE_RISK_STATUS_SQL).toBe(
-      "NOT IN ('closed','mitigated','resolved','cancelled')",
+      "NOT IN ('closed','mitigated')",
     );
     expect(routeSource).toContain("ACTIVE_RISK_STATUS_SQL");
     expect(routeSource).toContain(

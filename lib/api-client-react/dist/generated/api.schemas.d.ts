@@ -2298,7 +2298,11 @@ export type ReportAggregatesBudget = {
     planned: number;
     actual: number;
     remaining: number;
-    burnRatePct: number;
+    /**
+     * Null when planned is zero or unavailable — matches the same convention used elsewhere (Dashboard, Plans)
+     * @nullable
+     */
+    burnRatePct: number | null;
 };
 export type ReportAggregatesActivitiesItem = {
     id: number;

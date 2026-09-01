@@ -344,8 +344,13 @@ describe("RBAC-AUDIT: audit documents exist and are complete", () => {
   });
 
   it("represents wildcard-only route capabilities as explicit Inspector actions", () => {
-    for (const capability of ["settings.view", "risks.admin", "risks.delete"]) {
+    // risks.delete deliberately excluded: RISK-BD-05 — no DELETE /risks/:id route
+    // exists for any role, including super_admin via wildcard (routes/risks.ts,
+    // pinned by RISK-DEL-14). Unlike settings.view/risks.admin, it corresponds to
+    // no real, reachable capability, so it must not have an Inspector row either.
+    for (const capability of ["settings.view", "risks.admin"]) {
       expect(effectiveAccess, `missing wildcard Inspector row for ${capability}`).toContain(`"${capability}"`);
     }
+    expect(effectiveAccess, "risks.delete is not a real capability (RISK-BD-05) and must not have an Inspector row").not.toContain('"risks.delete"');
   });
 });

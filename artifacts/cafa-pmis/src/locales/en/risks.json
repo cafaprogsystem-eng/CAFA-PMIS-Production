@@ -10,7 +10,6 @@
   "loadErrorDesc": "An error occurred while fetching the risk register. Please try again.",
   "registerSuccess": "Risk registered",
   "updateSuccess": "Risk updated",
-  "deleteSuccess": "Risk deleted",
   "projectRemoved": "[Project removed]",
   "levels": {
     "low": "Low",

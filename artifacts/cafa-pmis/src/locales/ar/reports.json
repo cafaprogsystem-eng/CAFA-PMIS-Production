@@ -169,6 +169,7 @@
     "duplicate": "نسخ",
     "deleteDraft": "حذف المسودة",
     "duplicateAsDraft": "نسخ كمسودة",
+    "copyOfTitle": "نسخة من {{title}}",
     "noScopeEmpty": "لا تتوفر {{type}} في نطاقك الحالي.",
     "noFilterMatch": "لا تطابق أي {{type}} التصفية المحددة."
   },
@@ -435,7 +436,44 @@
     "coordinationUpdatesPlaceholder": "صف تحديثات التنسيق ذات الصلة…",
     "communityFeedbackPlaceholder": "لخّص ملاحظات المجتمع أو المشاركين ذات الصلة…",
     "noActivitiesHintPrefix": "لا توجد أنشطة بعد — انقر",
-    "noActivitiesHintSuffix": "."
+    "noActivitiesHintSuffix": ".",
+    "indicatorProgressTitle": "تقدم المؤشرات",
+    "indicatorProgressSubtitle": "(لهذه الفترة الدورية)",
+    "thisPeriodAchievementAria": "الإنجاز لهذه الفترة — {{name}}",
+    "remarksOptional": "ملاحظات (اختياري)",
+    "remarksAria": "ملاحظات — {{name}}",
+    "projectRisksTitle": "مخاطر المشروع",
+    "projectRisksSubtitle": "(من سجل المخاطر — تحديثات الحالة تُزامن تلقائيًا)",
+    "loadingRisks": "جارٍ تحميل المخاطر…",
+    "noLinkedRisks": "لا توجد مخاطر مرتبطة بهذا المشروع بعد. أضفها من سجل المخاطر.",
+    "riskStatusUpdateFailed": "فشل تحديث حالة الخطر",
+    "activityNameAria": "اسم النشاط — {{label}}",
+    "achievementSummaryAria": "ملخص الإنجاز — {{label}}",
+    "actualExpenditureAria": "الإنفاق الفعلي (هذه الفترة) — {{label}}",
+    "exceptionReasonAria": "استثناء / سبب النشاط غير المخطط له — {{label}}",
+    "activityStatusAria": "حالة النشاط — {{label}}",
+    "implementationPercentAria": "% التنفيذ — {{label}}",
+    "varianceReasonAria": "سبب الانحراف — {{label}}",
+    "menBeneficiariesAria": "المستفيدون من الرجال — {{label}}",
+    "womenBeneficiariesAria": "المستفيدات من النساء — {{label}}",
+    "boysBeneficiariesAria": "المستفيدون من الأولاد — {{label}}",
+    "girlsBeneficiariesAria": "المستفيدات من الفتيات — {{label}}",
+    "totalBeneficiariesThisPeriodAria": "إجمالي المستفيدين لهذه الفترة — {{label}}",
+    "challengesAria": "التحديات — {{label}}",
+    "mitigationMeasuresAria": "إجراءات التخفيف — {{label}}",
+    "nextStepsAria": "الخطوات التالية — {{label}}",
+    "outputAria": "المخرج — {{label}}",
+    "milestoneAria": "المعلم — {{label}}",
+    "removeRowAria": "حذف {{label}}",
+    "removeActivityNamedAria": "حذف \"{{name}}\"",
+    "removeActivityNumberedAria": "حذف النشاط {{number}}",
+    "downloadFileAria": "تنزيل {{fileName}}",
+    "removeFileAria": "حذف {{fileName}}",
+    "documentTypeForAria": "نوع المستند لـ {{fileName}}",
+    "openReportAria": "فتح التقرير: {{title}}",
+    "acceptedFormatsWithSize": "الصيغ المقبولة: PDF وWord وExcel والصور (JPG، PNG). الحد الأقصى 20 ميجابايت لكل ملف.",
+    "acceptedFormatsCsv": "الصيغ المقبولة: PDF وWord وExcel وCSV والصور (JPG، PNG).",
+    "attachDocument": "إرفاق مستند"
   },
   "wizard": {
     "step2": {
@@ -749,6 +787,8 @@
     "onDemand": "عند الطلب"
   },
   "hqForm": {
+    "correctErrorsBeforeContinuing": "يرجى تصحيح ما يلي قبل المتابعة:",
+    "noAttachmentsConfirm": "لم يتم رفع أي وثائق داعمة. يُوصى بشدة بتقديم الأدلة الداعمة (الصور وسجلات الحضور والملاحظات الميدانية).\n\nهل تريد التقديم بدون مرفقات؟",
     "unavailable": "غير متوفر",
     "formTitle": "تقرير قطاع المقر",
     "titleRevise": "مراجعة تقرير قطاع المقر",
@@ -1049,7 +1089,8 @@
     "planned": "مخطط",
     "spent": "مُنفَق",
     "remaining": "متبقي",
-    "burn": "معدل الاستهلاك"
+    "burn": "معدل الاستهلاك",
+    "loadError": "تعذّر تحميل البيانات المرجعية لهذا التقرير."
   },
   "consolidated": {
     "activitiesImplemented": "الأنشطة المنفَّذة",

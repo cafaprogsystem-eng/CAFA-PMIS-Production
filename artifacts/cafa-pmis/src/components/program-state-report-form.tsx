@@ -41,6 +41,7 @@ import {
 } from "@/lib/offline/report-drafts";
 import { isOfflineQueuedError } from "@/lib/offline/fetch-interceptor";
 import { useSyncContext } from "@/contexts/sync-context";
+import { sanitizeReportAttachments, buildReportPeriodLabel } from "@/lib/report-form-payload-shared";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1054,11 +1055,18 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
     girls: activities.reduce((s, a) => s + Number(a.beneficiariesGirls || 0), 0),
   };
 
-  // ── Payload builder ─────────────────────────────────────────────────────────
+  // ── Shared submit-readiness validation (SPR-007 client mirror) ──────────────
+  // Used by BOTH the create-and-submit path (via buildPayload) and the resubmit
+  // path (onSubmitReport's edit-mode branch, which otherwise only calls
+  // buildPatchPayload — a deliberately validation-free content-only PATCH —
+  // before invoking the submit transition). Previously only the create path
+  // validated client-side; a resubmission could reach the server with blank
+  // required fields, discovered only by the server's 422 instead of an
+  // immediate, specific error.
   /** onError: optional callback invoked with the validation message so callers
    *  can surface an accessible error summary in addition to the toast. */
-  function buildPayload(values: BasicValues, onError?: (msg: string) => void) {
-    function fail(msg: string) { toast.error(msg); onError?.(msg); return null; }
+  function validateSubmitReadiness(values: BasicValues, onError?: (msg: string) => void): boolean {
+    function fail(msg: string) { toast.error(msg); onError?.(msg); return false; }
 
     if (!values.stateId) return fail(t("stateForm.validationSelectState"));
     if (!values.title.trim()) return fail(t("stateForm.validationEnterTitle"));
@@ -1095,6 +1103,18 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
     if (!values.mitigationMeasures.trim()) return fail(t("stateForm.validationMitigationMeasures"));
     if (!values.nextPeriodPriorities.trim()) return fail(t("stateForm.validationNextPeriodPriorities"));
 
+    return true;
+  }
+
+  // ── Payload builder ─────────────────────────────────────────────────────────
+  /** onError: optional callback invoked with the validation message so callers
+   *  can surface an accessible error summary in addition to the toast. */
+  function buildPayload(values: BasicValues, onError?: (msg: string) => void) {
+    if (!validateSubmitReadiness(values, onError)) return null;
+
+    // Activities
+    const cleanActivities = activities.filter((a) => a.title.trim());
+
     // HQ Support
     const cleanHqRequests = hqRequests.filter((r) => r.supportType && r.description.trim());
 
@@ -1111,21 +1131,24 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
       relatedProjectId: a.relatedProjectId === "" ? null : Number(a.relatedProjectId),
     }));
 
-    const cleanAttachments = attachments.filter((d) => d.attachmentId || d.objectPath).map(({ tempId: _t, uploading: _u, file: _file, ...rest }) => rest);
+    const cleanAttachments = sanitizeReportAttachments(attachments);
 
     // Compute period
-    let period: string;
     let reportingMonthVal: number | undefined;
-    if (values.frequency === "quarterly") {
-      period = `${values.reportingYear}-Q${values.quarter}`;
-    } else if (values.frequency === "annual") {
-      period = String(values.reportingYear);
-    } else if (values.frequency === "on_demand") {
-      period = values.periodStart;
-    } else {
-      period = `${values.reportingYear}-${String(values.reportingMonth).padStart(2, "0")}`;
+    if (values.frequency !== "quarterly" && values.frequency !== "annual" && values.frequency !== "on_demand") {
       reportingMonthVal = Number(values.reportingMonth);
     }
+    const period = buildReportPeriodLabel(
+      {
+        frequency: values.frequency,
+        reportingYear: values.reportingYear,
+        quarter: values.quarter,
+        reportingMonth: values.reportingMonth,
+        periodStart: values.periodStart,
+        periodEnd: values.periodEnd,
+      },
+      "start-only",
+    );
 
     const sections = {
       frequency: values.frequency,
@@ -1202,9 +1225,7 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
           Number(a.beneficiariesBoys || 0) + Number(a.beneficiariesGirls || 0),
         relatedProjectId: a.relatedProjectId === "" ? null : Number(a.relatedProjectId),
       }));
-    const cleanAttachments = attachments
-      .filter((d) => d.attachmentId || d.objectPath)
-      .map(({ tempId: _t, uploading: _u, file: _file, ...rest }) => rest);
+    const cleanAttachments = sanitizeReportAttachments(attachments);
     const cleanHqRequests = hqRequests.filter((r) => r.supportType && r.description.trim());
     const cleanRisks = risks.filter((r) => r.title.trim());
 
@@ -1348,6 +1369,11 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
     try {
       let reportId: number;
       if ((isEditMode && existingReport) || createdReportId) {
+        // Resubmission — validate BEFORE patching. buildPatchPayload deliberately
+        // performs no field validation (it also serves plain content-save PATCHes
+        // that must not hard-validate like a submit does), so this is the only
+        // client-side gate a resubmission gets before hitting the server's 422.
+        if (!validateSubmitReadiness(values, raiseFormError)) return;
         // SPR-007: PATCH latest content first; if it fails, do NOT transition.
         setPatchPending(true);
         try {
@@ -1419,6 +1445,7 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
             error={localDraft.stored?.lastError}
             onDiscard={() => { void localDraft.remove(); onClose(); }}
             className="mt-2"
+            isStale={localDraft.isStale}
           />
         )}
         {!isOnline && (

@@ -597,7 +597,16 @@ function RiskDetailModal({
                     <div>
                       <Label htmlFor="edit-impact">{t("fields.impact")}</Label>
                       <div className="max-w-xs">
-                        <Select value={form.watch("impact") ?? ""} onValueChange={(v) => form.setValue("impact", v)}>
+                        <Select
+                          value={form.watch("impact") ?? ""}
+                          // Kept in sync with severity on edit, exactly like the create form
+                          // (createForm.setValue("impact"/"severity") above): impact is the
+                          // authoritative level input, but any code path that still reads the
+                          // legacy severity column directly (rather than through the impact ??
+                          // severity fallback computeRiskLevel/riskLevelSQL both use) must not
+                          // see it silently go stale after the risk's first edit.
+                          onValueChange={(v) => { form.setValue("impact", v); form.setValue("severity", v); }}
+                        >
                           <SelectTrigger id="edit-impact" aria-invalid={!!form.formState.errors.impact}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {IMPACTS.map((i) => <SelectItem key={i} value={i}>{t(`presentation.impacts.${i}`, { defaultValue: displayImpact(i) })}</SelectItem>)}

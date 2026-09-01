@@ -157,7 +157,7 @@ describe("REP-UX-07: Long filename truncated with title attribute in detail view
   });
 
   it("download link for attachments has aria-label naming the file", () => {
-    expect(reportsSrc).toContain("aria-label={`Download ${att.fileName}`}");
+    expect(reportsSrc).toContain('aria-label={t("formExtra.downloadFileAria", { fileName: att.fileName })}');
   });
 });
 

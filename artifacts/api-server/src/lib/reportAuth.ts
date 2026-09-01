@@ -36,9 +36,24 @@ export interface ReportAuthQueryExecutor {
 }
 
 /**
- * Returns the authoritative sector for a Report — identical logic to
- * `getReportSector` in routes/reports.ts. Exported here so voice-notes.ts
- * can share it without a circular dependency.
+ * Returns the authoritative sector for a Report — the single canonical
+ * implementation, used by every view/mutation/sector-scope check in the
+ * system (routes/reports.ts, voice-notes.ts, storage.ts). Previously
+ * duplicated three ways (routes/reports.ts's getReportSector,
+ * this file's own getReportSectorForMutation, and this function); the other
+ * two were deleted in favour of this one during the Reports/Risk Register
+ * consistency pass so the sector-resolution rule can never drift between
+ * call sites again.
+ *
+ * Security rule (spec §3):
+ *   Project Reports  → return p.sector ONLY (Project Primary Sector is authoritative).
+ *                      Fail-closed: if the project has no sector, return null so TC is denied.
+ *                      NEVER fall back to r.sector — a stale historical value must not widen access.
+ *   Activity Reports → source-aware: project-linked uses the Project's sector as the ONLY
+ *                      authority; standalone (project_id IS NULL) uses activity.sector as the
+ *                      ONLY authority.
+ *   All other types  → return COALESCE(NULLIF(r.sector,''), p.sector) for backwards-compatible
+ *                      behaviour (hq_sector reports carry their own authoritative sector in r.sector).
  *
  * Returns:
  *   - string | null  — the effective sector (null means "no sector" which
@@ -176,39 +191,6 @@ export function assertCanViewHqSectorSnapshot(
   return { ok: true };
 }
 
-// ─── Helper: resolve report sector for mutation scope ────────────────────────
-// (Mirrors getReportSector in reports.ts; kept here to avoid circular imports.)
-
-async function getReportSectorForMutation(
-  reportId: number,
-): Promise<string | null | undefined> {
-  const r = await pool.query<{
-    reportType: string | null;
-    projectId: number | null;
-    projectSector: string | null;
-    activitySector: string | null;
-    effectiveSector: string | null;
-  }>(
-    `SELECT r.report_type                           AS "reportType",
-            r.project_id                            AS "projectId",
-            p.sector                                AS "projectSector",
-            act.sector                              AS "activitySector",
-            COALESCE(NULLIF(r.sector,''), p.sector) AS "effectiveSector"
-     FROM reports r
-     LEFT JOIN projects    p   ON p.id   = r.project_id
-     LEFT JOIN activities  act ON act.id = r.activity_id
-     WHERE r.id = $1`,
-    [reportId],
-  );
-  if (r.rows.length === 0) return undefined;
-  const { reportType, projectId, projectSector, activitySector, effectiveSector } = r.rows[0];
-  if (reportType === "project") return projectSector;
-  if (reportType === "activity") {
-    return projectId === null ? activitySector : projectSector;
-  }
-  return effectiveSector;
-}
-
 /**
  * Shared auth helper for attachment/voice-note mutation.
  *
@@ -242,7 +224,7 @@ export async function assertAttachmentMutationAllowed(
       body: { error: "draft_edit_forbidden", message: "Only the original report author can edit this draft." },
     };
   }
-  const sector = await getReportSectorForMutation(reportId);
+  const sector = await getReportSectorForAuth(reportId);
   const sectorGuard = assertSectorAllowed(req, sector ?? null);
   if (!sectorGuard.ok) return { ok: false, status: sectorGuard.status, body: sectorGuard.body };
   return { ok: true };

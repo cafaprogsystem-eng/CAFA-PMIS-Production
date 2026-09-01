@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { canAuthorHqSectorReport, canAuthorProjectReport } from "../lib/permissions";
+import { REPORT_WORKFLOWS } from "@workspace/report-transitions";
 
 describe("canAuthorHqSectorReport — pure function", () => {
   it("HQSR-AUTH-FE-01: sector-assigned technical_coordinator → true", () => {
@@ -103,44 +104,53 @@ describe("HQ Sector create visibility — canCreate derivation", () => {
 });
 
 /**
- * Mirrors the HQSR coordination-review perm selection in transitionsFor()
- * (reports.tsx): for simple-chain reports, the coordination-stage actions are
- * gated on reports.approve.final when workflow_path = 'spc_fallback' on an
- * hq_sector report (PM is the reviewer via a narrow server-side exception —
- * PM does NOT hold reports.approve.coordination), and on
- * reports.approve.coordination otherwise (SPC reviews TC-authored reports).
+ * HQSR coordination-review permission — no longer a hand-mirrored shadow copy.
+ * transitionsFor() (reports.tsx) now derives this directly from
+ * @workspace/report-transitions's REPORT_WORKFLOWS, the exact same table
+ * routes/reports.ts enforces. This test imports the real function so it can
+ * never silently drift from production again — the failure mode that let the
+ * OLD hand-mirrored version here keep asserting a workflow_path='spc_fallback'
+ * exception (PM reviews via reports.approve.final) years after the backend
+ * generalised PM's coordination-review access to reports.approve.coordination
+ * for ALL hq_sector reports via Full Operational Access (Task #373).
  */
-function hqsrCoordPerm(reportType: string, workflowPath: string | null): string {
-  return reportType === "hq_sector" && workflowPath === "spc_fallback"
-    ? "reports.approve.final"
-    : "reports.approve.coordination";
+function hqsrCoordPerm(reportType: string): string {
+  return REPORT_WORKFLOWS[reportType].coordination_review.perm;
 }
 const hasPermMirror = (perms: string[], perm: string) => perms.includes("*") || perms.includes(perm);
-// Real production permission facts (permissionsFor): PM holds final but NOT
-// coordination; SPC holds coordination but NOT final.
-const PM_PERMS = ["reports.update", "reports.approve.final"];
+// Real production permission facts (middlewares/currentUser.ts): PM holds ALL
+// THREE of reports.approve.{technical,coordination,final} via Full Operational
+// Access; SPC holds only reports.approve.coordination.
+const PM_PERMS = ["reports.update", "reports.approve.coordination", "reports.approve.final"];
 const SPC_PERMS = ["reports.update", "reports.approve.coordination"];
 
 describe("HQSR coordination-review action visibility (HQSR-FB-FE)", () => {
-  it("HQSR-FB-FE-02: PM sees coordination action on spc_fallback report", () => {
-    expect(hasPermMirror(PM_PERMS, hqsrCoordPerm("hq_sector", "spc_fallback"))).toBe(true);
+  it("HQSR-FB-FE-02: PM sees coordination action on a spc_fallback report", () => {
+    expect(hasPermMirror(PM_PERMS, hqsrCoordPerm("hq_sector"))).toBe(true);
   });
-  it("HQSR-FB-FE-03: PM does NOT see coordination action on TC-authored (workflow_path null) report", () => {
-    expect(hasPermMirror(PM_PERMS, hqsrCoordPerm("hq_sector", null))).toBe(false);
+  it("HQSR-FB-FE-03: PM ALSO sees coordination action on a TC-authored (workflow_path null) report — Full Operational Access is not path-dependent", () => {
+    // Corrected behaviour: the coordination permission is unconditional per
+    // report type, not narrowed by workflow_path — matching the backend,
+    // which never differentiated here after Task #373.
+    expect(hasPermMirror(PM_PERMS, hqsrCoordPerm("hq_sector"))).toBe(true);
   });
-  it("HQSR-FB-FE-04: SPC (author) does not see coordination action on spc_fallback report", () => {
-    expect(hasPermMirror(SPC_PERMS, hqsrCoordPerm("hq_sector", "spc_fallback"))).toBe(false);
+  it("SPC (even as the spc_fallback report's own author) sees the coordination action — visibility is permission-based, not author-based", () => {
+    // Corrected behaviour: SPC holds reports.approve.coordination, the actual
+    // required permission, so the button renders for them too. Self-review
+    // prevention for non-PM/non-super_admin authors is enforced server-side
+    // (routes/reports.ts's author_id guard), not by hiding the button behind
+    // a permission SPC was never meant to lack.
+    expect(hasPermMirror(SPC_PERMS, hqsrCoordPerm("hq_sector"))).toBe(true);
   });
-  it("SPC still sees coordination action on TC-authored hq_sector report", () => {
-    expect(hasPermMirror(SPC_PERMS, hqsrCoordPerm("hq_sector", null))).toBe(true);
+  it("SPC sees coordination action on TC-authored hq_sector report", () => {
+    expect(hasPermMirror(SPC_PERMS, hqsrCoordPerm("hq_sector"))).toBe(true);
   });
-  it("non-hq_sector simple-chain reports keep the coordination perm (PM unaffected)", () => {
-    expect(hqsrCoordPerm("program_state", null)).toBe("reports.approve.coordination");
-    expect(hasPermMirror(PM_PERMS, hqsrCoordPerm("program_state", null))).toBe(false);
-    expect(hasPermMirror(SPC_PERMS, hqsrCoordPerm("program_state", null))).toBe(true);
+  it("non-hq_sector simple-chain reports keep the same coordination perm (PM and SPC both see it)", () => {
+    expect(hqsrCoordPerm("program_state")).toBe("reports.approve.coordination");
+    expect(hasPermMirror(PM_PERMS, hqsrCoordPerm("program_state"))).toBe(true);
+    expect(hasPermMirror(SPC_PERMS, hqsrCoordPerm("program_state"))).toBe(true);
   });
-  it("super_admin (wildcard) sees the action in both paths", () => {
-    expect(hasPermMirror(["*"], hqsrCoordPerm("hq_sector", "spc_fallback"))).toBe(true);
-    expect(hasPermMirror(["*"], hqsrCoordPerm("hq_sector", null))).toBe(true);
+  it("super_admin (wildcard) sees the action regardless of workflow_path", () => {
+    expect(hasPermMirror(["*"], hqsrCoordPerm("hq_sector"))).toBe(true);
   });
 });

@@ -7602,15 +7602,15 @@ export declare const GetReportAggregatesResponse: zod.ZodObject<{
         planned: zod.ZodNumber;
         actual: zod.ZodNumber;
         remaining: zod.ZodNumber;
-        burnRatePct: zod.ZodNumber;
+        burnRatePct: zod.ZodNullable<zod.ZodNumber>;
     }, "strip", zod.ZodTypeAny, {
         remaining: number;
-        burnRatePct: number;
+        burnRatePct: number | null;
         planned: number;
         actual: number;
     }, {
         remaining: number;
-        burnRatePct: number;
+        burnRatePct: number | null;
         planned: number;
         actual: number;
     }>;
@@ -7700,7 +7700,7 @@ export declare const GetReportAggregatesResponse: zod.ZodObject<{
     };
     budget: {
         remaining: number;
-        burnRatePct: number;
+        burnRatePct: number | null;
         planned: number;
         actual: number;
     };
@@ -7736,7 +7736,7 @@ export declare const GetReportAggregatesResponse: zod.ZodObject<{
     };
     budget: {
         remaining: number;
-        burnRatePct: number;
+        burnRatePct: number | null;
         planned: number;
         actual: number;
     };

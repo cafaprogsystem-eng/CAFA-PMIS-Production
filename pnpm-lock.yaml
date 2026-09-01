@@ -209,6 +209,9 @@ importers:
       '@workspace/plan-transitions':
         specifier: workspace:*
         version: link:../../lib/plan-transitions
+      '@workspace/report-transitions':
+        specifier: workspace:*
+        version: link:../../lib/report-transitions
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -475,6 +478,9 @@ importers:
       '@workspace/plan-transitions':
         specifier: workspace:*
         version: link:../../lib/plan-transitions
+      '@workspace/report-transitions':
+        specifier: workspace:*
+        version: link:../../lib/report-transitions
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -818,6 +824,8 @@ importers:
         version: 25.6.2
 
   lib/plan-transitions: {}
+
+  lib/report-transitions: {}
 
   scripts:
     devDependencies:
