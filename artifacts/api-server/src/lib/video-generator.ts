@@ -51,15 +51,26 @@ async function setProgress(id: number, pct: number, label: string) {
   );
 }
 
-function esc(s: string): string {
+// Escapes a display-text string for embedding inside a drawtext text='...'
+// value. A literal apostrophe is deliberately replaced with the typographic
+// right single quotation mark (U+2019) rather than backslash-escaped: an
+// escaped apostrophe (\') parses fine on its own, but truncated bullet text
+// (see the 55-char slice below) can leave a single, unmatched apostrophe in
+// the string, and empirically — reproduced locally with a real ffmpeg build
+// — a lone escaped apostrophe followed by more chained filters desyncs
+// ffmpeg's own quote-tracking across the rest of the filter chain ("No
+// option name near ..."). Swapping it for U+2019 sidesteps ffmpeg's
+// quoting rules entirely instead of trying to match them exactly, and reads
+// better on screen than a straight apostrophe regardless.
+export function esc(s: string): string {
   return s
     .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'")
+    .replace(/%/g, "\\%")
+    .replace(/'/g, "’")
     .replace(/:/g, "\\:")
-    .replace(/\[/g, "\\[")
-    .replace(/\]/g, "\\]")
     .replace(/,/g, "\\,")
-    .replace(/%/g, "\\%");
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]");
 }
 
 // Same escaping a filter *expression* (not literal text) needs when it's
