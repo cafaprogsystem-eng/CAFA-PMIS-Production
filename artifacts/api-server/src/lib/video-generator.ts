@@ -18,8 +18,8 @@ const exec = promisify(execCb);
 
 const FONT_EN   = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
 const FONT_MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
-const FONTS_DIR = "/tmp/cafa-fonts";
 const DATA_DIR  = "/home/runner/workspace/data/training-videos";
+const SCREENSHOTS_DIR = "/home/runner/workspace/data/training-screenshots";
 const TMP_BASE  = "/tmp/cafa-videos";
 
 // ---------------------------------------------------------------------------
@@ -56,34 +56,6 @@ async function getDuration(filePath: string): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
-// Arabic font download (for libass subtitle rendering)
-// ---------------------------------------------------------------------------
-
-async function ensureArabicFont(): Promise<string> {
-  const fontPath = path.join(FONTS_DIR, "Amiri-Regular.ttf");
-  await ensureDir(FONTS_DIR);
-  try {
-    await fs.access(fontPath);
-    return fontPath; // already cached
-  } catch { /* need to download */ }
-
-  const urls = [
-    "https://cdn.jsdelivr.net/gh/alif-type/amiri@1.000/Amiri-Regular.ttf",
-    "https://github.com/alif-type/amiri/raw/main/Amiri-Regular.ttf",
-  ];
-  for (const url of urls) {
-    try {
-      const buf = await fetchBuffer(url, 20000);
-      if (buf.length > 100_000) { // sanity check — font should be > 100KB
-        await fs.writeFile(fontPath, buf);
-        return fontPath;
-      }
-    } catch { /* try next */ }
-  }
-  return FONT_EN; // fallback — won't render Arabic but won't crash
-}
-
-// ---------------------------------------------------------------------------
 // HTTP fetch helper
 // ---------------------------------------------------------------------------
 
@@ -111,7 +83,7 @@ function fetchBuffer(url: string, timeout = 15000): Promise<Buffer> {
 }
 
 // ---------------------------------------------------------------------------
-// TTS — Google Translate (Arabic, chunked at 190 chars)
+// TTS — Google Translate (English, chunked at 190 chars)
 // ---------------------------------------------------------------------------
 
 function chunkText(text: string, max = 190): string[] {
@@ -133,7 +105,7 @@ async function fetchTTS(text: string, tmpDir: string, name: string): Promise<str
   const chunkFiles: string[] = [];
   for (let i = 0; i < chunks.length; i++) {
     const enc = encodeURIComponent(chunks[i]);
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${enc}&tl=ar&client=tw-ob&ttsspeed=0.82`;
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${enc}&tl=en&client=tw-ob&ttsspeed=0.82`;
     try {
       const buf = await fetchBuffer(url, 12000);
       if (buf.length < 100) throw new Error("Empty TTS response");
@@ -208,7 +180,7 @@ function renderMockupFilters(elements: MockupElement[]): string[] {
 async function buildIntroSlide(tmpDir: string): Promise<string> {
   const out = path.join(tmpDir, "slide_000.mp4");
   const audioPath = await fetchTTS(
-    FULL_SYSTEM_SCRIPT[0].narrationAr,
+    FULL_SYSTEM_SCRIPT[0].narrationEn,
     tmpDir, "audio_intro",
   ) ?? await silentAudio(8, tmpDir, "audio_intro");
 
@@ -218,7 +190,7 @@ async function buildIntroSlide(tmpDir: string): Promise<string> {
     `drawtext=text='CAFA':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2-130:fontcolor=0xe8a012:fontsize=64`,
     `drawtext=text='Program Management System':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2-50:fontcolor=white:fontsize=32`,
     `drawtext=text='Complete System Training Guide':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+10:fontcolor=white:fontsize=24`,
-    `drawtext=text='Arabic Voice-Over  |  Full System Walkthrough':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+55:fontcolor=0xe8a012:fontsize=18`,
+    `drawtext=text='English Voice-Over  |  Full System Walkthrough':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+55:fontcolor=0xe8a012:fontsize=18`,
     `drawtext=text='CAFA Development Organization':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h-45:fontcolor=white@0.5:fontsize=15`,
     "fade=t=in:st=0:d=0.5",
   ].join(",");
@@ -230,7 +202,7 @@ async function buildIntroSlide(tmpDir: string): Promise<string> {
 async function buildOutroSlide(tmpDir: string): Promise<string> {
   const out = path.join(tmpDir, "slide_outro.mp4");
   const lastSlide = FULL_SYSTEM_SCRIPT[FULL_SYSTEM_SCRIPT.length - 1];
-  const audioPath = await fetchTTS(lastSlide.narrationAr, tmpDir, "audio_outro")
+  const audioPath = await fetchTTS(lastSlide.narrationEn, tmpDir, "audio_outro")
     ?? await silentAudio(8, tmpDir, "audio_outro");
 
   const vf = [
@@ -249,7 +221,7 @@ async function buildOutroSlide(tmpDir: string): Promise<string> {
 
 async function buildSectionDivider(slide: FullSlide, index: number, tmpDir: string): Promise<string> {
   const out = path.join(tmpDir, `slide_${String(index).padStart(3, "0")}.mp4`);
-  const audioPath = await fetchTTS(slide.narrationAr, tmpDir, `audio_${index}`)
+  const audioPath = await fetchTTS(slide.narrationEn, tmpDir, `audio_${index}`)
     ?? await silentAudio(3, tmpDir, `audio_${index}`);
 
   const sectionNum = slide.sectionNum?.toString().padStart(2, "0") ?? "00";
@@ -267,15 +239,26 @@ async function buildSectionDivider(slide: FullSlide, index: number, tmpDir: stri
   return out;
 }
 
+export function resolveScreenshotPath(slide: FullSlide): string | null {
+  if (!slide.screenshotKey) return null;
+  const p = path.join(SCREENSHOTS_DIR, `${slide.screenshotKey}.png`);
+  return fsSync.existsSync(p) ? p : null;
+}
+
 async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string): Promise<string> {
-  const out = path.join(tmpDir, `slide_${String(index).padStart(3, "0")}.mp4`);
-  const audioPath = await fetchTTS(slide.narrationAr, tmpDir, `audio_${index}`)
+  const audioPath = await fetchTTS(slide.narrationEn, tmpDir, `audio_${index}`)
     ?? await silentAudio(slide.durationHint, tmpDir, `audio_${index}`);
 
-  const hasMockup = !!(slide.mockup?.length);
-  const contentWidth = hasMockup ? 700 : 1200;
+  const screenshotPath = resolveScreenshotPath(slide);
+  if (screenshotPath && slide.screenshotLayout === "full") {
+    return buildFullScreenshotSlide(slide, index, screenshotPath, audioPath, tmpDir);
+  }
 
-  // ---- Build filter chain ----
+  const out = path.join(tmpDir, `slide_${String(index).padStart(3, "0")}.mp4`);
+  const hasMockup = !screenshotPath && !!(slide.mockup?.length);
+  const hasPanel = !!screenshotPath || hasMockup;
+
+  // ---- Build filter chain (drawn onto the solid navy background input) ----
   const filters: string[] = [];
 
   // Background
@@ -298,10 +281,13 @@ async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string
     filters.push(`drawtext=text='${sn}':fontfile='${FONT_EN}':x=w-222:y=25:fontcolor=0x1a2744:fontsize=26`);
   }
 
-  // Mockup panel (right side) — render before text so text overlaps correctly
-  if (hasMockup) {
-    // Panel separator line
+  // Panel separator line (screenshot or drawn mockup both sit in the same right-side panel)
+  if (hasPanel) {
     filters.push("drawbox=x=718:y=85:w=2:h=625:color=0xe8a012@0.3:t=fill");
+  }
+
+  // Drawn mockup panel — only when no real screenshot is available yet
+  if (hasMockup) {
     for (const f of renderMockupFilters(slide.mockup!)) {
       filters.push(f);
     }
@@ -327,8 +313,63 @@ async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string
   // Fade
   filters.push("fade=t=in:st=0:d=0.3");
 
+  if (screenshotPath) {
+    // "card" layout: the real screenshot sits in the same narrow panel region
+    // (730,90 .. 1260,640) the mockup used to draw by hand.
+    const filterComplex =
+      `[0:v]${filters.join(",")}[bg];` +
+      `[1:v]scale=530:550[shot];` +
+      `[bg][shot]overlay=730:90[outv]`;
+    await exec(
+      `ffmpeg -y -f lavfi -i "color=c=0x1a2744:s=1280x720:r=24" -i "${screenshotPath}" -i "${audioPath}" ` +
+      `-filter_complex "${filterComplex}" -map "[outv]" -map 2:a -c:v libx264 -preset ultrafast -crf 26 -c:a aac -b:a 96k -shortest "${out}"`,
+    );
+    return out;
+  }
+
   const vf = filters.join(",");
   await exec(`ffmpeg -y -f lavfi -i "color=c=0x1a2744:s=1280x720:r=24" -i "${audioPath}" -vf "${vf}" -c:v libx264 -preset ultrafast -crf 26 -c:a aac -b:a 96k -shortest "${out}"`);
+  return out;
+}
+
+// "full" layout: the real screenshot fills the frame (wide, full-page screens
+// like Dashboard or Projects don't fit the narrow card region above); title
+// and bullets sit in a translucent lower-third band over the screenshot.
+async function buildFullScreenshotSlide(
+  slide: FullSlide,
+  index: number,
+  screenshotPath: string,
+  audioPath: string,
+  tmpDir: string,
+): Promise<string> {
+  const out = path.join(tmpDir, `slide_${String(index).padStart(3, "0")}.mp4`);
+  const secLabel = slide.sectionEn ? esc(slide.sectionEn.toUpperCase()) : "";
+  const bandTop = 500;
+
+  const filters: string[] = [
+    "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720",
+    "drawbox=x=0:y=0:w=iw:h=56:color=0x1a2744@0.85:t=fill",
+    `drawtext=text='${secLabel}':fontfile='${FONT_EN}':x=24:y=16:fontcolor=0xe8a012:fontsize=22`,
+    `drawtext=text='CAFA PMIS':fontfile='${FONT_EN}':x=w-160:y=16:fontcolor=white:fontsize=20`,
+    `drawbox=x=0:y=${bandTop}:w=iw:h=${720 - bandTop}:color=0x0a1220@0.72:t=fill`,
+    `drawtext=text='${esc(slide.titleEn)}':fontfile='${FONT_EN}':x=28:y=${bandTop + 14}:fontcolor=0xe8a012:fontsize=26`,
+  ];
+
+  const startY = bandTop + 56;
+  const lineH = 34;
+  const points = slide.pointsEn.slice(0, 4); // the lower-third band has less room than the old left column
+  for (let i = 0; i < points.length; i++) {
+    const y = startY + i * lineH;
+    const truncated = points[i].length > 70 ? points[i].slice(0, 70) + "…" : points[i];
+    filters.push(`drawtext=text='• ${esc(truncated)}':fontfile='${FONT_EN}':x=28:y=${y}:fontcolor=white:fontsize=18`);
+  }
+  filters.push("fade=t=in:st=0:d=0.3");
+
+  const vf = filters.join(",");
+  await exec(
+    `ffmpeg -y -loop 1 -framerate 24 -i "${screenshotPath}" -i "${audioPath}" -vf "${vf}" ` +
+    `-c:v libx264 -preset ultrafast -crf 26 -c:a aac -b:a 96k -shortest "${out}"`,
+  );
   return out;
 }
 
@@ -347,10 +388,9 @@ function toAssTime(secs: number): string {
 async function generateASSSubtitles(
   slides: FullSlide[],
   clipDurations: number[],
-  arabicFontPath: string,
   outputPath: string,
 ): Promise<void> {
-  const fontName = path.basename(arabicFontPath, ".ttf");
+  const fontName = path.basename(FONT_EN, ".ttf");
   const header = `[Script Info]
 Title: CAFA PMIS Training
 ScriptType: v4.00+
@@ -360,7 +400,7 @@ WrapStyle: 1
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Arabic,${fontName},28,&H00FFFFFF,&H000000FF,&H00000000,&HAA000000,0,0,0,0,100,100,0,0,1,3,1,2,20,20,20,1
+Style: English,${fontName},28,&H00FFFFFF,&H000000FF,&H00000000,&HAA000000,0,0,0,0,100,100,0,0,1,3,1,2,20,20,20,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
@@ -372,9 +412,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     const start = toAssTime(t);
     const end = toAssTime(t + Math.max(duration - 0.2, 0.5));
 
-    if (slides[i].narrationAr && slides[i].type !== "section-header") {
-      const text = slides[i].narrationAr.replace(/,/g, "،").replace(/\n/g, "\\N");
-      dialogues.push(`Dialogue: 0,${start},${end},Arabic,,0,0,0,,{\\fad(300,300)}${text}`);
+    if (slides[i].narrationEn && slides[i].type !== "section-header") {
+      const text = slides[i].narrationEn.replace(/\n/g, "\\N");
+      dialogues.push(`Dialogue: 0,${start},${end},English,,0,0,0,,{\\fad(300,300)}${text}`);
     }
     t += duration;
   }
@@ -410,9 +450,6 @@ export async function generateFullSystemVideo(videoId: number): Promise<void> {
   const clipDurations: number[] = [];
 
   try {
-    await setProgress(videoId, 2, "Downloading Arabic font for subtitles…");
-    const arabicFont = await ensureArabicFont();
-
     const slides = FULL_SYSTEM_SCRIPT;
     const total = slides.length;
 
@@ -441,10 +478,10 @@ export async function generateFullSystemVideo(videoId: number): Promise<void> {
     await setProgress(videoId, 84, "Assembling final video…");
     await concatClips(clipPaths, rawConcat);
 
-    await setProgress(videoId, 88, "Generating Arabic subtitle track…");
-    await generateASSSubtitles(slides, clipDurations, arabicFont, assPath);
+    await setProgress(videoId, 88, "Generating subtitle track…");
+    await generateASSSubtitles(slides, clipDurations, assPath);
 
-    await setProgress(videoId, 92, "Burning Arabic captions into video…");
+    await setProgress(videoId, 92, "Burning captions into video…");
     // Escape path for libass filter
     const assEscaped = assPath.replace(/\\/g, "/").replace(/:/g, "\\:");
     await exec(

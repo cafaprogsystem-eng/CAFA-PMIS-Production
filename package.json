@@ -14,7 +14,8 @@
     "test:dashboard-truthfulness-browser": "playwright test --config artifacts/cafa-pmis/playwright.dashboard-truthfulness.config.ts",
     "test:offline-browser": "playwright test --config artifacts/cafa-pmis/playwright.offline.config.ts",
     "test:visual:sidebar": "pnpm --filter @workspace/cafa-pmis run test:visual:sidebar",
-    "test:visual:sidebar:update": "pnpm --filter @workspace/cafa-pmis run test:visual:sidebar:update"
+    "test:visual:sidebar:update": "pnpm --filter @workspace/cafa-pmis run test:visual:sidebar:update",
+    "capture-training-screenshots": "node ./scripts/capture-training-screenshots.mjs"
   },
   "private": true,
   "devDependencies": {
@@ -23,6 +24,7 @@
     "typescript": "~5.9.3"
   },
   "dependencies": {
-    "@playwright/test": "1.57.0"
+    "@playwright/test": "1.57.0",
+    "sharp": "^0.34.5"
   }
 }

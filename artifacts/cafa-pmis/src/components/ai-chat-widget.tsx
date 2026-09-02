@@ -49,6 +49,39 @@ function getOrCreateSessionId(): string {
   return fresh;
 }
 
+// ── Draggable widget position ───────────────────────────────────────────────
+// The floating widget used to be pinned to one fixed corner (bottom-right)
+// regardless of language direction. It's now freely draggable — from the
+// launcher bubble or the panel's header bar — with the dropped position
+// remembered per device. No saved position yet (first run, or storage
+// unavailable) → falls back to that original corner, unchanged.
+const WIDGET_POSITION_STORAGE_KEY = "cafa.ai.widgetPosition";
+const LAUNCHER_SIZE = 48; // h-12 w-12
+const PANEL_GAP = 12;
+const VIEWPORT_MARGIN = 8;
+const DRAG_CLICK_THRESHOLD = 6; // px of movement before a press counts as a drag, not a click
+
+type WidgetPosition = { x: number; y: number }; // launcher's top-left corner, viewport px
+
+function readStoredWidgetPosition(): WidgetPosition | null {
+  try {
+    const raw = localStorage.getItem(WIDGET_POSITION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown };
+    if (typeof parsed.x === "number" && typeof parsed.y === "number") return { x: parsed.x, y: parsed.y };
+  } catch { /* localStorage unavailable, or a corrupt stored value */ }
+  return null;
+}
+
+function clampWidgetPositionToViewport(pos: WidgetPosition): WidgetPosition {
+  const maxX = Math.max(VIEWPORT_MARGIN, window.innerWidth - LAUNCHER_SIZE - VIEWPORT_MARGIN);
+  const maxY = Math.max(VIEWPORT_MARGIN, window.innerHeight - LAUNCHER_SIZE - VIEWPORT_MARGIN);
+  return {
+    x: Math.min(Math.max(pos.x, VIEWPORT_MARGIN), maxX),
+    y: Math.min(Math.max(pos.y, VIEWPORT_MARGIN), maxY),
+  };
+}
+
 export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation("ai");
   const [open, setOpen] = useState(embedded);
@@ -58,11 +91,22 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
   const [streaming, setStreaming] = useState(false);
   const [sessionId] = useState(getOrCreateSessionId);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [position, setPosition] = useState<WidgetPosition | null>(() => (embedded ? null : readStoredWidgetPosition()));
+  const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const prevOpenRef = useRef(false);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startPointerX: number;
+    startPointerY: number;
+    startPosition: WidgetPosition;
+    lastPosition: WidgetPosition;
+    moved: boolean;
+  } | null>(null);
+  const justDraggedRef = useRef(false);
   const [location] = useLocation();
   const { data: meData } = useGetMe();
   const user = meData?.user;
@@ -109,6 +153,75 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
     }
     prevOpenRef.current = open;
   }, [open]);
+
+  // Re-clamp a saved/dragged position after the viewport is resized (e.g.
+  // rotating a phone, or resizing a desktop window) so the widget can never
+  // end up stranded off-screen.
+  useEffect(() => {
+    if (embedded) return;
+    function handleResize() {
+      setPosition((current) => (current ? clampWidgetPositionToViewport(current) : current));
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [embedded]);
+
+  // Shared drag handling for both the launcher bubble and the panel header —
+  // Pointer Events cover mouse, touch, and pen with the same code path.
+  // A press only counts as a drag once it moves past a small threshold, so a
+  // plain tap/click still opens/closes or minimises the panel as before.
+  const handleDragPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    if (embedded) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    // Let the header's own Clear history / Minimise buttons behave normally
+    // instead of starting a drag underneath them.
+    if ((e.target as HTMLElement).closest("button") && e.currentTarget.tagName !== "BUTTON") return;
+    const rect = launcherRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const startPosition = { x: rect.left, y: rect.top };
+    dragStateRef.current = {
+      pointerId: e.pointerId,
+      startPointerX: e.clientX,
+      startPointerY: e.clientY,
+      startPosition,
+      lastPosition: startPosition,
+      moved: false,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [embedded]);
+
+  const handleDragPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.startPointerX;
+    const dy = e.clientY - drag.startPointerY;
+    if (!drag.moved && Math.hypot(dx, dy) < DRAG_CLICK_THRESHOLD) return;
+    drag.moved = true;
+    justDraggedRef.current = true;
+    setIsDragging(true);
+    const next = clampWidgetPositionToViewport({ x: drag.startPosition.x + dx, y: drag.startPosition.y + dy });
+    drag.lastPosition = next;
+    setPosition(next);
+  }, []);
+
+  const handleDragPointerUp = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    if (drag.moved) {
+      try { localStorage.setItem(WIDGET_POSITION_STORAGE_KEY, JSON.stringify(drag.lastPosition)); } catch { /* non-fatal */ }
+    }
+    setIsDragging(false);
+    dragStateRef.current = null;
+  }, []);
+
+  // A click/tap that follows a genuine drag must not also toggle open/close
+  // or un-minimise — consume exactly one such click, then resume normal
+  // behaviour on the next one.
+  const swallowClickAfterDrag = useCallback((action: () => void) => {
+    if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+    action();
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -245,9 +358,34 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
     ? t("widget.uatDisabled")
     : t("widget.adminDisabled");
 
-  // Shared positioning — launcher: 24px from bottom/right; panel: 12px above launcher
+  // Shared positioning — launcher: 24px from bottom/right; panel: 12px above launcher.
+  // Once the widget has been dragged (or a prior drag was restored from
+  // storage), `position` overrides both with explicit viewport-pixel
+  // coordinates instead.
   const launcherBottomStyle = "calc(max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem)))";
   const panelBottomStyle   = "calc(max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem)) + 48px + 12px)";
+
+  const launcherStyle: React.CSSProperties = position
+    ? { left: position.x, top: position.y }
+    : { bottom: launcherBottomStyle, right: "1.5rem" };
+
+  const panelStyle: React.CSSProperties = (() => {
+    if (!position) return { bottom: panelBottomStyle, right: "1.5rem" };
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    // Rough estimate matching the panel's own max-w-[400px] / w-[calc(100vw-3rem)]
+    // and maxHeight rules — used only to keep it inside the viewport, not to
+    // control its actual rendered size.
+    const estimatedWidth = Math.min(400, viewportW - 48);
+    const estimatedMinHeight = Math.min(300, viewportH - 120);
+    const spaceAbove = position.y - VIEWPORT_MARGIN;
+    const openAbove = spaceAbove >= estimatedMinHeight;
+    let left = position.x + LAUNCHER_SIZE - estimatedWidth;
+    left = Math.min(Math.max(left, VIEWPORT_MARGIN), Math.max(VIEWPORT_MARGIN, viewportW - estimatedWidth - VIEWPORT_MARGIN));
+    return openAbove
+      ? { left, bottom: viewportH - position.y + PANEL_GAP }
+      : { left, top: position.y + LAUNCHER_SIZE + PANEL_GAP };
+  })();
 
   return (
     <>
@@ -259,20 +397,24 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
               ref={launcherRef}
               id="cafa-ai-launcher"
               type="button"
-              onClick={() => open ? setOpen(false) : (setOpen(true), setMinimized(false))}
+              onPointerDown={handleDragPointerDown}
+              onPointerMove={handleDragPointerMove}
+              onPointerUp={handleDragPointerUp}
+              onPointerCancel={handleDragPointerUp}
+              onClick={() => swallowClickAfterDrag(() => (open ? setOpen(false) : (setOpen(true), setMinimized(false))))}
               aria-label={open ? t("widget.closeAssistant") : t("widget.openAssistant")}
               aria-expanded={open}
               aria-controls="cafa-ai-panel"
               className={cn(
-                "fixed z-50 h-12 w-12 rounded-full flex items-center justify-center",
+                "fixed z-50 h-12 w-12 rounded-full flex items-center justify-center touch-none cursor-grab active:cursor-grabbing",
                 enabled
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-slate-600 text-white hover:bg-slate-700",
                 "shadow-md hover:shadow-lg",
-                "transition-all duration-150 motion-reduce:transition-none",
+                isDragging ? "" : "transition-all duration-150 motion-reduce:transition-none",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               )}
-              style={{ bottom: launcherBottomStyle, right: "1.5rem" }}
+              style={launcherStyle}
             >
               {open
                 ? <X className="h-5 w-5" aria-hidden="true" />
@@ -308,20 +450,25 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
           style={embedded
             ? { maxHeight: minimized ? "56px" : "min(70vh, 700px)", overflow: "hidden" }
             : {
-                bottom: panelBottomStyle,
-                right: "1.5rem",
+                ...panelStyle,
                 maxHeight: minimized ? "56px" : "min(75vh, calc(100dvh - 120px))",
                 overflow: "hidden",
               }}
         >
-          {/* ── Panel header — 52–56px, compact ── */}
+          {/* ── Panel header — 52–56px, compact — also the drag handle ── */}
           <div
             className={cn(
-              "flex items-center gap-2.5 px-4 py-3 shrink-0 rounded-t-2xl cursor-pointer select-none",
+              "flex items-center gap-2.5 px-4 py-3 shrink-0 rounded-t-2xl select-none",
+              !embedded && "touch-none cursor-grab active:cursor-grabbing",
+              embedded && "cursor-pointer",
               enabled ? "bg-primary text-primary-foreground" : "bg-slate-700 text-white",
             )}
             style={{ minHeight: "54px" }}
-            onClick={() => minimized && setMinimized(false)}
+            onPointerDown={handleDragPointerDown}
+            onPointerMove={handleDragPointerMove}
+            onPointerUp={handleDragPointerUp}
+            onPointerCancel={handleDragPointerUp}
+            onClick={() => swallowClickAfterDrag(() => { if (minimized) setMinimized(false); })}
           >
             {/* CAFA AI icon */}
             <div className="h-7 w-7 rounded-full bg-white/15 flex items-center justify-center shrink-0" aria-hidden="true">

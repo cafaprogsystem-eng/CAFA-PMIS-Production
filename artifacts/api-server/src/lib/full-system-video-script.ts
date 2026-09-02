@@ -13,9 +13,21 @@ export type FullSlide = {
   sectionAr?: string;
   titleEn: string;
   pointsEn: string[];
-  narrationAr: string;
+  narrationEn: string;
   durationHint: number;
   mockup?: MockupElement[];
+  // Real screenshot support: when screenshotKey is set AND
+  // data/training-screenshots/<screenshotKey>.png exists at render time, the
+  // video generator composites that real captured screenshot instead of
+  // drawing `mockup` — see scripts/capture-training-screenshots.mjs. `mockup`
+  // is kept as a fallback for slides that already have a screenshotKey, so a
+  // render started before the screenshot is captured still produces a
+  // complete video. "card" reuses the narrow floating-panel treatment
+  // (login-sized screens); "full" fills the frame with the real screenshot
+  // and puts the title/bullets in a lower-third band (wide, full-page
+  // screens like Dashboard or Projects that don't fit a narrow card).
+  screenshotKey?: string;
+  screenshotLayout?: "card" | "full";
 };
 
 // Mockup panel occupies x: 730..1250, y: 90..640 (right 40% of frame)
@@ -55,8 +67,8 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
   {
     type: "intro",
     titleEn: "CAFA Program Management System",
-    pointsEn: ["Complete System Training", "Arabic Voice-Over Guide", "CAFA Development Organization"],
-    narrationAr: "أهلاً وسهلاً بكم في دليل التدريب الشامل لنظام إدارة البرامج لمنظمة كافا للتنمية. سنستعرض في هذا الفيديو جميع وحدات النظام خطوة بخطوة.",
+    pointsEn: ["Complete System Training", "English Voice-Over Guide", "CAFA Development Organization"],
+    narrationEn: "Welcome to the complete training guide for the CAFA Program Management System. In this video we'll walk through every module of the system, step by step.",
     durationHint: 8,
   },
 
@@ -68,7 +80,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 1, sectionEn: "Login & Email Verification", sectionAr: "تسجيل الدخول والتحقق من البريد الإلكتروني",
     titleEn: "Login & Email Verification",
     pointsEn: [],
-    narrationAr: "القسم الأول: تسجيل الدخول والتحقق من البريد الإلكتروني.",
+    narrationEn: "Section one: logging in and verifying your email address.",
     durationHint: 3,
   },
   {
@@ -76,8 +88,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 1, sectionEn: "Login",
     titleEn: "Accessing the System",
     pointsEn: ["Open the CAFA PMIS in your browser", "Enter your Username or Email address", "Enter your Password (case sensitive)", "Tick 'Remember me' for 30-day sessions", "Click the Sign In button"],
-    narrationAr: "للوصول إلى النظام، افتح متصفحك وانتقل إلى رابط نظام كافا. أدخل اسم المستخدم أو البريد الإلكتروني المسجل، ثم كلمة المرور. يمكنك تحديد خيار 'تذكرني' للبقاء مسجلاً لمدة ثلاثين يوماً. انقر على زر تسجيل الدخول للمتابعة.",
+    narrationEn: "To access the system, open your browser and go to the CAFA PMIS link. Enter your registered username or email address, followed by your password. You can tick 'Remember me' to stay signed in for thirty days. Click the Sign In button to continue.",
     durationHint: 10,
+    screenshotKey: "login",
+    screenshotLayout: "card",
     mockup: [
       ...mkPanel(),
       ...mkHeader("CAFA PMIS — Sign In"),
@@ -96,7 +110,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 1, sectionEn: "Login",
     titleEn: "Login Security & Roles",
     pointsEn: ["Only ACTIVE accounts can log in", "Login bumps your Last Login timestamp", "Non-active accounts get generic error", "Session cookie valid 8 hours (or 30 days)", "7 roles control what you see & can do"],
-    narrationAr: "يقبل النظام تسجيل الدخول فقط للحسابات النشطة. في حال كان حسابك موقوفاً أو غير مفعل، ستظهر رسالة خطأ عامة دون الكشف عن سبب الرفض. مدة جلسة العمل ثماني ساعات، أو ثلاثون يوماً عند تفعيل خيار التذكر. يحدد دور المستخدم الصفحات والإجراءات المتاحة له في النظام.",
+    narrationEn: "Only active accounts can sign in to the system. If your account is suspended or not yet active, you'll see a generic error message without any detail about why. Your session lasts eight hours, or thirty days if you selected 'Remember me'. Your role determines exactly which pages and actions are available to you.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -120,7 +134,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 2, sectionEn: "Password Reset", sectionAr: "إعادة تعيين كلمة المرور",
     titleEn: "Password Reset",
     pointsEn: [],
-    narrationAr: "القسم الثاني: إعادة تعيين كلمة المرور.",
+    narrationEn: "Section two: resetting your password.",
     durationHint: 3,
   },
   {
@@ -128,8 +142,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 2, sectionEn: "Password Reset",
     titleEn: "Forgot Your Password?",
     pointsEn: ["Click 'Forgot password?' on the login page", "Enter your registered email address", "System sends a secure reset link", "Link expires after 30 minutes", "Only active accounts receive the link"],
-    narrationAr: "إذا نسيت كلمة مرورك، انقر على رابط 'نسيت كلمة المرور' في صفحة تسجيل الدخول. أدخل عنوان بريدك الإلكتروني المسجل وانقر إرسال. ستتلقى رابطاً مؤمناً لإعادة التعيين صالحاً لمدة ثلاثين دقيقة فقط.",
+    narrationEn: "If you've forgotten your password, click 'Forgot password?' on the login page. Enter your registered email address and click Send. You'll receive a secure reset link that stays valid for only thirty minutes.",
     durationHint: 10,
+    screenshotKey: "forgot-password",
+    screenshotLayout: "card",
     mockup: [
       ...mkPanel(),
       ...mkHeader("Forgot Password"),
@@ -146,7 +162,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 2, sectionEn: "Password Reset",
     titleEn: "Setting a New Password",
     pointsEn: ["Open the reset link from your email", "Enter a new password (min 8 characters)", "Confirm the new password matches", "Strength bar guides you (Weak→Strong)", "Submit — you are logged in automatically"],
-    narrationAr: "افتح رابط إعادة التعيين من بريدك الإلكتروني. أدخل كلمة مرور جديدة لا تقل عن ثمانية أحرف. راقب مؤشر القوة وتأكد من حصولك على مستوى 'قوي'. أكد كلمة المرور ثم اضغط حفظ؛ سيتم تسجيل دخولك تلقائياً.",
+    narrationEn: "Open the reset link from your email. Enter a new password of at least eight characters. Watch the strength indicator and aim for a 'Strong' rating. Confirm the new password, then click Save — you'll be signed in automatically.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -169,7 +185,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 3, sectionEn: "Dashboard", sectionAr: "لوحة المعلومات",
     titleEn: "Dashboard Overview",
     pointsEn: [],
-    narrationAr: "القسم الثالث: لوحة المعلومات.",
+    narrationEn: "Section three: the Dashboard.",
     durationHint: 3,
   },
   {
@@ -177,8 +193,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 3, sectionEn: "Dashboard",
     titleEn: "Key Performance Indicators",
     pointsEn: ["Real-time project & beneficiary counts", "Active Projects / Submitted / Under Review", "Total Beneficiaries by category", "Budget utilization across all projects", "Click any card to drill down"],
-    narrationAr: "تعرض لوحة المعلومات مؤشرات الأداء الرئيسية في الوقت الفعلي. تشمل البطاقات عدد المشاريع النشطة والمقدمة وقيد المراجعة، إجمالي المستفيدين، ونسبة استخدام الميزانية. انقر على أي بطاقة للانتقال إلى تفاصيلها.",
+    narrationEn: "The Dashboard shows your key performance indicators in real time. The cards cover Active, Submitted, and Under Review projects, total beneficiaries, and overall budget utilization. Click any card to jump straight to its details.",
     durationHint: 10,
+    screenshotKey: "dashboard",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       { kind: "box", x: 730, y: 90, w: 140, h: 550, color: "0x1a2744" },
@@ -204,7 +222,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 3, sectionEn: "Dashboard",
     titleEn: "Beneficiary Breakdown Modal",
     pointsEn: ["Click the 'Total Beneficiaries' KPI card", "Modal opens with full disaggregation", "Breakdown: IDP / Returnee / Host / Refugee", "Gender disaggregation: Male / Female", "Age disaggregation: Adults / Boys / Girls", "Disability and special-needs data"],
-    narrationAr: "انقر على بطاقة إجمالي المستفيدين لفتح نافذة التوزيع التفصيلي. تعرض النافذة توزيع المستفيدين حسب الفئة النزوح الداخلي والعائدين والمجتمع المضيف واللاجئين، مع تصنيف إضافي حسب الجنس والعمر وذوي الاحتياجات الخاصة.",
+    narrationEn: "Click the 'Total Beneficiaries' card to open the full breakdown. It shows beneficiaries by category — internally displaced, returnee, host community, and refugee — with further disaggregation by gender, age group, and disability or special needs.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -230,7 +248,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 3, sectionEn: "Dashboard",
     titleEn: "Pending Approvals & Recent Activity",
     pointsEn: ["Pending Approvals section lists items awaiting your action", "Click any item to go directly to it", "Recent Activity shows latest changes", "Notifications alert you to new items", "State Performance chart by state"],
-    narrationAr: "يعرض قسم الموافقات المعلقة جميع العناصر التي تتطلب إجراءً من جانبك. انقر على أي عنصر للانتقال مباشرة إليه. يُظهر قسم النشاط الأخير آخر التحديثات في النظام، بما في ذلك تقديمات المشاريع والتقارير والتغييرات الأخيرة.",
+    narrationEn: "The Pending Approvals section lists every item waiting on your action. Click any item to go straight to it. The Recent Activity feed shows the latest updates across the system, including project submissions, report approvals, and other recent changes.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -256,7 +274,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 4, sectionEn: "Projects Module", sectionAr: "وحدة المشاريع",
     titleEn: "Projects Module",
     pointsEn: [],
-    narrationAr: "القسم الرابع: وحدة المشاريع.",
+    narrationEn: "Section four: the Projects module.",
     durationHint: 3,
   },
   {
@@ -264,8 +282,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 4, sectionEn: "Projects",
     titleEn: "Projects List & Filters",
     pointsEn: ["Navigate to Projects in the sidebar", "View all projects with status badges", "Filter by: Status / Sector / State / Search", "Sort by date, budget, or sector", "Export filtered results to CSV"],
-    narrationAr: "انتقل إلى قسم المشاريع من الشريط الجانبي. ستجد قائمة بجميع المشاريع مع شارات الحالة الملونة. يمكنك تصفية القائمة حسب الحالة والقطاع والولاية والبحث بالاسم أو الكود. لتصدير البيانات، انقر على زر تصدير CSV.",
+    narrationEn: "Go to the Projects section from the sidebar. You'll see every project listed with a colored status badge. Filter the list by status, sector, or state, or search by name or code. To export the data, click the Export CSV button.",
     durationHint: 10,
+    screenshotKey: "projects-list",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       ...mkHeader("Projects"),
@@ -292,7 +312,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 4, sectionEn: "Projects",
     titleEn: "Registering a New Project",
     pointsEn: ["Click 'Register Project' button", "Section 1: Basic info — Name, Sector, Dates", "Section 2: Management level (HQ / State)", "Section 3: States & localities covered", "Section 4: Staff role assignments", "Section 5: Budget & currency (USD/SDG/EUR)", "Section 6: Upload signed documents"],
-    narrationAr: "لتسجيل مشروع جديد، انقر على زر 'تسجيل مشروع'. تتوزع النموذج على ست مراحل: المعلومات الأساسية، مستوى الإدارة، التغطية الجغرافية، تعيين الموظفين، الميزانية والعملة، وأخيراً رفع الوثائق الموقعة.",
+    narrationEn: "To register a new project, click the 'Register Project' button. The form spans six sections: basic information, management level, geographic coverage, staff role assignments, budget and currency, and finally uploading signed documents.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -316,7 +336,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 4, sectionEn: "Projects",
     titleEn: "Project Detail — Tabs & Actions",
     pointsEn: ["Overview tab: summary, geography, budget bar", "Activities tab: output-level activity tracking", "Indicators tab: targets vs. actuals", "Documents tab: upload & view agreements", "Comments tab: threaded review comments", "Action buttons change based on your role"],
-    narrationAr: "تُقدّم صفحة تفاصيل المشروع خمسة تبويبات: النظرة العامة، الأنشطة، المؤشرات، الوثائق، والتعليقات. تتغير أزرار الإجراءات في الأعلى بحسب دورك وحالة المشروع الحالية. يمكن للموظف المختص تقديم المشروع أو سحب التقديم أو إضافة تعليق.",
+    narrationEn: "The project detail page has five tabs: Overview, Activities, Indicators, Documents, and Comments. The action buttons at the top change depending on your role and the project's current status. An authorized staff member can submit the project, withdraw a submission, or add a comment.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -348,7 +368,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 5, sectionEn: "Planning Module", sectionAr: "وحدة التخطيط",
     titleEn: "Planning Module",
     pointsEn: [],
-    narrationAr: "القسم الخامس: وحدة التخطيط.",
+    narrationEn: "Section five: the Planning module.",
     durationHint: 3,
   },
   {
@@ -356,7 +376,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 5, sectionEn: "Plans",
     titleEn: "Plan Types & Creating a Plan",
     pointsEn: ["6 plan types: Monthly, Quarterly, Annual, Action, Operational, Emergency", "Navigate to Planning → Plans → New Plan", "Select type, state, sector", "Optionally link the plan to a project", "Add activities with budget & targets", "Code auto-generated: CAFA-PLAN-KH-001"],
-    narrationAr: "يدعم النظام ستة أنواع من الخطط: الشهرية والفصلية والسنوية وخطط العمل والتشغيلية والطوارئ. لإنشاء خطة جديدة، انتقل إلى التخطيط وانقر على خطة جديدة، ثم حدد النوع والولاية والقطاع. يمكن ربط الخطة بمشروع قائم. يُولَّد كود الخطة تلقائياً.",
+    narrationEn: "The system supports six plan types: monthly, quarterly, annual, action, operational, and emergency. To create a new plan, go to Planning and click New Plan, then choose the type, state, and sector. You can optionally link the plan to an existing project. The plan code is generated automatically.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -379,7 +399,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 5, sectionEn: "Plans",
     titleEn: "Plan Activities & Approval Workflow",
     pointsEn: ["Each plan contains activities with: Title, Responsible Person, Dates, Budget", "Progress percentage updated as work proceeds", "Draft → Submitted → Technically Approved", "→ Coordination Approved → Approved → Active", "→ In Progress → Completed / Delayed", "Final approval blocked if open corrections exist"],
-    narrationAr: "تتضمن كل خطة أنشطة محددة مع المسؤول عنها وتواريخ التنفيذ والميزانية المخصصة ونسبة الإنجاز. تمر الخطة بسلسلة موافقات متعددة المراحل من المسودة وصولاً إلى التفعيل والتنفيذ. لا يمكن إعطاء الموافقة النهائية ما لم يتم حل جميع التصحيحات المطلوبة.",
+    narrationEn: "Each plan contains activities with a responsible person, dates, an allocated budget, and a progress percentage. A plan moves through a multi-stage approval chain — from draft all the way to activation and completion. Final approval is blocked until every required correction has been resolved.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -407,7 +427,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 6, sectionEn: "Reports Module", sectionAr: "وحدة التقارير",
     titleEn: "Reports Module",
     pointsEn: [],
-    narrationAr: "القسم السادس: وحدة التقارير.",
+    narrationEn: "Section six: the Reports module.",
     durationHint: 3,
   },
   {
@@ -415,8 +435,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 6, sectionEn: "Reports",
     titleEn: "3 Report Types",
     pointsEn: ["Project Reports — progress for a single project", "HQ Sector Reports — sector-wide narrative", "Program State Reports — per-state overview", "All types: Monthly / Quarterly / Annual / Ad-hoc", "Navigate: Reports → select type from landing page"],
-    narrationAr: "يدعم النظام ثلاثة أنواع من التقارير: تقارير المشاريع لمتابعة المشروع الفردي، والتقارير القطاعية لمقر الرئاسة، وتقارير البرامج على مستوى الولاية. تُقدَّم التقارير شهرياً أو فصلياً أو سنوياً أو كتقارير استثنائية حسب الحاجة.",
+    narrationEn: "The system supports three report types: project reports for tracking an individual project, headquarters sector reports covering a whole sector, and program state reports for a state-level overview. Reports can be submitted monthly, quarterly, annually, or as an ad-hoc report whenever needed.",
     durationHint: 10,
+    screenshotKey: "reports-landing",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       ...mkHeader("Reports"),
@@ -438,7 +460,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 6, sectionEn: "Reports",
     titleEn: "Writing & Submitting a Report",
     pointsEn: ["Section 2: Narrative progress (free text)", "Section 3: Activities Implemented (repeater rows)", "Each activity: Name, Status, Budget, Beneficiaries", "Section 4: Challenges & Recommendations", "Beneficiary counts: M / F / Boys / Girls (auto-totals)", "Footer: Save Draft  ·  Submit Report"],
-    narrationAr: "يتكون التقرير من أربعة أقسام: السرد التقدمي، وقائمة الأنشطة المنفذة المنظمة كصفوف متكررة، والتحديات والتوصيات، وإدخال أعداد المستفيدين يدوياً حسب الجنس والفئة العمرية. اضغط 'حفظ كمسودة' للحفظ الجزئي أو 'تقديم التقرير' لإرساله للمراجعة.",
+    narrationEn: "A report has four sections: a free-text progress narrative, a repeating list of activities implemented, challenges and recommendations, and manually entered beneficiary counts by gender and age group. Click 'Save as Draft' to save your progress, or 'Submit Report' to send it for review.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -466,7 +488,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 7, sectionEn: "Approval Workflows", sectionAr: "مسارات الموافقة",
     titleEn: "Approval Workflows",
     pointsEn: [],
-    narrationAr: "القسم السابع: مسارات الموافقة.",
+    narrationEn: "Section seven: approval workflows.",
     durationHint: 3,
   },
   {
@@ -474,7 +496,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 7, sectionEn: "Approvals",
     titleEn: "Project Approval Chain",
     pointsEn: ["1. State Officer submits project (Draft → Submitted)", "2. Technical Coordinator: technically_approved", "3. Senior Coordinator: coordination_approved", "4. Program Manager: approved (final sign-off)", "5. Executive/Admin: activate → mark active", "6. Closed when project ends"],
-    narrationAr: "يمر المشروع بست مراحل: يقدمه موظف الولاية، ثم يراجعه المنسق الفني، يلي ذلك كبير المنسقين، ثم مدير البرنامج للموافقة النهائية، ثم التفعيل، وأخيراً الإغلاق. يُسجَّل كل انتقال مع اسم المستخدم والوقت في سجل التدقيق.",
+    narrationEn: "A project passes through six stages: it's submitted by a state officer, reviewed by a technical coordinator, then a senior coordinator, then given final sign-off by the program manager, activated, and finally closed once it ends. Every transition is logged with the user's name and timestamp in the audit log.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -498,7 +520,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 7, sectionEn: "Approvals",
     titleEn: "Required Corrections & Revision Requests",
     pointsEn: ["Reviewers add 'Required Correction' comments", "Submitter must resolve each correction", "Status: Unresolved → Resolved", "Final approval BLOCKED until all resolved", "'Request Revision' sends entity back to submitter", "Rationale auto-mirrored into comment thread"],
-    narrationAr: "يمكن للمراجعين إضافة تعليقات من نوع 'تصحيح مطلوب' على المشروع أو التقرير. يجب على مقدم الطلب الرد على كل تصحيح وتحديد حالته كمحلول. لا يمكن إعطاء الموافقة النهائية حتى تُحَل جميع التصحيحات المفتوحة. يؤدي 'طلب المراجعة' إلى إعادة الملف إلى مقدمه مع سرد السبب تلقائياً.",
+    narrationEn: "Reviewers can add 'Required Correction' comments on a project or report. The submitter must respond to each one and mark it resolved. Final approval is blocked until every open correction is resolved. 'Request Revision' sends the item back to its submitter, and the reason is automatically added to the comment thread.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -523,7 +545,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 8, sectionEn: "Risks Module", sectionAr: "وحدة المخاطر",
     titleEn: "Risks Module",
     pointsEn: [],
-    narrationAr: "القسم الثامن: وحدة المخاطر.",
+    narrationEn: "Section eight: the Risks module.",
     durationHint: 3,
   },
   {
@@ -531,8 +553,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 8, sectionEn: "Risks",
     titleEn: "Risk Heatmap & Logging a Risk",
     pointsEn: ["Navigate to Risks in the sidebar", "3×3 matrix: Likelihood (Low/Medium/High) × Impact (Low/Medium/High); scores 1–9", "Click any matrix cell to see its risks", "Click 'Log Risk' to add a new risk", "Fill: Title, Category, Description, Severity, Likelihood", "Optional: link risk to a project or plan activity"],
-    narrationAr: "تعرض صفحة المخاطر خريطة حرارية تُظهر توزيع المخاطر على مصفوفة الخطورة مقابل الاحتمالية. انقر على أي خلية لرؤية المخاطر ضمنها. لتسجيل مخاطرة جديدة، انقر على 'تسجيل مخاطرة'، أدخل العنوان والفئة والوصف، ثم حدد درجتي الخطورة والاحتمالية.",
+    narrationEn: "The Risks page shows a heatmap of risks plotted by severity against likelihood. Click any cell to see the risks it contains. To log a new risk, click 'Log Risk', enter a title, category, and description, then set its severity and likelihood.",
     durationHint: 10,
+    screenshotKey: "risk-heatmap",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       ...mkHeader("Risk Heatmap"),
@@ -551,7 +575,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 8, sectionEn: "Risks",
     titleEn: "Risk Monitoring & Mitigation",
     pointsEn: ["Risk statuses: Open / Mitigated / Closed", "Filter risks by category, severity, project", "Each risk has a Mitigation Plan text field", "Risks linked to plans appear in plan activities", "Notifications sent to project team on new risks", "Export risk log as CSV"],
-    narrationAr: "تمتلك كل مخاطرة ثلاثة حالات: مفتوحة أو مخففة أو مغلقة. أدخل خطة التخفيف في حقل المخاطرة لتوثيق الإجراءات المتخذة. يمكن تصفية قائمة المخاطر حسب الفئة والخطورة والمشروع. ترسل المنظومة تنبيهات تلقائية لفريق المشروع عند تسجيل مخاطر جديدة.",
+    narrationEn: "Every risk has one of three statuses: open, mitigated, or closed. Enter a mitigation plan in the risk's text field to document the steps being taken. You can filter the risk list by category, severity, or project. The system automatically notifies the project team whenever a new risk is logged.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -577,7 +601,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 9, sectionEn: "Budget Management", sectionAr: "إدارة الميزانية",
     titleEn: "Budget Management",
     pointsEn: [],
-    narrationAr: "القسم التاسع: إدارة الميزانية.",
+    narrationEn: "Section nine: budget management.",
     durationHint: 3,
   },
   {
@@ -585,8 +609,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 9, sectionEn: "Budget",
     titleEn: "Budget Overview & Multi-Currency",
     pointsEn: ["Budget page aggregates all project budgets", "Supported currencies: USD, SDG, EUR", "Shows: Total Approved / Spent / Remaining", "Burn rate % calculated automatically", "Project-level and output-level budget tracking", "Alert when spending nears 90% of budget"],
-    narrationAr: "تجمع صفحة الميزانية بيانات الميزانية من جميع المشاريع وتعرضها مقارنةً بالمنصرف والمتبقي. يدعم النظام ثلاث عملات: الدولار الأمريكي والجنيه السوداني واليورو. تُحسَّب نسبة الصرف تلقائياً، وتُرسَل تنبيهات عند الاقتراب من نسبة التسعين بالمئة.",
+    narrationEn: "The Budget page aggregates figures from every project and compares them against amounts spent and remaining. The system supports three currencies — US Dollar, Sudanese Pound, and Euro. The burn rate is calculated automatically, and an alert is sent as spending approaches ninety percent of the approved budget.",
     durationHint: 10,
+    screenshotKey: "budget-overview",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       ...mkHeader("Budget Overview"),
@@ -611,7 +637,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 10, sectionEn: "Notifications & Comments", sectionAr: "الإشعارات والتعليقات",
     titleEn: "Notifications & Comments",
     pointsEn: [],
-    narrationAr: "القسم العاشر: الإشعارات والتعليقات.",
+    narrationEn: "Section ten: notifications and comments.",
     durationHint: 3,
   },
   {
@@ -619,8 +645,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 10, sectionEn: "Notifications",
     titleEn: "Notification Bell & Messages",
     pointsEn: ["Bell icon in the topbar shows unread count", "Polls every 30 seconds automatically", "Categories: Projects / Reports / Plans / Risks", "Messages icon shows recent conversations", "Full notifications page at /notifications", "Filter by module, search, mark-all-read"],
-    narrationAr: "أيقونة الجرس في الشريط العلوي تعرض عدد الإشعارات غير المقروءة وتتجدد كل ثلاثين ثانية تلقائياً. انقر على الجرس لرؤية آخر الإشعارات، وانتقل إلى الصفحة الكاملة لعرضها جميعاً مع إمكانية التصفية والتأشير كمقروءة.",
+    narrationEn: "The bell icon in the top bar shows your unread notification count and refreshes automatically every thirty seconds. Click the bell to see the latest notifications, or go to the full notifications page to view them all, filter by module, and mark everything as read.",
     durationHint: 10,
+    screenshotKey: "notifications",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       ...mkHeader("Notifications"),
@@ -641,7 +669,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 10, sectionEn: "Comments",
     titleEn: "Threaded Comments System",
     pointsEn: ["8 comment types: General / Technical / Required Correction / Approval Note / Rejection Reason / Revision Request / Coordination / Observation", "Role-based type restrictions per commenter", "Resolve/reopen corrections within threads", "All comments logged with user + timestamp", "Comments visible on project & report detail"],
-    narrationAr: "يدعم النظام ثمانية أنواع من التعليقات المرتبة في خيوط متسلسلة على المشاريع والتقارير. يُحدَّد نوع التعليق المتاح لكل مستخدم بحسب دوره. يجب تحديد حالة التعليقات من نوع 'تصحيح مطلوب' كمحلولة قبل المتابعة في سلسلة الموافقات.",
+    narrationEn: "The system supports eight comment types, organized as threaded discussions on projects and reports. Which comment type a user can post depends on their role. A 'Required Correction' comment must be marked resolved before the item can continue through the approval chain.",
     durationHint: 10,
     mockup: [
       ...mkPanel(),
@@ -667,7 +695,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 11, sectionEn: "Users & Roles", sectionAr: "المستخدمون والأدوار",
     titleEn: "Users & Roles",
     pointsEn: [],
-    narrationAr: "القسم الحادي عشر: المستخدمون والأدوار.",
+    narrationEn: "Section eleven: users and roles.",
     durationHint: 3,
   },
   {
@@ -675,8 +703,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 11, sectionEn: "Users",
     titleEn: "User Management (Admin Only)",
     pointsEn: ["Navigate to Admin → Users (/users)", "Super Admin: full read/write access", "Program Manager: read-only users list", "Create user: sets Name, Email, Role, Status", "Technical Coordinator: must assign sectors", "Invited users receive a /invite/{token} link"],
-    narrationAr: "تتوفر إدارة المستخدمين للمسؤول الأعلى بصلاحيات كاملة، وللمدير البرنامجي بصلاحية القراءة فقط. لإنشاء مستخدم جديد، أدخل الاسم والبريد الإلكتروني والدور. بالنسبة للمنسقين الفنيين، يجب تحديد القطاعات المخصصة لهم. يتلقى المستخدم المدعو رابط تفعيل يُشاركه المسؤول يدوياً.",
+    narrationEn: "User management is available to Super Admins with full read and write access, and to Program Managers with read-only access to the users list. To create a new user, enter their name, email, and role. Technical Coordinators must also have sectors assigned. An invited user receives an activation link that the administrator shares with them.",
     durationHint: 10,
+    screenshotKey: "users",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       ...mkHeader("User Management"),
@@ -706,7 +736,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 12, sectionEn: "System Manual", sectionAr: "دليل النظام",
     titleEn: "System Manual",
     pointsEn: [],
-    narrationAr: "القسم الثاني عشر: دليل النظام.",
+    narrationEn: "Section twelve: the System Manual.",
     durationHint: 3,
   },
   {
@@ -714,8 +744,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 12, sectionEn: "Manual",
     titleEn: "Manual Chapters & SOPs",
     pointsEn: ["Sidebar: Resources → Manual", "20+ auto-seeded chapters with icons", "Standard Operating Procedures per chapter", "Search across all sections and content", "Three-column detail: index / content / ToC", "Export chapter as PDF or Word document"],
-    narrationAr: "يحتوي دليل النظام على أكثر من عشرين فصلاً تغطي جميع وحدات النظام مع إجراءات التشغيل الموحدة. يمكن البحث في محتوى الدليل بالكلمات المفتاحية. يدعم كل فصل التصدير إلى PDF أو Word. يُوجد قسم مكتبة الفيديو للمشاهدة والتنزيل.",
+    narrationEn: "The System Manual has more than twenty chapters covering every module, each with its own standard operating procedures. You can search the manual's content by keyword, and every chapter can be exported as a PDF or Word document. There's also a video library section for watching and downloading training videos.",
     durationHint: 9,
+    screenshotKey: "manual",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       ...mkHeader("System Manual"),
@@ -738,7 +770,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 13, sectionEn: "Audit Log", sectionAr: "سجل التدقيق",
     titleEn: "Audit Log",
     pointsEn: [],
-    narrationAr: "القسم الثالث عشر: سجل التدقيق.",
+    narrationEn: "Section thirteen: the Audit Log.",
     durationHint: 3,
   },
   {
@@ -746,8 +778,10 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 13, sectionEn: "Audit Log",
     titleEn: "Full Audit Trail",
     pointsEn: ["Every mutating action logged automatically", "Captures: User, Timestamp, Action, Module", "Before & after snapshots of changed data", "Filter by module, user, date range", "Navigate to Admin → Audit Log (/audit-log)", "Non-repudiable — cannot be edited or deleted"],
-    narrationAr: "يُسجَّل كل تغيير في النظام تلقائياً في سجل التدقيق مع اسم المستخدم والوقت والوحدة المعنية ولقطات من البيانات قبل التغيير وبعده. لا يمكن تعديل سجل التدقيق أو حذفه. يمكن تصفيته حسب الوحدة والمستخدم ونطاق التاريخ.",
+    narrationEn: "Every change made in the system is logged automatically in the audit log, along with the user, timestamp, module, and a before-and-after snapshot of the data. The audit log cannot be edited or deleted, and can be filtered by module, user, or date range.",
     durationHint: 10,
+    screenshotKey: "audit-log",
+    screenshotLayout: "full",
     mockup: [
       ...mkPanel(),
       ...mkHeader("Audit Log"),
@@ -777,7 +811,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 14, sectionEn: "Logout & Session Management", sectionAr: "تسجيل الخروج وإدارة الجلسة",
     titleEn: "Logout",
     pointsEn: [],
-    narrationAr: "القسم الرابع عشر: تسجيل الخروج وإدارة الجلسة.",
+    narrationEn: "Section fourteen: logout and session management.",
     durationHint: 3,
   },
   {
@@ -785,7 +819,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     sectionNum: 14, sectionEn: "Logout",
     titleEn: "Secure Logout",
     pointsEn: ["Click your avatar (top-right corner)", "Select 'Logout' from the dropdown", "Session cookie cleared from browser", "Server-side session invalidated", "Auto-logout after 8 hours of inactivity", "Any open tabs will redirect to login"],
-    narrationAr: "لتسجيل الخروج، انقر على صورتك الرمزية في الزاوية العلوية اليمنى ثم اختر 'تسجيل الخروج'. يُمسح ملف تعريف الارتباط من المتصفح وتُلغى الجلسة على الخادم فوراً. يحدث تسجيل الخروج التلقائي بعد ثماني ساعات من عدم النشاط.",
+    narrationEn: "To log out, click your avatar in the top-right corner and select Logout. The session cookie is cleared from your browser and the session is invalidated on the server immediately. You'll also be logged out automatically after eight hours of inactivity.",
     durationHint: 9,
     mockup: [
       ...mkPanel(),
@@ -811,7 +845,7 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
     type: "outro",
     titleEn: "Training Complete",
     pointsEn: ["You are ready to use CAFA PMIS", "For support: pmis-support@cafa.org", "Manual: /manual", "CAFA Development Organization"],
-    narrationAr: "لقد أتممتم استعراض جميع وحدات نظام إدارة البرامج لمنظمة كافا للتنمية. النظام جاهز لاستخدامكم. للحصول على الدعم الفني، يُرجى التواصل عبر البريد الإلكتروني pmis-support@cafa.org. شكراً لمشاهدتكم.",
+    narrationEn: "You've now walked through every module of the CAFA Program Management System. The system is ready for you to use. For technical support, please reach out at pmis-support@cafa.org. Thank you for watching.",
     durationHint: 8,
   },
 ];

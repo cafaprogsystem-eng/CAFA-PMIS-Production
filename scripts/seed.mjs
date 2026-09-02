@@ -9,7 +9,7 @@
  *   docker compose exec api node /app/scripts/seed.mjs
  */
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -43,7 +43,10 @@ if (!tsx) {
 
 console.log("Seeding database…");
 try {
-  execSync(`node "${tsx}" "${seedScript}"`, {
+  // tsx's node_modules/.bin shim is a #!/bin/sh wrapper, not JS — it must be
+  // executed directly (its own shebang dispatches to node), not passed as an
+  // argument to `node`.
+  execFileSync(tsx, [seedScript], {
     stdio: "inherit",
     env: { ...process.env },
   });
