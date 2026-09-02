@@ -21,6 +21,13 @@ export interface CurrentUser {
   // Parsed list of assigned sectors. Only populated for Technical Coordinators —
   // for all other roles this is null, meaning "no sector restriction".
   sectors: string[] | null;
+  // The account's saved interface-language preference ("en" | "ar"), so it
+  // can be applied on login regardless of which device/browser the user is
+  // on — not just the one it happened to be set from. Optional: only
+  // attachCurrentUser's real session-backed construction populates this;
+  // the many synthetic CurrentUser fixtures elsewhere (tests, internal
+  // notification/realtime helpers) have no reason to carry it.
+  languagePreference?: string;
 }
 
 /** Development-only role-harness gate. Production always rejects the harness,
@@ -129,7 +136,9 @@ const PUBLIC_PATHS = new Set([
   "/health",
   "/healthz",
 ]);
-const PUBLIC_PREFIXES = ["/auth/invite/"];
+// Certificate verification is a public registry lookup (e.g. for an employer
+// checking a trainee's certificate) — it must be reachable with no account.
+const PUBLIC_PREFIXES = ["/auth/invite/", "/training-certificates/verify/"];
 
 export async function attachCurrentUser(req: Request, _res: Response, next: NextFunction) {
   try {
@@ -161,7 +170,7 @@ export async function attachCurrentUser(req: Request, _res: Response, next: Next
     if (id) {
       const result = await pool.query(
         `SELECT u.id, u.name, u.email, u.role, u.role_label, u.scope, u.state_id, u.sector, u.status, u.avatar_url,
-                s.name AS state_name, s.name_ar AS state_name_ar
+                u.language_preference, s.name AS state_name, s.name_ar AS state_name_ar
          FROM users u
          LEFT JOIN states s ON s.id = u.state_id
          WHERE u.id = $1
@@ -192,6 +201,7 @@ export async function attachCurrentUser(req: Request, _res: Response, next: Next
           // photos are always dereferenced through the self-owned proxy route.
           avatarUrl: isManagedProfilePhotoPath(row.avatar_url) ? "/api/profile/photo" : null,
           sectors,
+          languagePreference: row.language_preference,
         };
       }
     }
@@ -541,6 +551,11 @@ export function permissionsFor(user: CurrentUser): string[] {
   // AI logs: SA (via *) and PM monitoring oversight.
   if (role === "program_manager") {
     perms.push("ai.logs.view");
+  }
+
+  // Training video/certificate administration: SA (via *), ED, and PM.
+  if (["executive_director", "program_manager"].includes(role)) {
+    perms.push("training_videos.manage");
   }
 
   // Document Repository admin access: super_admin gets it via "*"; explicit grant for ED + PM.

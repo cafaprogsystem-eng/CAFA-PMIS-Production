@@ -18,6 +18,27 @@ export function getStoredLang(): Language {
   return "en";
 }
 
+// Captured once, at module load — before LanguageProvider's own effect ever
+// writes a default back to localStorage — so callers can still tell "this
+// device already had an explicit language choice" apart from "this is a
+// fresh device with nothing stored yet", even after that first write
+// happens. Used to sync a signed-in user's saved account-level
+// languagePreference on a fresh device without ever overwriting a choice
+// already made on this device (from a previous sync, or the quick
+// per-device switcher in the top nav, which is deliberately local-only and
+// must not be fought by that sync).
+const hadExplicitPreferenceAtLoad = (() => {
+  try {
+    return localStorage.getItem("cafa.lang") !== null;
+  } catch {
+    return false;
+  }
+})();
+
+export function hadStoredLangPreference(): boolean {
+  return hadExplicitPreferenceAtLoad;
+}
+
 /** Derive text-direction from language code. */
 export function directionFor(lang: Language): Direction {
   return lang === "ar" ? "rtl" : "ltr";

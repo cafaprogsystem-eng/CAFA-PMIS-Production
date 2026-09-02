@@ -22,6 +22,7 @@
     "readyToAssist": "جاهز للمساعدة",
     "pendingActivation": "في انتظار التفعيل",
     "clearHistory": "مسح سجل المحادثة",
+    "clearHistoryFailed": "تعذّر مسح سجل المحادثة. يرجى المحاولة مرة أخرى.",
     "minimise": "تصغير",
     "minimisePanel": "تصغير لوحة المساعد",
     "generatingResponse": "جارٍ إنشاء الرد",

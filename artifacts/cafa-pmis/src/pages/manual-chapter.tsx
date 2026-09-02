@@ -423,7 +423,7 @@ export default function ManualChapter({ slug }: { slug: string }) {
   });
 
   const deleteChapter = useMutation({
-    mutationFn: () => apiFetch(`/api/manual/chapters/${slug}`, { method: "DELETE" }),
+    mutationFn: () => apiFetch(`/api/manual/chapters/${chapter!.id}`, { method: "DELETE" }),
     onSuccess: () => {
       toast.success(t("chapter.chapterDeleted"));
       qc.invalidateQueries({ queryKey: ["manual", "chapters"] });

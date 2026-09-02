@@ -6,8 +6,19 @@ import { inferItemMeta, isRetiredNavigationPath } from "@/lib/recent-items";
 
 let currentRole = "program_manager";
 
+// Mirrors the AI-relevant slice of permissionsFor() in middlewares/currentUser.ts:
+// super_admin gets everything via "*"; executive_director gets both
+// ai.settings.manage and ai.logs.view; program_manager gets ai.logs.view only
+// (monitoring oversight, no settings access); every other role gets neither.
+function aiPermsForRole(role: string): string[] {
+  if (role === "super_admin") return ["*"];
+  if (role === "executive_director") return ["ai.settings.manage", "ai.logs.view"];
+  if (role === "program_manager") return ["ai.logs.view"];
+  return [];
+}
+
 vi.mock("@workspace/api-client-react", () => ({
-  useGetMe: () => ({ data: { user: { role: currentRole } } }),
+  useGetMe: () => ({ data: { user: { role: currentRole }, permissions: aiPermsForRole(currentRole) } }),
 }));
 
 vi.mock("@/components/ai-chat-widget", () => ({
@@ -121,11 +132,18 @@ describe("AI navigation consolidation", () => {
     expect(palette).toContain('href: "/manual"');
   });
 
-  it("keeps the assistant available while hiding administration from non-admin users", () => {
-    currentRole = "program_manager";
+  it("keeps the assistant available while hiding administration from a role with no AI permissions at all", () => {
+    currentRole = "state_program_officer";
     render(<AIPage />);
     expect(screen.getByTestId("assistant")).toHaveAttribute("data-embedded", "true");
     expect(screen.queryByTestId("administration")).not.toBeInTheDocument();
+  });
+
+  it("shows administration to program_manager (ai.logs.view — monitoring oversight), matching the backend permission exactly", () => {
+    currentRole = "program_manager";
+    render(<AIPage />);
+    expect(screen.getByTestId("assistant")).toHaveAttribute("data-embedded", "true");
+    expect(screen.getByTestId("administration")).toBeInTheDocument();
   });
 
   it("keeps the embedded assistant's history control while restricting activation guidance to administrators", () => {

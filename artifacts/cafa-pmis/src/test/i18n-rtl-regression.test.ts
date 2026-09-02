@@ -111,6 +111,7 @@ const RTL_AUDITED_FILES = [
   "pages/login.tsx",
   "pages/forgot-password.tsx",
   "pages/reset-password.tsx",
+  "pages/landing.tsx",
   "components/auth-shell.tsx",
   "components/layout.tsx",
   "components/global-search.tsx",

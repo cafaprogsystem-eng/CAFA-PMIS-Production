@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fsSync from "node:fs";
 import path from "node:path";
 import { pool } from "@workspace/db";
-import { requireAuth } from "../middlewares/currentUser";
+import { hasPerm, permissionsFor, requireAuth, requirePerm } from "../middlewares/currentUser";
 import { logAudit } from "../middlewares/currentUser";
 import { generateFullSystemVideo } from "../lib/video-generator";
 import { FULL_VIDEO_TITLE, FULL_VIDEO_MODULE } from "../lib/full-system-video-script";
@@ -26,14 +26,13 @@ const upload = multer({
   },
 });
 
-// Permission guard — super_admin + program_manager + executive_director
-function requireVideoAdmin(req: Request, res: Response, next: NextFunction) {
-  const role = req.currentUser?.role;
-  if (!role) { res.status(401).json({ error: "unauthorized" }); return; }
-  if (!["super_admin", "program_manager", "executive_director"].includes(role)) {
-    res.status(403).json({ error: "forbidden" }); return;
-  }
-  next();
+// Permission guard — training_videos.manage (SA via "*", ED, PM). Shared with
+// the read-scoping isAdmin checks below via hasPerm/permissionsFor instead of
+// each re-declaring its own copy of the same role list.
+const requireVideoAdmin = requirePerm("training_videos.manage");
+
+function isVideoAdmin(req: Request): boolean {
+  return hasPerm(permissionsFor(req.currentUser!), "training_videos.manage");
 }
 
 // Base video SELECT (no completion data — used for admin/internal queries)
@@ -127,9 +126,8 @@ router.get("/training-videos", requireAuth, async (req, res, next) => {
 // ---------------------------------------------------------------------------
 router.get("/training-videos/all", requireAuth, async (req, res, next) => {
   try {
-    const role = req.currentUser!.role;
     const userId = req.currentUser!.id;
-    const isAdmin = ["super_admin", "program_manager", "executive_director"].includes(role);
+    const isAdmin = isVideoAdmin(req);
     const { search, category } = req.query as Record<string, string>;
 
     const conditions: string[] = [];
@@ -522,8 +520,7 @@ router.get("/training-videos/:id/stream", requireAuth, async (req, res, next) =>
     if (!rows.length) { res.status(404).json({ error: "not_found" }); return; }
     const v = rows[0];
 
-    const role = req.currentUser!.role;
-    const isAdmin = ["super_admin", "program_manager", "executive_director"].includes(role);
+    const isAdmin = isVideoAdmin(req);
     if (v.status !== "published" && !isAdmin) { res.status(403).json({ error: "forbidden" }); return; }
 
     if (!v.filePath || !fsSync.existsSync(v.filePath)) {
@@ -565,8 +562,7 @@ router.get("/training-videos/:id/download", requireAuth, async (req, res, next) 
     const { rows } = await pool.query(`SELECT file_path AS "filePath", title, status FROM training_videos WHERE id=$1`, [id]);
     if (!rows.length) { res.status(404).json({ error: "not_found" }); return; }
     const v = rows[0];
-    const role = req.currentUser!.role;
-    const isAdmin = ["super_admin", "program_manager", "executive_director"].includes(role);
+    const isAdmin = isVideoAdmin(req);
     if (v.status !== "published" && !isAdmin) { res.status(403).json({ error: "forbidden" }); return; }
     if (!v.filePath || !fsSync.existsSync(v.filePath)) { res.status(404).json({ error: "file_not_found" }); return; }
     res.setHeader("Content-Disposition", `attachment; filename="${v.title.replace(/[^a-z0-9]/gi, "_")}.mp4"`);
@@ -643,33 +639,41 @@ router.post("/training-videos/:id/progress", requireAuth, async (req, res, next)
 // POST /training-videos/:id/complete — mark complete + issue certificate
 // ---------------------------------------------------------------------------
 router.post("/training-videos/:id/complete", requireAuth, async (req, res, next) => {
+  const id = Number(req.params.id);
+  const userId = req.currentUser!.id;
+  const client = await pool.connect();
   try {
-    const id = Number(req.params.id);
-    const userId = req.currentUser!.id;
-
-    // Check completion record
-    const { rows: compRows } = await pool.query(
+    await client.query("BEGIN");
+    // Lock this user's completion row for the whole transaction — closes the
+    // race where two concurrent calls (double-click, two open tabs) could
+    // both read certificate_issued=FALSE before either commits, each
+    // inserting its own certificate. The second call now blocks here until
+    // the first commits, then correctly sees certificate_issued=TRUE.
+    const { rows: compRows } = await client.query(
       `SELECT completion_status, watch_percent, certificate_issued
-       FROM training_completions WHERE training_video_id=$1 AND user_id=$2`,
+       FROM training_completions WHERE training_video_id=$1 AND user_id=$2 FOR UPDATE`,
       [id, userId],
     );
 
     if (!compRows.length || compRows[0].completion_status !== "completed") {
+      await client.query("ROLLBACK");
       res.status(400).json({ error: "not_completed" }); return;
     }
 
     // Return existing active certificate if already issued
     if (compRows[0].certificate_issued) {
-      const { rows: existing } = await pool.query(
+      const { rows: existing } = await client.query(
         `${CERT_SELECT} WHERE cert.user_id=$1 AND cert.training_video_id=$2 AND cert.is_active=TRUE
          ORDER BY cert.issued_at DESC LIMIT 1`,
         [userId, id],
       );
-      if (existing.length) { res.json({ certificate: existing[0] }); return; }
+      await client.query("COMMIT");
+      res.json({ certificate: existing[0] ?? null });
+      return;
     }
 
     // Issue new certificate
-    const { rows: certRows } = await pool.query(`
+    const { rows: certRows } = await client.query(`
       WITH issued AS (
         INSERT INTO training_certificates (certificate_id, user_id, training_video_id)
         VALUES ($1, $2, $3)
@@ -687,14 +691,20 @@ router.post("/training-videos/:id/complete", requireAuth, async (req, res, next)
       JOIN users u ON u.id = issued.user_id
     `, [generateCertificateId(), userId, id]);
 
-    await pool.query(
+    await client.query(
       `UPDATE training_completions SET certificate_issued=TRUE WHERE user_id=$1 AND training_video_id=$2`,
       [userId, id],
     );
-    await logAudit({ userId, action: "certificate_issued", module: "manual", entityId: certRows[0].id });
+    await logAudit({ userId, action: "certificate_issued", module: "manual", entityId: certRows[0].id }, client);
+    await client.query("COMMIT");
 
     res.json({ certificate: certRows[0] });
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 });
 
 // ===========================================================================
@@ -717,8 +727,9 @@ router.get("/training-certificates/my", requireAuth, async (req, res, next) => {
 
 // ---------------------------------------------------------------------------
 // GET /training-certificates/verify/:certId — public verification lookup
+// (listed in PUBLIC_PREFIXES in middlewares/currentUser.ts — reachable with no session)
 // ---------------------------------------------------------------------------
-router.get("/training-certificates/verify/:certId", requireAuth, async (req, res, next) => {
+router.get("/training-certificates/verify/:certId", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       `${CERT_SELECT} WHERE cert.certificate_id=$1`,
@@ -784,6 +795,19 @@ router.post("/training-certificates/:id/reissue", requireAuth, requireVideoAdmin
       `SELECT user_id, training_video_id FROM training_certificates WHERE id=$1`, [id],
     );
     if (!orig.length) { res.status(404).json({ error: "not_found" }); return; }
+
+    // A revoked certificate must not be silently restored without
+    // re-confirming the underlying completion is still genuinely valid — it
+    // may have been revoked precisely because the completion itself was
+    // found invalid, and reissuing here previously never re-checked that.
+    const { rows: completion } = await pool.query(
+      `SELECT completion_status FROM training_completions WHERE user_id=$1 AND training_video_id=$2`,
+      [orig[0].user_id, orig[0].training_video_id],
+    );
+    if (!completion.length || completion[0].completion_status !== "completed") {
+      res.status(409).json({ error: "completion_not_valid" });
+      return;
+    }
 
     // Revoke old cert
     await pool.query(

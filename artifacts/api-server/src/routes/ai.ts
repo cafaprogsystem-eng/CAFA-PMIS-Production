@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "node:crypto";
 import { pool } from "@workspace/db";
-import { logAudit, requirePerm } from "../middlewares/currentUser";
+import { hasPerm, logAudit, permissionsFor, requirePerm } from "../middlewares/currentUser";
 
 const router: IRouter = Router();
 
@@ -9,6 +9,12 @@ const router: IRouter = Router();
 // Set AI_ENABLED=true in production once OpenAI integration is provisioned.
 // Defaults to false (UAT / pre-launch mode).
 const AI_ENV_ENABLED = process.env.AI_ENABLED === "true";
+
+// Per-user daily message cap — bounds worst-case LLM API spend per user per
+// day. Deliberately separate from the general IP-keyed rate limiter in
+// app.ts, which is skipped outside production and shared across every API
+// route (not AI-specific, and easily shared across users behind one IP).
+const AI_DAILY_MESSAGE_LIMIT = Number(process.env.AI_DAILY_MESSAGE_LIMIT ?? 50);
 
 // Lazy-load the OpenAI client — only attempted when AI_ENV_ENABLED=true.
 // This prevents server startup failures when the integration env vars are absent.
@@ -180,17 +186,25 @@ Be concise. Use bullet points for steps. For navigation, name the exact page and
 // ── GET /ai/settings ──────────────────────────────────────────────────────────
 router.get("/ai/settings", async (req, res, next) => {
   try {
-    // Always read the DB singleton so the admin settings page can reflect and
-    // save the configured state even when AI_ENABLED env flag is not yet set.
-    // Clients use the separate `envEnabled` field to know whether AI is
-    // actually operational (env flag) vs. administratively configured (DB).
+    // Every authenticated user calls this route (the chat widget uses it to
+    // decide whether to render itself and which response language to
+    // request), so it stays open to all — but systemPromptExtra is the
+    // admin's custom internal system-prompt instructions, readable only by
+    // whoever could have written it (ai.settings.manage) or is auditing AI
+    // usage (ai.logs.view). Always read the DB singleton so the admin
+    // settings page can reflect and save the configured state even when
+    // AI_ENABLED env flag is not yet set. Clients use the separate
+    // `envEnabled` field to know whether AI is actually operational (env
+    // flag) vs. administratively configured (DB).
     const { rows } = await pool.query(`SELECT * FROM ai_settings WHERE id = 1`);
     const row = rows[0];
+    const perms = permissionsFor(req.currentUser!);
+    const canSeeAdminConfig = hasPerm(perms, "ai.settings.manage") || hasPerm(perms, "ai.logs.view");
     res.json({
       enabled: row?.enabled ?? "true",
       envEnabled: AI_ENV_ENABLED,
       ...(AI_ENV_ENABLED ? {} : { reason: "uat_mode" }),
-      systemPromptExtra: row?.system_prompt_extra ?? null,
+      systemPromptExtra: canSeeAdminConfig ? (row?.system_prompt_extra ?? null) : null,
       responseLanguage: row?.response_language ?? "auto",
       ...(row ? { updatedAt: row.updated_at } : {}),
     });
@@ -329,6 +343,21 @@ router.post("/ai/chat", async (req, res, next) => {
 
     const { message, currentPage, sessionId: clientSessionId, lang } = req.body ?? {};
     if (!message?.trim()) { res.status(400).json({ error: "message_required" }); return; }
+
+    // Guard 3: per-user daily message cap (see AI_DAILY_MESSAGE_LIMIT above).
+    const { rows: usageRows } = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM ai_chat_messages
+       WHERE user_id = $1 AND role = 'user' AND created_at >= date_trunc('day', NOW())`,
+      [user.id],
+    );
+    if (Number(usageRows[0]?.count ?? 0) >= AI_DAILY_MESSAGE_LIMIT) {
+      res.status(429).json({
+        error: "ai_daily_limit_reached",
+        limit: AI_DAILY_MESSAGE_LIMIT,
+        message: `You have reached today's limit of ${AI_DAILY_MESSAGE_LIMIT} AI messages. Please try again tomorrow.`,
+      });
+      return;
+    }
 
     const sessionId = clientSessionId ?? crypto.randomUUID();
     const currentModule = String(currentPage ?? "/").slice(0, 120);

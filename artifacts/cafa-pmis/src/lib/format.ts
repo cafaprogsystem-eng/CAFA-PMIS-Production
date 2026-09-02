@@ -55,6 +55,34 @@ export const formatDateTime = (d: string | undefined | null) => {
   }
 };
 
+/**
+ * Same fixed en-GB rendering as formatDate/formatDateTime — every date in
+ * the app stays in that one consistent, LTR-isolated format regardless of
+ * active UI language — but resolved in a specific IANA timezone (e.g. a
+ * user's saved Profile timezone) rather than the browser's local one.
+ * Never pass the active UI locale here: that would render Arabic month
+ * names and Arabic-Indic digits, inconsistent with every other date in
+ * the app.
+ */
+export const formatDateInTimezone = (
+  d: string | Date | undefined | null,
+  timeZone: string,
+  withTime = true,
+): string => {
+  if (!d) return "—";
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+    }).format(new Date(d));
+  } catch {
+    return "—";
+  }
+};
+
 export const hasPerm = (perms: string[] | undefined, p: string) =>
   !!perms && (perms.includes("*") || perms.includes(p));
 

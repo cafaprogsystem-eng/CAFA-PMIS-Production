@@ -2508,6 +2508,27 @@ router.get("/manual/search", async (req, res) => {
   res.json([...sectionRows, ...faqRows, ...sopRows].slice(0, 30));
 });
 
+// Editing a chapter/section/SOP's English source content previously never
+// touched its translated localization rows at all — translation_status only
+// ever changed via the explicit admin "import machine draft" action
+// (ensureLocalizedCorpus, checksum-diffed), so an ordinary content edit left
+// a stale Arabic translation with no visible "needs review" signal anywhere.
+// This marks every existing localization row for the edited entity stale
+// immediately, the moment any translatable field is touched in the request —
+// erring toward re-review even on a no-op resave, rather than ever missing
+// a real content change.
+async function markLocalizationsStale(
+  table: "manual_chapter_localizations" | "manual_section_localizations" | "manual_sop_localizations",
+  fkColumn: "chapter_id" | "section_id" | "sop_id",
+  entityId: number,
+) {
+  await pool.query(
+    `UPDATE ${table} SET translation_status = 'review_required', updated_at = NOW()
+     WHERE ${fkColumn} = $1 AND translation_status <> 'review_required'`,
+    [entityId],
+  );
+}
+
 // GET /manual/chapters
 router.get("/manual/chapters", async (req, res) => {
   await ensureSeeded();
@@ -2525,16 +2546,26 @@ router.get("/manual/chapters", async (req, res) => {
 // POST /manual/chapters
 router.post("/manual/chapters", requirePerm("manual.edit"), async (req, res) => {
   const { title, slug, description, icon, order, language, status } = req.body as Record<string, string>;
-  if (!title || !slug) {
+  if (!title?.trim() || !slug?.trim()) {
     res.status(400).json({ error: "title and slug are required" });
     return;
   }
-  const { rows } = await pool.query<{ id: number }>(
-    `INSERT INTO manual_chapters (title, slug, description, icon, "order", language, status, created_by_id, updated_by_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
-    [title, slug, description ?? null, icon ?? "FileText", order ?? 999, language ?? "en", status ?? "draft", req.currentUser!.id],
-  );
-  const id = rows[0].id;
+  let id: number;
+  try {
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO manual_chapters (title, slug, description, icon, "order", language, status, created_by_id, updated_by_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
+      [title.trim(), slug.trim(), description ?? null, icon ?? "FileText", order ?? 999, language ?? "en", status ?? "draft", req.currentUser!.id],
+    );
+    id = rows[0].id;
+  } catch (err) {
+    const pg = err as { code?: string; constraint?: string };
+    if (pg.code === "23505" && pg.constraint === "manual_chapters_slug_unique") {
+      res.status(409).json({ error: "slug_taken" });
+      return;
+    }
+    throw err;
+  }
   await logAudit({ userId: req.currentUser!.id, action: "create", module: "manual_chapter", entityId: id, newValue: JSON.stringify({ title, slug }) });
   const { rows: ch } = await pool.query(`${chapterSelect()} WHERE mc.id = $1`, [id]);
   res.status(201).json(ch[0]);
@@ -2620,6 +2651,10 @@ router.patch("/manual/chapters/:slug", requirePerm("manual.edit.content"), async
   }
   const chapterId = existing[0].id;
   const { title, description, icon, order, language, status } = req.body as Record<string, string>;
+  if (title !== undefined && !title.trim()) {
+    res.status(400).json({ error: "invalid_title" });
+    return;
+  }
   await pool.query(
     `UPDATE manual_chapters
      SET title = COALESCE($1, title),
@@ -2631,25 +2666,60 @@ router.patch("/manual/chapters/:slug", requirePerm("manual.edit.content"), async
          updated_by_id = $7,
          updated_at = NOW()
      WHERE id = $8`,
-    [title ?? null, description ?? null, icon ?? null, order ?? null, language ?? null, status ?? null, req.currentUser!.id, chapterId],
+    [title?.trim() ?? null, description ?? null, icon ?? null, order ?? null, language ?? null, status ?? null, req.currentUser!.id, chapterId],
   );
+  if (title !== undefined || description !== undefined) {
+    await markLocalizationsStale("manual_chapter_localizations", "chapter_id", chapterId);
+  }
   await logAudit({ userId: req.currentUser!.id, action: "update", module: "manual_chapter", entityId: chapterId });
   const { rows: ch } = await pool.query(`${chapterSelect()} WHERE mc.id = $1`, [chapterId]);
   res.json(ch[0]);
 });
 
-// DELETE /manual/chapters/:slug
-router.delete("/manual/chapters/:slug", requirePerm("manual.edit"), async (req, res) => {
-  const { slug } = req.params;
-  const { rows } = await pool.query<{ id: number }>(
-    "DELETE FROM manual_chapters WHERE slug = $1 RETURNING id",
-    [slug],
-  );
-  if (!rows.length) {
-    res.status(404).json({ error: "not_found" });
+// DELETE /manual/chapters/:id — by numeric ID, not slug: a slug is caller-
+// supplied text, and even with the slug now unique, deleting by the row's
+// own stable primary key is the precise, unambiguous target. Cascades to
+// every dependent row (sections, SOPs, their localizations, and version
+// history) since none of those carry a DB-level ON DELETE CASCADE.
+router.delete("/manual/chapters/:id", requirePerm("manual.edit"), async (req, res) => {
+  const chapterId = Number(req.params.id);
+  if (!Number.isInteger(chapterId) || chapterId < 1) {
+    res.status(400).json({ error: "invalid_chapter_id" });
     return;
   }
-  await logAudit({ userId: req.currentUser!.id, action: "delete", module: "manual_chapter", entityId: rows[0].id });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: number }>(
+      "SELECT id FROM manual_chapters WHERE id = $1 FOR UPDATE",
+      [chapterId],
+    );
+    if (!rows.length) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    await client.query(
+      `DELETE FROM manual_sop_localizations WHERE sop_id IN (SELECT id FROM manual_sops WHERE chapter_id = $1)`,
+      [chapterId],
+    );
+    await client.query(`DELETE FROM manual_sops WHERE chapter_id = $1`, [chapterId]);
+    await client.query(
+      `DELETE FROM manual_section_localizations WHERE section_id IN (SELECT id FROM manual_sections WHERE chapter_id = $1)`,
+      [chapterId],
+    );
+    await client.query(`DELETE FROM manual_sections WHERE chapter_id = $1`, [chapterId]);
+    await client.query(`DELETE FROM manual_chapter_localizations WHERE chapter_id = $1`, [chapterId]);
+    await client.query(`DELETE FROM manual_version_history WHERE chapter_id = $1`, [chapterId]);
+    await client.query(`DELETE FROM manual_chapters WHERE id = $1`, [chapterId]);
+    await logAudit({ userId: req.currentUser!.id, action: "delete", module: "manual_chapter", entityId: chapterId }, client);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
   res.json({ ok: true });
 });
 
@@ -2667,7 +2737,7 @@ router.post("/manual/chapters/:slug/sections", requirePerm("manual.edit.content"
   }
   const chapterId = ch[0].id;
   const { title, content, order } = req.body as { title: string; content?: string; order?: number };
-  if (!title) {
+  if (!title?.trim()) {
     res.status(400).json({ error: "title required" });
     return;
   }
@@ -2677,7 +2747,7 @@ router.post("/manual/chapters/:slug/sections", requirePerm("manual.edit.content"
   );
   const { rows } = await pool.query<{ id: number }>(
     `INSERT INTO manual_sections (chapter_id, title, content, "order") VALUES ($1,$2,$3,$4) RETURNING id`,
-    [chapterId, title, content ?? "", order ?? maxOrder[0].m + 1],
+    [chapterId, title.trim(), content ?? "", order ?? maxOrder[0].m + 1],
   );
   await logAudit({ userId: req.currentUser!.id, action: "create", module: "manual_section", entityId: rows[0].id });
   const { rows: sec } = await pool.query(
@@ -2704,6 +2774,10 @@ router.patch("/manual/sections/:id", requirePerm("manual.edit.content"), async (
     [old[0].chapter_id, id, old[0].content, req.currentUser!.id],
   );
   const { title, content, order } = req.body as { title?: string; content?: string; order?: number };
+  if (title !== undefined && !title.trim()) {
+    res.status(400).json({ error: "invalid_title" });
+    return;
+  }
   await pool.query(
     `UPDATE manual_sections
      SET title = COALESCE($1, title),
@@ -2711,8 +2785,11 @@ router.patch("/manual/sections/:id", requirePerm("manual.edit.content"), async (
          "order" = COALESCE($3, "order"),
          updated_at = NOW()
      WHERE id = $4`,
-    [title ?? null, content ?? null, order ?? null, id],
+    [title?.trim() ?? null, content ?? null, order ?? null, id],
   );
+  if (title !== undefined || content !== undefined) {
+    await markLocalizationsStale("manual_section_localizations", "section_id", id);
+  }
   await logAudit({ userId: req.currentUser!.id, action: "update", module: "manual_section", entityId: id });
   const { rows } = await pool.query(
     `SELECT id, chapter_id AS "chapterId", title, content, "order", created_at AS "createdAt", updated_at AS "updatedAt"
@@ -2747,7 +2824,7 @@ router.post("/manual/chapters/:slug/sops", requirePerm("manual.edit"), async (re
   }
   const chapterId = ch[0].id;
   const { processName, purpose, responsibleRole, steps, requiredInputs, approvalFlow, outputs, timeline, relatedModule, notifications, order } = req.body as Record<string, unknown>;
-  if (!processName) {
+  if (typeof processName !== "string" || !processName.trim()) {
     res.status(400).json({ error: "processName required" });
     return;
   }
@@ -2760,7 +2837,7 @@ router.post("/manual/chapters/:slug/sops", requirePerm("manual.edit"), async (re
      (chapter_id, process_name, purpose, responsible_role, steps, required_inputs,
       approval_flow, outputs, timeline, related_module, notifications, "order")
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-    [chapterId, processName, purpose ?? null, responsibleRole ?? null, steps ? JSON.stringify(steps) : null,
+    [chapterId, processName.trim(), purpose ?? null, responsibleRole ?? null, steps ? JSON.stringify(steps) : null,
      requiredInputs ?? null, approvalFlow ?? null, outputs ?? null, timeline ?? null,
      relatedModule ?? null, notifications ?? null, order ?? maxOrder[0].m + 1],
   );
@@ -2783,6 +2860,10 @@ router.patch("/manual/sops/:id", requirePerm("manual.edit"), async (req, res) =>
     return;
   }
   const { processName, purpose, responsibleRole, steps, requiredInputs, approvalFlow, outputs, timeline, relatedModule, notifications } = req.body as Record<string, unknown>;
+  if (processName !== undefined && (typeof processName !== "string" || !processName.trim())) {
+    res.status(400).json({ error: "invalid_process_name" });
+    return;
+  }
   await pool.query(
     `UPDATE manual_sops SET
      process_name = COALESCE($1, process_name),
@@ -2797,10 +2878,13 @@ router.patch("/manual/sops/:id", requirePerm("manual.edit"), async (req, res) =>
      notifications = COALESCE($10, notifications),
      updated_at = NOW()
      WHERE id = $11`,
-    [processName ?? null, purpose ?? null, responsibleRole ?? null, steps ? JSON.stringify(steps) : null,
+    [typeof processName === "string" ? processName.trim() : null, purpose ?? null, responsibleRole ?? null, steps ? JSON.stringify(steps) : null,
      requiredInputs ?? null, approvalFlow ?? null, outputs ?? null, timeline ?? null,
      relatedModule ?? null, notifications ?? null, id],
   );
+  if ([processName, purpose, responsibleRole, steps, requiredInputs, approvalFlow, outputs, timeline, relatedModule, notifications].some((v) => v !== undefined)) {
+    await markLocalizationsStale("manual_sop_localizations", "sop_id", id);
+  }
   await logAudit({ userId: req.currentUser!.id, action: "update", module: "manual_sop", entityId: id });
   const { rows } = await pool.query(
     `SELECT id, chapter_id AS "chapterId", process_name AS "processName", purpose,

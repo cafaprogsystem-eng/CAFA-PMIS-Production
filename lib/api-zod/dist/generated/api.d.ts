@@ -32,6 +32,7 @@ export declare const GetMeResponse: zod.ZodObject<{
         stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         sector: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         avatarUrl: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+        languagePreference: zod.ZodOptional<zod.ZodString>;
     }, "strip", zod.ZodTypeAny, {
         id: number;
         name: string;
@@ -44,6 +45,7 @@ export declare const GetMeResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     }, {
         id: number;
         name: string;
@@ -56,6 +58,7 @@ export declare const GetMeResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     }>;
     permissions: zod.ZodArray<zod.ZodString, "many">;
 }, "strip", zod.ZodTypeAny, {
@@ -71,6 +74,7 @@ export declare const GetMeResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     };
     permissions: string[];
 }, {
@@ -86,6 +90,7 @@ export declare const GetMeResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     };
     permissions: string[];
 }>;
@@ -106,6 +111,7 @@ export declare const GetProfileResponse: zod.ZodIntersection<zod.ZodIntersection
     stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     sector: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     avatarUrl: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    languagePreference: zod.ZodOptional<zod.ZodString>;
 }, "strip", zod.ZodTypeAny, {
     id: number;
     name: string;
@@ -118,6 +124,7 @@ export declare const GetProfileResponse: zod.ZodIntersection<zod.ZodIntersection
     stateNameAr?: string | null | undefined;
     sector?: string | null | undefined;
     avatarUrl?: string | null | undefined;
+    languagePreference?: string | undefined;
 }, {
     id: number;
     name: string;
@@ -130,11 +137,11 @@ export declare const GetProfileResponse: zod.ZodIntersection<zod.ZodIntersection
     stateNameAr?: string | null | undefined;
     sector?: string | null | undefined;
     avatarUrl?: string | null | undefined;
+    languagePreference?: string | undefined;
 }>, zod.ZodObject<{
     username: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     phone: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     status: zod.ZodOptional<zod.ZodString>;
-    languagePreference: zod.ZodOptional<zod.ZodString>;
     lastLoginAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
     isOnline: zod.ZodOptional<zod.ZodBoolean>;
     lastSeenAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
@@ -147,7 +154,6 @@ export declare const GetProfileResponse: zod.ZodIntersection<zod.ZodIntersection
     status?: string | undefined;
     username?: string | null | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     lastLoginAt?: Date | null | undefined;
     isOnline?: boolean | undefined;
     lastSeenAt?: Date | null | undefined;
@@ -160,7 +166,6 @@ export declare const GetProfileResponse: zod.ZodIntersection<zod.ZodIntersection
     status?: string | undefined;
     username?: string | null | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     lastLoginAt?: Date | null | undefined;
     isOnline?: boolean | undefined;
     lastSeenAt?: Date | null | undefined;
@@ -581,8 +586,8 @@ export declare const UpdateProfileBody: zod.ZodObject<{
     }>, zod.ZodNull]>>;
 }, "strip", zod.ZodTypeAny, {
     name?: string | undefined;
-    phone?: string | null | undefined;
     languagePreference?: "en" | "ar" | undefined;
+    phone?: string | null | undefined;
     jobTitle?: string | null | undefined;
     timezone?: string | undefined;
     notificationPreferences?: {
@@ -620,8 +625,8 @@ export declare const UpdateProfileBody: zod.ZodObject<{
     } | null | undefined;
 }, {
     name?: string | undefined;
-    phone?: string | null | undefined;
     languagePreference?: "en" | "ar" | undefined;
+    phone?: string | null | undefined;
     jobTitle?: string | null | undefined;
     timezone?: string | undefined;
     notificationPreferences?: {
@@ -672,6 +677,7 @@ export declare const UpdateProfileResponse: zod.ZodIntersection<zod.ZodIntersect
     stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     sector: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     avatarUrl: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    languagePreference: zod.ZodOptional<zod.ZodString>;
 }, "strip", zod.ZodTypeAny, {
     id: number;
     name: string;
@@ -684,6 +690,7 @@ export declare const UpdateProfileResponse: zod.ZodIntersection<zod.ZodIntersect
     stateNameAr?: string | null | undefined;
     sector?: string | null | undefined;
     avatarUrl?: string | null | undefined;
+    languagePreference?: string | undefined;
 }, {
     id: number;
     name: string;
@@ -696,11 +703,11 @@ export declare const UpdateProfileResponse: zod.ZodIntersection<zod.ZodIntersect
     stateNameAr?: string | null | undefined;
     sector?: string | null | undefined;
     avatarUrl?: string | null | undefined;
+    languagePreference?: string | undefined;
 }>, zod.ZodObject<{
     username: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     phone: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     status: zod.ZodOptional<zod.ZodString>;
-    languagePreference: zod.ZodOptional<zod.ZodString>;
     lastLoginAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
     isOnline: zod.ZodOptional<zod.ZodBoolean>;
     lastSeenAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
@@ -713,7 +720,6 @@ export declare const UpdateProfileResponse: zod.ZodIntersection<zod.ZodIntersect
     status?: string | undefined;
     username?: string | null | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     lastLoginAt?: Date | null | undefined;
     isOnline?: boolean | undefined;
     lastSeenAt?: Date | null | undefined;
@@ -726,7 +732,6 @@ export declare const UpdateProfileResponse: zod.ZodIntersection<zod.ZodIntersect
     status?: string | undefined;
     username?: string | null | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     lastLoginAt?: Date | null | undefined;
     isOnline?: boolean | undefined;
     lastSeenAt?: Date | null | undefined;
@@ -1226,6 +1231,7 @@ export declare const LoginResponse: zod.ZodObject<{
         stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         sector: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         avatarUrl: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+        languagePreference: zod.ZodOptional<zod.ZodString>;
     }, "strip", zod.ZodTypeAny, {
         id: number;
         name: string;
@@ -1238,6 +1244,7 @@ export declare const LoginResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     }, {
         id: number;
         name: string;
@@ -1250,6 +1257,7 @@ export declare const LoginResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     }>;
     permissions: zod.ZodArray<zod.ZodString, "many">;
 }, "strip", zod.ZodTypeAny, {
@@ -1265,6 +1273,7 @@ export declare const LoginResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     };
     permissions: string[];
 }, {
@@ -1280,6 +1289,7 @@ export declare const LoginResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     };
     permissions: string[];
 }>;
@@ -1409,6 +1419,7 @@ export declare const ListUsersResponse: zod.ZodObject<{
         stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         sector: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         avatarUrl: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+        languagePreference: zod.ZodOptional<zod.ZodString>;
     }, "strip", zod.ZodTypeAny, {
         id: number;
         name: string;
@@ -1421,6 +1432,7 @@ export declare const ListUsersResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     }, {
         id: number;
         name: string;
@@ -1433,11 +1445,11 @@ export declare const ListUsersResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     }>, zod.ZodObject<{
         username: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         phone: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
         status: zod.ZodOptional<zod.ZodString>;
-        languagePreference: zod.ZodOptional<zod.ZodString>;
         lastLoginAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
         isOnline: zod.ZodOptional<zod.ZodBoolean>;
         lastSeenAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
@@ -1450,7 +1462,6 @@ export declare const ListUsersResponse: zod.ZodObject<{
         status?: string | undefined;
         username?: string | null | undefined;
         phone?: string | null | undefined;
-        languagePreference?: string | undefined;
         lastLoginAt?: Date | null | undefined;
         isOnline?: boolean | undefined;
         lastSeenAt?: Date | null | undefined;
@@ -1463,7 +1474,6 @@ export declare const ListUsersResponse: zod.ZodObject<{
         status?: string | undefined;
         username?: string | null | undefined;
         phone?: string | null | undefined;
-        languagePreference?: string | undefined;
         lastLoginAt?: Date | null | undefined;
         isOnline?: boolean | undefined;
         lastSeenAt?: Date | null | undefined;
@@ -1493,11 +1503,11 @@ export declare const ListUsersResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     } & {
         status?: string | undefined;
         username?: string | null | undefined;
         phone?: string | null | undefined;
-        languagePreference?: string | undefined;
         lastLoginAt?: Date | null | undefined;
         isOnline?: boolean | undefined;
         lastSeenAt?: Date | null | undefined;
@@ -1525,11 +1535,11 @@ export declare const ListUsersResponse: zod.ZodObject<{
         stateNameAr?: string | null | undefined;
         sector?: string | null | undefined;
         avatarUrl?: string | null | undefined;
+        languagePreference?: string | undefined;
     } & {
         status?: string | undefined;
         username?: string | null | undefined;
         phone?: string | null | undefined;
-        languagePreference?: string | undefined;
         lastLoginAt?: Date | null | undefined;
         isOnline?: boolean | undefined;
         lastSeenAt?: Date | null | undefined;
@@ -1577,9 +1587,9 @@ export declare const CreateUserBody: zod.ZodObject<{
     status?: string | undefined;
     stateId?: number | null | undefined;
     sector?: string | null | undefined;
+    languagePreference?: string | undefined;
     username?: string | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     password?: string | null | undefined;
 }>;
 /**
@@ -1680,6 +1690,7 @@ export declare const GetUserResponse: zod.ZodIntersection<zod.ZodObject<{
     stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     sector: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     avatarUrl: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    languagePreference: zod.ZodOptional<zod.ZodString>;
 }, "strip", zod.ZodTypeAny, {
     id: number;
     name: string;
@@ -1692,6 +1703,7 @@ export declare const GetUserResponse: zod.ZodIntersection<zod.ZodObject<{
     stateNameAr?: string | null | undefined;
     sector?: string | null | undefined;
     avatarUrl?: string | null | undefined;
+    languagePreference?: string | undefined;
 }, {
     id: number;
     name: string;
@@ -1704,11 +1716,11 @@ export declare const GetUserResponse: zod.ZodIntersection<zod.ZodObject<{
     stateNameAr?: string | null | undefined;
     sector?: string | null | undefined;
     avatarUrl?: string | null | undefined;
+    languagePreference?: string | undefined;
 }>, zod.ZodObject<{
     username: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     phone: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     status: zod.ZodOptional<zod.ZodString>;
-    languagePreference: zod.ZodOptional<zod.ZodString>;
     lastLoginAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
     isOnline: zod.ZodOptional<zod.ZodBoolean>;
     lastSeenAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
@@ -1721,7 +1733,6 @@ export declare const GetUserResponse: zod.ZodIntersection<zod.ZodObject<{
     status?: string | undefined;
     username?: string | null | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     lastLoginAt?: Date | null | undefined;
     isOnline?: boolean | undefined;
     lastSeenAt?: Date | null | undefined;
@@ -1734,7 +1745,6 @@ export declare const GetUserResponse: zod.ZodIntersection<zod.ZodObject<{
     status?: string | undefined;
     username?: string | null | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     lastLoginAt?: Date | null | undefined;
     isOnline?: boolean | undefined;
     lastSeenAt?: Date | null | undefined;
@@ -1768,9 +1778,9 @@ export declare const UpdateUserBody: zod.ZodObject<{
     role?: string | undefined;
     stateId?: number | null | undefined;
     sector?: string | null | undefined;
+    languagePreference?: string | undefined;
     username?: string | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
 }, {
     status?: string | undefined;
     name?: string | undefined;
@@ -1778,9 +1788,9 @@ export declare const UpdateUserBody: zod.ZodObject<{
     role?: string | undefined;
     stateId?: number | null | undefined;
     sector?: string | null | undefined;
+    languagePreference?: string | undefined;
     username?: string | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
 }>;
 export declare const UpdateUserResponse: zod.ZodIntersection<zod.ZodObject<{
     id: zod.ZodNumber;
@@ -1794,6 +1804,7 @@ export declare const UpdateUserResponse: zod.ZodIntersection<zod.ZodObject<{
     stateNameAr: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     sector: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     avatarUrl: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
+    languagePreference: zod.ZodOptional<zod.ZodString>;
 }, "strip", zod.ZodTypeAny, {
     id: number;
     name: string;
@@ -1806,6 +1817,7 @@ export declare const UpdateUserResponse: zod.ZodIntersection<zod.ZodObject<{
     stateNameAr?: string | null | undefined;
     sector?: string | null | undefined;
     avatarUrl?: string | null | undefined;
+    languagePreference?: string | undefined;
 }, {
     id: number;
     name: string;
@@ -1818,11 +1830,11 @@ export declare const UpdateUserResponse: zod.ZodIntersection<zod.ZodObject<{
     stateNameAr?: string | null | undefined;
     sector?: string | null | undefined;
     avatarUrl?: string | null | undefined;
+    languagePreference?: string | undefined;
 }>, zod.ZodObject<{
     username: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     phone: zod.ZodOptional<zod.ZodNullable<zod.ZodString>>;
     status: zod.ZodOptional<zod.ZodString>;
-    languagePreference: zod.ZodOptional<zod.ZodString>;
     lastLoginAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
     isOnline: zod.ZodOptional<zod.ZodBoolean>;
     lastSeenAt: zod.ZodOptional<zod.ZodNullable<zod.ZodDate>>;
@@ -1835,7 +1847,6 @@ export declare const UpdateUserResponse: zod.ZodIntersection<zod.ZodObject<{
     status?: string | undefined;
     username?: string | null | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     lastLoginAt?: Date | null | undefined;
     isOnline?: boolean | undefined;
     lastSeenAt?: Date | null | undefined;
@@ -1848,7 +1859,6 @@ export declare const UpdateUserResponse: zod.ZodIntersection<zod.ZodObject<{
     status?: string | undefined;
     username?: string | null | undefined;
     phone?: string | null | undefined;
-    languagePreference?: string | undefined;
     lastLoginAt?: Date | null | undefined;
     isOnline?: boolean | undefined;
     lastSeenAt?: Date | null | undefined;

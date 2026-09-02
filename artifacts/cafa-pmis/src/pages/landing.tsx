@@ -415,9 +415,7 @@ function FeatureShowcase() {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-interface LandingPageProps { isAuthenticated?: boolean }
-
-export default function LandingPage({ isAuthenticated = false }: LandingPageProps) {
+export default function LandingPage() {
   const { t } = useTranslation("landing");
   const [, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen]       = useState(false);
@@ -468,18 +466,18 @@ export default function LandingPage({ isAuthenticated = false }: LandingPageProp
     return () => window.removeEventListener("scroll", handle);
   }, []);
 
-  const handlePrimary = () => setLocation(isAuthenticated ? "/dashboard" : "/login");
+  const handlePrimary = () => setLocation("/login");
   const handleAnchor  = (anchor: string) => {
     setMobileOpen(false);
     setTimeout(() => smoothScroll(anchor), mobileOpen ? 150 : 0);
   };
-  const ctaLabel = isAuthenticated ? t("hero.ctaDashboard") : t("hero.ctaPrimary");
+  const ctaLabel = t("hero.ctaPrimary");
 
   return (
     <>
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[9999] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-semibold"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-[9999] focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-semibold"
       >
         {t("content.skipToContent")}
       </a>
@@ -923,7 +921,7 @@ export default function LandingPage({ isAuthenticated = false }: LandingPageProp
                 <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-3">{t("footer.legalNav")}</p>
                 <ul className="space-y-2">
                   {[
-                    { key: "systemManual", href: "/login", ext: false },
+                    { key: "systemManual", href: "/manual", ext: false },
                   ].map(l => (
                     <li key={l.key}>
                       <a

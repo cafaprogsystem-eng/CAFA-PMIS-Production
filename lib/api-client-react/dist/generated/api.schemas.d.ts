@@ -30,6 +30,8 @@ export interface User {
     sector?: string | null;
     /** @nullable */
     avatarUrl?: string | null;
+    /** en | ar — the account's saved interface-language preference, applied on every device/session, not just the one it was set from. */
+    languagePreference?: string;
 }
 export interface SwitcherUser {
     id: number;
@@ -56,8 +58,6 @@ export type UserDetail = User & {
     phone?: string | null;
     /** active | invited | suspended | inactive | deactivated */
     status?: string;
-    /** en | ar */
-    languagePreference?: string;
     /** @nullable */
     lastLoginAt?: string | null;
     /** True only while this API process has an authenticated Socket.IO connection for the user. */

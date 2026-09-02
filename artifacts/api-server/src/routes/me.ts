@@ -22,6 +22,7 @@ router.get("/me", (req, res) => {
       stateNameAr: req.currentUser.stateNameAr,
       sector: req.currentUser.sector,
       avatarUrl: req.currentUser.avatarUrl,
+      languagePreference: req.currentUser.languagePreference,
     },
     permissions: permissionsFor(req.currentUser),
   });

@@ -170,6 +170,15 @@ describe("Landing page — footer dead links are removed", () => {
   });
 });
 
+describe("Landing page — footer System Manual link", () => {
+  it("routes to /manual, not /login (a visitor clicking it should not land on the sign-in screen with no explanation)", () => {
+    renderLanding();
+    const manualLinks = document.querySelectorAll('a[href="/manual"]');
+    expect(manualLinks).toHaveLength(1);
+    expect(manualLinks[0]).toHaveTextContent((enLanding.footer.links as Record<string, string>).systemManual);
+  });
+});
+
 describe("Landing page — primary CTA routes to /login", () => {
   it("Sign In button navigates to /login", () => {
     renderLanding();

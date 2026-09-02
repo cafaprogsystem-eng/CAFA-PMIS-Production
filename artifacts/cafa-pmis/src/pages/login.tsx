@@ -50,7 +50,17 @@ export default function LoginPage() {
         body: JSON.stringify({ identifier: identifier.trim(), password, remember }),
       });
       if (!res.ok) {
-        setError(t("invalidCredentials"));
+        const errBody = await res.json().catch(() => ({}));
+        if (res.status === 429) {
+          setError(t("tooManyRequests"));
+        } else if (res.status === 403 && errBody.error === "account_not_active") {
+          setError(t("accountNotActive"));
+        } else {
+          // Wrong password, unknown identifier, and a missing field all collapse
+          // to the same generic message — anything more specific here would let
+          // an attacker enumerate which accounts exist.
+          setError(t("invalidCredentials"));
+        }
         setBusy(false);
         return;
       }
@@ -67,7 +77,7 @@ export default function LoginPage() {
       qc.invalidateQueries();
       window.location.assign(import.meta.env.BASE_URL || "/");
     } catch {
-      setError(t("invalidCredentials"));
+      setError(t("networkError"));
       setBusy(false);
     }
   };

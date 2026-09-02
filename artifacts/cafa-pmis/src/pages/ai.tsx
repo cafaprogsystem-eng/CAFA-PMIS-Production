@@ -4,17 +4,19 @@ import { useGetMe } from "@workspace/api-client-react";
 import { AIChatWidget } from "@/components/ai-chat-widget";
 import { AIAdministrationPanel } from "@/pages/ai-settings";
 
-const ADMIN_ROLES = new Set(["super_admin", "executive_director"]);
-
 /**
  * Canonical AI workspace. The assistant is available to every authenticated
- * user; administration remains a role-gated section backed by the existing
- * settings and logs endpoints.
+ * user; administration remains a permission-gated section backed by the
+ * existing settings (ai.settings.manage) and logs (ai.logs.view) endpoints —
+ * matching the backend exactly, rather than a separate hardcoded role list
+ * that can drift from it (the backend also grants ai.logs.view to
+ * program_manager, who previously had no frontend path to this section at all).
  */
 export default function AIPage() {
   const { t } = useTranslation("ai");
   const { data: me } = useGetMe();
-  const isAdmin = ADMIN_ROLES.has(me?.user?.role ?? "");
+  const myPerms = me?.permissions ?? [];
+  const isAdmin = myPerms.includes("*") || myPerms.includes("ai.settings.manage") || myPerms.includes("ai.logs.view");
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">

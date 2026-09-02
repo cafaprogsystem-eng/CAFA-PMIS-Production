@@ -1,6 +1,7 @@
-import { Suspense, lazy, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
-import { QueryClient, QueryClientProvider, MutationCache, useQuery, useQueryClient } from "@tanstack/react-query";
+import { QueryCache, QueryClient, QueryClientProvider, MutationCache, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@workspace/api-client-react";
 import { Loader2 } from "lucide-react";
 import { DirectionProvider } from "@radix-ui/react-direction";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,7 +13,7 @@ import { RouteErrorBoundary } from "@/components/route-error-boundary";
 import { OfflineIndicator } from "@/components/offline-indicator";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { SyncProvider } from "@/contexts/sync-context";
-import { LanguageProvider, useLanguage } from "@/contexts/language-context";
+import { LanguageProvider, useLanguage, hadStoredLangPreference } from "@/contexts/language-context";
 import { LocationProvider } from "@/contexts/location-context";
 import { isOfflineQueuedError, isOfflineBlockedError } from "@/lib/offline/fetch-interceptor";
 import { SocketProvider } from "@/lib/socket";
@@ -60,7 +61,33 @@ const AiPage           = lazy(() => import("@/pages/ai"));
 const NotificationPreferencesPage = lazy(() => import("@/pages/notification-preferences"));
 const LandingPage          = lazy(() => import("@/pages/landing"));
 
+// A 401 mid-session (an expired or server-revoked session hit while
+// submitting a form, or on a background refetch) previously surfaced only
+// through whatever generic "Failed to save" toast that one page's own catch
+// block happened to show — with no indication the user needs to sign back
+// in, and no redirect until the next unrelated navigation happened to
+// re-trigger AuthGate's own /api/me check (staleTime: 60s). This is the one
+// choke point every orval-generated hook's fetch funnels through
+// (customFetch throws ApiError on any non-2xx), so it is also the one place
+// that can catch this for every query and mutation in the app, not just the
+// pages that happen to check for it themselves.
+function handleSessionExpiry(error: unknown) {
+  if (error instanceof ApiError && error.status === 401) {
+    toast.error("Your session has expired. Please sign in again.", {
+      id: "session-expired",
+      duration: 6000,
+    });
+    // Forces AuthGate's own /api/me query to re-run now instead of waiting
+    // out its staleTime — it will see the same 401, call
+    // invalidateAuthenticatedSession(), and redirect to /login.
+    appQueryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+  }
+}
+
 export const appQueryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: handleSessionExpiry,
+  }),
   mutationCache: new MutationCache({
     onError: (error) => {
       if (isOfflineQueuedError(error)) {
@@ -76,6 +103,8 @@ export const appQueryClient = new QueryClient({
           duration: 5000,
           description: `${error.actionDescription}. Please reconnect and try again.`,
         });
+      } else {
+        handleSessionExpiry(error);
       }
     },
   }),
@@ -172,7 +201,7 @@ function Router() {
           <Route path="/manual" component={ManualHome} />
           <Route path="/manual/faq" component={ManualFaqPage} />
           <Route path="/manual/guides/:role">{(params) => <ManualRoleGuide role={params.role} />}</Route>
-          <Route path="/manual/certificate/:certId">{(params) => <CertificateVerify certId={params.certId} />}</Route>
+          {/* /manual/certificate/:certId is handled by the public route in App() — it never reaches here. */}
           <Route path="/manual/:slug">{(params) => <ManualChapter slug={params.slug} />}</Route>
           <Route path="/notifications" component={NotificationsPage} />
           <Route path="/access-denied" component={AccessDenied} />
@@ -200,6 +229,7 @@ function Router() {
 function AuthGate() {
   const [location] = useLocation();
   const qc = useQueryClient();
+  const { setLang } = useLanguage();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["auth", "me"],
     queryFn: async () => {
@@ -220,6 +250,20 @@ function AuthGate() {
     retry: false,
     staleTime: 60_000,
   });
+
+  // A saved account-level language preference previously never took effect
+  // on a device other than the one it was set from — this device's language
+  // silently defaulted to English regardless of what the user saved in
+  // Profile. Only apply it once, on a fresh device with no local choice
+  // already made (hadStoredLangPreference), so it never fights the
+  // deliberately local-only quick switcher in the top nav or a choice this
+  // sync itself already applied.
+  useEffect(() => {
+    const pref = data?.user?.languagePreference;
+    if (!hadStoredLangPreference() && (pref === "en" || pref === "ar")) {
+      setLang(pref);
+    }
+  }, [data?.user?.languagePreference, setLang]);
 
   if (isLoading) {
     return (
@@ -284,6 +328,9 @@ function App() {
                   <Route path="/password-reset-sent" component={PasswordResetSentPage} />
                   <Route path="/verify-email" component={VerifyEmailPage} />
                   <Route path="/email-verification-sent" component={EmailVerificationSentPage} />
+                  {/* Public certificate-verification lookup: an external party (e.g. an employer)
+                      must be able to check a certificate without a CAFA PMIS account. */}
+                  <Route path="/manual/certificate/:certId">{(params) => <CertificateVerify certId={params.certId} />}</Route>
                   <Route><AuthGate /></Route>
                 </Switch>
               </Suspense>

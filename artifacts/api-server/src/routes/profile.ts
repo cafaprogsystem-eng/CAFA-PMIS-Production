@@ -312,9 +312,11 @@ router.post("/profile/photo", async (req: Request, res: Response) => {
     const metadata = await objectStorageService.getObjectEntityMetadata(descriptor.objectPath);
     const actualType = normalizeImageType(metadata.contentType);
     if (metadata.size < 1 || metadata.size > PROFILE_PHOTO_MAX_SIZE || metadata.size > descriptor.maxSize) {
+      deleteStorageObjectSafely(descriptor.objectPath).catch((err) => req.log.warn({ err }, "rejected profile photo upload cleanup failed"));
       res.status(413).json({ error: "photo_too_large" }); return;
     }
     if (actualType !== descriptor.contentType || !PROFILE_PHOTO_TYPES.has(actualType)) {
+      deleteStorageObjectSafely(descriptor.objectPath).catch((err) => req.log.warn({ err }, "rejected profile photo upload cleanup failed"));
       res.status(415).json({ error: "unsupported_photo_type" }); return;
     }
     const uploaded = await objectStorageService.downloadObject(
@@ -323,6 +325,7 @@ router.post("/profile/photo", async (req: Request, res: Response) => {
     );
     const bytes = new Uint8Array(await uploaded.arrayBuffer()).slice(0, 12);
     if (!hasExpectedImageSignature(actualType, bytes)) {
+      deleteStorageObjectSafely(descriptor.objectPath).catch((err) => req.log.warn({ err }, "rejected profile photo upload cleanup failed"));
       res.status(415).json({ error: "invalid_photo_content" }); return;
     }
     const finalPath = await objectStorageService.finalizeObjectEntityUpload(descriptor.objectPath, "profiles");

@@ -26,13 +26,16 @@ function strengthScore(pw: string): { score: number; labelKey: string; color: st
   return { score: s, ...map[Math.min(s, 5)] };
 }
 
+// Matches the server's actual policy exactly (lib/password.ts in the API):
+// at least 10 characters, one letter, one digit. No case or special-character
+// requirement — a client-side rule stricter than the server's would block a
+// password the server would otherwise accept, with the submit button just
+// staying disabled and no error ever shown.
 function validateRules(pw: string) {
   return {
-    length:  pw.length >= 8,
-    upper:   /[A-Z]/.test(pw),
-    lower:   /[a-z]/.test(pw),
-    digit:   /[0-9]/.test(pw),
-    special: /[^A-Za-z0-9]/.test(pw),
+    length: pw.length >= 10,
+    letter: /[A-Za-z]/.test(pw),
+    digit:  /[0-9]/.test(pw),
   };
 }
 
@@ -249,11 +252,9 @@ export default function ResetPasswordPage() {
                 {/* Rules */}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-2">
                   {[
-                    { ok: rules.length,  label: t("rulesLength") },
-                    { ok: rules.upper,   label: t("rulesUpper") },
-                    { ok: rules.lower,   label: t("rulesLower") },
-                    { ok: rules.digit,   label: t("rulesDigit") },
-                    { ok: rules.special, label: t("rulesSpecial") },
+                    { ok: rules.length, label: t("rulesLength") },
+                    { ok: rules.letter, label: t("rulesLetter") },
+                    { ok: rules.digit,  label: t("rulesDigit") },
                   ].map(({ ok, label }) => (
                     <p key={label} className={`text-xs flex items-center gap-1 ${ok ? "text-emerald-600" : "text-gray-400"}`}>
                       <span>{ok ? "✓" : "○"}</span> {label}

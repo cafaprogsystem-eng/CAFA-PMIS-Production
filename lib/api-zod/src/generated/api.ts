@@ -37,6 +37,12 @@ export const GetMeResponse = zod.object({
       .describe("Canonical Arabic State label for locale-aware display."),
     sector: zod.string().nullish(),
     avatarUrl: zod.string().nullish(),
+    languagePreference: zod
+      .string()
+      .optional()
+      .describe(
+        "en | ar — the account's saved interface-language preference, applied on every device\/session, not just the one it was set from.",
+      ),
   }),
   permissions: zod.array(zod.string()),
 });
@@ -69,6 +75,12 @@ export const GetProfileResponse = zod
       .describe("Canonical Arabic State label for locale-aware display."),
     sector: zod.string().nullish(),
     avatarUrl: zod.string().nullish(),
+    languagePreference: zod
+      .string()
+      .optional()
+      .describe(
+        "en | ar — the account's saved interface-language preference, applied on every device\/session, not just the one it was set from.",
+      ),
   })
   .and(
     zod.object({
@@ -78,7 +90,6 @@ export const GetProfileResponse = zod
         .string()
         .optional()
         .describe("active | invited | suspended | inactive | deactivated"),
-      languagePreference: zod.string().optional().describe("en | ar"),
       lastLoginAt: zod.coerce.date().nullish(),
       isOnline: zod
         .boolean()
@@ -330,6 +341,12 @@ export const UpdateProfileResponse = zod
       .describe("Canonical Arabic State label for locale-aware display."),
     sector: zod.string().nullish(),
     avatarUrl: zod.string().nullish(),
+    languagePreference: zod
+      .string()
+      .optional()
+      .describe(
+        "en | ar — the account's saved interface-language preference, applied on every device\/session, not just the one it was set from.",
+      ),
   })
   .and(
     zod.object({
@@ -339,7 +356,6 @@ export const UpdateProfileResponse = zod
         .string()
         .optional()
         .describe("active | invited | suspended | inactive | deactivated"),
-      languagePreference: zod.string().optional().describe("en | ar"),
       lastLoginAt: zod.coerce.date().nullish(),
       isOnline: zod
         .boolean()
@@ -660,6 +676,12 @@ export const LoginResponse = zod.object({
       .describe("Canonical Arabic State label for locale-aware display."),
     sector: zod.string().nullish(),
     avatarUrl: zod.string().nullish(),
+    languagePreference: zod
+      .string()
+      .optional()
+      .describe(
+        "en | ar — the account's saved interface-language preference, applied on every device\/session, not just the one it was set from.",
+      ),
   }),
   permissions: zod.array(zod.string()),
 });
@@ -751,6 +773,12 @@ export const ListUsersResponse = zod.object({
           .describe("Canonical Arabic State label for locale-aware display."),
         sector: zod.string().nullish(),
         avatarUrl: zod.string().nullish(),
+        languagePreference: zod
+          .string()
+          .optional()
+          .describe(
+            "en | ar — the account's saved interface-language preference, applied on every device\/session, not just the one it was set from.",
+          ),
       })
       .and(
         zod.object({
@@ -760,7 +788,6 @@ export const ListUsersResponse = zod.object({
             .string()
             .optional()
             .describe("active | invited | suspended | inactive | deactivated"),
-          languagePreference: zod.string().optional().describe("en | ar"),
           lastLoginAt: zod.coerce.date().nullish(),
           isOnline: zod
             .boolean()
@@ -882,6 +909,12 @@ export const GetUserResponse = zod
       .describe("Canonical Arabic State label for locale-aware display."),
     sector: zod.string().nullish(),
     avatarUrl: zod.string().nullish(),
+    languagePreference: zod
+      .string()
+      .optional()
+      .describe(
+        "en | ar — the account's saved interface-language preference, applied on every device\/session, not just the one it was set from.",
+      ),
   })
   .and(
     zod.object({
@@ -891,7 +924,6 @@ export const GetUserResponse = zod
         .string()
         .optional()
         .describe("active | invited | suspended | inactive | deactivated"),
-      languagePreference: zod.string().optional().describe("en | ar"),
       lastLoginAt: zod.coerce.date().nullish(),
       isOnline: zod
         .boolean()
@@ -960,6 +992,12 @@ export const UpdateUserResponse = zod
       .describe("Canonical Arabic State label for locale-aware display."),
     sector: zod.string().nullish(),
     avatarUrl: zod.string().nullish(),
+    languagePreference: zod
+      .string()
+      .optional()
+      .describe(
+        "en | ar — the account's saved interface-language preference, applied on every device\/session, not just the one it was set from.",
+      ),
   })
   .and(
     zod.object({
@@ -969,7 +1007,6 @@ export const UpdateUserResponse = zod
         .string()
         .optional()
         .describe("active | invited | suspended | inactive | deactivated"),
-      languagePreference: zod.string().optional().describe("en | ar"),
       lastLoginAt: zod.coerce.date().nullish(),
       isOnline: zod
         .boolean()

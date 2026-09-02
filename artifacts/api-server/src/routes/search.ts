@@ -7,14 +7,14 @@ const router: IRouter = Router();
 /**
  * GET /search?q=<term>&limit=<n>
  *
- * Returns matching projects, plans, reports, risks, documents, and (for admins/PMs) users.
+ * Returns matching projects, plans, reports, risks, documents, states, and (for admins/PMs) users.
  * Each category is capped at `limit` results (default 5).
  */
 router.get("/search", async (req, res, next) => {
   try {
     const raw = String(req.query.q ?? "").trim();
     if (!raw) {
-      res.json({ projects: [], plans: [], reports: [], risks: [], documents: [], users: [] });
+      res.json({ projects: [], plans: [], reports: [], risks: [], documents: [], users: [], states: [] });
       return;
     }
 
@@ -28,6 +28,13 @@ router.get("/search", async (req, res, next) => {
     // ── RBAC helpers ──────────────────────────────────────────────────
     const isStateRole =
       user.role === "state_program_officer" || user.role === "state_office_manager";
+    if (isStateRole && !user.stateId) {
+      // Fail-closed: a state-scoped role with no assigned state must see
+      // nothing, not an unscoped organisation-wide result set (same rule as
+      // the report-list and plan-list scopes).
+      res.status(403).json({ error: "no state assigned" });
+      return;
+    }
     const canViewUsers =
       hasAll || perms.includes("users.view") || perms.includes("users.manage");
     const tcSectors = tcSectorRestriction(req);
@@ -92,6 +99,17 @@ router.get("/search", async (req, res, next) => {
       );
     }
 
+    // ── States ────────────────────────────────────────────────────────
+    // States are not sector-partitioned (tcSectors does not apply here,
+    // same as the users query below). A state-scoped role can only ever
+    // match its own single assigned state.
+    const stateParams: unknown[] = [q, limit];
+    let stateWhere = `(s.name ILIKE $1 OR s.name_ar ILIKE $1 OR s.code ILIKE $1)`;
+    if (isStateRole && user.stateId) {
+      stateParams.push(user.stateId);
+      stateWhere += ` AND s.id = $${stateParams.length}`;
+    }
+
     // ── Documents (project_documents) ────────────────────────────────
     const docParams: unknown[] = [q, limit];
     const docFilters: string[] = [
@@ -109,7 +127,7 @@ router.get("/search", async (req, res, next) => {
     }
 
     // ── Fire all queries in parallel ──────────────────────────────────
-    const [projectsResult, reportsResult, usersResult, risksResult, plansResult, documentsResult] =
+    const [projectsResult, reportsResult, usersResult, risksResult, plansResult, documentsResult, statesResult] =
       await Promise.all([
         pool.query<{
           id: number; code: string; title: string; status: string; sector: string | null;
@@ -205,6 +223,19 @@ router.get("/search", async (req, res, next) => {
            LIMIT $2`,
           docParams,
         ),
+
+        pool.query<{
+          id: number; name: string; nameAr: string; code: string;
+          operationalStatus: string; officeStatus: string;
+        }>(
+          `SELECT s.id, s.name, s.name_ar AS "nameAr", s.code,
+                  s.operational_status AS "operationalStatus", s.office_status AS "officeStatus"
+           FROM states s
+           WHERE ${stateWhere}
+           ORDER BY s.name
+           LIMIT $2`,
+          stateParams,
+        ),
       ]);
 
     res.json({
@@ -214,6 +245,7 @@ router.get("/search", async (req, res, next) => {
       risks: risksResult.rows,
       documents: documentsResult.rows,
       users: usersResult.rows,
+      states: statesResult.rows,
     });
   } catch (err) {
     next(err);

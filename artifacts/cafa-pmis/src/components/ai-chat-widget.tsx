@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { Trans, useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Bot, X, Minimize2, Send, Trash2, RotateCcw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
@@ -31,6 +32,23 @@ const ADMIN_ROLES = new Set(["super_admin", "executive_director"]);
 
 function newId() { return Math.random().toString(36).slice(2); }
 
+// GET /ai/history was fully implemented server-side but never called from
+// here — sessionId used to be a fresh crypto.randomUUID() on every mount, so
+// every page reload or widget close/reopen lost the visible conversation
+// even though the server had been persisting every message all along.
+// Persisting the session id lets the widget reload that same conversation.
+const AI_SESSION_STORAGE_KEY = "cafa.ai.sessionId";
+
+function getOrCreateSessionId(): string {
+  try {
+    const existing = localStorage.getItem(AI_SESSION_STORAGE_KEY);
+    if (existing) return existing;
+  } catch { /* localStorage unavailable (private mode, etc.) */ }
+  const fresh = crypto.randomUUID();
+  try { localStorage.setItem(AI_SESSION_STORAGE_KEY, fresh); } catch { /* non-fatal */ }
+  return fresh;
+}
+
 export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation("ai");
   const [open, setOpen] = useState(embedded);
@@ -38,7 +56,8 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [streaming, setStreaming] = useState(false);
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [sessionId] = useState(getOrCreateSessionId);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
@@ -101,16 +120,33 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
     if (open && !minimized && enabled) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open, minimized, enabled]);
 
-  // Welcome message (only shown when AI is enabled)
+  // Load this session's prior messages once, so a reload or close/reopen
+  // restores the conversation instead of starting blank every time.
   useEffect(() => {
-    if (open && enabled && messages.length === 0) {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/ai/history?sessionId=${encodeURIComponent(sessionId)}&limit=50`, { credentials: "include" });
+        if (!res.ok) return;
+        const body = await res.json() as { messages: Array<{ id: number; role: "user" | "assistant"; content: string }> };
+        if (cancelled || !body.messages.length) return;
+        setMessages(body.messages.slice().reverse().map((m) => ({ id: String(m.id), role: m.role, content: m.content })));
+      } catch { /* history is a convenience, not critical to chat working */ }
+      finally { if (!cancelled) setHistoryLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
+  // Welcome message (only shown when AI is enabled and there's no restored history)
+  useEffect(() => {
+    if (open && enabled && historyLoaded && messages.length === 0) {
       setMessages([{
         id: newId(),
         role: "assistant",
         content: t("widget.welcome", { name: user?.name ? `, ${user.name.split(" ")[0]}` : "" }),
       }]);
     }
-  }, [open, enabled, messages.length, user?.name, t]);
+  }, [open, enabled, historyLoaded, messages.length, user?.name, t]);
 
   async function sendMessage(text: string) {
     if (!text.trim() || streaming || !enabled) return;
@@ -124,7 +160,7 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
     abortRef.current = abort;
 
     try {
-      const lang = (meData?.user as unknown as Record<string, string | undefined>)?.languagePreference ?? "en";
+      const lang = meData?.user?.languagePreference ?? "en";
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -182,9 +218,16 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
   }
 
-  function clearHistory() {
-    fetch("/api/ai/history", { method: "DELETE", credentials: "include" }).catch(() => {});
-    setMessages([]);
+  async function clearHistory() {
+    try {
+      const res = await fetch("/api/ai/history", { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setMessages([]);
+    } catch {
+      // Do not clear the visible messages on failure — the server-side rows
+      // still exist, so an emptied chat here would misleadingly look cleared.
+      toast.error(t("widget.clearHistoryFailed"));
+    }
   }
 
   function stop() { abortRef.current?.abort(); }

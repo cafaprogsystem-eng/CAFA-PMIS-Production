@@ -32,6 +32,9 @@ vi.mock("react-i18next", () => {
     signingIn: "Signing in…",
     invalidCredentials: "Invalid username or password. Please try again.",
     requiredFields: "Username and password are required.",
+    tooManyRequests: "Too many requests. Please wait 15 minutes and try again.",
+    networkError: "Network error. Please check your connection and try again.",
+    accountNotActive: "This account is not active. Please contact your system administrator.",
     internalSystemLabel: "Internal Programme Management System",
     systemTagline: "One secure platform for CAFA programme teams.",
     copyright: "CAFA PMIS © 2026",
@@ -58,7 +61,7 @@ describe("sign-in refined UI", () => {
 
   beforeEach(() => {
     fetchMock.mockReset();
-    fetchMock.mockResolvedValue({ ok: false });
+    fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: "invalid_credentials" }) });
     window.localStorage.clear();
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("ResizeObserver", class {

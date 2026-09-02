@@ -200,7 +200,8 @@
       "reports": "Reports",
       "risks": "Risks",
       "documents": "Documents",
-      "users": "Users"
+      "users": "Users",
+      "states": "States"
     },
     "hintNavigate": "navigate",
     "hintOpen": "open",

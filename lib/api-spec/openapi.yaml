@@ -2480,6 +2480,7 @@ components:
         stateNameAr: { type: ["string", "null"], description: "Canonical Arabic State label for locale-aware display." }
         sector: { type: ["string", "null"] }
         avatarUrl: { type: ["string", "null"] }
+        languagePreference: { type: string, description: "en | ar — the account's saved interface-language preference, applied on every device/session, not just the one it was set from." }
 
     SwitcherUser:
       type: object
@@ -2503,7 +2504,6 @@ components:
             username: { type: ["string", "null"] }
             phone: { type: ["string", "null"] }
             status: { type: string, description: "active | invited | suspended | inactive | deactivated" }
-            languagePreference: { type: string, description: "en | ar" }
             lastLoginAt: { type: ["string", "null"], format: date-time }
             isOnline: { type: boolean, description: "True only while this API process has an authenticated Socket.IO connection for the user." }
             lastSeenAt: { type: ["string", "null"], format: date-time, description: "Persisted timestamp of the last final realtime-presence transition to offline." }

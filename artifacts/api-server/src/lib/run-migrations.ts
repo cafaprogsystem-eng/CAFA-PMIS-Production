@@ -3750,6 +3750,64 @@ ALTER TABLE states
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 `,
   },
+  {
+    name: "064_manual_chapters_slug_unique",
+    sql: /* sql */ `
+-- Migration 064: manual_chapters.slug had no uniqueness enforcement, and
+-- POST /manual/chapters never checked for a duplicate before inserting. If
+-- two chapters ever ended up sharing a slug, DELETE /manual/chapters/:slug
+-- (a WHERE slug = $1 with no LIMIT) would delete every matching row in one
+-- call while only reporting/auditing the first — silently destroying a
+-- second chapter the caller never asked to touch. Any pre-existing
+-- duplicate is defensively renamed (never deleted) before the index is
+-- created, since a fresh duplicate can otherwise only arise from data
+-- imported outside the API.
+WITH ranked AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY slug ORDER BY id) AS rn
+  FROM manual_chapters
+)
+UPDATE manual_chapters mc
+SET slug = mc.slug || '-dup-' || mc.id
+FROM ranked r
+WHERE mc.id = r.id AND r.rn > 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS manual_chapters_slug_unique ON manual_chapters(slug);
+`,
+  },
+  {
+    name: "065_training_certificates_active_unique",
+    sql: /* sql */ `
+-- Migration 065: at most one ACTIVE training certificate per (user, video).
+--
+-- POST /training-videos/:id/complete read training_completions.certificate_issued,
+-- then inserted a new certificate, then set certificate_issued=TRUE — three
+-- separate statements with no lock between them. Two concurrent calls (double-
+-- click, two open tabs) could both pass the certificate_issued check before
+-- either commits, producing two active certificates for the same completion.
+-- The route now also locks the completion row (SELECT ... FOR UPDATE) inside
+-- one transaction, which alone closes the race — this partial unique index is
+-- belt-and-braces, same rationale as projects_code_unique/plans_code_unique.
+-- Partial (WHERE is_active = TRUE), not a plain unique constraint: revoke +
+-- reissue is a real, intentional flow that inserts a new row referencing the
+-- same (user_id, training_video_id) as an existing, now-inactive one.
+--
+-- Defensively deactivate all but the most-recently-issued active certificate
+-- for any (user, video) pair that already has more than one, before the
+-- index is created — never deletes a row, only revokes the older duplicate.
+WITH ranked AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id, training_video_id ORDER BY issued_at DESC, id DESC) AS rn
+  FROM training_certificates
+  WHERE is_active = TRUE
+)
+UPDATE training_certificates tc
+SET is_active = FALSE, revoked_at = NOW()
+FROM ranked r
+WHERE tc.id = r.id AND r.rn > 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS training_certificates_active_user_video_unique
+  ON training_certificates(user_id, training_video_id) WHERE is_active = TRUE;
+`,
+  },
 
 ];
 

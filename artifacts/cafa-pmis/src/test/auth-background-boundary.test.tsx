@@ -36,7 +36,8 @@ vi.mock("@/contexts/location-context", () => ({
 
 vi.mock("@/contexts/language-context", () => ({
   LanguageProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  useLanguage: () => ({ direction: "ltr" }),
+  useLanguage: () => ({ direction: "ltr", setLang: vi.fn() }),
+  hadStoredLangPreference: () => true,
 }));
 
 vi.mock("@radix-ui/react-direction", () => ({

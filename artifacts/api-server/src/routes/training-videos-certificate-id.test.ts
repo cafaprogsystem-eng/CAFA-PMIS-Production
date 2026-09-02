@@ -6,14 +6,22 @@
  * verification endpoint, which returns each holder's name, role, and email.
  * Generation now happens in application code with a random suffix and is
  * bound as a plain SQL parameter, not built via NEXTVAL() string concatenation.
+ *
+ * POST /training-videos/:id/complete runs inside a transaction (pool.connect)
+ * — see MANUAL-CERT-DUP-RACE for why — so this mocks pool.connect()'s client,
+ * not pool.query() directly.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express, { type Request, type Response, type NextFunction } from "express";
 import supertest from "supertest";
 
-const { mockPoolQuery } = vi.hoisted(() => ({ mockPoolQuery: vi.fn() }));
+const { mockPoolQuery, mockClientQuery, mockConnect } = vi.hoisted(() => ({
+  mockPoolQuery: vi.fn(),
+  mockClientQuery: vi.fn(),
+  mockConnect: vi.fn(),
+}));
 
-vi.mock("@workspace/db", () => ({ pool: { query: mockPoolQuery } }));
+vi.mock("@workspace/db", () => ({ pool: { query: mockPoolQuery, connect: mockConnect } }));
 
 const trainingVideosRouter = (await import("./training-videos")).default;
 import type { CurrentUser } from "../middlewares/currentUser";
@@ -31,11 +39,13 @@ function appAs(userId: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockConnect.mockResolvedValue({ query: mockClientQuery, release: vi.fn() });
 });
 
 function stubIssueFlow() {
-  mockPoolQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
-    if (sql.includes("FROM training_completions WHERE training_video_id")) {
+  mockClientQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
+    if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
+    if (sql.includes("FROM training_completions WHERE training_video_id") && sql.includes("FOR UPDATE")) {
       return { rows: [{ completion_status: "completed", watch_percent: 100, certificate_issued: false }], rowCount: 1 };
     }
     if (sql.includes("INSERT INTO training_certificates")) {
@@ -60,7 +70,7 @@ describe("TRAINING-CERT-ID — POST /training-videos/:id/complete issues an ungu
     stubIssueFlow();
     await appAs(1).post("/training-videos/1/complete");
 
-    const insertCall = mockPoolQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO training_certificates"));
+    const insertCall = mockClientQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO training_certificates"));
     const [sql, params] = insertCall as [string, unknown[]];
     expect(sql).not.toContain("NEXTVAL");
     expect(sql).not.toContain("LPAD");
@@ -71,12 +81,13 @@ describe("TRAINING-CERT-ID — POST /training-videos/:id/complete issues an ungu
   it("generates a different certificate ID on every issuance — not a predictable sequence", async () => {
     stubIssueFlow();
     await appAs(1).post("/training-videos/1/complete");
-    const first = (mockPoolQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO training_certificates")) as [string, unknown[]])[1][0];
+    const first = (mockClientQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO training_certificates")) as [string, unknown[]])[1][0];
 
     vi.clearAllMocks();
+    mockConnect.mockResolvedValue({ query: mockClientQuery, release: vi.fn() });
     stubIssueFlow();
     await appAs(2).post("/training-videos/1/complete");
-    const second = (mockPoolQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO training_certificates")) as [string, unknown[]])[1][0];
+    const second = (mockClientQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO training_certificates")) as [string, unknown[]])[1][0];
 
     expect(first).not.toBe(second);
   });

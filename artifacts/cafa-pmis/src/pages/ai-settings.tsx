@@ -42,12 +42,26 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
   const { t } = useTranslation("ai");
   const { data: me } = useGetMe();
   const qc = useQueryClient();
-  const isAdmin = me?.user?.role === "super_admin" || me?.user?.role === "executive_director";
+  const myPerms = me?.permissions ?? [];
+  // Matches the backend exactly: ai.settings.manage (SA/ED) can view+edit the
+  // Settings tab; ai.logs.view (SA/ED, and PM for monitoring oversight) can
+  // view the Logs tab. A PM has logs access only — no Settings tab at all,
+  // since PUT /ai/settings itself requires ai.settings.manage and would 403.
+  const canManageSettings = myPerms.includes("*") || myPerms.includes("ai.settings.manage");
+  const canViewLogs = myPerms.includes("*") || myPerms.includes("ai.logs.view");
+  const isAdmin = canManageSettings || canViewLogs;
 
   const [extraPrompt, setExtraPrompt] = useState("");
   const [responseLang, setResponseLang] = useState("auto");
   const [logSearch, setLogSearch] = useState("");
   const [tab, setTab] = useState("settings");
+
+  // `me` resolves asynchronously, so canManageSettings is false on the very
+  // first render even for an admin — correct the default tab once it lands,
+  // for a logs-only viewer (e.g. program_manager) who has no Settings tab.
+  useEffect(() => {
+    if (me && !canManageSettings && canViewLogs) setTab("logs");
+  }, [me, canManageSettings, canViewLogs]);
 
   const { data: settings, isLoading: settingsLoading } = useQuery<AiSettings>({
     queryKey: ["ai-settings"],
@@ -74,7 +88,7 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
       if (!r.ok) throw new Error("Failed");
       return r.json() as Promise<{ messages: LogMsg[]; total: number }>;
     },
-    enabled: isAdmin && tab === "logs",
+    enabled: canViewLogs && tab === "logs",
   });
 
   const saveMut = useMutation({
@@ -196,11 +210,14 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="settings" className="gap-1.5"><Settings className="h-3.5 w-3.5" /> {t("settings.tabSettings")}</TabsTrigger>
+          {canManageSettings && (
+            <TabsTrigger value="settings" className="gap-1.5"><Settings className="h-3.5 w-3.5" /> {t("settings.tabSettings")}</TabsTrigger>
+          )}
           <TabsTrigger value="logs" className="gap-1.5"><Activity className="h-3.5 w-3.5" /> {t("settings.tabLogs")}</TabsTrigger>
         </TabsList>
 
-        {/* ── Settings tab ─────────────────────────────────────────────────── */}
+        {/* ── Settings tab — ai.settings.manage only (a logs-only viewer, e.g. program_manager, never sees this) ── */}
+        {canManageSettings && (
         <TabsContent value="settings" className="space-y-5 mt-5">
           {settingsLoading ? (
             <div className="space-y-4">
@@ -307,6 +324,7 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
             </>
           )}
         </TabsContent>
+        )}
 
         {/* ── Logs tab ─────────────────────────────────────────────────────── */}
         <TabsContent value="logs" className="space-y-5 mt-5">

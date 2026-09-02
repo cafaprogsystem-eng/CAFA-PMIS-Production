@@ -454,6 +454,7 @@ export async function resolveEffectiveAccess(
         resolveAction("view", "View manual", perms, [{ key: "manual.view", scopeNote: "" }]),
         resolveAction("edit_structure", "Create / delete chapters", perms, [{ key: "manual.edit", scopeNote: "" }]),
         resolveAction("edit_content", "Edit sections & SOPs", perms, [{ key: "manual.edit.content", scopeNote: "" }]),
+        resolveAction("manage_training", "Manage training videos & certificates", perms, [{ key: "training_videos.manage", scopeNote: "" }]),
       ],
     },
     {

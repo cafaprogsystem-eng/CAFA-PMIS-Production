@@ -28,6 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
+import { formatDateInTimezone } from "@/lib/format";
 
 const TIMEZONES = [
   "Africa/Khartoum", "Africa/Juba", "Africa/Cairo", "Africa/Nairobi",
@@ -44,17 +45,6 @@ function passwordRules(password: string): Record<"length" | "letter" | "number",
     letter: /[A-Za-z]/.test(password),
     number: /\d/.test(password),
   };
-}
-
-function formatTimestamp(value: string | Date | null | undefined, timezone: string, locale: string, withTime = true) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: timezone,
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
-  }).format(new Date(value));
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -117,7 +107,6 @@ export default function ProfilePage() {
   const passwordPolicy = passwordRules(newPassword);
   const passwordMatches = confirmPassword.length > 0 && confirmPassword === newPassword;
   const passwordValid = Object.values(passwordPolicy).every(Boolean) && passwordMatches;
-  const locale = language === "ar" ? "ar-EG" : "en-GB";
   const photoSrc = previewUrl ?? profile?.avatarUrl ?? undefined;
   const initials = (profile?.name ?? "??").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
   const access = profile?.access;
@@ -300,8 +289,8 @@ export default function ProfilePage() {
                 <p className="text-xs text-muted-foreground"><bdi dir="ltr">{profile?.email}</bdi></p>
               </div>
               <div className="grid w-full grid-cols-2 gap-3 border-t pt-4 text-start">
-                <Metadata label={t("profile.memberSince")} value={formatTimestamp(profile?.createdAt, timezone, locale, false)} />
-                <Metadata label={t("profile.lastLogin")} value={formatTimestamp(profile?.lastLoginAt, timezone, locale)} />
+                <Metadata label={t("profile.memberSince")} value={formatDateInTimezone(profile?.createdAt, timezone, false)} dir="ltr" />
+                <Metadata label={t("profile.lastLogin")} value={formatDateInTimezone(profile?.lastLoginAt, timezone)} dir="ltr" />
                 <Metadata label={t("profile.username")} value={profile?.username ?? "—"} mono />
                 <Metadata label={t("profile.timezone")} value={timezone} />
               </div>
@@ -436,8 +425,8 @@ function Field({ label, htmlFor, children, required = false }: { label: string; 
   return <div className="space-y-1.5"><Label htmlFor={htmlFor}>{label}{required && <span className="text-destructive"> *</span>}</Label>{children}</div>;
 }
 
-function Metadata({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return <div><p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p><p className={`mt-0.5 text-sm ${mono ? "font-mono" : ""}`}><bdi>{value}</bdi></p></div>;
+function Metadata({ label, value, mono = false, dir }: { label: string; value: string; mono?: boolean; dir?: "ltr" | "rtl" }) {
+  return <div><p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p><p className={`mt-0.5 text-sm ${mono ? "font-mono" : ""}`}><bdi dir={dir}>{value}</bdi></p></div>;
 }
 
 function PasswordField({ id, label, value, onChange, visible, onToggle, showLabel, hideLabel, invalid, error }: {

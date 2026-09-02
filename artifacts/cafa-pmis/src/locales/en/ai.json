@@ -22,6 +22,7 @@
     "readyToAssist": "Ready to assist",
     "pendingActivation": "Pending activation",
     "clearHistory": "Clear chat history",
+    "clearHistoryFailed": "Could not clear chat history. Please try again.",
     "minimise": "Minimise",
     "minimisePanel": "Minimise assistant panel",
     "generatingResponse": "Generating response",

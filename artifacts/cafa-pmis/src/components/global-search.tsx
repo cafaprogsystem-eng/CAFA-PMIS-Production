@@ -17,6 +17,7 @@ import {
   ChevronRight,
   TrendingUp,
   Star,
+  MapPin,
 } from "lucide-react";
 import { useFavorites } from "@/hooks/use-favorites";
 import { rankScore, buildRecentMap } from "@/lib/favorites";
@@ -86,6 +87,15 @@ interface SearchUser {
   status: string;
 }
 
+interface SearchState {
+  id: number;
+  name: string;
+  nameAr: string;
+  code: string;
+  operationalStatus: string;
+  officeStatus: string;
+}
+
 interface SearchResults {
   projects: SearchProject[];
   plans: SearchPlan[];
@@ -93,6 +103,7 @@ interface SearchResults {
   risks: SearchRisk[];
   documents: SearchDocument[];
   users: SearchUser[];
+  states: SearchState[];
 }
 
 type FlatItem =
@@ -101,7 +112,8 @@ type FlatItem =
   | { kind: "report"; data: SearchReport }
   | { kind: "risk"; data: SearchRisk }
   | { kind: "document"; data: SearchDocument }
-  | { kind: "user"; data: SearchUser };
+  | { kind: "user"; data: SearchUser }
+  | { kind: "state"; data: SearchState };
 
 /* ─── Constants ─────────────────────────────────────────────────────────── */
 const HISTORY_KEY = "cafa:search-history";
@@ -121,7 +133,8 @@ function totalResults(r: SearchResults) {
     r.reports.length +
     r.risks.length +
     r.documents.length +
-    r.users.length
+    r.users.length +
+    r.states.length
   );
 }
 
@@ -379,7 +392,7 @@ export function GlobalSearch() {
       setActiveIdx(-1);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
-      setResults({ projects: [], plans: [], reports: [], risks: [], documents: [], users: [] });
+      setResults({ projects: [], plans: [], reports: [], risks: [], documents: [], users: [], states: [] });
     } finally {
       setLoading(false);
     }
@@ -430,6 +443,7 @@ export function GlobalSearch() {
       ...results.risks.map((d) => ({ kind: "risk" as const, data: d })),
       ...results.documents.map((d) => ({ kind: "document" as const, data: d })),
       ...results.users.map((d) => ({ kind: "user" as const, data: d })),
+      ...results.states.map((d) => ({ kind: "state" as const, data: d })),
     ];
   }, [results, sortedProjects, sortedPlans]);
 
@@ -442,12 +456,18 @@ export function GlobalSearch() {
       } else if (item.kind === "plan") {
         openRecord("plan", item.data.id);
       } else if (item.kind === "report") {
-        setLocation(reportTypePath(item.data.reportType));
+        // Reuses the existing ?open=<reportId> deep-link convention (already
+        // used by the PMR completeness panel and consolidated view "View"
+        // links) so a search result opens the exact report, not just its
+        // generic list.
+        setLocation(`${reportTypePath(item.data.reportType)}?open=${item.data.id}`);
       } else if (item.kind === "risk") {
         setLocation(`/risks`);
       } else if (item.kind === "document") {
         if (item.data.projectId) openRecord("project", item.data.projectId);
         else setLocation("/projects");
+      } else if (item.kind === "state") {
+        setLocation(`/states/${item.data.id}`);
       } else {
         setLocation("/users");
       }
@@ -509,7 +529,7 @@ export function GlobalSearch() {
 
   /* ── Group offsets for keyboard nav ─────────────────────────────── */
   const offsets = useMemo(() => {
-    if (!results) return { projects: 0, plans: 0, reports: 0, risks: 0, documents: 0, users: 0 };
+    if (!results) return { projects: 0, plans: 0, reports: 0, risks: 0, documents: 0, users: 0, states: 0 };
     return {
       projects: 0,
       plans: results.projects.length,
@@ -526,6 +546,13 @@ export function GlobalSearch() {
         results.reports.length +
         results.risks.length +
         results.documents.length,
+      states:
+        results.projects.length +
+        results.plans.length +
+        results.reports.length +
+        results.risks.length +
+        results.documents.length +
+        results.users.length,
     };
   }, [results]);
 
@@ -953,6 +980,26 @@ export function GlobalSearch() {
                           {u.roleLabel}
                         </span>
                       }
+                    />
+                  ))}
+                </section>
+              )}
+
+              {/* States */}
+              {results!.states.length > 0 && (
+                <section>
+                  <SectionHeader label={t("globalSearch.groups.states")} />
+                  {results!.states.map((s, i) => (
+                    <ResultRow
+                      key={s.id}
+                      isActive={activeIdx === offsets.states + i}
+                      onClick={() => navigate({ kind: "state", data: s }, query)}
+                      onMouseEnter={() => setActiveIdx(offsets.states + i)}
+                      icon={<MapPin className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />}
+                      iconBg="bg-cyan-500/10"
+                      title={i18n?.language === "ar" ? (s.nameAr || s.name) : s.name}
+                      subtitle={s.code}
+                      badge={<StatusBadge status={s.operationalStatus} label={capitalize(s.operationalStatus)} />}
                     />
                   ))}
                 </section>

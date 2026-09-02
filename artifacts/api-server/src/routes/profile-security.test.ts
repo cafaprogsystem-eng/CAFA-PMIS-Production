@@ -198,6 +198,56 @@ describe("secure self-profile boundary", () => {
     expect(JSON.stringify(response.body)).not.toContain("/objects/");
   });
 
+  it("cleans up the staged upload when the actual file is oversized (metadata check failed)", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const token = signUploadToken({
+      objectPath: "/objects/uploads/33333333-3333-3333-3333-333333333333",
+      userId: 7, reportId: 0, entityType: "profile_photo", scope: "profile",
+      contentType: "image/png", maxSize: 5 * 1024 * 1024, iat: now, exp: now + 60,
+    });
+    mockGetMetadata.mockResolvedValue({ size: 5 * 1024 * 1024 + 1, contentType: "image/png" });
+
+    const response = await request(appFor()).post("/profile/photo").send({ uploadToken: token }).expect(413);
+
+    expect(response.body).toEqual({ error: "photo_too_large" });
+    expect(mockDelete).toHaveBeenCalledWith("/objects/uploads/33333333-3333-3333-3333-333333333333");
+    expect(mockFinalize).not.toHaveBeenCalled();
+  });
+
+  it("cleans up the staged upload when the actual content-type does not match the descriptor", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const token = signUploadToken({
+      objectPath: "/objects/uploads/44444444-4444-4444-4444-444444444444",
+      userId: 7, reportId: 0, entityType: "profile_photo", scope: "profile",
+      contentType: "image/png", maxSize: 5 * 1024 * 1024, iat: now, exp: now + 60,
+    });
+    mockGetMetadata.mockResolvedValue({ size: 8, contentType: "image/gif" });
+
+    const response = await request(appFor()).post("/profile/photo").send({ uploadToken: token }).expect(415);
+
+    expect(response.body).toEqual({ error: "unsupported_photo_type" });
+    expect(mockDelete).toHaveBeenCalledWith("/objects/uploads/44444444-4444-4444-4444-444444444444");
+    expect(mockFinalize).not.toHaveBeenCalled();
+  });
+
+  it("cleans up the staged upload when the file's magic bytes don't match its claimed type", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const token = signUploadToken({
+      objectPath: "/objects/uploads/55555555-5555-5555-5555-555555555555",
+      userId: 7, reportId: 0, entityType: "profile_photo", scope: "profile",
+      contentType: "image/png", maxSize: 5 * 1024 * 1024, iat: now, exp: now + 60,
+    });
+    mockGetMetadata.mockResolvedValue({ size: 8, contentType: "image/png" });
+    mockGetFile.mockResolvedValue({});
+    mockDownload.mockResolvedValue(new Response(new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0])));
+
+    const response = await request(appFor()).post("/profile/photo").send({ uploadToken: token }).expect(415);
+
+    expect(response.body).toEqual({ error: "invalid_photo_content" });
+    expect(mockDelete).toHaveBeenCalledWith("/objects/uploads/55555555-5555-5555-5555-555555555555");
+    expect(mockFinalize).not.toHaveBeenCalled();
+  });
+
   it("rejects unsupported or oversized photo descriptors before issuing storage uploads", async () => {
     await request(appFor()).post("/profile/photo/upload-url").send({ size: 1, contentType: "image/gif" }).expect(415);
     await request(appFor()).post("/profile/photo/upload-url").send({ size: 5 * 1024 * 1024 + 1, contentType: "image/png" }).expect(413);

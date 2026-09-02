@@ -715,7 +715,9 @@ export const manualChaptersTable = pgTable("manual_chapters", {
   updatedById: integer("updated_by_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  slugUnique: uniqueIndex("manual_chapters_slug_unique").on(table.slug),
+}));
 
 export const manualSectionsTable = pgTable("manual_sections", {
   id: serial("id").primaryKey(),
