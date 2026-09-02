@@ -18,6 +18,10 @@ async function buildAll() {
     entryPoints: {
       index: path.resolve(artifactDir, "src/index.ts"),
       migrate: path.resolve(artifactDir, "src/migrate.ts"),
+      // Bundled the same way as migrate.ts, so the one-off demo-data seed
+      // (scripts/seed.mjs) needs no TS toolchain (tsx/typescript) in the
+      // production image at runtime — only this compiled dist/seed.mjs.
+      seed: path.resolve(artifactDir, "../../lib/db/src/seed.ts"),
     },
     platform: "node",
     bundle: true,

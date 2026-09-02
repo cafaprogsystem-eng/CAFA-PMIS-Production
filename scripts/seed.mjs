@@ -1,15 +1,24 @@
 /**
  * Standalone seed runner for Docker / CI environments.
  *
- * Seeds all roles, canonical Sudan State master data, and demo users into the database.
- * Safe to run multiple times — upserts where possible.
+ * Seeds demo data (a demo user, a demo project, and a few related records)
+ * used by the training-video screenshot pipeline. Safe to run multiple
+ * times — every insert is idempotent (see lib/db/src/seed.ts).
+ *
+ * Runs the API's bundled, compiled seed entry point — the same pattern
+ * scripts/migrate.mjs already uses for migrations — so this needs no
+ * TypeScript toolchain (tsx/typescript) at runtime. Production images strip
+ * devDependencies, and tsx is a devDependency, so invoking the raw .ts
+ * source directly would fail there; build.mjs bundles lib/db/src/seed.ts
+ * into dist/seed.mjs at build time instead, alongside dist/index.mjs and
+ * dist/migrate.mjs.
  *
  * Usage:
  *   DATABASE_URL=postgres://... node /app/scripts/seed.mjs
  *   docker compose exec api node /app/scripts/seed.mjs
  */
 
-import { execFileSync } from "child_process";
+import { spawnSync } from "child_process";
 import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -25,33 +34,23 @@ if (process.env.NODE_ENV === "production") {
   process.exit(1);
 }
 
-const seedScript = resolve(__dirname, "../lib/db/src/seed.ts");
-if (!existsSync(seedScript)) {
-  console.error(`ERROR: Seed script not found at ${seedScript}`);
-  process.exit(1);
-}
-
-const tsxCandidates = [
-  resolve(__dirname, "../node_modules/.bin/tsx"),
-  resolve(__dirname, "../lib/db/node_modules/.bin/tsx"),
-];
-const tsx = tsxCandidates.find(existsSync);
-if (!tsx) {
-  console.error("ERROR: tsx not found. Run `pnpm install` in the workspace first.");
+const entryPoint = resolve(__dirname, "../artifacts/api-server/dist/seed.mjs");
+if (!existsSync(entryPoint)) {
+  console.error(`ERROR: compiled seed entry point not found at ${entryPoint}. Build the API artifact first.`);
   process.exit(1);
 }
 
 console.log("Seeding database…");
-try {
-  // tsx's node_modules/.bin shim is a #!/bin/sh wrapper, not JS — it must be
-  // executed directly (its own shebang dispatches to node), not passed as an
-  // argument to `node`.
-  execFileSync(tsx, [seedScript], {
-    stdio: "inherit",
-    env: { ...process.env },
-  });
-  console.log("Seed complete.");
-} catch (err) {
-  console.error("Seed failed:", err.message);
+const result = spawnSync(process.execPath, ["--enable-source-maps", entryPoint], {
+  stdio: "inherit",
+  env: process.env,
+});
+if (result.error) {
+  console.error("Seed command could not start:", result.error.message);
   process.exit(1);
 }
+if (result.status !== 0) {
+  console.error(`Seed command failed with exit code ${result.status ?? 1}.`);
+  process.exit(result.status ?? 1);
+}
+console.log("Seed complete.");
