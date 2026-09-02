@@ -612,12 +612,20 @@ export async function generateModuleVideo(videoId: number, config: ModuleVideoCo
       [finalPath, Math.round(duration), videoId],
     );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    // A failed exec() rejects with "Command failed: <full echoed command>"
+    // followed by stderr — for these long filter-chain invocations the
+    // echoed command alone easily runs past a few hundred characters, which
+    // pushed the actually useful part (stderr, the real reason) out of the
+    // stored message entirely under the old 500-char cap. stderr goes first
+    // now, and the cap is wide enough that this can't recur in practice.
+    const stderr = (err as { stderr?: unknown })?.stderr;
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    const msg = typeof stderr === "string" && stderr.trim() ? stderr.trim() : rawMsg;
     await pool.query(
       `UPDATE training_videos
        SET status='failed', error_message=$1, progress_pct=0, progress_label='Failed', updated_at=NOW()
        WHERE id=$2`,
-      [msg.slice(0, 500), videoId],
+      [msg.slice(0, 4000), videoId],
     );
     throw err;
   } finally {

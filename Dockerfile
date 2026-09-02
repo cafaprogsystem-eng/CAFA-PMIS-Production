@@ -55,8 +55,16 @@ FROM node:24-slim AS runner
 
 # Trust the official Amazon RDS certificate authorities while preserving
 # full TLS certificate and hostname verification for PostgreSQL connections.
+#
+# ffmpeg (+ ffprobe, same package) is a hard runtime dependency of the
+# training-video pipeline (lib/video-generator.ts) and the uploaded-video
+# duration probe (routes/training-videos.ts) — both just shell out to the
+# system binary, there is no npm package providing it. fonts-dejavu-core
+# provides /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf and
+# DejaVuSansMono.ttf, the fontfile paths video-generator.ts's drawtext
+# filters use — node:24-slim ships neither by default.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl \
+ && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg fonts-dejavu-core \
  && mkdir -p /opt/aws-rds-ca \
  && curl --fail --silent --show-error --location \
       https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
