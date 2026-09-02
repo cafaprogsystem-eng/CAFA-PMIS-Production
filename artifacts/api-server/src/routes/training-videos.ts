@@ -5,8 +5,9 @@ import path from "node:path";
 import { pool } from "@workspace/db";
 import { hasPerm, permissionsFor, requireAuth, requirePerm } from "../middlewares/currentUser";
 import { logAudit } from "../middlewares/currentUser";
-import { generateFullSystemVideo } from "../lib/video-generator";
+import { generateModuleVideo } from "../lib/video-generator";
 import { FULL_VIDEO_TITLE, FULL_VIDEO_MODULE } from "../lib/full-system-video-script";
+import { TRAINING_VIDEO_MODULES } from "../lib/training-video-modules";
 import multer from "multer";
 
 // Schema is owned exclusively by tracked migration 052_runtime_schema_authority.
@@ -345,7 +346,7 @@ router.post(
          VALUES ($1, $2, 'all', 'ar', $3, 'published', $4, $4, $5, $6, 100, 'Uploaded manually')
          RETURNING id`,
         [FULL_VIDEO_TITLE, FULL_VIDEO_MODULE,
-         "Comprehensive walkthrough of all CAFA PMIS modules with Arabic voice-over and captions.",
+         "Comprehensive walkthrough of all CAFA PMIS modules with voice-over and captions.",
          req.currentUser!.id, newPath, duration],
       );
       const id = rows[0].id as number;
@@ -361,9 +362,16 @@ router.post(
 // ---------------------------------------------------------------------------
 router.post("/training-videos/generate", requireAuth, requireVideoAdmin, async (req, res, next) => {
   try {
+    const moduleKey = String(req.body?.moduleKey ?? FULL_VIDEO_MODULE);
+    const moduleConfig = TRAINING_VIDEO_MODULES[moduleKey];
+    if (!moduleConfig) {
+      res.status(400).json({ error: "unknown_module", knownModules: Object.keys(TRAINING_VIDEO_MODULES) });
+      return;
+    }
+
     const { rows: existing } = await pool.query(
       `SELECT id FROM training_videos WHERE module_name=$1 AND status='processing' LIMIT 1`,
-      [FULL_VIDEO_MODULE],
+      [moduleKey],
     );
     if (existing.length) {
       res.status(409).json({ error: "generation_in_progress", videoId: existing[0].id });
@@ -374,12 +382,12 @@ router.post("/training-videos/generate", requireAuth, requireVideoAdmin, async (
       `INSERT INTO training_videos
          (title, module_name, role_access, language, description, status,
           uploaded_by_id, generated_by, progress_pct, progress_label)
-       VALUES ($1, $2, 'all', 'ar', $3, 'processing', $4, $4, 0, 'Starting…')
+       VALUES ($1, $2, 'all', 'en', $3, 'processing', $4, $4, 0, 'Starting…')
        RETURNING id`,
       [
-        FULL_VIDEO_TITLE,
-        FULL_VIDEO_MODULE,
-        "Comprehensive walkthrough of all CAFA PMIS modules with Arabic voice-over and captions.",
+        moduleConfig.videoTitle,
+        moduleKey,
+        moduleConfig.description,
         req.currentUser!.id,
       ],
     );
@@ -387,7 +395,7 @@ router.post("/training-videos/generate", requireAuth, requireVideoAdmin, async (
     await logAudit({ userId: req.currentUser!.id, action: "generate_training_video", module: "manual", entityId: videoId });
 
     setImmediate(() => {
-      generateFullSystemVideo(videoId).catch(err => console.error(`Video generation ${videoId} failed:`, err));
+      generateModuleVideo(videoId, moduleConfig).catch(err => console.error(`Video generation ${videoId} failed:`, err));
     });
 
     res.status(202).json({ ok: true, videoId, message: "Generation started" });
@@ -412,8 +420,17 @@ router.get("/training-videos/:id", requireAuth, async (req, res, next) => {
 router.post("/training-videos/:id/regenerate", requireAuth, requireVideoAdmin, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const { rows } = await pool.query(`SELECT file_path AS "filePath" FROM training_videos WHERE id=$1`, [id]);
+    const { rows } = await pool.query(
+      `SELECT file_path AS "filePath", module_name AS "moduleName" FROM training_videos WHERE id=$1`,
+      [id],
+    );
     if (!rows.length) { res.status(404).json({ error: "not_found" }); return; }
+
+    const moduleConfig = TRAINING_VIDEO_MODULES[rows[0].moduleName];
+    if (!moduleConfig) {
+      res.status(400).json({ error: "unknown_module", moduleName: rows[0].moduleName });
+      return;
+    }
 
     if (rows[0].filePath) {
       try { fsSync.unlinkSync(rows[0].filePath); } catch { /* ignore */ }
@@ -427,7 +444,7 @@ router.post("/training-videos/:id/regenerate", requireAuth, requireVideoAdmin, a
     await logAudit({ userId: req.currentUser!.id, action: "regenerate_training_video", module: "manual", entityId: id });
 
     setImmediate(() => {
-      generateFullSystemVideo(id).catch(err => console.error(`Regeneration ${id} failed:`, err));
+      generateModuleVideo(id, moduleConfig).catch(err => console.error(`Regeneration ${id} failed:`, err));
     });
 
     res.json({ ok: true, message: "Regeneration started" });

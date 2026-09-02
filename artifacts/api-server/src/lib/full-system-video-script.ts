@@ -32,29 +32,29 @@ export type FullSlide = {
 
 // Mockup panel occupies x: 730..1250, y: 90..640 (right 40% of frame)
 
-const mkPanel = (): MockupElement[] => [
+export const mkPanel = (): MockupElement[] => [
   { kind: "box", x: 730, y: 90, w: 530, h: 550, color: "white@0.97" },
 ];
 
-const mkHeader = (label: string): MockupElement[] => [
+export const mkHeader = (label: string): MockupElement[] => [
   { kind: "box", x: 730, y: 90, w: 530, h: 55, color: "0x1a2744" },
   { kind: "text", x: 750, y: 107, text: label, color: "white", fontSize: 18 },
 ];
 
-const mkInput = (x: number, y: number, w: number, placeholder: string, highlight = false): MockupElement[] => [
+export const mkInput = (x: number, y: number, w: number, placeholder: string, highlight = false): MockupElement[] => [
   { kind: "box", x, y, w, h: 34, color: "0xf3f4f6" },
   { kind: "text", x: x + 10, y: y + 9, text: placeholder, color: "0xaaaaaa", fontSize: 14 },
   ...(highlight ? [{ kind: "highlight" as const, x: x - 2, y: y - 2, w: w + 4, h: 38, color: "0xFFD700@0.6" }] : []),
 ];
 
-const mkButton = (x: number, y: number, w: number, label: string, color = "0x1a2744"): MockupElement[] => [
+export const mkButton = (x: number, y: number, w: number, label: string, color = "0x1a2744"): MockupElement[] => [
   { kind: "box", x, y, w, h: 38, color },
   { kind: "text", x: x + 12, y: y + 11, text: label, color: "white", fontSize: 15 },
 ];
 
-const mkCursor = (x: number, y: number): MockupElement => ({ kind: "cursor", x, y });
+export const mkCursor = (x: number, y: number): MockupElement => ({ kind: "cursor", x, y });
 
-const mkStatusBadge = (x: number, y: number, label: string, color: string): MockupElement[] => [
+export const mkStatusBadge = (x: number, y: number, label: string, color: string): MockupElement[] => [
   { kind: "box", x, y, w: 90, h: 24, color },
   { kind: "text", x: x + 8, y: y + 5, text: label, color: "white", fontSize: 11 },
 ];

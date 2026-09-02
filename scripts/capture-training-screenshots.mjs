@@ -17,11 +17,21 @@
  *      command-line arguments (they would land in shell history).
  *   3. One-time browser install if this machine has never run Playwright:
  *        npx playwright install chromium
+ *      If that download hangs or fails specifically on
+ *      "chromium_headless_shell" (a separate binary Playwright fetches only
+ *      for headless mode), set HEADLESS=false below to run the full Chromium
+ *      build instead — no separate download needed if `npx playwright
+ *      install chromium` (without "--only-shell") already succeeded.
+ *      HEADLESS=false opens a real, visible browser window, so it needs an
+ *      actual display (your own machine, or an X server / Xvfb on a
+ *      headless box) — it will not work inside a plain container with no
+ *      display at all.
  *
  * Usage:
  *   STAGING_BASE_URL=https://staging.pmis.cafa.systems \
  *   STAGING_DEMO_EMAIL=demo@cafa.org \
  *   STAGING_DEMO_PASSWORD=*** \
+ *   [HEADLESS=false] \
  *   node scripts/capture-training-screenshots.mjs [key1 key2 ...]
  *
  * With no keys given, captures every target in TARGETS. Output goes to
@@ -49,6 +59,21 @@ import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
+
+// Every wait in this script (navigation, fill, click, screenshot…) is bounded
+// by this — Playwright's own per-action defaults are also set to this value
+// below, but this wrapper is a second, explicit guarantee: no step can ever
+// hang silently. A step that exceeds it fails fast with a labeled error
+// instead of leaving the script looking frozen with no output.
+const STEP_TIMEOUT_MS = 30_000;
+
+function withTimeout(promise, label, ms = STEP_TIMEOUT_MS) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms}ms waiting for: ${label}`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 const TARGETS = [
   { key: "login", urlPath: "/login", auth: false, style: "card" },
@@ -88,11 +113,25 @@ const BLUR_SCRIPT = `
 `;
 
 async function login(page, baseUrl, email, password) {
-  await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
-  await page.fill("#identifier", email);
-  await page.fill("#password", password);
-  await page.click('button[type="submit"]');
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15000 });
+  console.log("  Navigating to /login…");
+  // "networkidle" never fires on an authenticated app that polls in the
+  // background (this one polls notifications every 30s) — "domcontentloaded"
+  // is what actually matters for a login form to be fillable.
+  await withTimeout(page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" }), "navigate to /login");
+
+  console.log("  Filling in demo credentials…");
+  await withTimeout(page.fill("#identifier", email), "fill #identifier");
+  await withTimeout(page.fill("#password", password), "fill #password");
+
+  console.log("  Submitting the login form…");
+  await withTimeout(page.click('button[type="submit"]'), "click submit");
+
+  console.log("  Waiting for the post-login redirect…");
+  await withTimeout(
+    page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: STEP_TIMEOUT_MS }),
+    "post-login redirect away from /login",
+  );
+  console.log(`  Logged in — redirected to ${new URL(page.url()).pathname}.`);
 }
 
 // "card": rounded corners + a soft drop shadow, sized for the narrow panel
@@ -135,9 +174,15 @@ async function styleScreenshot(buffer, style) {
 }
 
 async function main() {
+  console.log("Starting training-screenshot capture…");
   const baseUrl = (process.env.STAGING_BASE_URL || "https://staging.pmis.cafa.systems").replace(/\/$/, "");
   const email = process.env.STAGING_DEMO_EMAIL;
   const password = process.env.STAGING_DEMO_PASSWORD;
+  // Default headless (normal case). Set HEADLESS=false to run the full,
+  // visible Chromium build instead — avoids depending on the separate
+  // "chromium-headless-shell" binary Playwright otherwise fetches for
+  // headless mode, useful when that particular download is unreliable.
+  const headless = process.env.HEADLESS !== "false";
   const outDir = process.env.SCREENSHOT_OUT_DIR
     ? path.resolve(process.env.SCREENSHOT_OUT_DIR)
     : path.join(REPO_ROOT, "data", "training-screenshots");
@@ -157,27 +202,59 @@ async function main() {
   }
 
   await mkdir(outDir, { recursive: true });
-  const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await context.newPage();
+
+  console.log(`Target: ${baseUrl}`);
+  console.log(`Output: ${outDir}`);
+  console.log(`Targets queued (${targets.length}): ${targets.map((t) => t.key).join(", ")}`);
+  console.log(
+    `Launching Chromium in ${headless ? "headless" : "headed (visible window)"} mode ` +
+    `(each step below is capped at ${STEP_TIMEOUT_MS / 1000}s)…`,
+  );
+  const browser = await withTimeout(chromium.launch({ headless }), "launch chromium", STEP_TIMEOUT_MS);
+  console.log("Browser launched.");
+
+  const context = await withTimeout(
+    browser.newContext({ viewport: { width: 1440, height: 900 } }),
+    "create browser context",
+  );
+  // Blanket safety net on top of withTimeout() above: any Playwright action
+  // on this context/page that isn't explicitly wrapped still can't hang past
+  // this either.
+  context.setDefaultTimeout(STEP_TIMEOUT_MS);
+  context.setDefaultNavigationTimeout(STEP_TIMEOUT_MS);
+  const page = await withTimeout(context.newPage(), "open new page");
+  console.log("Browser context and page ready.");
 
   let authenticated = false;
   try {
-    for (const target of targets) {
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i];
+      const progress = `[${i + 1}/${targets.length}]`;
+
       if (target.auth && !authenticated) {
-        console.log(`Logging in as the demo account…`);
+        console.log(`${progress} Logging in as the demo account…`);
         await login(page, baseUrl, email, password);
         authenticated = true;
       }
-      console.log(`Capturing ${target.key} → ${baseUrl}${target.urlPath}`);
-      await page.goto(`${baseUrl}${target.urlPath}`, { waitUntil: "networkidle" });
-      await page.waitForTimeout(500); // let any post-load skeleton/animation settle
-      await page.evaluate(BLUR_SCRIPT);
-      const raw = await page.screenshot();
+
+      console.log(`${progress} Capturing '${target.key}' → ${baseUrl}${target.urlPath}`);
+      await withTimeout(
+        page.goto(`${baseUrl}${target.urlPath}`, { waitUntil: "domcontentloaded" }),
+        `navigate to ${target.urlPath}`,
+      );
+      console.log(`${progress}   Page loaded, letting it settle…`);
+      await withTimeout(page.waitForTimeout(500), `settle delay for ${target.key}`); // post-load skeleton/animation
+      console.log(`${progress}   Scanning for and blurring sensitive text…`);
+      await withTimeout(page.evaluate(BLUR_SCRIPT), `blur scan for ${target.key}`);
+      console.log(`${progress}   Taking screenshot…`);
+      const raw = await withTimeout(page.screenshot(), `screenshot for ${target.key}`);
       const styled = await styleScreenshot(raw, target.style);
-      await writeFile(path.join(outDir, `${target.key}.png`), styled);
+      const outPath = path.join(outDir, `${target.key}.png`);
+      await writeFile(outPath, styled);
+      console.log(`${progress} Saved ${target.key}.png (${styled.length} bytes) → ${outPath}`);
     }
   } finally {
+    console.log("Closing browser…");
     await browser.close();
   }
 
