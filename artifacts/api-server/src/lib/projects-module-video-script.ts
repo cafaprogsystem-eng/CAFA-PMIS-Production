@@ -74,6 +74,12 @@ export const PROJECTS_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["A State Officer submits the project first", "A Technical Coordinator gives technical approval", "A Senior Coordinator gives coordination approval", "The Program Manager gives final sign-off", "Leadership then activates it, and closes it when it ends", "Every transition is logged with who did it and when"],
     narrationEn: "A project moves through six stages: a state officer submits it, a technical coordinator reviews it, a senior coordinator gives coordination approval, the program manager gives final sign-off, leadership activates it, and it's closed once it ends. Every transition is recorded in the audit log with the user and timestamp.",
     durationHint: 10,
+    // Reused here because the approval stage is exactly what the list's
+    // colored status badges show — not shown for the registration form,
+    // detail-page tabs, or corrections slides below, none of which are the
+    // page this screenshot was actually captured from.
+    screenshotKey: "projects-list",
+    screenshotLayout: "full",
   },
   {
     type: "content",

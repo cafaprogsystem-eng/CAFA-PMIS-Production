@@ -40,11 +40,11 @@ const C_CYAN       = "0x00B0EB";
 const C_CYAN_LIGHT = "0x5CD6F7"; // foreground accent text on dark — wordmark, badge numbers
 const C_CYAN_SOFT  = "0xBFEAF8"; // pale tint for pill/chip backgrounds under dark navy text
 const C_TEXT_SOFT  = "0xAEC0DE"; // muted labels (tag lines, timestamps) — never pure white
-// Karla — the design proposal's body/narration face — is used for captions
-// by family name only ("Karla" in generateASSSubtitles's ASS Style line):
-// libass resolves it via fontconfig, the same way DejaVu is found for
-// drawtext without an explicit fontsdir. See the Dockerfile for the actual
-// font file install + fc-cache.
+// Karla (the design proposal's body/narration face) was previously burned
+// into the frame via libass for captions — captions are now a WebVTT
+// sidecar instead (see generateVTTCaptions()), so this render path no
+// longer touches Karla at all; a future player would load it as a web font
+// on its own, the same as any other frontend typeface.
 
 // Two clips crossfade into each other over this many seconds instead of a
 // hard cut (replaces the old concat-demuxer hard cuts).
@@ -495,6 +495,14 @@ async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string
   return out;
 }
 
+// Convenience wrapper for a filter's "enable" timeline option — every
+// dim/highlight/cursor filter below is gated to a specific time window, and
+// between()'s own comma-separated args need escExpr() same as any other
+// expression embedded inside a filter-chain (or filter_complex) option.
+function enableBetween(startSec: number, endSec: number): string {
+  return `enable='${escExpr(`between(t,${startSec},${endSec})`)}'`;
+}
+
 // "full" layout: the real screenshot fills the frame (wide, full-page screens
 // like Dashboard or Projects don't fit the narrow card region above); title
 // and bullets sit in a translucent lower-third band over the screenshot.
@@ -509,13 +517,46 @@ async function buildFullScreenshotSlide(
   const secLabel = slide.sectionEn ? esc(slide.sectionEn.toUpperCase()) : "";
   const bandTop = 500;
 
-  const filters: string[] = [
-    "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720",
+  // ---- Base screenshot stage — scale/crop to frame, with an optional light
+  // zoom-in pulse timed to a cursor click (cursorAction.zoom). scale's w=/h=
+  // accept per-frame expressions with eval=frame (confirmed empirically with
+  // a local ffmpeg-full render before shipping this), so the "zoom" is
+  // really the frame briefly scaling up and re-centering around its own
+  // middle, not a crop of any specific screenshot region.
+  const cursorAction = slide.cursorAction;
+  const baseScale = cursorAction?.zoom
+    ? (() => {
+        const zoomPulse = (dim: number) =>
+          escExpr(`${dim}*(1+0.045*max(0,1-abs(t-${cursorAction.clickAtSec})/0.35))`);
+        return `scale=w='${zoomPulse(1280)}':h='${zoomPulse(720)}':eval=frame:force_original_aspect_ratio=increase,` +
+          `crop=w=1280:h=720:x='(in_w-1280)/2':y='(in_h-720)/2'`;
+      })()
+    : "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720";
+
+  // ---- Section title / bullet band. Was a static quarter-frame band for
+  // the whole slide (the single biggest review complaint — it permanently
+  // covered part of the real screenshot it was meant to be explaining).
+  // Now: full-size for a "read window" — a 2.5s floor, or however long the
+  // bullets' own staggered fade-in actually takes, whichever is longer, so a
+  // slide with several bullets never collapses mid-reveal — then it
+  // collapses to a small persistent tag, freeing the screenshot underneath
+  // for the rest of the slide.
+  const points = slide.pointsEn.slice(0, 4); // the lower-third band has less room than the old left column
+  const lastBulletAt = Math.max(0, points.length - 1) * BULLET_STAGGER_SEC + 0.3;
+  const readWindow = Math.max(2.5, lastBulletAt + 0.4);
+  const fullBandH = 720 - bandTop;
+  const tagH = 40;
+  const bandHExpr = escExpr(`if(lt(t,${readWindow}),${fullBandH},${tagH})`);
+  const bandYExpr = escExpr(`if(lt(t,${readWindow}),${bandTop},${720 - tagH})`);
+  const titleYExpr = escExpr(`if(lt(t,${readWindow}),${bandTop + 14},${720 - tagH + 11})`);
+  const titleSizeExpr = escExpr(`if(lt(t,${readWindow}),26,16)`);
+
+  const chrome: string[] = [
     `drawbox=x=0:y=0:w=iw:h=56:color=${C_NAVY}@0.85:t=fill`,
     `drawtext=text='${secLabel}':fontfile='${FONT_EN}':x=24:y=16:fontcolor=${C_CYAN}:fontsize=22`,
     `drawtext=text='CAFA PMIS':fontfile='${FONT_EN}':x=w-160:y=16:fontcolor=white:fontsize=20`,
-    `drawbox=x=0:y=${bandTop}:w=iw:h=${720 - bandTop}:color=${C_INK}@0.72:t=fill`,
-    `drawtext=text='${esc(slide.titleEn)}':fontfile='${FONT_EN}':x=28:y=${bandTop + 14}:fontcolor=${C_CYAN}:fontsize=26`,
+    `drawbox=x=0:y='${bandYExpr}':w=iw:h='${bandHExpr}':color=${C_INK}@0.72:t=fill`,
+    `drawtext=text='${esc(slide.titleEn)}':fontfile='${FONT_EN}':x=28:y='${titleYExpr}':fontcolor=${C_CYAN}:fontsize='${titleSizeExpr}'`,
   ];
 
   const startY = bandTop + 56;
@@ -525,15 +566,75 @@ async function buildFullScreenshotSlide(
   // capped well below what would technically fit — long unbroken lines here
   // would be a readability problem, not an overlap one.
   const bulletMax = Math.min(maxBulletChars(1252 - 28, bulletFontSize), 85);
-  const points = slide.pointsEn.slice(0, 4); // the lower-third band has less room than the old left column
   for (let i = 0; i < points.length; i++) {
     const y = startY + i * lineH;
     const truncated = points[i].length > bulletMax ? points[i].slice(0, bulletMax) + "…" : points[i];
-    filters.push(...bulletFilters(truncated, 28, y, bulletFontSize, i));
+    // Bullets only ever show during the read window — the band above them
+    // physically collapses away afterward, so leaving them enabled past
+    // that would float bullet text over the bare screenshot.
+    for (const f of bulletFilters(truncated, 28, y, bulletFontSize, i)) {
+      chrome.push(`${f}:${enableBetween(0, readWindow)}`);
+    }
   }
-  filters.push("fade=t=in:st=0:d=0.3");
 
-  const vf = filters.join(",");
+  // ---- Tell → Show → Do: an animated cursor moving to, and "clicking",
+  // whatever the narration describes acting on — instead of only describing
+  // the action in text. Shares its target coordinates with highlightRegion
+  // below when both are set on the same slide, so the earlier glow and the
+  // later click land in the same place.
+  if (cursorAction) {
+    const { fromX, fromY, toX, toY, clickAtSec } = cursorAction;
+    const moveStart = Math.max(0, clickAtSec - 0.7);
+    const moveEnd = Math.max(moveStart + 0.1, clickAtSec - 0.1);
+    const moveSpan = (moveEnd - moveStart).toFixed(3);
+    const cursorX = escExpr(
+      `if(lt(t,${moveStart}),${fromX},if(lt(t,${moveEnd}),${fromX}+(${toX}-${fromX})*(t-${moveStart})/${moveSpan},${toX}))`,
+    );
+    const cursorY = escExpr(
+      `if(lt(t,${moveStart}),${fromY},if(lt(t,${moveEnd}),${fromY}+(${toY}-${fromY})*(t-${moveStart})/${moveSpan},${toY}))`,
+    );
+    chrome.push(
+      `drawtext=text='►':fontfile='${FONT_EN}':x='${cursorX}':y='${cursorY}':fontsize=32:fontcolor=0xFF6B00:` +
+      enableBetween(moveStart, clickAtSec + 0.6),
+    );
+    // A brief pulsing dot at the destination, right as the cursor arrives —
+    // a lightweight stand-in for a "click ripple" (drawtext/drawbox have no
+    // circle primitive to actually expand a ring).
+    const pulseSize = escExpr(`22+14*max(0,1-abs(t-${clickAtSec})/0.3)`);
+    chrome.push(
+      `drawtext=text='●':fontfile='${FONT_EN}':x=${toX}:y=${toY}:fontsize='${pulseSize}':fontcolor=0xFF6B00@0.55:` +
+      enableBetween(clickAtSec - 0.05, clickAtSec + 0.6),
+    );
+  }
+
+  chrome.push("fade=t=in:st=0:d=0.3");
+
+  if (slide.highlightRegion) {
+    // Dim everything between the header and the band, then "cut out" (by
+    // overlaying an un-dimmed crop of the same region back on top) and
+    // outline just the highlighted element — confirmed empirically with a
+    // local ffmpeg-full render before shipping this. Needs filter_complex
+    // (labeled pads for the split/crop/overlay), unlike the plain -vf chain
+    // used when no slide has a highlightRegion yet.
+    const hr = slide.highlightRegion;
+    const dimStart = 0.5, dimEnd = 2.5;
+    const filterComplex =
+      `[0:v]${baseScale},split=2[shotMain][shotClean];` +
+      `[shotClean]crop=${hr.w}:${hr.h}:${hr.x}:${hr.y}[cleanRegion];` +
+      `[shotMain]drawbox=x=0:y=56:w=iw:h=${bandTop - 56}:color=black@0.55:t=fill:${enableBetween(dimStart, dimEnd)}[dimmed];` +
+      `[dimmed][cleanRegion]overlay=x=${hr.x}:y=${hr.y}:${enableBetween(dimStart, dimEnd)}[withregion];` +
+      `[withregion]drawbox=x=${hr.x}:y=${hr.y}:w=${hr.w}:h=${hr.h}:color=${C_CYAN}@0.3:t=8:${enableBetween(dimStart, dimEnd)}[glow];` +
+      `[glow]drawbox=x=${hr.x}:y=${hr.y}:w=${hr.w}:h=${hr.h}:color=${C_CYAN}:t=3:${enableBetween(dimStart, dimEnd)}[chromed];` +
+      `[chromed]${chrome.join(",")}[outv]`;
+    await exec(
+      `ffmpeg -y -loop 1 -framerate 24 -i "${screenshotPath}" -i "${audioPath}" ` +
+      `-filter_complex "${filterComplex}" -map "[outv]" -map 1:a ` +
+      `-c:v libx264 -preset ultrafast -crf 26 -c:a aac -b:a 96k -shortest "${out}"`,
+    );
+    return out;
+  }
+
+  const vf = [baseScale, ...chrome].join(",");
   await exec(
     `ffmpeg -y -loop 1 -framerate 24 -i "${screenshotPath}" -i "${audioPath}" -vf "${vf}" ` +
     `-c:v libx264 -preset ultrafast -crf 26 -c:a aac -b:a 96k -shortest "${out}"`,
@@ -542,85 +643,98 @@ async function buildFullScreenshotSlide(
 }
 
 // ---------------------------------------------------------------------------
-// ASS subtitle generator
+// Caption track — WebVTT sidecar (not burned into the video)
 // ---------------------------------------------------------------------------
+// Captions used to be permanently burned into the frame via a libass "ass="
+// filter, as one static Dialogue line showing a slide's *entire* narration
+// for its *entire* duration — that, not just its font size, is why review
+// called the captions oversized: it was a whole paragraph on screen at
+// once, not a normal caption updating every few seconds. Moving to a WebVTT
+// sidecar fixes both problems at once: generateCaptionCues() below splits
+// each slide's narration into short, sentence-scale cues timed across the
+// slide's own on-screen span (so only a line or two is ever visible at
+// once), and — since it's a separate file rather than something baked into
+// the frame — it can be toggled on/off by a player and translated to Arabic
+// later with zero video re-rendering. There is no training-video player in
+// the frontend yet to consume this file; generateModuleVideo() below just
+// writes it next to the .mp4 (same local-disk convention) and
+// routes/training-videos.ts serves it, ready for whenever that player
+// exists.
 
-function toAssTime(secs: number): string {
+export function toVttTime(secs: number): string {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
-  const cs = Math.round((s % 1) * 100);
-  return `${h}:${String(Math.floor(m)).padStart(2, "0")}:${String(Math.floor(s)).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+  const ms = Math.round((s % 1) * 1000);
+  return `${String(h).padStart(2, "0")}:${String(Math.floor(m)).padStart(2, "0")}:${String(Math.floor(s)).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
 }
 
-// ASS color fields are &HAABBGGRR (alpha, blue, green, red — note the
-// reversed byte order vs. CSS). AA=00 is fully opaque, AA=FF fully
-// transparent. Converts one of this file's "0xRRGGBB" ffmpeg-style color
-// constants.
-function toAssColor(rgbHex: string, alphaHex = "00"): string {
-  const hex = rgbHex.replace(/^0x/, "").padStart(6, "0");
-  const r = hex.slice(0, 2), g = hex.slice(2, 4), b = hex.slice(4, 6);
-  return `&H${alphaHex}${b}${g}${r}`;
+// Splits on sentence-ending punctuation, keeping it with its sentence —
+// narrationEn is always well-punctuated prose (see the module scripts), so
+// this never needs to special-case abbreviations or decimals.
+function splitCaptionSentences(text: string): string[] {
+  const parts = text.match(/[^.!?]+[.!?]+(\s+|$)/g);
+  if (!parts) return [text.trim()];
+  return parts.map(p => p.trim()).filter(Boolean);
+}
+
+// One caption cue per sentence, unless a sentence itself runs long — those
+// get word-wrapped (reusing chunkText(), the same word-safe splitter TTS
+// chunking already relies on) so no single cue is more than a line or two
+// in a typical player at a normal caption size.
+export function buildCaptionCues(text: string, maxCharsPerCue = 110): string[] {
+  const sentences = splitCaptionSentences(text);
+  const cues: string[] = [];
+  for (const s of sentences) {
+    if (s.length <= maxCharsPerCue) { cues.push(s); continue; }
+    cues.push(...chunkText(s, maxCharsPerCue));
+  }
+  return cues;
 }
 
 // `starts[i]` is when slide i's own content begins in the FINAL (already
 // crossfaded) timeline — see crossfadeConcat(), which shrinks the naive
-// sum-of-durations timeline by XFADE_SEC at every transition, so subtitles
-// can't just be timed off the original per-clip durations anymore.
-async function generateASSSubtitles(
+// sum-of-durations timeline by XFADE_SEC at every transition, so cues can't
+// just be timed off the original per-clip durations anymore. Within one
+// slide's span, cues are spaced proportionally to their own character
+// length (there's no word-level timing from the TTS engine to time them
+// against precisely) — approximate, but far closer to real captioning than
+// one static block for the whole slide.
+async function generateVTTCaptions(
   slides: FullSlide[],
   starts: number[],
   totalDuration: number,
   outputPath: string,
 ): Promise<void> {
-  // Karla — the same body/narration face as the design proposal — with an
-  // opaque navy caption box (BorderStyle=3; empirically, OutlineColour is
-  // what actually paints the box, not BackColour, so both are set the same
-  // to be safe regardless of libass version) instead of the bare
-  // outline-on-transparent look. Bold, a touch of letter-spacing, and a
-  // taller MarginV (so the box clears the y=690 bottom credit bar on
-  // content slides) round it out.
-  const boxColor = toAssColor(C_INK);
-  const textColor = toAssColor("0xFFFFFF");
-  const header = `[Script Info]
-Title: CAFA PMIS Training
-ScriptType: v4.00+
-PlayResX: 1280
-PlayResY: 720
-WrapStyle: 1
+  const lines: string[] = ["WEBVTT", ""];
+  let cueIndex = 1;
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: English,Karla,32,${textColor},&H000000FF,${boxColor},${boxColor},-1,0,0,0,100,100,0.5,0,3,4,0,2,50,50,50,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
-
-  const dialogues: string[] = [];
   for (let i = 0; i < slides.length; i++) {
     const slide = slides[i];
-    const start = starts[i] ?? 0;
-    const end = i + 1 < starts.length ? starts[i + 1] : totalDuration;
-    const startStr = toAssTime(start);
-    const endStr = toAssTime(Math.max(end - 0.2, start + 0.5));
+    if (!slide.narrationEn || slide.type === "section-header") continue;
 
-    if (slide.narrationEn && slide.type !== "section-header") {
-      const text = slide.narrationEn.replace(/[{}]/g, "").replace(/\n/g, "\\N");
-      // A "full" screenshot slide already has its own translucent band and
-      // bullets occupying the bottom third of the frame (see
-      // buildFullScreenshotSlide) — the default bottom-center caption
-      // position would sit right on top of that, so those slides get an
-      // explicit top-of-frame override instead, clear of both that band and
-      // the slide's own top header strip (which ends at y=56).
-      const isFullScreenshot = slide.type === "content"
-        && slide.screenshotLayout === "full"
-        && !!(await resolveScreenshotPath(slide));
-      const posTag = isFullScreenshot ? "\\an8\\pos(640,80)" : "";
-      dialogues.push(`Dialogue: 0,${startStr},${endStr},English,,0,0,0,,{${posTag}\\fad(400,250)}${text}`);
+    const slideStart = starts[i] ?? 0;
+    const slideEnd = i + 1 < starts.length ? starts[i + 1] : totalDuration;
+    const slideDur = Math.max(0.5, slideEnd - slideStart - 0.2);
+
+    const cues = buildCaptionCues(slide.narrationEn.replace(/\n/g, " "));
+    const totalChars = cues.reduce((sum, c) => sum + c.length, 0) || 1;
+
+    let elapsed = 0;
+    for (const cue of cues) {
+      const share = cue.length / totalChars;
+      const dur = Math.max(0.9, slideDur * share);
+      const cueStart = slideStart + elapsed;
+      const cueEnd = Math.min(slideStart + slideDur, Math.max(cueStart + dur, cueStart + 0.5));
+      lines.push(String(cueIndex++));
+      lines.push(`${toVttTime(cueStart)} --> ${toVttTime(cueEnd)}`);
+      lines.push(cue);
+      lines.push("");
+      elapsed += dur;
     }
   }
 
-  await fs.writeFile(outputPath, `${header}\n${dialogues.join("\n")}\n`);
+  await fs.writeFile(outputPath, lines.join("\n"));
 }
 
 // ---------------------------------------------------------------------------
@@ -705,7 +819,7 @@ export async function generateModuleVideo(videoId: number, config: ModuleVideoCo
 
   const rawConcat = path.join(tmpDir, "concat_raw.mp4");
   const finalPath = path.join(DATA_DIR, `${videoId}.mp4`);
-  const assPath   = path.join(tmpDir, "subtitles.ass");
+  const vttPath   = path.join(DATA_DIR, `${videoId}.vtt`);
   const clipPaths: string[] = [];
   const clipDurations: number[] = [];
 
@@ -738,15 +852,12 @@ export async function generateModuleVideo(videoId: number, config: ModuleVideoCo
     await setProgress(videoId, 84, "Assembling final video (cross-dissolve transitions)…");
     const { starts, totalDuration } = await crossfadeConcat(clipPaths, clipDurations, rawConcat, tmpDir);
 
-    await setProgress(videoId, 88, "Generating subtitle track…");
-    await generateASSSubtitles(slides, starts, totalDuration, assPath);
-
-    await setProgress(videoId, 92, "Burning captions into video…");
-    // Escape path for libass filter
-    const assEscaped = assPath.replace(/\\/g, "/").replace(/:/g, "\\:");
-    await exec(
-      `ffmpeg -y -i "${rawConcat}" -vf "ass='${assEscaped}'" -c:v libx264 -preset ultrafast -crf 24 -c:a copy "${finalPath}"`,
-    );
+    await setProgress(videoId, 92, "Generating caption track…");
+    // Captions are a WebVTT sidecar, not burned into the frame — see the
+    // comment above generateVTTCaptions() — so the crossfaded concat is
+    // already the final video with no further encode pass needed.
+    await generateVTTCaptions(slides, starts, totalDuration, vttPath);
+    await fs.copyFile(rawConcat, finalPath);
 
     await setProgress(videoId, 98, "Finalizing…");
     const duration = await getDuration(finalPath);

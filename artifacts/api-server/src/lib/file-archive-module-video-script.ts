@@ -30,6 +30,8 @@ export const FILE_ARCHIVE_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Brings together files already attached to projects, plans, and reports", "Plus standalone resource files uploaded directly here", "It doesn't own or move the original file — just makes it discoverable", "Filter by source: project, plan, report, or standalone resource", "Filter by status: active, archived, or deleted"],
     narrationEn: "File and Archive is a registry over documents that already exist — files attached to projects, plans, and reports, plus standalone resource files uploaded directly here. It doesn't take ownership of the underlying file; it just makes everything discoverable in one place. Filter by where a file came from, or by whether it's active, archived, or deleted.",
     durationHint: 10,
+    screenshotKey: "file-archive",
+    screenshotLayout: "full",
   },
   {
     type: "content",
@@ -38,6 +40,8 @@ export const FILE_ARCHIVE_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Sixteen approved filing categories, from Governance to Technical Resources", "Every file carries a confidentiality level", "Public, internal, confidential, or restricted", "Search by keyword across the whole registry", "Filter by classification to narrow results fast"],
     narrationEn: "Every file is filed under one of sixteen approved categories, from governance and legal down to technical resources, and carries a confidentiality level — public, internal, confidential, or restricted. Search by keyword across the whole registry, or filter by classification to narrow things down quickly.",
     durationHint: 10,
+    screenshotKey: "file-archive",
+    screenshotLayout: "full",
   },
 
   {
@@ -55,6 +59,8 @@ export const FILE_ARCHIVE_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["A standalone resource isn't attached to any project, plan, or report", "Only Super Admin, Executive Director, and Program Manager can manage them", "Project, plan, and report attachments stay owned by their own modules", "Uploading a new version replaces the file, not the history", "Deleting a resource here never touches a project's own documents"],
     narrationEn: "A standalone resource upload isn't tied to any project, plan, or report — and only the Super Admin, Executive Director, and Program Manager roles can manage them. Attachments that belong to a project, plan, or report stay owned by those modules and aren't affected by anything done here. Replacing a resource uploads a new version without losing its history.",
     durationHint: 10,
+    screenshotKey: "file-archive",
+    screenshotLayout: "full",
   },
 
   {

@@ -56,6 +56,8 @@ export const USERS_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Active, Invited, Suspended, Inactive, or Deactivated", "Only an Active account can sign in at all", "Suspending someone is reversible; deactivating is more final", "A re-invite can be issued if the original link expired", "Every status change is recorded in the audit log"],
     narrationEn: "An account moves through active, invited, suspended, inactive, or deactivated status — only active accounts can sign in. Suspending someone is reversible, while deactivating is more final. A re-invite can be issued if the original link expired, and every status change is recorded in the audit log.",
     durationHint: 10,
+    screenshotKey: "users",
+    screenshotLayout: "full",
   },
 
   {

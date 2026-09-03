@@ -56,6 +56,8 @@ export const REPORTS_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Each project has its own reporting period and frequency", "The system tracks which reports are due and by when", "Reminders go out automatically as a due date approaches", "A late report shows up clearly wherever reporting compliance is tracked", "Submitting doesn't require a reminder — you can report any time"],
     narrationEn: "Every project carries its own reporting period and frequency, and the system tracks which reports are due and when. Reminders go out automatically as a due date approaches, and a late report shows up clearly wherever reporting compliance is tracked — though you're never required to wait for a reminder to submit one.",
     durationHint: 10,
+    screenshotKey: "reports-landing",
+    screenshotLayout: "full",
   },
 
   {

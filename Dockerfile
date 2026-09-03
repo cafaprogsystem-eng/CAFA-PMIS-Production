@@ -71,18 +71,6 @@ RUN apt-get update \
       --output /opt/aws-rds-ca/global-bundle.pem \
  && rm -rf /var/lib/apt/lists/*
 
-# Karla — the same body/narration face as the approved training-video design
-# proposal, for burned-in captions (lib/video-generator.ts's
-# generateASSSubtitles) — fetched from the font's official Google Fonts
-# repository (verified reachable and a valid font file before adding this).
-# fc-cache registers it with fontconfig so libass finds it by family name
-# ("Karla") with no explicit fontsdir, the same way it already finds DejaVu.
-RUN mkdir -p /usr/share/fonts/truetype/karla \
- && curl --fail --silent --show-error --location \
-      https://raw.githubusercontent.com/google/fonts/main/ofl/karla/Karla%5Bwght%5D.ttf \
-      --output /usr/share/fonts/truetype/karla/Karla-Regular.ttf \
- && fc-cache -f
-
 ENV NODE_EXTRA_CA_CERTS="/opt/aws-rds-ca/global-bundle.pem"
 
 ENV PNPM_HOME="/pnpm"

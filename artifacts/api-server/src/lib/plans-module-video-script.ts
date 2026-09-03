@@ -29,6 +29,8 @@ export const PLANS_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Monthly, Quarterly, and Annual plans", "Action, Operational, and Emergency plans", "Every plan has a state and a sector", "A plan can optionally link to an existing project", "Its code is generated automatically, like CAFA-PLAN-KH-001"],
     narrationEn: "The system supports six plan types: monthly, quarterly, annual, action, operational, and emergency. Every plan is tied to a state and a sector, and can optionally link to an existing project. Its code is generated automatically.",
     durationHint: 10,
+    screenshotKey: "plans",
+    screenshotLayout: "full",
   },
   {
     type: "content",
@@ -54,6 +56,8 @@ export const PLANS_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Draft, then Submitted", "Technically Approved, then Coordination Approved", "Approved, then Active", "In Progress, then Completed", "Delayed and Cancelled are also possible at any point", "Final approval is blocked while open corrections remain"],
     narrationEn: "A plan's status moves from draft to submitted, technically approved, coordination approved, approved, active, in progress, and finally completed — with delayed or cancelled possible along the way. Just like projects, final approval is blocked until every open correction on the plan has been resolved.",
     durationHint: 10,
+    screenshotKey: "plans",
+    screenshotLayout: "full",
   },
   {
     type: "content",

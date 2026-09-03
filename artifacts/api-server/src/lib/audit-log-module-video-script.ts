@@ -58,6 +58,8 @@ export const AUDIT_LOG_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Filter by module: Projects, Plans, Budgets, Reports, and more", "Filter by the user who made the change", "Filter by a specific date range", "Search results stay complete — filters narrow, they never hide", "Use it to reconstruct exactly what happened to a record over time"],
     narrationEn: "You can filter by module, from projects and plans to budgets and reports, by the specific user who made a change, or by a date range. Filters only narrow what you're looking at — they never hide anything from the underlying record — so you can reconstruct exactly what happened to any item over time.",
     durationHint: 10,
+    screenshotKey: "audit-log",
+    screenshotLayout: "full",
   },
 
   {

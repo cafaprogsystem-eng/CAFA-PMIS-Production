@@ -49,6 +49,8 @@ export const NOTIFICATIONS_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["General, Technical, and Observation comments", "Required Correction — blocks approval until resolved", "Approval Note and Rejection Reason", "Revision Request and Coordination comments", "Which types you can post depends on your role"],
     narrationEn: "Comments come in eight types — general, technical, and observation notes, required correction, which blocks approval until it's resolved, approval note, rejection reason, revision request, and coordination. Which of these you're allowed to post depends on your role.",
     durationHint: 10,
+    screenshotKey: "notifications",
+    screenshotLayout: "full",
   },
   {
     type: "content",

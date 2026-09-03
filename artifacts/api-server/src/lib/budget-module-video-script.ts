@@ -48,6 +48,8 @@ export const BUDGET_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["A project covering multiple states splits its budget between them", "Each state gets its own allocation, beneficiary target, and team", "The sum of all state allocations can never exceed the project total", "This is enforced when the project is created", "…and enforced again every time the budget is edited afterward"],
     narrationEn: "A project that covers more than one state splits its budget between them, and each state allocation carries its own beneficiary target and state team. The sum of every state's allocation can never exceed the project's total budget — the system checks this both when the project is first created, and again every time its budget is edited afterward.",
     durationHint: 10,
+    screenshotKey: "budget-overview",
+    screenshotLayout: "full",
   },
   {
     type: "content",
@@ -56,6 +58,8 @@ export const BUDGET_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Project budget covers the whole project's approved amount", "Each activity has its own planned and spent budget", "Activity spend rolls up to show real burn rate", "Reports also capture planned budget and actual expenditure", "Together these give you three views of the same money"],
     narrationEn: "Budget is tracked at two levels: the project's overall approved amount, and each activity's own planned and spent figures, which roll up into the real burn rate. Reports add a third view, capturing planned budget and actual expenditure for the period being reported.",
     durationHint: 10,
+    screenshotKey: "budget-overview",
+    screenshotLayout: "full",
   },
 
   {

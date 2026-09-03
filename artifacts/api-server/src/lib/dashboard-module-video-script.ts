@@ -32,6 +32,13 @@ export const DASHBOARD_MODULE_SCRIPT: FullSlide[] = [
     durationHint: 10,
     screenshotKey: "dashboard",
     screenshotLayout: "full",
+    // Pilot for the highlight/cursor feature (approved before rollout to the
+    // other 11 modules) — coordinates are a hand-eyeballed guess at the KPI
+    // row's position, not derived from the real captured screenshot (no DOM
+    // instrumentation exists yet); expect to nudge these once the actual
+    // render is reviewed.
+    highlightRegion: { x: 270, y: 130, w: 940, h: 170 },
+    cursorAction: { fromX: 100, fromY: 650, toX: 390, toY: 195, clickAtSec: 3.2, zoom: true },
   },
   {
     type: "content",
@@ -57,6 +64,8 @@ export const DASHBOARD_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Leadership and coordination roles see the whole organisation", "A State Office Manager sees only their own state's numbers", "A Technical Coordinator sees only their assigned sectors", "The same dashboard layout adapts its data, not its design", "This scoping is enforced by the server, not just hidden in the UI"],
     narrationEn: "The dashboard looks the same for everyone, but the numbers behind it don't. Leadership and coordination roles see organisation-wide figures, a State Office Manager sees only their own state's data, and a Technical Coordinator sees only the sectors they're assigned to. This scoping is enforced on the server — it isn't just hidden in the interface.",
     durationHint: 10,
+    screenshotKey: "dashboard",
+    screenshotLayout: "full",
   },
   {
     type: "content",
@@ -65,6 +74,8 @@ export const DASHBOARD_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Shows which sectors have the highest indicator completion", "Compares target vs. achieved across every active project", "Helps identify sectors falling behind early", "Available to roles with organisation-wide visibility", "Links directly into the Reports and Plans behind each figure"],
     narrationEn: "The sector achievement view compares target against achieved indicator values across every active project, sector by sector — a quick way to see which sectors are on track and which are falling behind, with links straight into the reports and plans behind each figure.",
     durationHint: 10,
+    screenshotKey: "dashboard",
+    screenshotLayout: "full",
   },
 
   {
@@ -82,6 +93,8 @@ export const DASHBOARD_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Pending Approvals lists everything waiting on your action", "Click any item to go directly to it", "Recent Activity shows the latest changes system-wide", "Includes submissions, approvals, and newly logged risks", "Both refresh automatically — no manual reload needed"],
     narrationEn: "The Pending Approvals section lists every item waiting on your action — click one to go straight to it. Recent Activity shows the latest changes across the system: submissions, approvals, and newly logged risks. Both refresh automatically.",
     durationHint: 10,
+    screenshotKey: "dashboard",
+    screenshotLayout: "full",
   },
 
   {

@@ -56,6 +56,8 @@ export const RISKS_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["Three statuses: Open, Mitigated, Closed", "A dedicated mitigation-plan text field documents actions taken", "Filter the risk log by category, severity, or project", "The project team is notified automatically when a new risk appears", "Export the risk log as CSV whenever you need it"],
     narrationEn: "Every risk carries one of three statuses — open, mitigated, or closed — and a dedicated mitigation-plan field to document what's being done about it. Filter the risk log by category, severity, or project, and the project team is notified automatically the moment a new risk is logged.",
     durationHint: 10,
+    screenshotKey: "risk-heatmap",
+    screenshotLayout: "full",
   },
 
   {

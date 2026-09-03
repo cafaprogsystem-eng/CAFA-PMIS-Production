@@ -49,6 +49,8 @@ export const STATES_MODULE_SCRIPT: FullSlide[] = [
     pointsEn: ["State Administration shows a state's assigned manager", "But it can't be changed from this page", "Assigning a State Office Manager happens in User Management instead", "This keeps 'who manages this state' as one single source of truth", "Editing a state's own status or office address stays here"],
     narrationEn: "State Administration shows you which manager is assigned to a state, but that assignment can't be changed from this page — it's set in User Management instead, when a State Office Manager's role is assigned. This keeps a single source of truth for who manages a state, while updating the state's own status or office address stays right here.",
     durationHint: 10,
+    screenshotKey: "states",
+    screenshotLayout: "full",
   },
 
   {

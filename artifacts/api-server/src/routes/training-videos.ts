@@ -625,6 +625,30 @@ router.get("/training-videos/:id/download", requireAuth, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// ---------------------------------------------------------------------------
+// GET /training-videos/:id/captions — WebVTT sidecar (see
+// video-generator.ts's generateVTTCaptions()). Derived from file_path rather
+// than its own column: written to the same local path with a .vtt extension
+// instead of .mp4, no schema change needed. No frontend player consumes this
+// yet — it's ready for whenever one exists, and 404s cleanly for any video
+// generated before this endpoint existed.
+// ---------------------------------------------------------------------------
+router.get("/training-videos/:id/captions", requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { rows } = await pool.query(`SELECT file_path AS "filePath", status FROM training_videos WHERE id=$1`, [id]);
+    if (!rows.length) { res.status(404).json({ error: "not_found" }); return; }
+    const v = rows[0];
+    const isAdmin = isVideoAdmin(req);
+    if (v.status !== "published" && !isAdmin) { res.status(403).json({ error: "forbidden" }); return; }
+    if (!v.filePath) { res.status(404).json({ error: "file_not_found" }); return; }
+    const vttPath = v.filePath.replace(/\.mp4$/, ".vtt");
+    if (!fsSync.existsSync(vttPath)) { res.status(404).json({ error: "captions_not_found" }); return; }
+    res.setHeader("Content-Type", "text/vtt; charset=utf-8");
+    fsSync.createReadStream(vttPath).pipe(res);
+  } catch (err) { next(err); }
+});
+
 // ===========================================================================
 // COMPLETION TRACKING
 // ===========================================================================
