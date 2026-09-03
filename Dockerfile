@@ -107,7 +107,8 @@ COPY --from=builder /app/artifacts/cafa-pmis/package.json   ./artifacts/cafa-pmi
 COPY --from=builder /app/lib                                 ./lib
 COPY --from=builder /app/scripts/package.json \
                     /app/scripts/migrate.mjs \
-                    /app/scripts/seed.mjs                   ./scripts/
+                    /app/scripts/seed.mjs \
+                    /app/scripts/capture-training-screenshots.mjs ./scripts/
 
 # ── Frontend static assets (Express serves these in production) ───────────────
 COPY --from=builder /app/artifacts/cafa-pmis/dist/public    ./public
