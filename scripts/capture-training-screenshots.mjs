@@ -134,12 +134,24 @@ async function login(page, baseUrl, email, password) {
   console.log("  Submitting the login form…");
   await withTimeout(page.click('button[type="submit"]'), "click submit");
 
-  console.log("  Waiting for the post-login redirect…");
+  // login.tsx's success handler does a *full* browser navigation to "/"
+  // (window.location.assign), not a client-side one — but "/" itself is only
+  // ever a transient stop: App.tsx's root route renders <Redirect
+  // to="/dashboard"/> (a wouter/history-API, same-document navigation, once
+  // the app's own /api/me check resolves), so the final URL depends on timing
+  // that varies run to run. Waiting on a URL predicate is unreliable here —
+  // it can be satisfied by the intermediate "/" before the client-side
+  // redirect even fires, and Playwright's default waitUntil:"load" then waits
+  // on a lifecycle event that a same-document navigation never re-signals,
+  // which is what produced the 30s hang. The sidebar brand title only renders
+  // once AppLayout (the authenticated shell) actually mounts post-redirect —
+  // an unambiguous "logged in" signal regardless of which URL it lands on.
+  console.log("  Waiting for the authenticated app shell to render…");
   await withTimeout(
-    page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: STEP_TIMEOUT_MS }),
-    "post-login redirect away from /login",
+    page.waitForSelector('[data-testid="sidebar-brand-title"]', { state: "visible", timeout: STEP_TIMEOUT_MS }),
+    "authenticated app shell after login",
   );
-  console.log(`  Logged in — redirected to ${new URL(page.url()).pathname}.`);
+  console.log(`  Logged in — landed on ${new URL(page.url()).pathname}.`);
 }
 
 // "card": rounded corners + a soft drop shadow, sized for the narrow panel
