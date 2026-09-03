@@ -844,8 +844,8 @@ export const FULL_SYSTEM_SCRIPT: FullSlide[] = [
   {
     type: "outro",
     titleEn: "Training Complete",
-    pointsEn: ["You are ready to use CAFA PMIS", "For support: pmis-support@cafa.org", "Manual: /manual", "CAFA Development Organization"],
-    narrationEn: "You've now walked through every module of the CAFA Program Management System. The system is ready for you to use. For technical support, please reach out at pmis-support@cafa.org. Thank you for watching.",
+    pointsEn: ["You are ready to use CAFA PMIS", "For support: pmis-support@cafa.systems", "Manual: /manual", "CAFA Development Organization"],
+    narrationEn: "You've now walked through every module of the CAFA Program Management System. The system is ready for you to use. For technical support, please reach out at pmis-support@cafa.systems. Thank you for watching.",
     durationHint: 8,
   },
 ];

@@ -34,9 +34,16 @@
  *   [HEADLESS=false] \
  *   node scripts/capture-training-screenshots.mjs [key1 key2 ...]
  *
- * With no keys given, captures every target in TARGETS. Output goes to
- * data/training-screenshots/<key>.png (override with SCREENSHOT_OUT_DIR),
- * the same directory video-generator.ts reads from.
+ * With no keys given, captures every target in TARGETS. Each screenshot is
+ * both written to data/training-screenshots/<key>.png (override with
+ * SCREENSHOT_OUT_DIR — harmless, but not load-bearing when this runs as a
+ * one-off ECS task, since that local disk never reaches the running app)
+ * AND uploaded to POST /api/training-videos/screenshots/:key on the target
+ * itself, authenticated with the same session login() established — that
+ * route stores it in the app's own S3 bucket, which is what
+ * video-generator.ts's resolveScreenshotPath() actually reads from. Set
+ * SKIP_UPLOAD=true to skip the upload (e.g. previewing a screenshot locally
+ * with no server changes intended).
  *
  * Defense-in-depth: every page is scanned for visible email-looking text and
  * blurred before the screenshot is taken, regardless of which account or
@@ -173,6 +180,22 @@ async function styleScreenshot(buffer, style) {
     .toBuffer();
 }
 
+// context.request shares cookies with the browser context — the same
+// session login() established authenticates this upload too, no separate
+// credential handling needed.
+async function uploadScreenshot(context, baseUrl, key, buffer) {
+  const response = await withTimeout(
+    context.request.post(`${baseUrl}/api/training-videos/screenshots/${key}`, {
+      data: buffer,
+      headers: { "Content-Type": "image/png" },
+    }),
+    `upload ${key} to the server`,
+  );
+  if (!response.ok()) {
+    throw new Error(`Upload rejected with ${response.status()} ${response.statusText()}: ${await response.text()}`);
+  }
+}
+
 async function main() {
   console.log("Starting training-screenshot capture…");
   const baseUrl = (process.env.STAGING_BASE_URL || "https://staging.pmis.cafa.systems").replace(/\/$/, "");
@@ -196,8 +219,14 @@ async function main() {
     console.error(`Known keys: ${TARGETS.map((t) => t.key).join(", ")}`);
     process.exit(1);
   }
-  if (targets.some((t) => t.auth) && (!email || !password)) {
-    console.error("ERROR: STAGING_DEMO_EMAIL and STAGING_DEMO_PASSWORD are required for authenticated targets.");
+  const skipUpload = process.env.SKIP_UPLOAD === "true";
+  // Uploading needs an authenticated admin session regardless of whether the
+  // *page itself* requires login (e.g. /login is public) — so credentials
+  // are required whenever an upload will actually be attempted, and
+  // separately whenever any requested target needs auth just to view it.
+  const needsAuth = !skipUpload || targets.some((t) => t.auth);
+  if (needsAuth && (!email || !password)) {
+    console.error("ERROR: STAGING_DEMO_EMAIL and STAGING_DEMO_PASSWORD are required (uploading needs an authenticated session). Set SKIP_UPLOAD=true and request only auth:false targets to skip this entirely.");
     process.exit(1);
   }
 
@@ -225,17 +254,21 @@ async function main() {
   const page = await withTimeout(context.newPage(), "open new page");
   console.log("Browser context and page ready.");
 
-  let authenticated = false;
+  let uploadFailures = 0;
   try {
+    // Logged in once, up front, regardless of which targets need auth just
+    // to *view* them — uploading needs an authenticated admin session for
+    // every target, including the public ones (/login itself doesn't
+    // redirect an already-authenticated visitor away, so capturing it after
+    // logging in is safe).
+    if (email && password) {
+      console.log("Logging in as the demo account…");
+      await login(page, baseUrl, email, password);
+    }
+
     for (let i = 0; i < targets.length; i++) {
       const target = targets[i];
       const progress = `[${i + 1}/${targets.length}]`;
-
-      if (target.auth && !authenticated) {
-        console.log(`${progress} Logging in as the demo account…`);
-        await login(page, baseUrl, email, password);
-        authenticated = true;
-      }
 
       console.log(`${progress} Capturing '${target.key}' → ${baseUrl}${target.urlPath}`);
       await withTimeout(
@@ -252,6 +285,17 @@ async function main() {
       const outPath = path.join(outDir, `${target.key}.png`);
       await writeFile(outPath, styled);
       console.log(`${progress} Saved ${target.key}.png (${styled.length} bytes) → ${outPath}`);
+
+      if (!skipUpload) {
+        console.log(`${progress}   Uploading to the server…`);
+        try {
+          await uploadScreenshot(context, baseUrl, target.key, styled);
+          console.log(`${progress}   Uploaded.`);
+        } catch (err) {
+          uploadFailures += 1;
+          console.error(`${progress}   Upload FAILED: ${err.message}`);
+        }
+      }
     }
   } finally {
     console.log("Closing browser…");
@@ -259,6 +303,13 @@ async function main() {
   }
 
   console.log(`Done. ${targets.length} screenshot(s) written to ${outDir}`);
+  if (!skipUpload) {
+    console.log(`${targets.length - uploadFailures}/${targets.length} uploaded successfully.`);
+    if (uploadFailures > 0) {
+      console.error(`${uploadFailures} upload(s) failed — see above.`);
+      process.exitCode = 1;
+    }
+  }
 }
 
 main().catch((err) => {

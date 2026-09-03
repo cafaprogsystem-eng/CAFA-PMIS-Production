@@ -1,13 +1,16 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import express from "express";
 import crypto from "node:crypto";
 import fsSync from "node:fs";
 import path from "node:path";
 import { pool } from "@workspace/db";
 import { hasPerm, permissionsFor, requireAuth, requirePerm } from "../middlewares/currentUser";
 import { logAudit } from "../middlewares/currentUser";
-import { generateModuleVideo } from "../lib/video-generator";
+import { generateModuleVideo, TRAINING_SCREENSHOT_S3_PREFIX } from "../lib/video-generator";
 import { FULL_VIDEO_TITLE, FULL_VIDEO_MODULE } from "../lib/full-system-video-script";
 import { TRAINING_VIDEO_MODULES } from "../lib/training-video-modules";
+import { s3Client, s3Bucket } from "../lib/objectStorage";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import multer from "multer";
 
 // Schema is owned exclusively by tracked migration 052_runtime_schema_authority.
@@ -353,6 +356,40 @@ router.post(
       await logAudit({ userId: req.currentUser!.id, action: "upload_new_training_video", module: "manual", entityId: id });
 
       res.json({ ok: true, videoId: id, duration });
+    } catch (err) { next(err); }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /training-videos/screenshots/:key — upload one real screenshot,
+// captured by scripts/capture-training-screenshots.mjs, for the training
+// video pipeline to composite instead of a drawn mockup. A one-off ECS
+// capture task has no persistent disk of its own — this uploads to the same
+// S3 bucket the app already uses for attachments so the *running app*
+// (which does have S3 access) can fetch it at generation time; see
+// video-generator.ts's resolveScreenshotPath().
+// ---------------------------------------------------------------------------
+const SCREENSHOT_KEY_RE = /^[a-z0-9-]{1,64}$/;
+
+router.post(
+  "/training-videos/screenshots/:key",
+  requireAuth, requireVideoAdmin,
+  express.raw({ type: "image/png", limit: "10mb" }),
+  async (req, res, next) => {
+    try {
+      const key = String(req.params.key);
+      if (!SCREENSHOT_KEY_RE.test(key)) { res.status(400).json({ error: "invalid_key" }); return; }
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) { res.status(400).json({ error: "empty_body" }); return; }
+
+      await s3Client().send(new PutObjectCommand({
+        Bucket: s3Bucket(),
+        Key: `${TRAINING_SCREENSHOT_S3_PREFIX}/${key}.png`,
+        Body: req.body,
+        ContentType: "image/png",
+      }));
+      await logAudit({ userId: req.currentUser!.id, action: "upload_training_screenshot", module: "manual", entityId: null });
+
+      res.json({ ok: true, key });
     } catch (err) { next(err); }
   },
 );

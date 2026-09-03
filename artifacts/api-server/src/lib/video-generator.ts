@@ -13,6 +13,8 @@ import {
   type FullSlide,
   type MockupElement,
 } from "./full-system-video-script";
+import { s3Client, s3Bucket } from "./objectStorage";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 
 const exec = promisify(execCb);
 
@@ -20,6 +22,10 @@ const FONT_EN   = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
 const FONT_MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
 const DATA_DIR  = "/home/runner/workspace/data/training-videos";
 const SCREENSHOTS_DIR = "/home/runner/workspace/data/training-screenshots";
+// Shared with routes/training-videos.ts's upload route — kept here (not
+// there) so that file doesn't need to import from this one, which already
+// imports generateModuleVideo from here and would otherwise be circular.
+export const TRAINING_SCREENSHOT_S3_PREFIX = "training-screenshots";
 const TMP_BASE  = "/tmp/cafa-videos";
 
 // Sampled directly from the real CAFA wordmark (cafa-logo.png) — no gold.
@@ -148,8 +154,17 @@ function chunkText(text: string, max = 190): string[] {
   return chunks;
 }
 
+// The English TTS engine reads a bare all-caps "CAFA" letter-by-letter, like
+// an acronym, instead of as one word — spelling it "Kafa" (still whole-word
+// matched, so it can't clip a word like "CAFAlon") makes it read naturally
+// as a name. On-screen text (titles, bullets, subtitles) is untouched — this
+// only transforms what's sent to the TTS endpoint, never what's displayed.
+export function ttsSafeText(text: string): string {
+  return text.replace(/\bCAFA\b/g, "Kafa");
+}
+
 async function fetchTTS(text: string, tmpDir: string, name: string): Promise<string | null> {
-  const chunks = chunkText(text);
+  const chunks = chunkText(ttsSafeText(text));
   const chunkFiles: string[] = [];
   for (let i = 0; i < chunks.length; i++) {
     const enc = encodeURIComponent(chunks[i]);
@@ -234,6 +249,11 @@ export type ModuleVideoConfig = {
   introHeading: string;   // big line under "CAFA" on the intro slide
   introSubtitle: string;  // smaller line under introHeading
   outroHeading?: string;  // defaults to introHeading
+  // Big cyan headline on the outro slide. Defaults to "Training Complete" —
+  // only correct for the full-system walkthrough. A standalone per-module
+  // video must override this (e.g. "Module Complete") so it doesn't imply
+  // the viewer has finished the entire system, not just this one module.
+  outroBigText?: string;
   slides: FullSlide[];
 };
 
@@ -270,9 +290,9 @@ async function buildOutroSlide(config: ModuleVideoConfig, tmpDir: string): Promi
 
   const vf = [
     `drawbox=x=0:y=ih/2-3:w=iw:h=6:color=${C_CYAN}:t=fill`,
-    `drawtext=text='Training Complete':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2-80:fontcolor=${C_CYAN}:fontsize=48`,
+    `drawtext=text='${esc(config.outroBigText ?? "Training Complete")}':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2-80:fontcolor=${C_CYAN}:fontsize=48`,
     `drawtext=text='${esc(config.outroHeading ?? config.introHeading)}':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+10:fontcolor=white:fontsize=28`,
-    `drawtext=text='Support\\: pmis-support@cafa.org  |  Manual\\: /manual':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+55:fontcolor=white:fontsize=18`,
+    `drawtext=text='Support\\: pmis-support@cafa.systems  |  Manual\\: /manual':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+55:fontcolor=white:fontsize=18`,
     `drawtext=text='CAFA Development Organization':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h-40:fontcolor=${C_CYAN}@0.8:fontsize=16`,
     "fade=t=in:st=0:d=0.5",
   ].join(",");
@@ -300,17 +320,45 @@ async function buildSectionDivider(slide: FullSlide, index: number, tmpDir: stri
   return out;
 }
 
-export function resolveScreenshotPath(slide: FullSlide): string | null {
+// scripts/capture-training-screenshots.mjs runs as a one-off ECS task with no
+// disk shared with this process, so it uploads each screenshot to S3 instead
+// (see routes/training-videos.ts's screenshot-upload route). Local disk is
+// checked first — cheap, and lets a screenshot placed there directly (e.g. in
+// local dev) work with no S3 involved at all — and a local hit is cached for
+// every later slide in the same video and future videos, so this only ever
+// downloads a given key from S3 once.
+async function fetchScreenshotFromS3(key: string, localPath: string): Promise<string | null> {
+  try {
+    const result = await s3Client().send(new GetObjectCommand({
+      Bucket: s3Bucket(),
+      Key: `${TRAINING_SCREENSHOT_S3_PREFIX}/${key}.png`,
+    }));
+    const body = result.Body;
+    if (!body) return null;
+    const chunks: Buffer[] = [];
+    for await (const chunk of body as AsyncIterable<Buffer>) chunks.push(chunk);
+    await fs.mkdir(path.dirname(localPath), { recursive: true });
+    await fs.writeFile(localPath, Buffer.concat(chunks));
+    return localPath;
+  } catch {
+    // Not configured, not found, or a transient failure — all fall back to
+    // the slide's drawn mockup the same way a missing local file always has.
+    return null;
+  }
+}
+
+export async function resolveScreenshotPath(slide: FullSlide): Promise<string | null> {
   if (!slide.screenshotKey) return null;
   const p = path.join(SCREENSHOTS_DIR, `${slide.screenshotKey}.png`);
-  return fsSync.existsSync(p) ? p : null;
+  if (fsSync.existsSync(p)) return p;
+  return fetchScreenshotFromS3(slide.screenshotKey, p);
 }
 
 async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string, config: ModuleVideoConfig): Promise<string> {
   const audioPath = await fetchTTS(slide.narrationEn, tmpDir, `audio_${index}`)
     ?? await silentAudio(slide.durationHint, tmpDir, `audio_${index}`);
 
-  const screenshotPath = resolveScreenshotPath(slide);
+  const screenshotPath = await resolveScreenshotPath(slide);
   if (screenshotPath && slide.screenshotLayout === "full") {
     return buildFullScreenshotSlide(slide, index, screenshotPath, audioPath, tmpDir);
   }

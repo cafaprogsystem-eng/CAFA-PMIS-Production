@@ -239,7 +239,7 @@ function gcsClientForProvider(): Storage {
 // ─── S3 client ────────────────────────────────────────────────────────────────
 
 let _s3: S3Client | null = null;
-function s3Client(): S3Client {
+export function s3Client(): S3Client {
   if (!_s3) {
     const endpoint = process.env.S3_ENDPOINT_URL;
     _s3 = new S3Client({
@@ -251,7 +251,7 @@ function s3Client(): S3Client {
   return _s3;
 }
 
-function s3Bucket(): string {
+export function s3Bucket(): string {
   const b = process.env.S3_BUCKET;
   if (!b) throw new Error("S3_BUCKET is required when STORAGE_PROVIDER=s3");
   return b;

@@ -184,8 +184,8 @@ export const LOGIN_MODULE_SCRIPT: FullSlide[] = [
   {
     type: "outro",
     titleEn: "Login & Email Verification — Complete",
-    pointsEn: ["You know how to sign in, read login errors, and manage sessions", "You know how email verification and invited accounts work", "For support: pmis-support@cafa.org", "CAFA Development Organization"],
-    narrationEn: "You've now covered signing in, reading login errors correctly, session duration, email verification, and setting up an invited account. For technical support, please reach out at pmis-support@cafa.org. Thank you for watching.",
+    pointsEn: ["You know how to sign in, read login errors, and manage sessions", "You know how email verification and invited accounts work", "For support: pmis-support@cafa.systems", "CAFA Development Organization"],
+    narrationEn: "You've now covered signing in, reading login errors correctly, session duration, email verification, and setting up an invited account. For technical support, please reach out at pmis-support@cafa.systems. Thank you for watching.",
     durationHint: 8,
   },
 ];

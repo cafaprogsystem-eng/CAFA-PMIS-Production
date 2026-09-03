@@ -33,9 +33,17 @@ set -Eeuo pipefail
 STACK_NAME="cafa-pmis-staging"
 SEED_CONTAINER_NAME="cafa-pmis-migration"
 
+# JSON-string-encodes one value (quotes included in the output) so a
+# password containing a literal quote, backslash, or newline can't break the
+# --overrides payload below — plain "\"...\"" interpolation can't do this
+# safely.
+json_string() {
+  node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$1"
+}
+
 ENV_OVERRIDES="{ \"name\": \"NODE_ENV\", \"value\": \"staging\" }"
 if [[ -n "${SEED_DEMO_PASSWORD:-}" ]]; then
-  ENV_OVERRIDES="${ENV_OVERRIDES}, { \"name\": \"SEED_DEMO_PASSWORD\", \"value\": \"${SEED_DEMO_PASSWORD}\" }"
+  ENV_OVERRIDES="${ENV_OVERRIDES}, { \"name\": \"SEED_DEMO_PASSWORD\", \"value\": $(json_string "${SEED_DEMO_PASSWORD}") }"
   echo "Using the SEED_DEMO_PASSWORD you set — it will not be printed anywhere by this script."
 fi
 

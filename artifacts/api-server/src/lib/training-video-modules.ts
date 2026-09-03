@@ -25,6 +25,7 @@ export const TRAINING_VIDEO_MODULES: Record<string, ModuleRegistryEntry> = {
     videoTitle: LOGIN_VIDEO_TITLE,
     introHeading: "Login & Email Verification",
     introSubtitle: "Module Deep-Dive Training Guide",
+    outroBigText: "Module Complete",
     slides: LOGIN_MODULE_SCRIPT,
     description: "Deep dive into signing in, login errors and account lockout, session duration, email verification, and invited-account setup.",
   },
