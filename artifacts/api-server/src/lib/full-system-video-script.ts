@@ -28,21 +28,24 @@ export type FullSlide = {
   // screens like Dashboard or Projects that don't fit a narrow card).
   screenshotKey?: string;
   screenshotLayout?: "card" | "full";
-  // Draws a ~2s dim-and-glow highlight around one region of a "full" real
-  // screenshot while its narration discusses that specific element —
-  // coordinates are hand-picked pixels within the 1280x720 frame (no DOM
-  // instrumentation exists yet on the product pages to derive these
-  // automatically). Only meaningful on a "full" screenshotLayout slide.
+  // A "full" real screenshot pans and zooms (Ken Burns style) from the full
+  // frame into a framing centered on this region over its first ~1.8s, then
+  // holds there for the rest of the slide — so the picture actually moves
+  // toward whatever the narration is currently discussing instead of
+  // sitting frozen for the whole slide. Coordinates are hand-picked pixels
+  // within the original 1280x720 frame (no DOM instrumentation exists yet
+  // on the product pages to derive these automatically). Only meaningful on
+  // a "full" screenshotLayout slide.
   highlightRegion?: { x: number; y: number; w: number; h: number };
   // Tell → Show → Do: animates a cursor from one point to another and plays
   // a brief click pulse at the destination, for slides whose narration
   // describes clicking something ("Click any card to…") — so the video
-  // shows the action instead of only describing it. Same coordinate space
-  // as highlightRegion; keep clickAtSec safely after any highlightRegion's
-  // own ~0.5-2.5s window on the same slide so the two never overlap. zoom
-  // adds a light zoom-in pulse on the frame at the click moment. Only
-  // meaningful on a "full" screenshotLayout slide.
-  cursorAction?: { fromX: number; fromY: number; toX: number; toY: number; clickAtSec: number; zoom?: boolean };
+  // shows the action instead of only describing it. Pick coordinates in
+  // terms of what's actually on screen at clickAtSec — if the slide also
+  // has a highlightRegion, that means the already-settled zoomed-in framing
+  // (schedule clickAtSec safely after ~1.8s), not the original full frame.
+  // Only meaningful on a "full" screenshotLayout slide.
+  cursorAction?: { fromX: number; fromY: number; toX: number; toY: number; clickAtSec: number };
 };
 
 // Mockup panel occupies x: 730..1250, y: 90..640 (right 40% of frame)

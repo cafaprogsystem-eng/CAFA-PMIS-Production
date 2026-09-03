@@ -32,13 +32,15 @@ export const DASHBOARD_MODULE_SCRIPT: FullSlide[] = [
     durationHint: 10,
     screenshotKey: "dashboard",
     screenshotLayout: "full",
-    // Pilot for the highlight/cursor feature (approved before rollout to the
+    // Pilot for the pan-zoom/cursor feature (approved before rollout to the
     // other 11 modules) — coordinates are a hand-eyeballed guess at the KPI
     // row's position, not derived from the real captured screenshot (no DOM
     // instrumentation exists yet); expect to nudge these once the actual
-    // render is reviewed.
+    // render is reviewed. cursorAction's coordinates are in terms of the
+    // already-zoomed-in framing (clickAtSec is safely after the pan settles
+    // at 1.8s), not the original full frame.
     highlightRegion: { x: 270, y: 130, w: 940, h: 170 },
-    cursorAction: { fromX: 100, fromY: 650, toX: 390, toY: 195, clickAtSec: 3.2, zoom: true },
+    cursorAction: { fromX: 100, fromY: 650, toX: 390, toY: 195, clickAtSec: 3.2 },
   },
   {
     type: "content",
@@ -66,6 +68,7 @@ export const DASHBOARD_MODULE_SCRIPT: FullSlide[] = [
     durationHint: 10,
     screenshotKey: "dashboard",
     screenshotLayout: "full",
+    highlightRegion: { x: 200, y: 130, w: 1000, h: 350 },
   },
   {
     type: "content",
@@ -76,6 +79,7 @@ export const DASHBOARD_MODULE_SCRIPT: FullSlide[] = [
     durationHint: 10,
     screenshotKey: "dashboard",
     screenshotLayout: "full",
+    highlightRegion: { x: 250, y: 320, w: 780, h: 280 },
   },
 
   {
@@ -95,6 +99,7 @@ export const DASHBOARD_MODULE_SCRIPT: FullSlide[] = [
     durationHint: 10,
     screenshotKey: "dashboard",
     screenshotLayout: "full",
+    highlightRegion: { x: 150, y: 340, w: 950, h: 300 },
   },
 
   {

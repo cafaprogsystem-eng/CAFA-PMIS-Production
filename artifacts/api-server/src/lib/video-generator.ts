@@ -106,15 +106,17 @@ async function getDuration(filePath: string): Promise<number> {
 
 // Fade-in + small left-to-right slide for a bullet line, staggered by
 // BULLET_STAGGER_SEC per index — matches the agreed design's per-line
-// cascade instead of every bullet appearing at frame 0.
+// cascade instead of every bullet appearing at frame 0. Returns the raw
+// (un-escaped) expressions — escExpr() is applied once, at the point each
+// gets embedded into a filter string (see bulletFilters()), so a caller can
+// still wrap the raw alpha expression in another if(...) first (a
+// highlight band's own hide-after-readWindow cutoff) without double-escaping.
 function bulletStagger(index: number, baseX: number): { alpha: string; x: string } {
   const delay = index * BULLET_STAGGER_SEC;
   const rampEnd = delay + 0.3;
-  // Plain, readable expressions first — escExpr() does the one-pass comma
-  // escaping needed to embed them safely inside the outer filter chain.
   const alphaExpr = `if(lt(t,${delay}),0,if(lt(t,${rampEnd}),(t-${delay})/0.3,1))`;
   const xExpr = `${baseX}+if(lt(t,${delay}),20,if(lt(t,${rampEnd}),20*(1-(t-${delay})/0.3),0))`;
-  return { alpha: escExpr(alphaExpr), x: escExpr(xExpr) };
+  return { alpha: alphaExpr, x: xExpr };
 }
 
 // Safe max character count for a truncated bullet line, given the actual
@@ -131,15 +133,22 @@ function maxBulletChars(availableWidthPx: number, fontSize: number): number {
 // One bullet line as two filters — a small cyan ring-mark and the white body
 // text — instead of a plain "• text" in one color, matching the agreed
 // design's colored bullet marker. Both share the same stagger timing so they
-// fade/slide in together.
-function bulletFilters(text: string, baseX: number, y: number, fontSize: number, index: number): string[] {
+// fade/slide in together. hideAfterSec, when given, wraps the (still raw)
+// alpha expression in one more if(...) so the bullet forces back to
+// invisible from that time on — folded into the SAME alpha channel that
+// already, provenly, controls this text's visibility, rather than a second,
+// independent gating mechanism (e.g. drawtext's own `enable` timeline
+// option) layered on top of it.
+function bulletFilters(text: string, baseX: number, y: number, fontSize: number, index: number, hideAfterSec?: number): string[] {
   const textX = baseX + Math.round(fontSize * 0.85);
   const mark = bulletStagger(index, baseX);
   const body = bulletStagger(index, textX);
   const markSize = Math.max(10, Math.round(fontSize * 0.42));
+  const finalAlpha = (raw: string) =>
+    escExpr(hideAfterSec !== undefined ? `if(lt(t,${hideAfterSec}),${raw},0)` : raw);
   return [
-    `drawtext=text='●':fontfile='${FONT_EN}':x='${mark.x}':y=${y + Math.round(fontSize * 0.28)}:fontcolor=${C_CYAN}:fontsize=${markSize}:alpha='${mark.alpha}'`,
-    `drawtext=text='${esc(text)}':fontfile='${FONT_EN}':x='${body.x}':y=${y}:fontcolor=white:fontsize=${fontSize}:alpha='${body.alpha}'`,
+    `drawtext=text='●':fontfile='${FONT_EN}':x='${escExpr(mark.x)}':y=${y + Math.round(fontSize * 0.28)}:fontcolor=${C_CYAN}:fontsize=${markSize}:alpha='${finalAlpha(mark.alpha)}'`,
+    `drawtext=text='${esc(text)}':fontfile='${FONT_EN}':x='${escExpr(body.x)}':y=${y}:fontcolor=white:fontsize=${fontSize}:alpha='${finalAlpha(body.alpha)}'`,
   ];
 }
 
@@ -495,17 +504,33 @@ async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string
   return out;
 }
 
-// Convenience wrapper for a filter's "enable" timeline option — every
-// dim/highlight/cursor filter below is gated to a specific time window, and
-// between()'s own comma-separated args need escExpr() same as any other
-// expression embedded inside a filter-chain (or filter_complex) option.
+// Convenience wrapper for a filter's "enable" timeline option — the cursor
+// filters below are gated to a specific time window, and between()'s own
+// comma-separated args need escExpr() same as any other expression embedded
+// inside a filter-chain option.
 function enableBetween(startSec: number, endSec: number): string {
   return `enable='${escExpr(`between(t,${startSec},${endSec})`)}'`;
 }
 
+// Ken Burns pan-and-zoom timing shared by every highlightRegion slide — eases
+// from the full frame into a framing centered on the region between these
+// two timestamps, then holds. A fixed shared window (rather than a per-slide
+// setting) keeps every slide's camera move feeling consistent.
+const PAN_START = 0.4;
+const PAN_END = 1.8;
+const PAN_ZOOM = 1.35;
+
 // "full" layout: the real screenshot fills the frame (wide, full-page screens
 // like Dashboard or Projects don't fit the narrow card region above); title
-// and bullets sit in a translucent lower-third band over the screenshot.
+// and bullets sit in a translucent lower-third band over the screenshot. A
+// highlightRegion, when set, drives a real Ken Burns pan-and-zoom of the
+// screenshot itself toward that region — a static screenshot for the whole
+// slide regardless of what the narration is currently discussing was the
+// loudest complaint in review, and a purely decorative dim/highlight box
+// around a still-frozen frame didn't actually address it, only a moving
+// camera does. Confirmed empirically (a local ffmpeg-full render, both the
+// scale/crop math in isolation and the full filter chain end to end) before
+// shipping this.
 async function buildFullScreenshotSlide(
   slide: FullSlide,
   index: number,
@@ -517,21 +542,29 @@ async function buildFullScreenshotSlide(
   const secLabel = slide.sectionEn ? esc(slide.sectionEn.toUpperCase()) : "";
   const bandTop = 500;
 
-  // ---- Base screenshot stage — scale/crop to frame, with an optional light
-  // zoom-in pulse timed to a cursor click (cursorAction.zoom). scale's w=/h=
-  // accept per-frame expressions with eval=frame (confirmed empirically with
-  // a local ffmpeg-full render before shipping this), so the "zoom" is
-  // really the frame briefly scaling up and re-centering around its own
-  // middle, not a crop of any specific screenshot region.
   const cursorAction = slide.cursorAction;
-  const baseScale = cursorAction?.zoom
-    ? (() => {
-        const zoomPulse = (dim: number) =>
-          escExpr(`${dim}*(1+0.045*max(0,1-abs(t-${cursorAction.clickAtSec})/0.35))`);
-        return `scale=w='${zoomPulse(1280)}':h='${zoomPulse(720)}':eval=frame:force_original_aspect_ratio=increase,` +
-          `crop=w=1280:h=720:x='(in_w-1280)/2':y='(in_h-720)/2'`;
-      })()
-    : "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720";
+  let baseScale: string;
+  if (slide.highlightRegion) {
+    const hr = slide.highlightRegion;
+    const centerX = hr.x + hr.w / 2;
+    const centerY = hr.y + hr.h / 2;
+    // The crop position this settles into, at full zoom, so the region ends
+    // up centered in frame — computed once here in plain JS, not as a
+    // runtime ffmpeg expression.
+    const finalCropX = (centerX * PAN_ZOOM - 640).toFixed(2);
+    const finalCropY = (centerY * PAN_ZOOM - 360).toFixed(2);
+    const panSpan = (PAN_END - PAN_START).toFixed(3);
+    // 0 before the pan starts, ramps to 1 by PAN_END, then holds at 1 — the
+    // same ramp shape bulletStagger already uses for its own fade-in.
+    const progress = `if(lt(t,${PAN_START}),0,if(lt(t,${PAN_END}),(t-${PAN_START})/${panSpan},1))`;
+    const scaleDim = (px: number) => escExpr(`${px}*(1+${(PAN_ZOOM - 1).toFixed(3)}*(${progress}))`);
+    const cropPos = (finalPx: string) => escExpr(`(${progress})*${finalPx}`);
+    baseScale =
+      `scale=w='${scaleDim(1280)}':h='${scaleDim(720)}':eval=frame:force_original_aspect_ratio=increase,` +
+      `crop=w=1280:h=720:x='${cropPos(finalCropX)}':y='${cropPos(finalCropY)}'`;
+  } else {
+    baseScale = "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720";
+  }
 
   // ---- Section title / bullet band. Was a static quarter-frame band for
   // the whole slide (the single biggest review complaint — it permanently
@@ -570,18 +603,20 @@ async function buildFullScreenshotSlide(
     const y = startY + i * lineH;
     const truncated = points[i].length > bulletMax ? points[i].slice(0, bulletMax) + "…" : points[i];
     // Bullets only ever show during the read window — the band above them
-    // physically collapses away afterward, so leaving them enabled past
-    // that would float bullet text over the bare screenshot.
-    for (const f of bulletFilters(truncated, 28, y, bulletFontSize, i)) {
-      chrome.push(`${f}:${enableBetween(0, readWindow)}`);
+    // physically collapses away afterward, so leaving them visible past
+    // that would float bullet text over the bare screenshot. Folded into
+    // the bullet's own alpha channel (see bulletFilters' hideAfterSec)
+    // rather than a second, independent gating mechanism layered on top.
+    for (const f of bulletFilters(truncated, 28, y, bulletFontSize, i, readWindow)) {
+      chrome.push(f);
     }
   }
 
   // ---- Tell → Show → Do: an animated cursor moving to, and "clicking",
   // whatever the narration describes acting on — instead of only describing
-  // the action in text. Shares its target coordinates with highlightRegion
-  // below when both are set on the same slide, so the earlier glow and the
-  // later click land in the same place.
+  // the action in text. If the slide also pans/zooms via highlightRegion,
+  // schedule clickAtSec safely after PAN_END so the cursor's coordinates
+  // are relative to the settled, zoomed-in framing.
   if (cursorAction) {
     const { fromX, fromY, toX, toY, clickAtSec } = cursorAction;
     const moveStart = Math.max(0, clickAtSec - 0.7);
@@ -608,31 +643,6 @@ async function buildFullScreenshotSlide(
   }
 
   chrome.push("fade=t=in:st=0:d=0.3");
-
-  if (slide.highlightRegion) {
-    // Dim everything between the header and the band, then "cut out" (by
-    // overlaying an un-dimmed crop of the same region back on top) and
-    // outline just the highlighted element — confirmed empirically with a
-    // local ffmpeg-full render before shipping this. Needs filter_complex
-    // (labeled pads for the split/crop/overlay), unlike the plain -vf chain
-    // used when no slide has a highlightRegion yet.
-    const hr = slide.highlightRegion;
-    const dimStart = 0.5, dimEnd = 2.5;
-    const filterComplex =
-      `[0:v]${baseScale},split=2[shotMain][shotClean];` +
-      `[shotClean]crop=${hr.w}:${hr.h}:${hr.x}:${hr.y}[cleanRegion];` +
-      `[shotMain]drawbox=x=0:y=56:w=iw:h=${bandTop - 56}:color=black@0.55:t=fill:${enableBetween(dimStart, dimEnd)}[dimmed];` +
-      `[dimmed][cleanRegion]overlay=x=${hr.x}:y=${hr.y}:${enableBetween(dimStart, dimEnd)}[withregion];` +
-      `[withregion]drawbox=x=${hr.x}:y=${hr.y}:w=${hr.w}:h=${hr.h}:color=${C_CYAN}@0.3:t=8:${enableBetween(dimStart, dimEnd)}[glow];` +
-      `[glow]drawbox=x=${hr.x}:y=${hr.y}:w=${hr.w}:h=${hr.h}:color=${C_CYAN}:t=3:${enableBetween(dimStart, dimEnd)}[chromed];` +
-      `[chromed]${chrome.join(",")}[outv]`;
-    await exec(
-      `ffmpeg -y -loop 1 -framerate 24 -i "${screenshotPath}" -i "${audioPath}" ` +
-      `-filter_complex "${filterComplex}" -map "[outv]" -map 1:a ` +
-      `-c:v libx264 -preset ultrafast -crf 26 -c:a aac -b:a 96k -shortest "${out}"`,
-    );
-    return out;
-  }
 
   const vf = [baseScale, ...chrome].join(",");
   await exec(
