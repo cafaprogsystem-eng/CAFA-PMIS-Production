@@ -32,11 +32,19 @@ const TMP_BASE  = "/tmp/cafa-videos";
 // video-assets/bg-graded.png is the pre-rendered graded background using
 // these same three colors (generated once with sharp; sharp is NOT a
 // runtime dependency of this file or the production image).
-const BG_ASSET    = path.resolve(__dirname, "video-assets/bg-graded.png");
-const C_NAVY      = "0x2B2F90";
-const C_INK       = "0x10133A";
-const C_CYAN      = "0x00B0EB";
-const C_CYAN_SOFT = "0xBFEAF8";
+const BG_ASSET     = path.resolve(__dirname, "video-assets/bg-graded.png");
+const C_NAVY       = "0x2B2F90";
+const C_NAVY_LIGHT = "0x455E86"; // the wordmark's own slate-blue — secondary chrome (badges, dividers)
+const C_INK        = "0x10133A";
+const C_CYAN       = "0x00B0EB";
+const C_CYAN_LIGHT = "0x5CD6F7"; // foreground accent text on dark — wordmark, badge numbers
+const C_CYAN_SOFT  = "0xBFEAF8"; // pale tint for pill/chip backgrounds under dark navy text
+const C_TEXT_SOFT  = "0xAEC0DE"; // muted labels (tag lines, timestamps) — never pure white
+// Karla — the design proposal's body/narration face — is used for captions
+// by family name only ("Karla" in generateASSSubtitles's ASS Style line):
+// libass resolves it via fontconfig, the same way DejaVu is found for
+// drawtext without an explicit fontsdir. See the Dockerfile for the actual
+// font file install + fc-cache.
 
 // Two clips crossfade into each other over this many seconds instead of a
 // hard cut (replaces the old concat-demuxer hard cuts).
@@ -99,14 +107,40 @@ async function getDuration(filePath: string): Promise<number> {
 // Fade-in + small left-to-right slide for a bullet line, staggered by
 // BULLET_STAGGER_SEC per index — matches the agreed design's per-line
 // cascade instead of every bullet appearing at frame 0.
-function bulletStagger(index: number): { alpha: string; x: string } {
+function bulletStagger(index: number, baseX: number): { alpha: string; x: string } {
   const delay = index * BULLET_STAGGER_SEC;
   const rampEnd = delay + 0.3;
   // Plain, readable expressions first — escExpr() does the one-pass comma
   // escaping needed to embed them safely inside the outer filter chain.
   const alphaExpr = `if(lt(t,${delay}),0,if(lt(t,${rampEnd}),(t-${delay})/0.3,1))`;
-  const xExpr = `28+if(lt(t,${delay}),20,if(lt(t,${rampEnd}),20*(1-(t-${delay})/0.3),0))`;
+  const xExpr = `${baseX}+if(lt(t,${delay}),20,if(lt(t,${rampEnd}),20*(1-(t-${delay})/0.3),0))`;
   return { alpha: escExpr(alphaExpr), x: escExpr(xExpr) };
+}
+
+// Safe max character count for a truncated bullet line, given the actual
+// pixel width available to its right — a screenshot/mockup panel starts at a
+// fixed x, or (with no panel) the bullet has the whole frame width. The
+// per-character estimate is deliberately generous (real DejaVu Sans Bold
+// glyphs average a bit narrower) so truncation always leaves real margin
+// instead of a string that just barely fits.
+function maxBulletChars(availableWidthPx: number, fontSize: number): number {
+  const avgCharWidth = fontSize * 0.62;
+  return Math.max(20, Math.floor(availableWidthPx / avgCharWidth));
+}
+
+// One bullet line as two filters — a small cyan ring-mark and the white body
+// text — instead of a plain "• text" in one color, matching the agreed
+// design's colored bullet marker. Both share the same stagger timing so they
+// fade/slide in together.
+function bulletFilters(text: string, baseX: number, y: number, fontSize: number, index: number): string[] {
+  const textX = baseX + Math.round(fontSize * 0.85);
+  const mark = bulletStagger(index, baseX);
+  const body = bulletStagger(index, textX);
+  const markSize = Math.max(10, Math.round(fontSize * 0.42));
+  return [
+    `drawtext=text='●':fontfile='${FONT_EN}':x='${mark.x}':y=${y + Math.round(fontSize * 0.28)}:fontcolor=${C_CYAN}:fontsize=${markSize}:alpha='${mark.alpha}'`,
+    `drawtext=text='${esc(text)}':fontfile='${FONT_EN}':x='${body.x}':y=${y}:fontcolor=white:fontsize=${fontSize}:alpha='${body.alpha}'`,
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -163,34 +197,37 @@ export function ttsSafeText(text: string): string {
   return text.replace(/\bCAFA\b/g, "Kafa");
 }
 
-async function fetchTTS(text: string, tmpDir: string, name: string): Promise<string | null> {
+// Throws (rather than silently falling back to silent audio) on any TTS
+// failure — a video with no NAT-gateway egress once "succeeded" with every
+// slide silently narration-less, and nothing in its status ever said so. A
+// clip missing its narration now fails the whole generation loudly instead,
+// through the same try/catch generateModuleVideo() already uses for every
+// other failure (status='failed', error_message set).
+async function fetchTTS(text: string, tmpDir: string, name: string): Promise<string> {
   const chunks = chunkText(ttsSafeText(text));
   const chunkFiles: string[] = [];
   for (let i = 0; i < chunks.length; i++) {
     const enc = encodeURIComponent(chunks[i]);
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${enc}&tl=en&client=tw-ob&ttsspeed=0.82`;
+    let buf: Buffer;
     try {
-      const buf = await fetchBuffer(url, 12000);
-      if (buf.length < 100) throw new Error("Empty TTS response");
-      const cp = path.join(tmpDir, `${name}_chunk_${i}.mp3`);
-      await fs.writeFile(cp, buf);
-      chunkFiles.push(cp);
-      if (chunks.length > 1) await new Promise(r => setTimeout(r, 380));
-    } catch { return null; }
+      buf = await fetchBuffer(url, 12000);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`TTS request failed for "${name}" (chunk ${i + 1}/${chunks.length}): ${reason}`);
+    }
+    if (buf.length < 100) throw new Error(`TTS returned an empty response for "${name}" (chunk ${i + 1}/${chunks.length})`);
+    const cp = path.join(tmpDir, `${name}_chunk_${i}.mp3`);
+    await fs.writeFile(cp, buf);
+    chunkFiles.push(cp);
+    if (chunks.length > 1) await new Promise(r => setTimeout(r, 380));
   }
-  if (!chunkFiles.length) return null;
   const outPath = path.join(tmpDir, `${name}.mp3`);
   if (chunkFiles.length === 1) { await fs.rename(chunkFiles[0], outPath); return outPath; }
   const listPath = path.join(tmpDir, `${name}_list.txt`);
   await fs.writeFile(listPath, chunkFiles.map(f => `file '${f}'`).join("\n"));
   await exec(`ffmpeg -y -f concat -safe 0 -i "${listPath}" -c copy "${outPath}"`);
   return outPath;
-}
-
-async function silentAudio(durationSec: number, tmpDir: string, name: string): Promise<string> {
-  const p = path.join(tmpDir, `${name}.mp3`);
-  await exec(`ffmpeg -y -f lavfi -i "anullsrc=channel_layout=mono:sample_rate=44100" -t ${durationSec} -q:a 9 -acodec libmp3lame "${p}"`);
-  return p;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,18 +300,18 @@ export type ModuleVideoConfig = {
 
 async function buildIntroSlide(config: ModuleVideoConfig, tmpDir: string): Promise<string> {
   const out = path.join(tmpDir, "slide_000.mp4");
-  const audioPath = await fetchTTS(
-    config.slides[0].narrationEn,
-    tmpDir, "audio_intro",
-  ) ?? await silentAudio(8, tmpDir, "audio_intro");
+  const audioPath = await fetchTTS(config.slides[0].narrationEn, tmpDir, "audio_intro");
 
   const vf = [
-    `drawbox=x=0:y=ih/2-4:w=iw:h=8:color=${C_CYAN}:t=fill`,
-    `drawtext=text='CAFA':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2-130:fontcolor=${C_CYAN}:fontsize=64`,
+    // Short two-tone rule under the wordmark (matches the design proposal's
+    // .intro-rule — a small centered line, not a full-width bar).
+    `drawbox=x=(iw-90)/2:y=ih/2-95:w=45:h=3:color=${C_CYAN}:t=fill`,
+    `drawbox=x=(iw-90)/2+45:y=ih/2-95:w=45:h=3:color=${C_NAVY_LIGHT}:t=fill`,
+    `drawtext=text='CAFA':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2-130:fontcolor=${C_CYAN_LIGHT}:fontsize=64`,
     `drawtext=text='${esc(config.introHeading)}':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2-50:fontcolor=white:fontsize=32`,
     `drawtext=text='${esc(config.introSubtitle)}':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+10:fontcolor=white:fontsize=24`,
-    `drawtext=text='English Voice-Over  |  ${esc(config.videoTitle)}':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+55:fontcolor=${C_CYAN}:fontsize=18`,
-    `drawtext=text='CAFA Development Organization':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h-45:fontcolor=white@0.5:fontsize=15`,
+    `drawtext=text='English Voice-Over  |  ${esc(config.videoTitle)}':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+55:fontcolor=${C_TEXT_SOFT}:fontsize=18`,
+    `drawtext=text='CAFA Development Organization':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h-45:fontcolor=${C_TEXT_SOFT}@0.7:fontsize=15`,
     "fade=t=in:st=0:d=0.5",
   ].join(",");
 
@@ -285,15 +322,14 @@ async function buildIntroSlide(config: ModuleVideoConfig, tmpDir: string): Promi
 async function buildOutroSlide(config: ModuleVideoConfig, tmpDir: string): Promise<string> {
   const out = path.join(tmpDir, "slide_outro.mp4");
   const lastSlide = config.slides[config.slides.length - 1];
-  const audioPath = await fetchTTS(lastSlide.narrationEn, tmpDir, "audio_outro")
-    ?? await silentAudio(8, tmpDir, "audio_outro");
+  const audioPath = await fetchTTS(lastSlide.narrationEn, tmpDir, "audio_outro");
 
   const vf = [
     `drawbox=x=0:y=ih/2-3:w=iw:h=6:color=${C_CYAN}:t=fill`,
     `drawtext=text='${esc(config.outroBigText ?? "Training Complete")}':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2-80:fontcolor=${C_CYAN}:fontsize=48`,
     `drawtext=text='${esc(config.outroHeading ?? config.introHeading)}':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+10:fontcolor=white:fontsize=28`,
     `drawtext=text='Support\\: pmis-support@cafa.systems  |  Manual\\: /manual':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h/2+55:fontcolor=white:fontsize=18`,
-    `drawtext=text='CAFA Development Organization':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h-40:fontcolor=${C_CYAN}@0.8:fontsize=16`,
+    `drawtext=text='CAFA Development Organization':fontfile='${FONT_EN}':x=(w-text_w)/2:y=h-40:fontcolor=${C_TEXT_SOFT}@0.8:fontsize=16`,
     "fade=t=in:st=0:d=0.5",
   ].join(",");
 
@@ -303,15 +339,31 @@ async function buildOutroSlide(config: ModuleVideoConfig, tmpDir: string): Promi
 
 async function buildSectionDivider(slide: FullSlide, index: number, tmpDir: string): Promise<string> {
   const out = path.join(tmpDir, `slide_${String(index).padStart(3, "0")}.mp4`);
-  const audioPath = await fetchTTS(slide.narrationEn, tmpDir, `audio_${index}`)
-    ?? await silentAudio(3, tmpDir, `audio_${index}`);
+  const audioPath = await fetchTTS(slide.narrationEn, tmpDir, `audio_${index}`);
 
   const sectionNum = slide.sectionNum?.toString().padStart(2, "0") ?? "00";
+  // A ringed badge (outer cyan, inner slate-blue) for the section number,
+  // instead of a flat "Section NN" text line — matches the design
+  // proposal's divider badge. drawbox only draws rectangles (no circle
+  // primitive), so this is a square ring rather than a true circle.
+  const badgeSize = 100;
+  const badgeInset = 3;
+  // Two different expressions for the same y — confirmed by rendering this
+  // locally: drawbox's own x=/y= only understand "iw"/"ih" (its w=/h=
+  // options are themselves this box's own width/height, so using "h" there
+  // means the BOX's height, not the frame's — an easy, silent mistake, not
+  // a parse error); drawtext's x=/y= are the reverse, only understanding
+  // "w"/"h" (the frame's), not "iw"/"ih" at all ("Undefined constant").
+  const badgeYBox = "(ih-" + badgeSize + ")/2";
+  const badgeYText = "(h-" + badgeSize + ")/2";
   const vf = [
     `drawbox=x=0:y=0:w=iw:h=8:color=${C_CYAN}:t=fill`,
     `drawbox=x=0:y=ih-8:w=iw:h=8:color=${C_CYAN}:t=fill`,
-    `drawtext=text='Section ${esc(sectionNum)}':fontfile='${FONT_EN}':x=80:y=(h-text_h)/2-40:fontcolor=${C_CYAN}:fontsize=24`,
-    `drawtext=text='${esc(slide.sectionEn ?? "")}':fontfile='${FONT_EN}':x=80:y=(h-text_h)/2:fontcolor=white:fontsize=42`,
+    `drawbox=x=80:y=${badgeYBox}:w=${badgeSize}:h=${badgeSize}:color=${C_CYAN}:t=fill`,
+    `drawbox=x=${80 + badgeInset}:y=${badgeYBox}+${badgeInset}:w=${badgeSize - badgeInset * 2}:h=${badgeSize - badgeInset * 2}:color=${C_NAVY_LIGHT}:t=fill`,
+    `drawtext=text='${esc(sectionNum)}':fontfile='${FONT_EN}':x=80+(${badgeSize}-text_w)/2:y=${badgeYText}+(${badgeSize}-text_h)/2:fontcolor=${C_CYAN_LIGHT}:fontsize=44`,
+    `drawtext=text='SECTION ${esc(sectionNum)}':fontfile='${FONT_MONO}':x=${80 + badgeSize + 40}:y=${badgeYText}+18:fontcolor=${C_CYAN}:fontsize=16`,
+    `drawtext=text='${esc(slide.sectionEn ?? "")}':fontfile='${FONT_EN}':x=${80 + badgeSize + 40}:y=${badgeYText}+48:fontcolor=white:fontsize=42`,
     "fade=t=in:st=0:d=0.3",
     "fade=t=out:st=2.7:d=0.3",
   ].join(",");
@@ -355,8 +407,7 @@ export async function resolveScreenshotPath(slide: FullSlide): Promise<string | 
 }
 
 async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string, config: ModuleVideoConfig): Promise<string> {
-  const audioPath = await fetchTTS(slide.narrationEn, tmpDir, `audio_${index}`)
-    ?? await silentAudio(slide.durationHint, tmpDir, `audio_${index}`);
+  const audioPath = await fetchTTS(slide.narrationEn, tmpDir, `audio_${index}`);
 
   const screenshotPath = await resolveScreenshotPath(slide);
   if (screenshotPath && slide.screenshotLayout === "full") {
@@ -381,8 +432,8 @@ async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string
   if (slide.sectionNum) {
     const sn = `${slide.sectionNum}`;
     const ringX = 44 + chipW + 12;
-    filters.push(`drawbox=x=${ringX}:y=40:w=40:h=40:color=${C_NAVY}@0.55:t=fill`);
-    filters.push(`drawtext=text='${sn}':fontfile='${FONT_EN}':x=${ringX + 13}:y=50:fontcolor=${C_CYAN}:fontsize=22`);
+    filters.push(`drawbox=x=${ringX}:y=40:w=40:h=40:color=${C_NAVY_LIGHT}@0.7:t=fill`);
+    filters.push(`drawtext=text='${sn}':fontfile='${FONT_EN}':x=${ringX + 13}:y=50:fontcolor=${C_CYAN_LIGHT}:fontsize=22`);
   }
 
   // Dim CAFA PMIS brand mark, top-right
@@ -403,15 +454,19 @@ async function buildContentSlide(slide: FullSlide, index: number, tmpDir: string
   // Slide title
   filters.push(`drawtext=text='${esc(slide.titleEn)}':fontfile='${FONT_EN}':x=28:y=112:fontcolor=${C_CYAN}:fontsize=30`);
 
-  // Bullet points — staggered fade + slide-in, one after another
+  // Bullet points — staggered fade + slide-in, one after another. Truncation
+  // width is panel-aware: a screenshot/mockup panel starts at x=718, but with
+  // neither, bullets have the full frame width to use.
   const startY = 165;
   const lineH = 52;
+  const bulletFontSize = 22;
+  const bulletRightEdge = hasPanel ? 706 : 1252;
+  const bulletMax = maxBulletChars(bulletRightEdge - 28, bulletFontSize);
   const points = slide.pointsEn.slice(0, 7);
   for (let i = 0; i < points.length; i++) {
     const y = startY + i * lineH;
-    const truncated = points[i].length > 55 ? points[i].slice(0, 55) + "…" : points[i];
-    const { alpha, x } = bulletStagger(i);
-    filters.push(`drawtext=text='• ${esc(truncated)}':fontfile='${FONT_EN}':x='${x}':y=${y}:fontcolor=white:fontsize=22:alpha='${alpha}'`);
+    const truncated = points[i].length > bulletMax ? points[i].slice(0, bulletMax) + "…" : points[i];
+    filters.push(...bulletFilters(truncated, 28, y, bulletFontSize, i));
   }
 
   // Bottom bar
@@ -465,12 +520,16 @@ async function buildFullScreenshotSlide(
 
   const startY = bandTop + 56;
   const lineH = 34;
+  const bulletFontSize = 18;
+  // The lower band spans the full frame width, but a single readable line is
+  // capped well below what would technically fit — long unbroken lines here
+  // would be a readability problem, not an overlap one.
+  const bulletMax = Math.min(maxBulletChars(1252 - 28, bulletFontSize), 85);
   const points = slide.pointsEn.slice(0, 4); // the lower-third band has less room than the old left column
   for (let i = 0; i < points.length; i++) {
     const y = startY + i * lineH;
-    const truncated = points[i].length > 70 ? points[i].slice(0, 70) + "…" : points[i];
-    const { alpha, x } = bulletStagger(i);
-    filters.push(`drawtext=text='• ${esc(truncated)}':fontfile='${FONT_EN}':x='${x}':y=${y}:fontcolor=white:fontsize=18:alpha='${alpha}'`);
+    const truncated = points[i].length > bulletMax ? points[i].slice(0, bulletMax) + "…" : points[i];
+    filters.push(...bulletFilters(truncated, 28, y, bulletFontSize, i));
   }
   filters.push("fade=t=in:st=0:d=0.3");
 
@@ -494,6 +553,16 @@ function toAssTime(secs: number): string {
   return `${h}:${String(Math.floor(m)).padStart(2, "0")}:${String(Math.floor(s)).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
 }
 
+// ASS color fields are &HAABBGGRR (alpha, blue, green, red — note the
+// reversed byte order vs. CSS). AA=00 is fully opaque, AA=FF fully
+// transparent. Converts one of this file's "0xRRGGBB" ffmpeg-style color
+// constants.
+function toAssColor(rgbHex: string, alphaHex = "00"): string {
+  const hex = rgbHex.replace(/^0x/, "").padStart(6, "0");
+  const r = hex.slice(0, 2), g = hex.slice(2, 4), b = hex.slice(4, 6);
+  return `&H${alphaHex}${b}${g}${r}`;
+}
+
 // `starts[i]` is when slide i's own content begins in the FINAL (already
 // crossfaded) timeline — see crossfadeConcat(), which shrinks the naive
 // sum-of-durations timeline by XFADE_SEC at every transition, so subtitles
@@ -504,7 +573,15 @@ async function generateASSSubtitles(
   totalDuration: number,
   outputPath: string,
 ): Promise<void> {
-  const fontName = path.basename(FONT_EN, ".ttf");
+  // Karla — the same body/narration face as the design proposal — with an
+  // opaque navy caption box (BorderStyle=3; empirically, OutlineColour is
+  // what actually paints the box, not BackColour, so both are set the same
+  // to be safe regardless of libass version) instead of the bare
+  // outline-on-transparent look. Bold, a touch of letter-spacing, and a
+  // taller MarginV (so the box clears the y=690 bottom credit bar on
+  // content slides) round it out.
+  const boxColor = toAssColor(C_INK);
+  const textColor = toAssColor("0xFFFFFF");
   const header = `[Script Info]
 Title: CAFA PMIS Training
 ScriptType: v4.00+
@@ -514,21 +591,32 @@ WrapStyle: 1
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: English,${fontName},28,&H00FFFFFF,&H000000FF,&H00000000,&HAA000000,0,0,0,0,100,100,0,0,1,3,1,2,20,20,20,1
+Style: English,Karla,32,${textColor},&H000000FF,${boxColor},${boxColor},-1,0,0,0,100,100,0.5,0,3,4,0,2,50,50,50,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 
   const dialogues: string[] = [];
   for (let i = 0; i < slides.length; i++) {
+    const slide = slides[i];
     const start = starts[i] ?? 0;
     const end = i + 1 < starts.length ? starts[i + 1] : totalDuration;
     const startStr = toAssTime(start);
     const endStr = toAssTime(Math.max(end - 0.2, start + 0.5));
 
-    if (slides[i].narrationEn && slides[i].type !== "section-header") {
-      const text = slides[i].narrationEn.replace(/\n/g, "\\N");
-      dialogues.push(`Dialogue: 0,${startStr},${endStr},English,,0,0,0,,{\\fad(300,300)}${text}`);
+    if (slide.narrationEn && slide.type !== "section-header") {
+      const text = slide.narrationEn.replace(/[{}]/g, "").replace(/\n/g, "\\N");
+      // A "full" screenshot slide already has its own translucent band and
+      // bullets occupying the bottom third of the frame (see
+      // buildFullScreenshotSlide) — the default bottom-center caption
+      // position would sit right on top of that, so those slides get an
+      // explicit top-of-frame override instead, clear of both that band and
+      // the slide's own top header strip (which ends at y=56).
+      const isFullScreenshot = slide.type === "content"
+        && slide.screenshotLayout === "full"
+        && !!(await resolveScreenshotPath(slide));
+      const posTag = isFullScreenshot ? "\\an8\\pos(640,80)" : "";
+      dialogues.push(`Dialogue: 0,${startStr},${endStr},English,,0,0,0,,{${posTag}\\fad(400,250)}${text}`);
     }
   }
 

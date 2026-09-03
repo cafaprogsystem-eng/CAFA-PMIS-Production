@@ -7,13 +7,13 @@ set -Eeuo pipefail
 # definition, subnets, and security group untouched, so this needs no
 # CloudFormation change and no rebuild.
 #
-# Chromium itself is installed fresh inside the task's own (ephemeral)
-# container filesystem at run time via `npx playwright install --with-deps`
-# — the production image deliberately never bakes it in permanently (it's
-# only needed for this rare, one-off operation). @playwright/test and sharp,
-# the two npm packages the capture script needs, are already present: both
-# are root-level "dependencies" (not devDependencies), so they survive the
-# image's own `pnpm install --prod`.
+# Chromium is baked into the production image at build time (see the
+# Dockerfile's `npx playwright install --with-deps chromium`) — the app's
+# private subnet has no NAT gateway, so a task here has no outbound internet
+# access at all; installing Chromium at task runtime (the original approach)
+# fails with "Network is unreachable". CodeBuild, which builds the image,
+# does have internet access, so baking it in there is the only place it can
+# happen.
 #
 # A one-off ECS task has no disk shared with the running app service, so
 # captured screenshots would vanish the moment this task stops — the
@@ -77,7 +77,7 @@ json_string() {
   node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$1"
 }
 
-CAPTURE_COMMAND="npx playwright install --with-deps chromium && node scripts/capture-training-screenshots.mjs ${TARGET_KEYS}"
+CAPTURE_COMMAND="node scripts/capture-training-screenshots.mjs ${TARGET_KEYS}"
 CAPTURE_COMMAND_JSON="$(json_string "${CAPTURE_COMMAND}")"
 STAGING_BASE_URL_JSON="$(json_string "${STAGING_BASE_URL_VALUE}")"
 STAGING_DEMO_EMAIL_JSON="$(json_string "${STAGING_DEMO_EMAIL}")"
@@ -116,7 +116,7 @@ if [[ -z "${CAPTURE_TASK_ARN}" || "${CAPTURE_TASK_ARN}" == "None" ]]; then
 fi
 
 echo "Capture task started: ${CAPTURE_TASK_ARN}"
-echo "Waiting for it to finish — this includes a fresh Chromium install, so it will take a few minutes longer than the seed task…"
+echo "Waiting for it to finish…"
 aws ecs wait tasks-stopped \
   --region "${CAFA_STAGING_APPROVED_REGION}" \
   --cluster "${CLUSTER_NAME}" \

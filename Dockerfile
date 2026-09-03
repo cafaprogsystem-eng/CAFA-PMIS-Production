@@ -64,12 +64,24 @@ FROM node:24-slim AS runner
 # DejaVuSansMono.ttf, the fontfile paths video-generator.ts's drawtext
 # filters use — node:24-slim ships neither by default.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg fonts-dejavu-core \
+ && apt-get install -y --no-install-recommends ca-certificates curl fontconfig ffmpeg fonts-dejavu-core \
  && mkdir -p /opt/aws-rds-ca \
  && curl --fail --silent --show-error --location \
       https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
       --output /opt/aws-rds-ca/global-bundle.pem \
  && rm -rf /var/lib/apt/lists/*
+
+# Karla — the same body/narration face as the approved training-video design
+# proposal, for burned-in captions (lib/video-generator.ts's
+# generateASSSubtitles) — fetched from the font's official Google Fonts
+# repository (verified reachable and a valid font file before adding this).
+# fc-cache registers it with fontconfig so libass finds it by family name
+# ("Karla") with no explicit fontsdir, the same way it already finds DejaVu.
+RUN mkdir -p /usr/share/fonts/truetype/karla \
+ && curl --fail --silent --show-error --location \
+      https://raw.githubusercontent.com/google/fonts/main/ofl/karla/Karla%5Bwght%5D.ttf \
+      --output /usr/share/fonts/truetype/karla/Karla-Regular.ttf \
+ && fc-cache -f
 
 ENV NODE_EXTRA_CA_CERTS="/opt/aws-rds-ca/global-bundle.pem"
 
@@ -114,6 +126,20 @@ RUN mkdir -p /usr/local/lib/node_modules/pnpm \
 # --ignore-scripts: skip native-module compile scripts; all externalized
 # packages we actually use (@aws-sdk, @google-cloud, nodemailer) are pure JS.
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+
+# Chromium for the training-video screenshot-capture tool
+# (scripts/capture-training-screenshots.mjs), baked in at build time. The ECS
+# task that runs it has no outbound internet access at all (private subnet,
+# no NAT gateway) — downloading Chromium there at runtime, as originally
+# attempted, is not possible ("Network is unreachable"). This build runs in
+# CodeBuild, which does have internet access, so installing it here works;
+# --with-deps also apt-installs the system libraries (libnss3, libatk, etc.)
+# headless Chromium needs to actually run, not just unpack. @playwright/test
+# (the npm package providing the `playwright` CLI) is already installed by
+# the step above — it's a root-level "dependencies" entry, not a
+# devDependency, specifically so it survives --prod here.
+ENV DEBIAN_FRONTEND=noninteractive
+RUN npx playwright install --with-deps chromium
 
 # ── Runtime config ────────────────────────────────────────────────────────────
 ENV NODE_ENV=production
