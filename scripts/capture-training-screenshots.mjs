@@ -94,6 +94,7 @@ const TARGETS = [
   { key: "manual", urlPath: "/manual", auth: true, style: "full" },
   { key: "audit-log", urlPath: "/audit-log", auth: true, style: "full" },
   { key: "users", urlPath: "/users", auth: true, style: "full" },
+  { key: "states", urlPath: "/states", auth: true, style: "full" },
 ];
 
 // Blurs any element whose visible text looks like an email address, on
