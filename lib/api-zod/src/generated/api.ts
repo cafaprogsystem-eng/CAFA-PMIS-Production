@@ -7895,7 +7895,6 @@ export const ListAuditLogQueryParams = zod.object({
       "reports",
       "risks",
       "states",
-      "training_videos",
       "users",
     ])
     .optional()
@@ -7927,7 +7926,6 @@ export const ListAuditLogQueryParams = zod.object({
       "reports",
       "risks",
       "states",
-      "training_videos",
       "users",
     ])
     .optional()

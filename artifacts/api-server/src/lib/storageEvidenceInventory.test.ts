@@ -64,7 +64,6 @@ describe("legacy storage evidence inventory", () => {
         "Historical storage import",
       "Profile",
       "SOPs, Manual and programme resources",
-      "Training videos",
     ]));
     for (const surface of ATTACHMENT_SURFACES) {
       expect(surface.upload).not.toHaveLength(0);
@@ -81,8 +80,6 @@ describe("legacy storage evidence inventory", () => {
     expect(ATTACHMENT_SURFACES.some((surface) =>
       surface.offlinePolicy.persistsReselectMetadata,
     )).toBe(true);
-    expect(ATTACHMENT_SURFACES.find((surface) => surface.surface === "Training videos")?.providerDependency)
-      .toContain("independent of the retired attachment façade");
   });
 
   it("uses provider category and reconciliation evidence to produce safe migration outcomes", () => {

@@ -136,9 +136,7 @@ const PUBLIC_PATHS = new Set([
   "/health",
   "/healthz",
 ]);
-// Certificate verification is a public registry lookup (e.g. for an employer
-// checking a trainee's certificate) — it must be reachable with no account.
-const PUBLIC_PREFIXES = ["/auth/invite/", "/training-certificates/verify/"];
+const PUBLIC_PREFIXES = ["/auth/invite/"];
 
 export async function attachCurrentUser(req: Request, _res: Response, next: NextFunction) {
   try {
@@ -551,11 +549,6 @@ export function permissionsFor(user: CurrentUser): string[] {
   // AI logs: SA (via *) and PM monitoring oversight.
   if (role === "program_manager") {
     perms.push("ai.logs.view");
-  }
-
-  // Training video/certificate administration: SA (via *), ED, and PM.
-  if (["executive_director", "program_manager"].includes(role)) {
-    perms.push("training_videos.manage");
   }
 
   // Document Repository admin access: super_admin gets it via "*"; explicit grant for ED + PM.

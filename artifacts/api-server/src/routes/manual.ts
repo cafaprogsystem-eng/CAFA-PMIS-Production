@@ -50,7 +50,7 @@ const INITIAL_CHAPTERS: SeedChapter[] = [
 
 The system provides a unified workspace for project tracking, beneficiary management, budget monitoring, risk assessment, and multi-level reporting — replacing fragmented spreadsheets with a structured, auditable workflow.
 
-Key modules include: Dashboard, Projects, Planning, Budget, Reports (Project, HQ Sector, and State Programme), Risks, Notifications, Communication Centre, States, Users, Audit Log, Training, AI, File & Archive, and this System Manual.`,
+Key modules include: Dashboard, Projects, Planning, Budget, Reports (Project, HQ Sector, and State Programme), Risks, Notifications, Communication Centre, States, Users, Audit Log, AI, File & Archive, and this System Manual.`,
       },
       {
         title: "Getting Started",
@@ -1580,99 +1580,6 @@ All suggested corrections to this manual are reviewed by the PMU and incorporate
     ],
   },
   {
-    title: "Training Centre",
-    slug: "training",
-    description: "Staff training resources, progress tracking, and completion certificates.",
-    icon: "GraduationCap",
-    sections: [
-      {
-        title: "Training Centre Overview",
-        content: `The Training Centre is CAFA PMIS's built-in learning platform. It provides on-demand training videos covering every module in the system so staff can learn at their own pace.
-
-Navigate to **Training Centre** in the sidebar (under Resources) to access the full video library.
-
-## What You Can Do
-- Watch training videos for each module (Dashboard, Projects, Reports, Planning, Risks, Communication, etc.)
-- Track your progress per video with an automatic completion percentage
-- Earn a completion certificate when you finish a training module
-- Download and print your certificates
-- Search and filter videos by category or duration
-
-## Who Can Access
-All authenticated users can view training videos and earn certificates. There are no role restrictions on training content — every staff member is encouraged to complete the full library.`,
-      },
-      {
-        title: "Watching Training Videos",
-        content: `## Finding a Video
-From the Training Centre home page you can browse videos by category (General, Projects, Reports, Planning, Risks, Communication, Administration) or use the search bar to find a specific topic.
-
-Each video card shows: title, category, duration, and your current completion percentage (or a ✓ if completed).
-
-## Playing a Video
-Click any video card to open the video player. Use the standard playback controls — play, pause, skip back 10 seconds, and volume. Videos resume from where you left off if you close and re-open them.
-
-## Progress Tracking
-The system automatically records your progress while you watch. You do not need to do anything manually — progress is saved every few seconds. If you leave the page and return later, the video resumes at your last position.
-
-## Completion
-A video is marked as complete when you have watched at least 90% of it. The card on the home page updates to show a green completion tick (✓).`,
-      },
-      {
-        title: "Progress Tracking & Completion Percentage",
-        content: `## My Progress Panel
-The Training Centre home page shows a **My Progress** panel with:
-- Overall completion percentage across the full video library
-- Number of videos completed vs. total
-- Number of certificates earned
-
-## Per-Video Progress
-Each video displays a progress bar and percentage. Progress is tracked per video, per user, and is stored in your personal account — it is not shared with other users.
-
-## Completion Requirements
-- A video must be at least 90% watched to count as "completed"
-- Rewatching a completed video does not reset its status
-- Administrators can view aggregate completion statistics across all staff from the Admin Settings page`,
-      },
-      {
-        title: "Certificates",
-        content: `## Earning a Certificate
-When you complete a training video (90%+ watched), the system automatically generates a certificate in your name. The certificate records:
-- Your full name
-- The title of the completed training module
-- The date of completion
-- A unique Certificate ID (format: CERT-XXXXXX)
-
-Certificates appear immediately in the **My Certificates** section on the Training Centre home page after you finish a video.
-
-## Viewing Certificates
-Click any certificate card to open a printable view of the certificate. The certificate is formatted for A4 printing and includes the CAFA logo and all completion details.
-
-## Certificate Verification
-Each certificate has a unique Certificate ID. Anyone can verify the authenticity of a certificate by navigating to:
-\`/manual/certificate/{Certificate ID}\`
-
-This verification page shows the recipient's name, the module title, and the date of completion — without requiring a login.`,
-      },
-      {
-        title: "Downloading Your Certificate",
-        content: `## How to Download
-1. Navigate to Training Centre in the sidebar.
-2. Scroll to the **My Certificates** section.
-3. Click the certificate you want to download.
-4. In the certificate preview, click the **Download Certificate** button (or use the **Print** button and choose "Save as PDF" in the print dialog).
-
-## Download Format
-Certificates are downloaded as PDF files. The filename includes your name and the module title (e.g., \`CAFA-Certificate-Projects-Module.pdf\`).
-
-## Sharing Your Certificate
-You can share the certificate PDF with your line manager or HR. For digital verification, share the certificate verification link (\`/manual/certificate/{Certificate ID}\`) — this allows the recipient to confirm the certificate is genuine directly in the system.
-
-## Certificate Expiry
-CAFA PMIS certificates do not expire. They are a permanent record of your training completion as of the date shown.`,
-      },
-    ],
-  },
-  {
     title: "AI",
     slug: "ai-assistant",
     description: "The AI assistant and administration settings for CAFA PMIS.",
@@ -1877,8 +1784,6 @@ async function ensureTerminologyMigrated() {
       ['document-repository', 'File & Archive'],
       ['communication',       'Communication Centre'],
       ['ai-assistant',        'AI'],
-      ['training',            'Training'],
-      ['training-center',     'Training'],  // legacy slug
     ];
     for (const [slug, title] of chapterTitleFixes) {
       await pool.query(
@@ -2044,7 +1949,6 @@ const ARABIC_CHAPTERS: Record<string, { title: string; description: string }> = 
   sops: { title: "الإجراءات التشغيلية المعيارية", description: "إجراءات عملية موحدة لتنفيذ مهام النظام الرئيسية." },
   troubleshooting: { title: "استكشاف الأخطاء وإصلاحها", description: "حل المشكلات الشائعة والحصول على الدعم." },
   annexes: { title: "الملاحق", description: "مصطلحات ومراجع مساندة لاستخدام النظام." },
-  training: { title: "مركز التدريب", description: "التدريب والشهادات ومواد التعلم الخاصة بنظام CAFA PMIS." },
   "ai-assistant": { title: "المساعد الذكي", description: "استخدام المساعد الذكي وإعداداته في نظام CAFA PMIS." },
   "document-repository": { title: "الملفات والأرشيف", description: "إدارة الملفات والأرشفة والوصول إلى الوثائق المصرح بها." },
 };

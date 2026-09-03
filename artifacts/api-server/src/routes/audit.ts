@@ -110,11 +110,6 @@ const entityReferenceSql = `
       (SELECT pr.title FROM program_resources pr WHERE pr.id = a.entity_id),
       (SELECT pa.file_name FROM plan_attachments pa WHERE pa.id = a.entity_id)
     )
-    -- Same caveat as "files": training_videos and training_certificates share the "manual" module.
-    WHEN a.module = 'manual' THEN COALESCE(
-      (SELECT tv.title FROM training_videos tv WHERE tv.id = a.entity_id),
-      (SELECT tc.certificate_id FROM training_certificates tc WHERE tc.id = a.entity_id)
-    )
     WHEN a.module = 'manual_chapter' THEN (
       SELECT mc.title FROM manual_chapters mc WHERE mc.id = a.entity_id
     )

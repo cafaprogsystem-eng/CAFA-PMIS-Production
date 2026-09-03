@@ -97,11 +97,6 @@
         "description": "Step-by-step guides for every module and workflow in CAFA PMIS.",
           "cta": "Browse the Manual"
       },
-      "training": {
-        "title": "Training Videos",
-        "description": "Short video tutorials for new staff onboarding and feature updates.",
-          "cta": "Watch Tutorials"
-      },
       "helpdesk": {
         "title": "IT Helpdesk",
         "description": "Technical support from the CAFA IT team for system issues and access requests.",

@@ -55,16 +55,8 @@ FROM node:24-slim AS runner
 
 # Trust the official Amazon RDS certificate authorities while preserving
 # full TLS certificate and hostname verification for PostgreSQL connections.
-#
-# ffmpeg (+ ffprobe, same package) is a hard runtime dependency of the
-# training-video pipeline (lib/video-generator.ts) and the uploaded-video
-# duration probe (routes/training-videos.ts) — both just shell out to the
-# system binary, there is no npm package providing it. fonts-dejavu-core
-# provides /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf and
-# DejaVuSansMono.ttf, the fontfile paths video-generator.ts's drawtext
-# filters use — node:24-slim ships neither by default.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl fontconfig ffmpeg fonts-dejavu-core \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
  && mkdir -p /opt/aws-rds-ca \
  && curl --fail --silent --show-error --location \
       https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
@@ -95,8 +87,7 @@ COPY --from=builder /app/artifacts/cafa-pmis/package.json   ./artifacts/cafa-pmi
 COPY --from=builder /app/lib                                 ./lib
 COPY --from=builder /app/scripts/package.json \
                     /app/scripts/migrate.mjs \
-                    /app/scripts/seed.mjs \
-                    /app/scripts/capture-training-screenshots.mjs ./scripts/
+                    /app/scripts/seed.mjs                   ./scripts/
 
 # ── Frontend static assets (Express serves these in production) ───────────────
 COPY --from=builder /app/artifacts/cafa-pmis/dist/public    ./public
@@ -115,20 +106,6 @@ RUN mkdir -p /usr/local/lib/node_modules/pnpm \
 # --ignore-scripts: skip native-module compile scripts; all externalized
 # packages we actually use (@aws-sdk, @google-cloud, nodemailer) are pure JS.
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
-
-# Chromium for the training-video screenshot-capture tool
-# (scripts/capture-training-screenshots.mjs), baked in at build time. The ECS
-# task that runs it has no outbound internet access at all (private subnet,
-# no NAT gateway) — downloading Chromium there at runtime, as originally
-# attempted, is not possible ("Network is unreachable"). This build runs in
-# CodeBuild, which does have internet access, so installing it here works;
-# --with-deps also apt-installs the system libraries (libnss3, libatk, etc.)
-# headless Chromium needs to actually run, not just unpack. @playwright/test
-# (the npm package providing the `playwright` CLI) is already installed by
-# the step above — it's a root-level "dependencies" entry, not a
-# devDependency, specifically so it survives --prod here.
-ENV DEBIAN_FRONTEND=noninteractive
-RUN npx playwright install --with-deps chromium
 
 # ── Runtime config ────────────────────────────────────────────────────────────
 ENV NODE_ENV=production

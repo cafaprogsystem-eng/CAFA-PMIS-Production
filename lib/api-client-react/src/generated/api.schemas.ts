@@ -4718,7 +4718,6 @@ export const ListAuditLogModule = {
   reports: "reports",
   risks: "risks",
   states: "states",
-  training_videos: "training_videos",
   users: "users",
 } as const;
 
@@ -4749,7 +4748,6 @@ export const ListAuditLogEntityType = {
   reports: "reports",
   risks: "risks",
   states: "states",
-  training_videos: "training_videos",
   users: "users",
 } as const;
 

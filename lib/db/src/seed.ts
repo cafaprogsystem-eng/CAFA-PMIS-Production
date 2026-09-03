@@ -1,9 +1,9 @@
 /**
- * Demo-data seed for the training-video screenshot pipeline
- * (scripts/capture-training-screenshots.mjs). Creates exactly one demo user
- * and a small, clearly-labeled set of records so the 11 screenshot targets
- * in full-system-video-script.ts aren't empty — nothing here is meant to
- * resemble real CAFA staff, beneficiaries, or projects.
+ * Demo-data seed for exercising a fresh staging database end to end.
+ * Creates exactly one demo user and a small, clearly-labeled set of records
+ * (a project, a plan, a report, a risk) so a fresh environment isn't
+ * completely empty — nothing here is meant to resemble real CAFA staff,
+ * beneficiaries, or projects.
  *
  * Safe to run multiple times: every insert is idempotent (upsert by a
  * natural key, or an existence check first), so re-running never creates
@@ -121,11 +121,11 @@ async function seedDemoProject(createdById: number): Promise<number> {
     [
       DEMO_PROJECT_CODE,
       "Demo Project — Community Health Programme",
-      "Illustrative demo project used only for training-video screenshots.",
+      "Illustrative demo project for staging smoke-testing.",
       "Health",
       JSON.stringify(["Health"]),
       "Demo Donor",
-      "Sample project created for training-video screenshot capture — not a real programme.",
+      "Sample project created for staging smoke-testing — not a real programme.",
       toDateStr(start),
       toDateStr(end),
       250000,
@@ -172,7 +172,7 @@ async function seedProjectAssignment(projectId: number, userId: number): Promise
 async function seedActivity(projectId: number, stateId: number): Promise<void> {
   await pool.query(
     `INSERT INTO activities (project_id, state_id, code, title, description, target, status, progress_pct, budget_planned, budget_spent, sector, currency)
-     SELECT $1, $2, 'DEMO-ACT-001', 'Community health outreach sessions', 'Demo activity for screenshot capture.', 40, 'in_progress', 60, 60000, 38000, 'Health', 'USD'
+     SELECT $1, $2, 'DEMO-ACT-001', 'Community health outreach sessions', 'Demo activity for staging smoke-testing.', 40, 'in_progress', 60, 60000, 38000, 'Health', 'USD'
      WHERE NOT EXISTS (SELECT 1 FROM activities WHERE project_id = $1 AND code = 'DEMO-ACT-001')`,
     [projectId, stateId],
   );
@@ -205,7 +205,7 @@ async function seedDemoPlan(projectId: number, stateId: number, createdById: num
       JSON.stringify(["Health"]),
       toDateStr(start),
       toDateStr(end),
-      "Sample monthly plan created for training-video screenshot capture.",
+      "Sample monthly plan created for staging smoke-testing.",
       createdById,
     ],
   );
@@ -215,7 +215,7 @@ async function seedDemoPlan(projectId: number, stateId: number, createdById: num
 async function seedPlanActivity(planId: number, stateId: number): Promise<void> {
   await pool.query(
     `INSERT INTO plan_activities (plan_id, title, description, state_id, target_beneficiaries, priority, status, progress_pct, budget_planned, budget_actual)
-     SELECT $1, 'Community health training', 'Demo plan activity for screenshot capture.', $2, 200, 'medium', 'in_progress', 60, 60000, 38000
+     SELECT $1, 'Community health training', 'Demo plan activity for staging smoke-testing.', $2, 200, 'medium', 'in_progress', 60, 60000, 38000
      WHERE NOT EXISTS (SELECT 1 FROM plan_activities WHERE plan_id = $1 AND title = 'Community health training')`,
     [planId, stateId],
   );
@@ -242,7 +242,7 @@ async function seedDemoReport(projectId: number, stateId: number, submittedById:
       `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
       now.getMonth() + 1,
       now.getFullYear(),
-      "This is a sample narrative describing demo progress for training-video screenshot capture.",
+      "This is a sample narrative describing demo progress for staging smoke-testing.",
       "No real challenges — this is demo content.",
       "No real recommendations — this is demo content.",
       submittedById,
@@ -257,7 +257,7 @@ async function seedDemoRisk(projectId: number, stateId: number, assignedToId: nu
      WHERE NOT EXISTS (SELECT 1 FROM risks WHERE project_id = $4 AND title = $1)`,
     [
       "Demo Risk — Field access delay",
-      "Sample risk created for training-video screenshot capture.",
+      "Sample risk created for staging smoke-testing.",
       stateId,
       projectId,
       assignedToId,
@@ -269,7 +269,7 @@ async function seedDemoRisk(projectId: number, stateId: number, assignedToId: nu
 async function seedDemoNotification(userId: number, projectId: number): Promise<void> {
   await pool.query(
     `INSERT INTO notifications (user_id, kind, entity_type, entity_id, message, link)
-     SELECT $1, 'project_update', 'project', $2, 'Demo Project was updated — sample notification for screenshot capture.', $3
+     SELECT $1, 'project_update', 'project', $2, 'Demo Project was updated — sample notification for staging smoke-testing.', $3
      WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id = $1 AND kind = 'project_update' AND entity_id = $2)`,
     [userId, projectId, `/projects/${projectId}`],
   );
@@ -285,9 +285,9 @@ async function seedDemoAuditEntry(userId: number, projectId: number): Promise<vo
 }
 
 const DEMO_MANUAL_CHAPTERS = [
-  { slug: "demo-getting-started", title: "Getting Started (Demo)", description: "Sample chapter for training-video screenshot capture.", order: 1 },
-  { slug: "demo-login-and-access", title: "Login & Access (Demo)", description: "Sample chapter for training-video screenshot capture.", order: 2 },
-  { slug: "demo-projects-module", title: "Projects Module (Demo)", description: "Sample chapter for training-video screenshot capture.", order: 3 },
+  { slug: "demo-getting-started", title: "Getting Started (Demo)", description: "Sample chapter for staging smoke-testing.", order: 1 },
+  { slug: "demo-login-and-access", title: "Login & Access (Demo)", description: "Sample chapter for staging smoke-testing.", order: 2 },
+  { slug: "demo-projects-module", title: "Projects Module (Demo)", description: "Sample chapter for staging smoke-testing.", order: 3 },
 ];
 
 async function seedManualChapters(): Promise<void> {
@@ -302,7 +302,7 @@ async function seedManualChapters(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log("Seeding demo data for the training-video screenshot pipeline…");
+  console.log("Seeding demo data for staging smoke-testing…");
 
   const stateId = await findStateId();
 

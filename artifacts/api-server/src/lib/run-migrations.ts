@@ -3808,6 +3808,44 @@ CREATE UNIQUE INDEX IF NOT EXISTS training_certificates_active_user_video_unique
   ON training_certificates(user_id, training_video_id) WHERE is_active = TRUE;
 `,
   },
+  {
+    name: "066_drop_training_video_feature",
+    sql: /* sql */ `
+-- Training-video generation, watch-completion tracking, and certificate
+-- issuance has been removed from the product entirely (routes, generator,
+-- frontend pages, and IAM). None of these three tables has an incoming
+-- foreign key from any other table — confirmed against the full migration
+-- history and the initial schema bootstrap before writing this.
+DROP TABLE IF EXISTS training_certificates;
+DROP TABLE IF EXISTS training_completions;
+DROP TABLE IF EXISTS training_videos;
+DROP SEQUENCE IF EXISTS training_cert_seq;
+`,
+  },
+  {
+    name: "067_drop_training_manual_chapter",
+    sql: /* sql */ `
+-- The in-app manual's "Training Centre" chapter (routes/manual.ts) described
+-- the now-removed training-video feature and is removed along with it.
+-- ensureSeeded() only inserts INITIAL_CHAPTERS into an empty table, so simply
+-- dropping this chapter from that array (already done in code) has no effect
+-- on an already-seeded database — these rows need explicit removal here.
+DELETE FROM manual_feedback WHERE chapter_slug IN ('training', 'training-center');
+DELETE FROM manual_version_history WHERE chapter_id IN (
+  SELECT id FROM manual_chapters WHERE slug IN ('training', 'training-center')
+);
+DELETE FROM manual_chapter_localizations WHERE chapter_id IN (
+  SELECT id FROM manual_chapters WHERE slug IN ('training', 'training-center')
+);
+DELETE FROM manual_sops WHERE chapter_id IN (
+  SELECT id FROM manual_chapters WHERE slug IN ('training', 'training-center')
+);
+DELETE FROM manual_sections WHERE chapter_id IN (
+  SELECT id FROM manual_chapters WHERE slug IN ('training', 'training-center')
+);
+DELETE FROM manual_chapters WHERE slug IN ('training', 'training-center');
+`,
+  },
 
 ];
 

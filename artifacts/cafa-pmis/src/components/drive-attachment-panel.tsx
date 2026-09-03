@@ -24,7 +24,7 @@ import {
  */
 export type DriveModule =
   | "projects" | "project_reports" | "state_reports" | "hq_reports"
-  | "plans" | "risks" | "budget" | "users" | "manual" | "training"
+  | "plans" | "risks" | "budget" | "users" | "manual"
   | "attachments";
 
 export type AttachmentModule = "plans" | "risks";

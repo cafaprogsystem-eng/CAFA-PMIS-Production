@@ -23,8 +23,8 @@ export declare function auditActionCategorySql(actionColumn: string): string;
 export declare const AuditLogQueryParams: z.ZodEffects<z.ZodObject<{
     search: z.ZodOptional<z.ZodString>;
     action: z.ZodOptional<z.ZodEnum<["created", "updated", "deleted", "approved", "create", "update", "delete", "approve"]>>;
-    module: z.ZodOptional<z.ZodEnum<["ai", "attachments", "auth", "beneficiaries", "comments", "conversation", "drive", "files", "manual", "manual_chapter", "manual_section", "manual_sop", "messages", "notifications", "password_reset", "plans", "profile", "program_resources", "project", "projects", "reports", "risks", "states", "training_videos", "users"]>>;
-    entityType: z.ZodOptional<z.ZodEnum<["ai", "attachments", "auth", "beneficiaries", "comments", "conversation", "drive", "files", "manual", "manual_chapter", "manual_section", "manual_sop", "messages", "notifications", "password_reset", "plans", "profile", "program_resources", "project", "projects", "reports", "risks", "states", "training_videos", "users"]>>;
+    module: z.ZodOptional<z.ZodEnum<["ai", "attachments", "auth", "beneficiaries", "comments", "conversation", "drive", "files", "manual", "manual_chapter", "manual_section", "manual_sop", "messages", "notifications", "password_reset", "plans", "profile", "program_resources", "project", "projects", "reports", "risks", "states", "users"]>>;
+    entityType: z.ZodOptional<z.ZodEnum<["ai", "attachments", "auth", "beneficiaries", "comments", "conversation", "drive", "files", "manual", "manual_chapter", "manual_section", "manual_sop", "messages", "notifications", "password_reset", "plans", "profile", "program_resources", "project", "projects", "reports", "risks", "states", "users"]>>;
     dateFrom: z.ZodOptional<z.ZodString>;
     dateTo: z.ZodOptional<z.ZodString>;
     page: z.ZodDefault<z.ZodNumber>;
@@ -32,15 +32,15 @@ export declare const AuditLogQueryParams: z.ZodEffects<z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     page: number;
     pageSize: number;
-    module?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "training_videos" | "users" | undefined;
-    entityType?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "training_videos" | "users" | undefined;
+    module?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "users" | undefined;
+    entityType?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "users" | undefined;
     search?: string | undefined;
     action?: "create" | "approved" | "deleted" | "created" | "updated" | "update" | "delete" | "approve" | undefined;
     dateFrom?: string | undefined;
     dateTo?: string | undefined;
 }, {
-    module?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "training_videos" | "users" | undefined;
-    entityType?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "training_videos" | "users" | undefined;
+    module?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "users" | undefined;
+    entityType?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "users" | undefined;
     search?: string | undefined;
     action?: "create" | "approved" | "deleted" | "created" | "updated" | "update" | "delete" | "approve" | undefined;
     page?: number | undefined;
@@ -50,15 +50,15 @@ export declare const AuditLogQueryParams: z.ZodEffects<z.ZodObject<{
 }>, {
     page: number;
     pageSize: number;
-    module?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "training_videos" | "users" | undefined;
-    entityType?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "training_videos" | "users" | undefined;
+    module?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "users" | undefined;
+    entityType?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "users" | undefined;
     search?: string | undefined;
     action?: "create" | "approved" | "deleted" | "created" | "updated" | "update" | "delete" | "approve" | undefined;
     dateFrom?: string | undefined;
     dateTo?: string | undefined;
 }, {
-    module?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "training_videos" | "users" | undefined;
-    entityType?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "training_videos" | "users" | undefined;
+    module?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "users" | undefined;
+    entityType?: "comments" | "project" | "conversation" | "projects" | "risks" | "reports" | "states" | "beneficiaries" | "drive" | "messages" | "attachments" | "ai" | "auth" | "files" | "manual" | "manual_chapter" | "manual_section" | "manual_sop" | "notifications" | "password_reset" | "plans" | "profile" | "program_resources" | "users" | undefined;
     search?: string | undefined;
     action?: "create" | "approved" | "deleted" | "created" | "updated" | "update" | "delete" | "approve" | undefined;
     page?: number | undefined;

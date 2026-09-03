@@ -158,16 +158,14 @@ describe("audit workspace API", () => {
     expect(response.body.items[0].changes.some((c: { field: string }) => c.field === "stateId")).toBe(false);
   });
 
-  it("resolves entity references for auth, comments, notifications, files, and manual modules", async () => {
+  it("resolves entity references for auth, comments, notifications, files, and manual chapter/section/sop modules", async () => {
     await appAs(user()).get("/audit-log");
     const dataQuery = String(mockQuery.mock.calls.find(([sql]) => String(sql).includes("entity_reference"))?.[0]);
-    for (const module of ["auth", "comments", "notifications", "files", "manual", "manual_chapter", "manual_section", "manual_sop"]) {
+    for (const module of ["auth", "comments", "notifications", "files", "manual_chapter", "manual_section", "manual_sop"]) {
       expect(dataQuery).toContain(`WHEN a.module = '${module}'`);
     }
     expect(dataQuery).toContain("program_resources pr");
     expect(dataQuery).toContain("plan_attachments pa");
-    expect(dataQuery).toContain("training_videos tv");
-    expect(dataQuery).toContain("training_certificates tc");
   });
 
   it("rejects malformed and contradictory filters before querying records", async () => {

@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { copyFile, cp, rm } from "node:fs/promises";
+import { copyFile, rm } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -128,14 +128,6 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
   await copyFile(
     path.resolve(artifactDir, "src/lib/initial-schema.sql"),
     path.resolve(distDir, "initial-schema.sql"),
-  );
-  // video-generator.ts resolves this relative to __dirname, which after
-  // bundling is dist/ — not its original src/lib/ location — so the
-  // pre-rendered background asset has to be copied alongside it too.
-  await cp(
-    path.resolve(artifactDir, "src/lib/video-assets"),
-    path.resolve(distDir, "video-assets"),
-    { recursive: true },
   );
 }
 

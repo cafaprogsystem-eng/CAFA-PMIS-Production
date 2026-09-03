@@ -922,54 +922,6 @@ export const emailVerificationTokensTable = pgTable("email_verification_tokens",
   ipAddress: text("ip_address"),
 });
 
-// Training videos ------------------------------------------------------------
-export const trainingVideosTable = pgTable("training_videos", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  moduleName: text("module_name").notNull(),
-  roleAccess: text("role_access").notNull().default("all"),
-  language: text("language").notNull().default("ar"),
-  description: text("description"),
-  filePath: text("file_path"),
-  duration: integer("duration"),
-  status: text("status").notNull().default("draft"),
-  generatedBy: integer("generated_by"),
-  errorMessage: text("error_message"),
-  progressPct: integer("progress_pct").default(0),
-  progressLabel: text("progress_label"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-// Training completions — per-user per-video progress tracking ---------------
-export const trainingCompletionsTable = pgTable("training_completions", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
-  trainingVideoId: integer("training_video_id").notNull(),
-  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
-  lastWatchedAt: timestamp("last_watched_at", { withTimezone: true }).notNull().defaultNow(),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  watchPercent: integer("watch_percent").notNull().default(0),
-  completionStatus: text("completion_status").notNull().default("not_started"),
-  totalWatchSeconds: integer("total_watch_seconds").notNull().default(0),
-  lastPositionSeconds: integer("last_position_seconds").notNull().default(0),
-  certificateIssued: boolean("certificate_issued").notNull().default(false),
-});
-
-// Training certificates -------------------------------------------------------
-export const trainingCertificatesTable = pgTable("training_certificates", {
-  id: serial("id").primaryKey(),
-  certificateId: text("certificate_id").notNull().unique(),
-  userId: integer("user_id").notNull(),
-  trainingVideoId: integer("training_video_id").notNull(),
-  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
-  revokedAt: timestamp("revoked_at", { withTimezone: true }),
-  revokedById: integer("revoked_by_id"),
-  reissuedAt: timestamp("reissued_at", { withTimezone: true }),
-  reissuedById: integer("reissued_by_id"),
-  isActive: boolean("is_active").notNull().default(true),
-});
-
 // Voice notes ----------------------------------------------------------------
 export const voiceNotesTable = pgTable("voice_notes", {
   id: serial("id").primaryKey(),

@@ -926,7 +926,6 @@ Resources:
                 Resource:
                   - !Sub ${AttachmentBucket.Arn}/objects/*
                   - !Sub ${AttachmentBucket.Arn}/public/*
-                  - !Sub ${AttachmentBucket.Arn}/training-screenshots/*
       Tags:
         - Key: Application
           Value: cafa-pmis

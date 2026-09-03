@@ -102,7 +102,7 @@ const NAV_CATEGORIES: NavCategory[] = [
   },
   {
     labelKey: "manual.navCategories.support",
-    slugs: ["system-manual", "manual", "training", "training-center", "support", "glossary", "sops", "troubleshooting", "annexes"],
+    slugs: ["system-manual", "manual", "support", "glossary", "sops", "troubleshooting", "annexes"],
   },
 ];
 

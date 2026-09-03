@@ -4202,7 +4202,6 @@ export declare const ListAuditLogModule: {
     readonly reports: "reports";
     readonly risks: "risks";
     readonly states: "states";
-    readonly training_videos: "training_videos";
     readonly users: "users";
 };
 export type ListAuditLogEntityType = (typeof ListAuditLogEntityType)[keyof typeof ListAuditLogEntityType];
@@ -4230,7 +4229,6 @@ export declare const ListAuditLogEntityType: {
     readonly reports: "reports";
     readonly risks: "risks";
     readonly states: "states";
-    readonly training_videos: "training_videos";
     readonly users: "users";
 };
 export type ListAuditLog400Error = (typeof ListAuditLog400Error)[keyof typeof ListAuditLog400Error];

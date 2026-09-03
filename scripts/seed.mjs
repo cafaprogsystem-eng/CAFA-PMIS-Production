@@ -2,7 +2,7 @@
  * Standalone seed runner for Docker / CI environments.
  *
  * Seeds demo data (a demo user, a demo project, and a few related records)
- * used by the training-video screenshot pipeline. Safe to run multiple
+ * for exercising a fresh staging database end to end. Safe to run multiple
  * times — every insert is idempotent (see lib/db/src/seed.ts).
  *
  * Runs the API's bundled, compiled seed entry point — the same pattern

@@ -52,7 +52,6 @@ const ManualHome          = lazy(() => import("@/pages/manual"));
 const ManualChapter       = lazy(() => import("@/pages/manual-chapter"));
 const ManualFaqPage       = lazy(() => import("@/pages/manual-faq"));
 const ManualRoleGuide     = lazy(() => import("@/pages/manual-role-guide"));
-const CertificateVerify   = lazy(() => import("@/pages/certificate-verify"));
 const NotificationsPage = lazy(() => import("@/pages/notifications"));
 const ProfilePage      = lazy(() => import("@/pages/profile"));
 const SyncStatusPage   = lazy(() => import("@/pages/sync-status"));
@@ -201,7 +200,6 @@ function Router() {
           <Route path="/manual" component={ManualHome} />
           <Route path="/manual/faq" component={ManualFaqPage} />
           <Route path="/manual/guides/:role">{(params) => <ManualRoleGuide role={params.role} />}</Route>
-          {/* /manual/certificate/:certId is handled by the public route in App() — it never reaches here. */}
           <Route path="/manual/:slug">{(params) => <ManualChapter slug={params.slug} />}</Route>
           <Route path="/notifications" component={NotificationsPage} />
           <Route path="/access-denied" component={AccessDenied} />
@@ -328,9 +326,6 @@ function App() {
                   <Route path="/password-reset-sent" component={PasswordResetSentPage} />
                   <Route path="/verify-email" component={VerifyEmailPage} />
                   <Route path="/email-verification-sent" component={EmailVerificationSentPage} />
-                  {/* Public certificate-verification lookup: an external party (e.g. an employer)
-                      must be able to check a certificate without a CAFA PMIS account. */}
-                  <Route path="/manual/certificate/:certId">{(params) => <CertificateVerify certId={params.certId} />}</Route>
                   <Route><AuthGate /></Route>
                 </Switch>
               </Suspense>

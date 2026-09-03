@@ -170,13 +170,6 @@ export const STORAGE_EVIDENCE_MANIFEST: readonly StorageEvidenceEntry[] = [
     evidenceBasis: "program_resources is the canonical metadata owner; category distinguishes SOP/manual content.",
   },
   {
-    reference: "artifacts/api-server/src/routes/training-videos.ts",
-    classification: "active_operational_code",
-    operationalPurpose: "Training-video upload, replacement and streaming.",
-    providerDependency: "Application-managed local file is primary; configured S3 façade receives a non-fatal backup recorded in training_videos.drive_file_id.",
-    evidenceBasis: "Multipart lifecycle writes file_path, then asyncBackupToS3 conditionally calls awsS3 and preserves local primary availability on backup failure.",
-  },
-  {
     reference: "lib/db/src/schema/index.ts",
     classification: "migration_compatibility",
     operationalPurpose: "Schema for drive_files and optional drive_file_id links on project/report attachments.",
@@ -426,17 +419,6 @@ export const ATTACHMENT_SURFACES: readonly AttachmentSurface[] = [
     parentAuthorisation: "program_resources permissions; category identifies SOP/manual semantics.",
     offlinePolicy: ONLINE_ONLY_RESELECT_METADATA,
     providerDependency: "Central object storage.",
-  },
-  {
-    surface: "Training videos",
-    renderedIn: "Training video administration and playback",
-    upload: "Multipart training-video upload routes",
-    metadata: "Training video record and application-managed file_path",
-    previewDownload: "Authenticated training-video stream",
-    lifecycle: "Create, replace and delete according to training administration permissions.",
-    parentAuthorisation: "Training administration permissions and record ownership rules.",
-    offlinePolicy: ONLINE_ONLY_NO_METADATA,
-    providerDependency: "Local application-managed file is primary; it is independent of the retired attachment façade.",
   },
 ];
 
