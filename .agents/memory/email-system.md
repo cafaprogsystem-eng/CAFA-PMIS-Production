@@ -50,3 +50,12 @@ renderPasswordResetEmail, renderPasswordResetConfirmEmail, renderInviteEmail, re
 - `/password-reset-sent?email=` — neutral confirmation after forgot-password
 
 **Why:** Tokens are hashed before DB storage (SHA-256); neutral responses prevent email enumeration; invite-accept proves email ownership so no separate verification needed for invited users.
+
+## Monthly reporting reminder requires EMAIL_PROVIDER=resend — or the whole server refuses to boot
+`lib/scheduler.ts`'s `startSchedulers()` calls `assertMonthlyReminderMailerConfiguration()` (in `mailer.ts`) before starting anything, and `index.ts` crashes the process (`process.exit(1)`) on any startup throw. That assertion throws whenever `EMAIL_ENABLED=true` and `EMAIL_PROVIDER` is anything other than `resend` (SMTP and SendGrid can't guarantee crash-safe idempotent delivery, so a duplicate reminder send is possible with them) — and this only matters if the monthly-reporting scheduler is itself enabled (`MONTHLY_REPORTING_ENABLED`, defaults to `true`).
+
+**Why this matters for going live:** `infra/aws-staging/template.yaml`'s application task currently sets `EMAIL_PROVIDER=smtp` with `EMAIL_ENABLED=false` (stub mode, safe for now). The moment `EMAIL_ENABLED` is flipped to `true` for real delivery without also changing `EMAIL_PROVIDER` to `resend`, the entire API server will crash-loop at startup — not just the reminder feature failing quietly.
+
+**How to apply:** when configuring real email for production, either set `EMAIL_PROVIDER=resend` specifically, or explicitly set `MONTHLY_REPORTING_ENABLED=false` if another provider (SMTP/SendGrid) is required for the other email types and the monthly reminder is deliberately being deferred.
+
+The monthly-reporting scheduler itself is a real, running in-process `setInterval` poller (not EventBridge/external cron) — confirmed active on staging via `SCHEDULER_ENABLED=true` in the application task definition. Manual verification without waiting for the schedule: `POST /reports/monthly-reporting/evaluate` (permission `reports.approve.final`), body `{"dryRun": true}` to preview without sending.
