@@ -18,6 +18,45 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const { mockPoolQuery } = vi.hoisted(() => ({ mockPoolQuery: vi.fn() }));
 
 vi.mock("@workspace/db", () => ({ pool: { query: mockPoolQuery } }));
+// login now also queries the shared rate_limit_events store (account
+// lockout — see lib/rate-limit-store.ts) alongside the original user
+// lookup, so a plain positional mockResolvedValueOnce() sequence no longer
+// lines up with one call per login attempt. A small in-memory fake — real
+// enough to reproduce isAccountLocked's actual sliding-window logic against
+// real Date.now() timestamps — replaces it below.
+type FakeEventRow = { bucket: string; key: string; occurredAt: number };
+
+function makeAuthTestPool(usersByIdentifier: Record<string, unknown[]>) {
+  const events: FakeEventRow[] = [];
+  return vi.fn(async (sql: string, params: unknown[] = []) => {
+    if (sql.includes("FROM users")) {
+      const identifier = String(params[0] ?? "").toLowerCase();
+      return { rows: usersByIdentifier[identifier] ?? [] };
+    }
+    if (sql.startsWith("INSERT INTO rate_limit_events")) {
+      const [bucket, key] = params as [string, string];
+      events.push({ bucket, key, occurredAt: Date.now() });
+      return { rows: [] };
+    }
+    if (sql.includes("SELECT occurred_at FROM rate_limit_events")) {
+      const [bucket, key, limit] = params as [string, string, number];
+      const rows = events
+        .filter((e) => e.bucket === bucket && e.key === key)
+        .sort((a, b) => b.occurredAt - a.occurredAt)
+        .slice(0, limit)
+        .map((e) => ({ occurred_at: new Date(e.occurredAt).toISOString() }));
+      return { rows };
+    }
+    if (sql.startsWith("DELETE FROM rate_limit_events")) {
+      const [bucket, key] = params as [string, string];
+      for (let i = events.length - 1; i >= 0; i -= 1) {
+        if (events[i].bucket === bucket && events[i].key === key) events.splice(i, 1);
+      }
+      return { rows: [] };
+    }
+    return { rows: [] };
+  });
+}
 vi.mock("../lib/session", () => ({
   createSession: vi.fn(async () => ({ session: { id: "s1", userId: 1, expiresAt: new Date() }, token: "tok" })),
   setSessionCookie: vi.fn(),
@@ -77,13 +116,15 @@ beforeEach(() => {
 describe("AUTH-LOGIN-SECURITY — timing side-channel", () => {
   it("an unknown identifier takes comparably long to reject as a wrong password on a real account", async () => {
     const app = makeApp();
+    mockPoolQuery.mockImplementation(makeAuthTestPool({
+      "user@test.com": [userRow({ password_hash: realCostHash })],
+      "no-such-user@test.com": [],
+    }));
 
-    mockPoolQuery.mockResolvedValueOnce({ rows: [userRow({ password_hash: realCostHash })] });
     const t0 = Date.now();
     const wrongPasswordRes = await request(app).post("/auth/login").send({ identifier: "user@test.com", password: "not-the-password" });
     const wrongPasswordMs = Date.now() - t0;
 
-    mockPoolQuery.mockResolvedValueOnce({ rows: [] });
     const t1 = Date.now();
     const notFoundRes = await request(app).post("/auth/login").send({ identifier: "no-such-user@test.com", password: "not-the-password" });
     const notFoundMs = Date.now() - t1;
@@ -103,7 +144,9 @@ describe("AUTH-LOGIN-SECURITY — account-level lockout", () => {
   it("locks an account after repeated failed attempts, rejecting even a subsequent correct password", async () => {
     const app = makeApp();
     const hash = await bcrypt.hash("CorrectPassw0rd", 4); // cheap cost — only the lockout counter is under test here
-    mockPoolQuery.mockResolvedValue({ rows: [userRow({ id: 42, email: "lockme@test.com", username: "lockme", password_hash: hash })] });
+    mockPoolQuery.mockImplementation(makeAuthTestPool({
+      "lockme@test.com": [userRow({ id: 42, email: "lockme@test.com", username: "lockme", password_hash: hash })],
+    }));
 
     for (let i = 0; i < 10; i += 1) {
       const res = await request(app).post("/auth/login").send({ identifier: "lockme@test.com", password: "WrongPassword" });
@@ -118,7 +161,10 @@ describe("AUTH-LOGIN-SECURITY — account-level lockout", () => {
   it("does not lock out a different account that never failed", async () => {
     const app = makeApp();
     const hash = await bcrypt.hash("CorrectPassw0rd", 4);
-    mockPoolQuery.mockResolvedValue({ rows: [userRow({ id: 43, email: "victim@test.com", username: "victim", password_hash: hash })] });
+    mockPoolQuery.mockImplementation(makeAuthTestPool({
+      "attacker-target@test.com": [userRow({ id: 99, email: "attacker-target@test.com", username: "attacker", password_hash: hash })],
+      "victim@test.com": [userRow({ id: 43, email: "victim@test.com", username: "victim", password_hash: hash })],
+    }));
 
     for (let i = 0; i < 10; i += 1) {
       await request(app).post("/auth/login").send({ identifier: "attacker-target@test.com", password: "WrongPassword" });

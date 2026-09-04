@@ -4,6 +4,7 @@ import {
 } from "./attachmentReconciliation";
 import { startDueDateChecker, stopDueDateChecker } from "./due-date-checker";
 import { startIdempotencyPruner, stopIdempotencyPruner } from "../middlewares/idempotency";
+import { startRateLimitEventPruner, stopRateLimitEventPruner } from "./rate-limit-store";
 import { logger } from "./logger";
 import { evaluateMonthlyReportingDeadlines } from "./monthly-reporting-deadline";
 import { monthlyReportingConfig } from "./monthly-reporting-config";
@@ -56,6 +57,7 @@ export function startSchedulers(env = process.env): boolean {
   startDueDateChecker();
   startAttachmentUploadExpirySweep();
   startIdempotencyPruner();
+  startRateLimitEventPruner();
   startMonthlyReportingScheduler(env);
   started = true;
   logger.info("Recurring scheduler started");
@@ -69,6 +71,7 @@ export async function stopSchedulers(): Promise<void> {
     stopDueDateChecker(),
     stopAttachmentUploadExpirySweep(),
     stopIdempotencyPruner(),
+    stopRateLimitEventPruner(),
     stopMonthlyReportingScheduler(),
   ]);
   started = false;

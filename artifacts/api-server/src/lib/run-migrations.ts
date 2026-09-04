@@ -3846,6 +3846,27 @@ DELETE FROM manual_sections WHERE chapter_id IN (
 DELETE FROM manual_chapters WHERE slug IN ('training', 'training-center');
 `,
   },
+  {
+    name: "068_rate_limit_events",
+    sql: /* sql */ `
+-- Shared, cross-process store for every counter that used to live in a
+-- plain in-memory Map (express-rate-limit's default MemoryStore included) —
+-- see lib/rate-limit-store.ts. A single running task never noticed the
+-- gap, but two tasks behind the same load balancer each keep their own
+-- independent counters, so a limit meant to trip at N requests effectively
+-- allows close to N-per-task before either one notices — most seriously for
+-- the account-lockout guard, which exists specifically to stop a
+-- brute-force attack regardless of how many tasks are running.
+CREATE TABLE IF NOT EXISTS rate_limit_events (
+  id BIGSERIAL PRIMARY KEY,
+  bucket TEXT NOT NULL,
+  key TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS rate_limit_events_bucket_key_time_idx
+  ON rate_limit_events (bucket, key, occurred_at DESC);
+`,
+  },
 
 ];
 

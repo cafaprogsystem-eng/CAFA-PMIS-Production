@@ -14,6 +14,7 @@ import {
 } from "./lib/security-config";
 import { createApiErrorHandler } from "./lib/error-handler";
 import { isProductionEnv } from "./lib/env";
+import { PgRateLimitStore } from "./lib/rate-limit-store";
 
 const app: Express = express();
 
@@ -69,14 +70,19 @@ app.use(
 );
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
+// Backed by a shared Postgres table (lib/rate-limit-store.ts), not the
+// library's default in-memory store — with more than one ECS task behind
+// the load balancer, an in-memory counter is only ever counting that one
+// task's share of traffic, silently allowing close to the limit per task.
 const defaultLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "too_many_requests" },
+  store: new PgRateLimitStore("api_default"),
   // Skip rate limiting in non-production environments so E2E tests and local dev
-  // are not blocked by in-memory counters. Production still enforces the limit.
+  // are not blocked by the shared counters. Production still enforces the limit.
   skip: () => !isProductionEnv(),
 });
 
@@ -86,6 +92,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "too_many_requests" },
+  store: new PgRateLimitStore("api_auth"),
   skip: () => !isProductionEnv(),
 });
 

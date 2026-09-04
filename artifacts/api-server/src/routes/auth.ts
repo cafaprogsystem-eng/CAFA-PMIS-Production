@@ -22,30 +22,18 @@ import {
   publicAppUrl,
 } from "../lib/mailer";
 import { createNotificationDeduped } from "../lib/notifications";
-
-// Simple in-memory rate limiter — configurable window/max.
-function makeRateLimiter(max: number, windowMs: number) {
-  const map = new Map<string, number[]>();
-  return (ip: string): boolean => {
-    const now = Date.now();
-    const times = (map.get(ip) ?? []).filter((t) => now - t < windowMs);
-    if (times.length >= max) return true;
-    times.push(now);
-    map.set(ip, times);
-    return false;
-  };
-}
+import {
+  isRateLimited as isRateLimitedShared,
+  isAccountLocked,
+  recordFailedLogin,
+  clearAccountFailures,
+} from "../lib/rate-limit-store";
 
 // 3 password reset requests per 15 min per IP
-const resetRateMap = new Map<string, number[]>();
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const window = 15 * 60 * 1000;
-  const times = (resetRateMap.get(ip) ?? []).filter((t) => now - t < window);
-  if (times.length >= 3) return true;
-  times.push(now);
-  resetRateMap.set(ip, times);
-  return false;
+const RESET_RATE_MAX = 3;
+const RESET_RATE_WINDOW_MS = 15 * 60 * 1000;
+function isRateLimited(ip: string): Promise<boolean> {
+  return isRateLimitedShared("password_reset_request", ip, RESET_RATE_MAX, RESET_RATE_WINDOW_MS);
 }
 
 function hashToken(plain: string): string {
@@ -65,38 +53,10 @@ const DUMMY_PASSWORD_HASH = bcrypt.hashSync("no-such-account-constant-time-place
 // source IP. The existing authLimiter in app.ts is IP-keyed only, so a
 // distributed attacker (rotating IPs / residential proxies) could otherwise
 // brute-force one high-value account indefinitely since the IP-based limiter
-// never trips for them.
-const ACCOUNT_LOCKOUT_THRESHOLD = 10;
-const ACCOUNT_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
-const ACCOUNT_LOCKOUT_DURATION_MS = 15 * 60 * 1000;
-const accountFailures = new Map<string, number[]>();
-const accountLockouts = new Map<string, number>();
-
-function isAccountLocked(identifier: string): boolean {
-  const until = accountLockouts.get(identifier);
-  if (until === undefined) return false;
-  if (Date.now() >= until) {
-    accountLockouts.delete(identifier);
-    accountFailures.delete(identifier);
-    return false;
-  }
-  return true;
-}
-
-function recordFailedLogin(identifier: string): void {
-  const now = Date.now();
-  const attempts = (accountFailures.get(identifier) ?? []).filter((t) => now - t < ACCOUNT_LOCKOUT_WINDOW_MS);
-  attempts.push(now);
-  accountFailures.set(identifier, attempts);
-  if (attempts.length >= ACCOUNT_LOCKOUT_THRESHOLD) {
-    accountLockouts.set(identifier, now + ACCOUNT_LOCKOUT_DURATION_MS);
-  }
-}
-
-function clearAccountFailures(identifier: string): void {
-  accountFailures.delete(identifier);
-  accountLockouts.delete(identifier);
-}
+// never trips for them. isAccountLocked/recordFailedLogin/clearAccountFailures
+// are backed by the shared rate_limit_events table (lib/rate-limit-store.ts)
+// so the lockout is enforced consistently regardless of which ECS task a
+// given request lands on.
 
 const router: IRouter = Router();
 
@@ -112,7 +72,7 @@ router.post("/auth/login", async (req, res, next) => {
     }
 
     const normalizedIdentifier = identifier.toLowerCase();
-    if (isAccountLocked(normalizedIdentifier)) {
+    if (await isAccountLocked(normalizedIdentifier)) {
       res.status(429).json({ error: "too_many_requests" });
       return;
     }
@@ -129,18 +89,18 @@ router.post("/auth/login", async (req, res, next) => {
     if (!row || !row.password_hash) {
       // Always run a real bcrypt comparison — see DUMMY_PASSWORD_HASH above.
       await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
-      recordFailedLogin(normalizedIdentifier);
+      await recordFailedLogin(normalizedIdentifier);
       res.status(401).json({ error: "invalid_credentials" });
       return;
     }
 
     const ok = await bcrypt.compare(password, row.password_hash);
     if (!ok) {
-      recordFailedLogin(normalizedIdentifier);
+      await recordFailedLogin(normalizedIdentifier);
       res.status(401).json({ error: "invalid_credentials" });
       return;
     }
-    clearAccountFailures(normalizedIdentifier);
+    await clearAccountFailures(normalizedIdentifier);
 
     // Only active accounts may sign in.
     if (row.status && row.status !== "active") {
@@ -314,7 +274,7 @@ router.post("/auth/accept-invite", async (req, res, next) => {
 router.post("/auth/forgot-password", async (req, res, next) => {
   try {
     const ip = String(req.ip ?? req.socket?.remoteAddress ?? "unknown");
-    if (isRateLimited(ip)) {
+    if (await isRateLimited(ip)) {
       res.status(429).json({ error: "too_many_requests" });
       return;
     }
@@ -466,12 +426,16 @@ router.post("/auth/reset-password", async (req, res, next) => {
 
 // SEND VERIFICATION EMAIL ---------------------------------------------------
 // Public. Rate-limited (5/hour per IP). Sends or resends a verification email.
-const verifyRateLimit = makeRateLimiter(5, 60 * 60 * 1000);
+const VERIFY_RATE_MAX = 5;
+const VERIFY_RATE_WINDOW_MS = 60 * 60 * 1000;
 
 router.post("/auth/send-verification-email", async (req, res, next) => {
   try {
     const ip = String(req.ip ?? req.socket?.remoteAddress ?? "unknown");
-    if (verifyRateLimit(ip)) { res.status(429).json({ error: "too_many_requests" }); return; }
+    if (await isRateLimitedShared("verify_email_send", ip, VERIFY_RATE_MAX, VERIFY_RATE_WINDOW_MS)) {
+      res.status(429).json({ error: "too_many_requests" });
+      return;
+    }
 
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     if (!email) { res.status(400).json({ error: "email_required" }); return; }
