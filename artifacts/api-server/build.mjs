@@ -22,6 +22,10 @@ async function buildAll() {
       // (scripts/seed.mjs) needs no TS toolchain (tsx/typescript) in the
       // production image at runtime — only this compiled dist/seed.mjs.
       seed: path.resolve(artifactDir, "../../lib/db/src/seed.ts"),
+      // Same pattern again for the one-off first-Super-Admin creator run by
+      // scripts/create-first-admin.mjs — see infra/aws-production/README.md,
+      // "First administrator account".
+      "create-first-admin": path.resolve(artifactDir, "../../lib/db/src/create-first-admin.ts"),
     },
     platform: "node",
     bundle: true,

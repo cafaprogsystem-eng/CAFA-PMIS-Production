@@ -99,24 +99,53 @@ infrastructure copy — before real certification/traffic, adapt those scripts
 (they are currently hardcoded to `CAFA_STAGING_*` env vars and staging-only
 error text) or write production-specific ones.
 
-## First administrator account — open decision
+## First administrator account
 
-**Must be resolved before the first real deploy:** the
-one-time administrator bootstrap path that created staging's first Super
-Admin account was deliberately removed from the codebase afterward (it must
-not be reintroduced for normal account or password management), and every
-normal path to create a user (the invite flow, `scripts/seed.mjs`) either
-requires an existing admin or is refused outright in production
+The one-time administrator bootstrap path that created staging's first
+Super Admin account was deliberately removed from the codebase afterward
+(it must not be reintroduced for normal account or password management),
+and every normal path to create a user (the invite flow, `scripts/seed.mjs`)
+either requires an existing admin or is refused outright in production
 (`NODE_ENV=production`). A brand-new, completely empty production database
 has no way to create its first Super Admin account through the application
-itself. Decide how to bootstrap it — e.g. a one-off, explicitly-audited
-manual SQL insert against the new database, or a narrowly-scoped, temporary
-bootstrap mechanism reintroduced just for this cutover and removed again
-immediately after — before running an actual production deploy.
+itself.
 
-Future administrator password recovery (after that first account exists)
-uses the normal authenticated user management or public
-forgot-password/reset-password workflow.
+**Resolution: a dedicated, narrowly-scoped one-off script, not a manual SQL
+session and not a reintroduced bootstrap route.**
+`scripts/create-first-admin.mjs` (compiled from `lib/db/src/create-first-admin.ts`,
+the same way `scripts/seed.mjs` is compiled from `lib/db/src/seed.ts`) inserts
+exactly one `super_admin` / `hq`-scope, `active` user row with a bcrypt
+(cost 12) password hash — the identical shape and hashing the app itself
+uses everywhere else — and is idempotent by email (a second run against the
+same `ADMIN_EMAIL` reports the existing account and changes nothing). Run it
+exactly once, immediately after the first successful `./deploy-production.sh`,
+via:
+
+```sh
+CAFA_PRODUCTION_APPROVED_REGION=<approved-region> \
+ADMIN_NAME="Full Name" \
+ADMIN_EMAIL="admin@example.org" \
+ADMIN_USERNAME="admin_username" \
+ADMIN_PASSWORD="choose-a-strong-password-yourself" \
+./infra/aws-production/run-create-first-admin.sh
+```
+
+This runs the script as a one-off ECS Fargate task on the same migration
+task definition, subnets, and security group `deploy-production.sh` already
+uses for migrations — RDS is private to the production VPC, so this cannot
+run directly from an operator machine, and no CloudFormation change or
+rebuild is needed. The name/email/username/password are passed as a
+container environment override (never a command-line argument, never
+written to this repository or to any file) and are never printed by this
+script or by `create-first-admin.ts` — only the resulting bcrypt hash
+reaches the database. Choose the password yourself before running this;
+nothing generates or displays one for you.
+
+After that first account exists, create every other account through the
+normal in-app invite flow, and use the normal authenticated user management
+or public forgot-password/reset-password workflow for password recovery —
+this script is not a general-purpose admin-creation tool and should not be
+run again once the first account is in place.
 
 ## Safe repeat runs and cleanup
 
