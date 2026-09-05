@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/contexts/language-context";
 import cafaLogo from "@/assets/cafa-logo.png";
+import cafaIcon from "@/assets/cafa-icon.png";
 import fieldBg from "@/assets/cafa-field.png";
 
 const CSS = `
@@ -67,7 +68,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
 
             <div className="cafa-card w-full max-w-[440px] shrink-0 rounded-2xl bg-white border border-gray-200 shadow-[0_12px_40px_rgba(0,0,0,0.16),0_2px_8px_rgba(0,0,0,0.08)] overflow-hidden">
               <div className="flex lg:hidden justify-center px-7 pt-7">
-                <img src={cafaLogo} alt="CAFA" className="h-12 object-contain" />
+                <img src={cafaIcon} alt="CAFA" className="h-12 object-contain" />
               </div>
               {children}
             </div>

@@ -8,11 +8,15 @@ import { fileURLToPath } from "url";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dir, "../..");
-const LOGO_PATH = resolve(ROOT, "artifacts/cafa-pmis/src/assets/cafa-logo.png");
+// cafa-icon.png is the interlocking-figures mark cropped out of cafa-logo.png
+// (transparent background, no wordmark) — the full logo's 700x377 aspect
+// ratio used to get squeezed into these square icon slots as a thin
+// horizontal strip, which is why icon-180/384/etc. looked wrong.
+const LOGO_PATH = resolve(ROOT, "artifacts/cafa-pmis/src/assets/cafa-icon.png");
 const OUT_DIR = resolve(ROOT, "artifacts/cafa-pmis/public/icons");
 
 const SIZES = [72, 96, 128, 144, 152, 180, 192, 384, 512];
-const BG_COLOR = 0x1a2744ff; // CAFA navy
+const BG_COLOR = 0xffffffff; // white — matches manifest background_color and the browser-tab favicon
 const PADDING_PCT = 0.18;    // 18% padding on each side
 
 async function main() {

@@ -16,7 +16,7 @@ import {
   Shield, HelpCircle, BookMarked,
   Search, Network, Check,
 } from "lucide-react";
-import cafaLogo from "@/assets/cafa-logo.png";
+import cafaLogo from "@/assets/cafa-icon.png";
 import cafaField from "@/assets/cafa-field.png";
 import ssDashboard from "@/assets/landing-dashboard.webp";
 import ssProjects from "@/assets/landing-projects.webp";

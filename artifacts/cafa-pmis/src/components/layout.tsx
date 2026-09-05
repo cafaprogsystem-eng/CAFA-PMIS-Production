@@ -48,7 +48,7 @@ import { clearNotificationQueries } from "@/lib/notification-client";
 import { useSocket } from "@/lib/socket";
 import { invalidateAuthenticatedSession } from "@/lib/authenticated-session";
 import { useRecentItems } from "@/hooks/use-recent-items";
-import cafaLogo from "@/assets/cafa-logo.png";
+import cafaLogo from "@/assets/cafa-icon.png";
 import {
   demoRoleHarnessEnabled,
   useGetMe,
