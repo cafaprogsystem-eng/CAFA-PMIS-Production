@@ -22,6 +22,8 @@ import {
   publicAppUrl,
 } from "../lib/mailer";
 import { createNotificationDeduped } from "../lib/notifications";
+import { logger } from "../lib/logger";
+import { isProductionEnv } from "../lib/env";
 import {
   isRateLimited as isRateLimitedShared,
   isAccountLocked,
@@ -321,8 +323,21 @@ router.post("/auth/forgot-password", async (req, res, next) => {
 
     await logAudit({ userId: user.id, action: "forgot_password_request", module: "auth", entityId: user.id });
 
-    // In dev mode (mailer stubbed), surface the link directly so testers can use it.
-    res.json({ ...neutral, ...(delivered ? {} : { devResetLink: resetLink }) });
+    // Never expose the raw reset link in production, regardless of *why*
+    // delivery failed (stub mode, missing key, provider outage, bad
+    // sender domain...) — this endpoint is public and unauthenticated, so
+    // leaking a working reset link here is an account-takeover primitive,
+    // not a debugging convenience. Non-production keeps the old
+    // surface-the-link-for-testers behavior.
+    if (!delivered) {
+      if (isProductionEnv()) {
+        logger.warn({ userId: user.id, kind: "password_reset" }, "[auth] password reset email failed to send — link withheld from API response");
+      } else {
+        res.json({ ...neutral, devResetLink: resetLink });
+        return;
+      }
+    }
+    res.json(neutral);
   } catch (err) { next(err); }
 });
 
@@ -471,7 +486,18 @@ router.post("/auth/send-verification-email", async (req, res, next) => {
     const { delivered } = await sendEmail({ to: user.email, subject, html, text, kind: "email_verification", userId: user.id });
     await logAudit({ userId: user.id, action: "verification_email_sent", module: "auth", entityId: user.id });
 
-    res.json({ ...neutral, ...(delivered ? {} : { devVerifyLink: `${publicAppUrl()}/verify-email?token=${encodeURIComponent(plainToken)}` }) });
+    // Same rationale as /auth/forgot-password above: this endpoint is
+    // public and unauthenticated, so a working verification link must
+    // never leak into the API response in production.
+    if (!delivered) {
+      if (isProductionEnv()) {
+        logger.warn({ userId: user.id, kind: "email_verification" }, "[auth] verification email failed to send — link withheld from API response");
+      } else {
+        res.json({ ...neutral, devVerifyLink: `${publicAppUrl()}/verify-email?token=${encodeURIComponent(plainToken)}` });
+        return;
+      }
+    }
+    res.json(neutral);
   } catch (err) { next(err); }
 });
 
