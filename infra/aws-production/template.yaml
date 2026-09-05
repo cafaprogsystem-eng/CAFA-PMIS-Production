@@ -824,6 +824,24 @@ Resources:
         - Key: Environment
           Value: production
 
+  ResendApiKeySecret:
+    Condition: CoreEnabled
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: cafa-pmis-production/resend-api-key
+      Description: >-
+        Resend API key for production email delivery. CloudFormation creates
+        this secret with no value — populate it manually after this stack is
+        created (aws secretsmanager put-secret-value --secret-id
+        cafa-pmis-production/resend-api-key --secret-string '<the key>')
+        before the application service starts, since EMAIL_ENABLED=true from
+        first deploy.
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: production
+
   ApplicationLogGroup:
     Condition: CoreEnabled
     Type: AWS::Logs::LogGroup
@@ -900,6 +918,7 @@ Resources:
                   - !Ref DatabaseUrlSecret
                   - !Ref SessionSecret
                   - !Ref PublicOriginSecret
+                  - !Ref ResendApiKeySecret
       Tags:
         - Key: Application
           Value: cafa-pmis
@@ -997,9 +1016,9 @@ Resources:
             - Name: MAX_ATTACHMENT_SIZE_MB
               Value: "25"
             - Name: EMAIL_ENABLED
-              Value: "false"
+              Value: "true"
             - Name: EMAIL_PROVIDER
-              Value: smtp
+              Value: resend
             - Name: EMAIL_FROM_ADDRESS
               Value: no-reply@pmis.cafa.systems
             - Name: EMAIL_FROM_NAME
@@ -1015,6 +1034,13 @@ Resources:
               ValueFrom: !Ref SessionSecret
             - Name: PUBLIC_APP_URL
               ValueFrom: !Ref PublicOriginSecret
+            # lib/mailer.ts reads the active provider's key from EMAIL_API_KEY
+            # specifically (not RESEND_API_KEY) — the Secrets Manager secret
+            # itself is named cafa-pmis-production/resend-api-key for clarity,
+            # but the container env var name below must match mailer.ts or
+            # validateEmailConfig() throws at boot ("EMAIL_API_KEY" missing).
+            - Name: EMAIL_API_KEY
+              ValueFrom: !Ref ResendApiKeySecret
           LogConfiguration:
             LogDriver: awslogs
             Options:
