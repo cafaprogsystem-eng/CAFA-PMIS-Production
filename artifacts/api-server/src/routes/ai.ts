@@ -433,8 +433,12 @@ router.post("/ai/chat", async (req, res, next) => {
       }
     } catch (openaiErr) {
       assistantStatus = "failed";
-      const errMsg = (openaiErr as Error)?.message ?? "AI service error";
-      fullResponse = `_Error: ${errMsg}_`;
+      // The raw OpenAI SDK message (rate limits, auth failures, malformed
+      // requests...) is not something to show a user as if it were the
+      // assistant talking — log it internally and persist/display only a
+      // generic notice.
+      req.log.error({ err: openaiErr, userId: user.id, sessionId }, "[ai:chat] OpenAI request failed");
+      fullResponse = "Sorry, something went wrong while generating a response. Please try again.";
       res.write(`data: ${JSON.stringify({ content: fullResponse })}\n\n`);
     }
 

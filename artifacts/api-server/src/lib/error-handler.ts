@@ -45,8 +45,22 @@ export function createApiErrorHandler(logger: ErrorLogger) {
       return;
     }
 
+    // A 4xx .status alone is not an opt-in to expose .message — plenty of
+    // third-party exceptions carry a real HTTP status without ever meaning
+    // for their message to reach an API caller. GaxiosError (the HTTP layer
+    // under @google-cloud/storage, i.e. STORAGE_PROVIDER=gcs/replit) sets
+    // .status from the raw response on every request failure, so an
+    // uncaught storage error used to leak Google's error text verbatim here.
+    // errorCode is the deliberate marker this codebase already uses when an
+    // error IS meant to surface its message (see routes/dashboard.ts's
+    // forbiddenDashboardScope) — require it before trusting .message.
+    const errorCode = typeof anyErr?.errorCode === "string" ? anyErr.errorCode : null;
+    if (!errorCode) {
+      res.status(status).json({ error: "request_failed", detail: "Request failed" });
+      return;
+    }
+
     const message = typeof anyErr?.message === "string" ? anyErr.message : "Request failed";
-    const error = typeof anyErr?.errorCode === "string" ? anyErr.errorCode : "server_error";
-    res.status(status).json({ error, detail: message });
+    res.status(status).json({ error: errorCode, detail: message });
   };
 }

@@ -20,6 +20,7 @@ import {
   renderInviteEmail,
   renderVerifyEmail,
   publicAppUrl,
+  type EmailDeliveryStatus,
 } from "../lib/mailer";
 import { createNotificationDeduped } from "../lib/notifications";
 import { logger } from "../lib/logger";
@@ -316,9 +317,16 @@ router.post("/auth/forgot-password", async (req, res, next) => {
     const resetLink = `${publicAppUrl()}/reset-password?token=${encodeURIComponent(plainToken)}`;
 
     const { html, text, subject } = renderPasswordResetEmail({ name: user.name, email: user.email, token: plainToken, expiresAt });
-    const { delivered } = await sendEmail({ to: user.email, subject, html, text, kind: "password_reset", userId: user.id, meta: { resetLink } });
-    if (delivered && tokenId) {
-      await pool.query(`UPDATE password_reset_tokens SET email_status = 'sent' WHERE id = $1`, [tokenId]);
+    let delivered = false;
+    let emailDelivery: EmailDeliveryStatus = "pending";
+    try {
+      ({ delivered, status: emailDelivery } = await sendEmail({ to: user.email, subject, html, text, kind: "password_reset", userId: user.id, meta: { resetLink } }));
+    } catch (emailErr) {
+      emailDelivery = "failed";
+      logger.warn({ err: emailErr, userId: user.id }, "[auth] forgot-password email dispatch threw");
+    }
+    if (tokenId) {
+      await pool.query(`UPDATE password_reset_tokens SET email_status = $1 WHERE id = $2`, [emailDelivery, tokenId]);
     }
 
     await logAudit({ userId: user.id, action: "forgot_password_request", module: "auth", entityId: user.id });

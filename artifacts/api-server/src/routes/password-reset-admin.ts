@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import crypto from "node:crypto";
 import { pool } from "@workspace/db";
 import { logAudit } from "../middlewares/currentUser";
-import { sendEmail, renderPasswordResetEmail, publicAppUrl } from "../lib/mailer";
+import { sendEmail, renderPasswordResetEmail, publicAppUrl, type EmailDeliveryStatus } from "../lib/mailer";
 
 const router: IRouter = Router();
 const RESET_STATUSES = ["active", "used", "expired", "revoked"] as const;
@@ -188,14 +188,31 @@ router.post("/password-reset-tokens/:id/resend", requireHqAdmin, async (req, res
 
     const resetLink = `${publicAppUrl()}/reset-password?token=${encodeURIComponent(plainToken)}`;
     const { html, text, subject } = renderPasswordResetEmail({ name: user.name, email: user.email, token: plainToken, expiresAt });
-    const { delivered } = await sendEmail({ to: user.email, subject, html, text, kind: "password_reset", userId: user.userId, meta: { resetLink, adminResend: true } });
-    if (delivered && newTokenId) {
-      await pool.query(`UPDATE password_reset_tokens SET email_status = 'sent' WHERE id = $1`, [newTokenId]);
+
+    let delivered = false;
+    let emailDelivery: EmailDeliveryStatus = "pending";
+    try {
+      ({ delivered, status: emailDelivery } = await sendEmail({ to: user.email, subject, html, text, kind: "password_reset", userId: user.userId, meta: { resetLink, adminResend: true } }));
+    } catch (emailErr) {
+      emailDelivery = "failed";
+      req.log.warn({ err: emailErr, userId: user.userId }, "[password-reset-admin:resend] email dispatch failed");
+    }
+    if (newTokenId) {
+      await pool.query(`UPDATE password_reset_tokens SET email_status = $1 WHERE id = $2`, [emailDelivery, newTokenId]);
     }
 
-    await logAudit({ userId: req.currentUser!.id, action: "password_reset_email_sent", module: "password_reset", entityId: user.userId });
+    // The audit trail must reflect what actually happened — an admin relying on
+    // this log to confirm a user was notified must not see "sent" for a
+    // delivery that failed (this is the same class of bug as devResetLink:
+    // trusting a fire-and-forget send instead of its real outcome).
+    await logAudit({
+      userId: req.currentUser!.id,
+      action: delivered ? "password_reset_email_sent" : "password_reset_email_failed",
+      module: "password_reset",
+      entityId: user.userId,
+    });
 
-    res.json({ ok: true, resetLink });
+    res.json({ ok: true, resetLink, delivered, emailDelivery });
   } catch (err) { next(err); }
 });
 

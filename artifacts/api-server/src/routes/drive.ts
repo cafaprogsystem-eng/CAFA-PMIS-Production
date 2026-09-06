@@ -698,8 +698,14 @@ router.post("/drive/admin/test-connection", requireAdmin, async (req: Request, r
 });
 
 // ── GET /drive/admin/health ────────────────────────────────────────────────
-// Lightweight health check — returns 200 if S3 is reachable, 503 otherwise
-router.get("/drive/admin/health", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+// Lightweight health check — returns 200 if S3 is reachable, 503 otherwise.
+// Admin-only despite the generic reason/bucket fields below: on failure
+// `reason` can carry raw provider error text (see lib/awsS3.ts testConnection),
+// which the "/admin/" path implies is restricted to admins — requireAuth alone
+// let any authenticated user of any role reach it. GET /storage/health remains
+// the intentionally public-to-any-authenticated-user alias for frontend
+// connectivity checks.
+router.get("/drive/admin/health", requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!isS3Configured()) {
       res.status(503).json({ ok: false, provider: "aws-s3", reason: "not_configured" });
