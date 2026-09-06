@@ -842,6 +842,27 @@ Resources:
         - Key: Environment
           Value: production
 
+  OpenAiApiKeySecret:
+    Condition: CoreEnabled
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: cafa-pmis-production/openai-api-key
+      Description: >-
+        OpenAI API key for the production AI Assistant
+        (lib/integrations-openai-ai-server reads it as
+        AI_INTEGRATIONS_OPENAI_API_KEY, not OPENAI_API_KEY — routes/ai.ts
+        throws at first use if this is missing). CloudFormation creates this
+        secret with no value — populate it manually after this stack is
+        created (aws secretsmanager put-secret-value --secret-id
+        cafa-pmis-production/openai-api-key --secret-string '<the key>')
+        before the application service starts, since AI_ENABLED=true from
+        this deploy.
+      Tags:
+        - Key: Application
+          Value: cafa-pmis
+        - Key: Environment
+          Value: production
+
   ApplicationLogGroup:
     Condition: CoreEnabled
     Type: AWS::Logs::LogGroup
@@ -919,6 +940,7 @@ Resources:
                   - !Ref SessionSecret
                   - !Ref PublicOriginSecret
                   - !Ref ResendApiKeySecret
+                  - !Ref OpenAiApiKeySecret
       Tags:
         - Key: Application
           Value: cafa-pmis
@@ -1024,7 +1046,12 @@ Resources:
             - Name: EMAIL_FROM_NAME
               Value: CAFA Program Management System
             - Name: AI_ENABLED
-              Value: "false"
+              Value: "true"
+            # lib/integrations-openai-ai-server/src/client.ts talks directly to
+            # OpenAI (not a proxied/gateway integration), so this is the plain
+            # public API base URL — matches the openai SDK's own default.
+            - Name: AI_INTEGRATIONS_OPENAI_BASE_URL
+              Value: https://api.openai.com/v1
             - Name: LOG_LEVEL
               Value: info
           Secrets:
@@ -1041,6 +1068,11 @@ Resources:
             # validateEmailConfig() throws at boot ("EMAIL_API_KEY" missing).
             - Name: EMAIL_API_KEY
               ValueFrom: !Ref ResendApiKeySecret
+            # lib/integrations-openai-ai-server/src/client.ts (imported by
+            # routes/ai.ts) reads AI_INTEGRATIONS_OPENAI_API_KEY specifically —
+            # NOT OPENAI_API_KEY — and throws at first /ai/chat call if unset.
+            - Name: AI_INTEGRATIONS_OPENAI_API_KEY
+              ValueFrom: !Ref OpenAiApiKeySecret
           LogConfiguration:
             LogDriver: awslogs
             Options:
