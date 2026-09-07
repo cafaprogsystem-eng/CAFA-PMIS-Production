@@ -1207,7 +1207,10 @@ Resources:
         - HasExistingServiceTaskDefinition
         - !Ref ServiceTaskDefinitionArn
         - !Ref ApplicationTaskDefinition
-      DesiredCount: 1
+      # Temporarily 2 (not 1) to validate the Postgres realtime adapter across
+      # multiple ECS tasks before this goes to production. Revert to 1 once
+      # that Staging test plan is confirmed done.
+      DesiredCount: 2
       LaunchType: FARGATE
       EnableExecuteCommand: false
       DeploymentConfiguration:
