@@ -767,10 +767,10 @@ router.get("/conversations/:id", async (req, res, next) => {
     );
     res.json({
       ...conv,
-      members: members.rows.map((member) => ({
+      members: await Promise.all(members.rows.map(async (member) => ({
         ...member,
-        isOnline: realtime.isUserOnline(member.id),
-      })),
+        isOnline: await realtime.isUserOnline(member.id),
+      }))),
       memberCount: members.rows.length,
       lastMessageBody: lastMsg.rows[0]?.body ?? null,
       lastMessageAt: lastMsg.rows[0]?.lastMessageAt ?? null,

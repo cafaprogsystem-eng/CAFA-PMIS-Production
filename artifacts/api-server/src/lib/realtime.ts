@@ -1,5 +1,7 @@
 import type { IncomingMessage, Server as HttpServer } from "http";
 import { Server as SocketIOServer, type Socket } from "socket.io";
+import pg from "pg";
+import { createAdapter } from "@socket.io/postgres-adapter";
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
 import {
@@ -415,9 +417,21 @@ function conversationRoom(conversationId: number): string {
   return `conversation:${conversationId}`;
 }
 
-type RealtimeSocket = Socket & {
+/**
+ * Cross-node fetchSockets() (used once a cluster adapter is installed) only
+ * returns a RemoteSocket for sockets on other processes, which exposes
+ * nothing but .id/.handshake/.rooms/.data — never a directly-assigned
+ * property. Identity must therefore always be read from and written to
+ * .data, never as a raw socket property, or it silently disappears for any
+ * socket connected to a different ECS task.
+ */
+interface RealtimeSocketData {
   rtUser: RealtimeUser;
   rtSessionId: string;
+}
+
+type RealtimeSocket = Socket & {
+  data: RealtimeSocketData;
 };
 
 /**
@@ -476,6 +490,21 @@ export function createRealtimeCorsOptions(
   };
 }
 
+/**
+ * Dedicated pool for the cross-process Socket.IO adapter (see init() below).
+ * Postgres LISTEN requires one client checked out from its pool for as long
+ * as the adapter runs; a separate pool from the shared query pool in
+ * @workspace/db keeps that permanent reservation from reducing the
+ * connections available for ordinary request handling.
+ */
+const realtimeAdapterPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 5,
+});
+realtimeAdapterPool.on("error", (err) => {
+  logger.warn({ err }, "[realtime] adapter pool error");
+});
+
 export class RealtimeService {
   private io: SocketIOServer | null = null;
 
@@ -498,6 +527,12 @@ export class RealtimeService {
       pingInterval: 25_000,
       pingTimeout: 20_000,
     });
+    // Makes fetchSockets()/room emit cluster-aware across every ECS task
+    // instead of only the process that received a given request. Requires
+    // the socket_io_attachments table (migration 069_socket_io_adapter_attachments)
+    // for payloads over the 8000-byte NOTIFY limit; ordinary domain-event
+    // payloads stay well under it.
+    this.io.adapter(createAdapter(realtimeAdapterPool));
 
     this.io.use(async (socket: Socket, next) => {
       try {
@@ -535,7 +570,7 @@ export class RealtimeService {
           return;
         }
 
-        (socket as Socket & { rtUser: RealtimeUser }).rtUser = {
+        socket.data.rtUser = {
           id: row.id,
           name: row.name,
           role: row.role,
@@ -544,8 +579,7 @@ export class RealtimeService {
             ? String(row.sector).split(",").map((sector) => sector.trim()).filter(Boolean)
             : null,
         };
-        (socket as RealtimeSocket).rtSessionId = session.id;
-        socket.data.rtUser = (socket as Socket & { rtUser: RealtimeUser }).rtUser;
+        socket.data.rtSessionId = session.id;
         this.presence.register(socket.id, row.id, session.id);
         next();
       } catch (err) {
@@ -556,7 +590,7 @@ export class RealtimeService {
 
     this.io.on("connection", (socket: Socket) => {
       const realtimeSocket = socket as RealtimeSocket;
-      const user = realtimeSocket.rtUser;
+      const user = realtimeSocket.data.rtUser;
 
       void socket.join(`user:${user.id}`);
       if (HQ_ROLES.has(user.role)) void socket.join("hq");
@@ -839,7 +873,7 @@ export class RealtimeService {
     void this.io.fetchSockets().then((sockets) => {
       for (const rawSocket of sockets) {
         const socket = rawSocket as unknown as RealtimeSocket;
-        if (socket.rtSessionId === sessionId) socket.disconnect(true);
+        if (socket.data.rtSessionId === sessionId) socket.disconnect(true);
       }
     }).catch((err) => {
       logger.warn({ err }, "[realtime] failed to disconnect revoked session");
@@ -853,15 +887,27 @@ export class RealtimeService {
     void this.io.fetchSockets().then((sockets) => {
       for (const rawSocket of sockets) {
         const socket = rawSocket as unknown as RealtimeSocket;
-        if (socket.rtUser?.id === userId) socket.disconnect(true);
+        if (socket.data.rtUser?.id === userId) socket.disconnect(true);
       }
     }).catch((err) => {
       logger.warn({ err, userId }, "[realtime] failed to disconnect deactivated user");
     });
   }
 
-  isUserOnline(userId: number): boolean {
-    return this.presence.isOnline(userId);
+  /**
+   * The local presence Map only knows about connections on this process, so
+   * it alone is only correct with a single ECS task. Every authenticated
+   * socket joins `user:<id>` (see connection handler above), which is
+   * cluster-aware once the Postgres adapter is installed — that room is
+   * checked whenever the local grace-period bookkeeping doesn't already say
+   * this user is online, so a user connected only to another task is still
+   * reported online.
+   */
+  async isUserOnline(userId: number): Promise<boolean> {
+    if (this.presence.isOnline(userId)) return true;
+    if (!this.io) return false;
+    const sockets = await this.io.in(`user:${userId}`).fetchSockets();
+    return sockets.length > 0;
   }
 
   /**
@@ -945,9 +991,9 @@ export class RealtimeService {
   private async refreshSocketUser(
     socket: RealtimeSocket,
   ): Promise<(ConversationAccessUser & OperationalRecordAccessUser) | null> {
-    const socketUser = socket.rtUser ?? socket.data.rtUser as RealtimeUser | undefined;
+    const socketUser = socket.data.rtUser;
     if (!socketUser) return null;
-    const activeSession = await getActiveSessionById(socket.rtSessionId);
+    const activeSession = await getActiveSessionById(socket.data.rtSessionId);
     // The demo role harness deliberately impersonates an active user in
     // development; production sockets must still exactly match their session.
     if (!activeSession || (
@@ -967,7 +1013,7 @@ export class RealtimeService {
     );
     const row = result.rows[0];
     if (!row || row.status !== "active") return null;
-    socket.rtUser = {
+    socket.data.rtUser = {
       id: row.id,
       name: row.name,
       role: row.role,
@@ -976,12 +1022,11 @@ export class RealtimeService {
         ? String(row.sector).split(",").map((sector) => sector.trim()).filter(Boolean)
         : null,
     };
-    socket.data.rtUser = socket.rtUser;
     return {
       id: row.id,
       role: row.role,
       stateId: row.state_id ?? null,
-      sectors: socket.rtUser.sectors,
+      sectors: socket.data.rtUser.sectors,
     };
   }
 
@@ -1021,13 +1066,13 @@ export class RealtimeService {
       // user's presence version.
       if (!this.presence.isCurrentTransition(transition.userId, transition.version)) return;
       const viewer = {
-        id: socket.rtUser.id,
-        name: socket.rtUser.name,
+        id: socket.data.rtUser.id,
+        name: socket.data.rtUser.name,
         email: "",
-        role: socket.rtUser.role,
+        role: socket.data.rtUser.role,
         roleLabel: "",
-        scope: socket.rtUser.stateId === null ? "hq" : "state",
-        stateId: socket.rtUser.stateId,
+        scope: socket.data.rtUser.stateId === null ? "hq" : "state",
+        stateId: socket.data.rtUser.stateId,
         stateName: null,
         sector: null,
         avatarUrl: null,
@@ -1253,8 +1298,8 @@ export class RealtimeService {
       const sockets = await this.io.in(`user:${userId}`).fetchSockets();
       for (const rawSocket of sockets) {
         const socket = rawSocket as unknown as RealtimeSocket;
-        if (socket.rtUser?.id !== userId) continue;
-        if (!await getActiveSessionById(socket.rtSessionId)) continue;
+        if (socket.data.rtUser?.id !== userId) continue;
+        if (!await getActiveSessionById(socket.data.rtSessionId)) continue;
         socket.emit("domain:event", event);
       }
     });

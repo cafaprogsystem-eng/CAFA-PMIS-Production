@@ -127,14 +127,14 @@ describe("Communication realtime event boundary", () =>
 ;
 
     const fetchSockets = vi.fn().mockResolvedValue([
-      
+
 {
- rtSessionId: "session-a", disconnect: matchingDisconnect 
+ data: { rtSessionId: "session-a" }, disconnect: matchingDisconnect
 }
 ,
-      
+
 {
- rtSessionId: "session-b", disconnect: otherDisconnect 
+ data: { rtSessionId: "session-b" }, disconnect: otherDisconnect
 }
 ,
     ])
@@ -851,22 +851,24 @@ describe("operational domain-event boundary", () =>
     const leave = vi.fn().mockResolvedValue(undefined)
 ;
 
-    const socket = 
+    const socket =
 {
 
-      rtSessionId: "revoked-session",
-      rtUser: 
+      data:
 {
- id: 11, name: "Viewer", role: "viewer", stateId: null, sectors: null 
+
+        rtSessionId: "revoked-session",
+        rtUser:
+{
+ id: 11, name: "Viewer", role: "viewer", stateId: null, sectors: null
 }
 ,
-      data: 
-{
+
 }
 ,
       emit,
       leave,
-    
+
 }
 ;
 

@@ -143,12 +143,12 @@ const USER_COLS = `
   u.email_verified AS "emailVerified", u.email_verified_at AS "emailVerifiedAt"
 `;
 
-function withPresence<T extends { id: number; lastSeenAt?: Date | string | null }>(
+async function withPresence<T extends { id: number; lastSeenAt?: Date | string | null }>(
   user: T,
-): T & { isOnline: boolean; lastSeenAt: Date | string | null } {
+): Promise<T & { isOnline: boolean; lastSeenAt: Date | string | null }> {
   return {
     ...user,
-    isOnline: realtime.isUserOnline(user.id),
+    isOnline: await realtime.isUserOnline(user.id),
     lastSeenAt: user.lastSeenAt ?? null,
   };
 }
@@ -274,7 +274,7 @@ router.get("/users", requirePerm("users.view"), async (req, res, next) => {
     const { rows } = await pool.query(sql, pageParams);
     const total = count.rows[0]?.total ?? 0;
     res.json({
-      items: rows.map(withPresence),
+      items: await Promise.all(rows.map(withPresence)),
       total,
       limit,
       offset,
@@ -501,7 +501,7 @@ router.get("/users/:id", requirePerm("users.view"), requireValidUserId, async (r
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json(withPresence(rows[0]));
+    res.json(await withPresence(rows[0]));
   } catch (err) {
     next(err);
   }
@@ -1103,7 +1103,7 @@ router.patch("/users/:id", requirePerm("users.manage"), requireValidUserId, asyn
       `SELECT ${USER_COLS} FROM users u LEFT JOIN states s ON s.id = u.state_id WHERE u.id = $1`,
       [id],
     );
-    res.json(withPresence(out.rows[0]));
+    res.json(await withPresence(out.rows[0]));
   } catch (err) {
     next(err);
   }

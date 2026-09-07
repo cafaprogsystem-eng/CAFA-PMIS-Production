@@ -80,10 +80,10 @@ describe("USER-FUNC: bounded truthful directory contract", () => {
     expect(usersRoute).toContain('ORDER BY LOWER(u.name) ASC, u.id ASC');
     expect(usersRoute).toContain("LIMIT $${pageParams.length - 1} OFFSET $${pageParams.length}");
     expect(usersRoute).toContain("COALESCE(u.sector, '')");
-    expect(usersRoute).toContain("items: rows");
+    expect(usersRoute).toContain("items: await Promise.all(rows.map(withPresence))");
     expect(usersRoute).toContain("nextOffset:");
     expect(usersRoute).toContain('u.last_seen_at AS "lastSeenAt"');
-    expect(usersRoute).toContain("isOnline: realtime.isUserOnline(user.id)");
+    expect(usersRoute).toContain("isOnline: await realtime.isUserOnline(user.id)");
     for (const role of [
       "super_admin", "executive_director", "program_manager", "senior_program_coordinator",
       "technical_coordinator", "state_office_manager", "state_program_officer", "viewer",

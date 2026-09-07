@@ -3867,6 +3867,22 @@ CREATE INDEX IF NOT EXISTS rate_limit_events_bucket_key_time_idx
   ON rate_limit_events (bucket, key, occurred_at DESC);
 `,
   },
+  {
+    name: "069_socket_io_adapter_attachments",
+    sql: /* sql */ `
+-- Backs @socket.io/postgres-adapter (lib/realtime.ts), which fans Socket.IO
+-- broadcasts out across every ECS task via Postgres LISTEN/NOTIFY instead of
+-- each task only reaching sockets connected to itself. NOTIFY payloads over
+-- 8000 bytes cannot go through the channel directly, so the adapter stores
+-- those (rare for our small JSON domain-event hints) here and notifies with
+-- just the row id. Schema and name are fixed by the library itself.
+CREATE TABLE IF NOT EXISTS socket_io_attachments (
+  id BIGSERIAL UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  payload BYTEA
+);
+`,
+  },
 
 ];
 
