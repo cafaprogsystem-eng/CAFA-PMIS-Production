@@ -315,6 +315,15 @@ importers:
 
   artifacts/api-worker:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1056.0
+        version: 3.1056.0
+      '@aws-sdk/s3-request-presigner':
+        specifier: ^3.1056.0
+        version: 3.1056.0
+      '@xmldom/xmldom':
+        specifier: ^0.9.12
+        version: 0.9.12
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -3533,6 +3542,10 @@ packages:
 
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
+
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -10085,6 +10098,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.10
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
+
+  '@xmldom/xmldom@0.9.12': {}
 
   abort-controller@3.0.0:
     dependencies:

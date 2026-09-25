@@ -10,6 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1056.0",
+    "@aws-sdk/s3-request-presigner": "^3.1056.0",
+    "@xmldom/xmldom": "^0.9.12",
     "bcryptjs": "^3.0.3",
     "hono": "^4.13.9",
     "pg": "^8.20.0"

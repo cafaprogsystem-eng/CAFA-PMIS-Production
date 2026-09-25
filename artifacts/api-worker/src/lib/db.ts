@@ -4,6 +4,10 @@ import type { Context } from "hono";
 export interface Bindings {
   HYPERDRIVE: Hyperdrive;
   SESSION_SECRET: string;
+  R2_ACCESS_KEY_ID: string;
+  R2_SECRET_ACCESS_KEY: string;
+  R2_ENDPOINT_URL: string;
+  R2_BUCKET: string;
 }
 
 export type AppContext = Context<{ Bindings: Bindings }>;
