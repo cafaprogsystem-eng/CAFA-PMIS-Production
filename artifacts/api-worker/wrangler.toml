@@ -1,0 +1,15 @@
+name = "cafa-pmis-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-20"
+compatibility_flags = ["nodejs_compat"]
+
+# Same Neon database created in the Phase 1 connectivity proof
+# (project cafa-pmis-cloudflare, aws-eu-central-1).
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "feceb30510ff449897f114637dc5569e"
+
+[vars]
+# Placeholder for local/dev only — production and staging supply their own
+# value via `wrangler secret put SESSION_SECRET` (never committed).
+SESSION_SECRET = "dev-only-insecure-secret-change-me"
