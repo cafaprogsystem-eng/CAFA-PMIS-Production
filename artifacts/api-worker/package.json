@@ -15,6 +15,7 @@
     "@xmldom/xmldom": "^0.9.12",
     "bcryptjs": "^3.0.3",
     "hono": "^4.13.9",
+    "openai": "^6.27.0",
     "pg": "^8.20.0"
   },
   "devDependencies": {

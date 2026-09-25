@@ -8,6 +8,17 @@ export interface Bindings {
   R2_SECRET_ACCESS_KEY: string;
   R2_ENDPOINT_URL: string;
   R2_BUCKET: string;
+  EMAIL_ENABLED?: string;
+  EMAIL_PROVIDER?: string;
+  EMAIL_API_KEY?: string;
+  EMAIL_FROM_ADDRESS?: string;
+  EMAIL_FROM_NAME?: string;
+  EMAIL_REPLY_TO?: string;
+  PUBLIC_APP_URL?: string;
+  AI_ENABLED?: string;
+  AI_DAILY_MESSAGE_LIMIT?: string;
+  AI_INTEGRATIONS_OPENAI_API_KEY?: string;
+  AI_INTEGRATIONS_OPENAI_BASE_URL?: string;
 }
 
 export type AppContext = Context<{ Bindings: Bindings }>;

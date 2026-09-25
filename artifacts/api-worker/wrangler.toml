@@ -16,3 +16,13 @@ SESSION_SECRET = "dev-only-insecure-secret-change-me"
 R2_BUCKET = "cafa-pmis-storage"
 # R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ENDPOINT_URL are real
 # credentials — set via `wrangler secret put`, never committed here.
+PUBLIC_APP_URL = "https://staging.pmis.cafa.systems"
+EMAIL_ENABLED = "false"
+EMAIL_PROVIDER = "resend"
+EMAIL_FROM_ADDRESS = "noreply@cafa.org"
+EMAIL_FROM_NAME = "CAFA Program Management System"
+AI_ENABLED = "false"
+AI_DAILY_MESSAGE_LIMIT = "50"
+AI_INTEGRATIONS_OPENAI_BASE_URL = "https://api.openai.com/v1"
+# EMAIL_API_KEY / AI_INTEGRATIONS_OPENAI_API_KEY are real credentials — set
+# via `wrangler secret put`, never committed here.

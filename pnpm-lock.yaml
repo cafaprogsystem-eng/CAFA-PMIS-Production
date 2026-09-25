@@ -330,6 +330,9 @@ importers:
       hono:
         specifier: ^4.13.9
         version: 4.13.9
+      openai:
+        specifier: ^6.27.0
+        version: 6.39.0(ws@8.21.0)(zod@3.25.76)
       pg:
         specifier: ^8.20.0
         version: 8.20.0
