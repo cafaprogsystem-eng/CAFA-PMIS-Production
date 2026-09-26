@@ -3,6 +3,7 @@ import type { Connect } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import { createRequire } from "module";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -21,6 +22,17 @@ const basePath = process.env.BASE_PATH ?? "/";
 // compiled to false for production even if an environment is misconfigured.
 const demoRoleHarnessEnabled =
   process.env.NODE_ENV !== "production" && process.env.CAFA_DEMO_MODE === "true";
+
+// HeroUI ships its component CSS both as Tailwind source (@apply text-muted,
+// bg-accent, …) and precompiled. The source form would resolve those utility
+// names against OUR theme, where muted/accent mean different things, so we
+// load the precompiled build, whose rules already point at HeroUI's own raw
+// variables (--accent, --muted, …) that index.css maps onto the CAFA palette.
+// The file is not in the package's exports map, hence the explicit path.
+const heroUiPrecompiledCss = path.join(
+  path.dirname(createRequire(import.meta.url).resolve("@heroui/styles/package.json")),
+  "dist/heroui.min.css",
+);
 
 export default defineConfig({
   base: basePath,
@@ -143,6 +155,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
       "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
+      "@heroui/styles/precompiled.css": heroUiPrecompiledCss,
     },
     dedupe: ["react", "react-dom"],
   },

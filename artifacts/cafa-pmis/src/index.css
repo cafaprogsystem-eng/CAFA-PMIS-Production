@@ -192,6 +192,50 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   HEROUI BRIDGE — HeroUI's raw variables, derived from the CAFA palette
+   HeroUI components read these names directly. They are unlayered, so
+   they beat HeroUI's own (layered) defaults, and they only reference
+   --cafa-* tokens, so light/dark follows the blocks above. Declared on
+   .dark too so a .dark subtree never falls back to HeroUI's dark theme.
+   Note the two semantic translations: HeroUI "accent" is the brand
+   colour (our primary) and HeroUI "muted" is a text colour (our
+   muted-foreground). Radius is intentionally left at HeroUI's default.
+   ══════════════════════════════════════════════════════════════════════ */
+:root,
+.dark {
+  --background:          hsl(var(--cafa-background));
+  --foreground:          hsl(var(--cafa-foreground));
+
+  --surface:             hsl(var(--cafa-card));
+  --surface-foreground:  hsl(var(--cafa-card-foreground));
+  --overlay:             hsl(var(--cafa-popover));
+  --overlay-foreground:  hsl(var(--cafa-popover-foreground));
+
+  --accent:              hsl(var(--cafa-primary));
+  --accent-foreground:   hsl(var(--cafa-primary-foreground));
+  --muted:               hsl(var(--cafa-muted-foreground));
+  --default:             hsl(var(--cafa-accent));
+  --default-foreground:  hsl(var(--cafa-accent-foreground));
+
+  --danger:              hsl(var(--cafa-destructive));
+  --danger-foreground:   hsl(var(--cafa-destructive-foreground));
+  --success:             hsl(var(--cafa-success));
+  --success-foreground:  hsl(var(--cafa-success-foreground));
+  --warning:             hsl(var(--cafa-warning));
+  --warning-foreground:  hsl(var(--cafa-warning-foreground));
+
+  --border:              hsl(var(--cafa-border));
+  --separator:           hsl(var(--cafa-border));
+  --focus:               hsl(var(--cafa-ring));
+
+  /* Our fields are outlined; HeroUI's default is borderless. */
+  --field-background:    hsl(var(--cafa-card));
+  --field-foreground:    hsl(var(--cafa-foreground));
+  --field-border:        hsl(var(--cafa-input));
+  --field-border-width:  1px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    BASE RESET + TYPOGRAPHY
    ══════════════════════════════════════════════════════════════════════ */
 @layer base {
