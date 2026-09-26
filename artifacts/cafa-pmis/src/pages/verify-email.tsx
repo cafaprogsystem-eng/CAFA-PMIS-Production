@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, XCircle, Loader2, ArrowLeft } from "lucide-react";
+import { CheckCircle2, XCircle, ArrowLeft } from "lucide-react";
+import { Button, Spinner } from "@heroui/react";
 import cafaLogo from "@/assets/cafa-logo.png";
-import { Button } from "@/components/ui/button";
 
 function DotGrid() {
   return (
@@ -69,20 +69,16 @@ export default function VerifyEmailPage() {
   return (
     <div className="min-h-screen bg-[#eaecf0] flex flex-col">
       <header className="flex justify-start px-6 py-4">
-        <button
-          type="button"
-          onClick={() => setLocation("/")}
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
-        >
+        <Button variant="ghost" size="sm" onPress={() => setLocation("/")}>
           <ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {t("backToSignIn")}
-        </button>
+        </Button>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-4 pb-10">
         <div className="w-full max-w-[820px] rounded-2xl shadow-xl overflow-hidden flex flex-col sm:flex-row">
           <div className="bg-white flex-1 px-10 py-14 flex flex-col justify-center items-center text-center gap-5">
             {state === "loading" ? (
-              <Loader2 className="h-12 w-12 text-gray-400 animate-spin" />
+              <Spinner size="xl" />
             ) : isSuccess ? (
               <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center">
                 <CheckCircle2 className="h-9 w-9 text-emerald-500" />
@@ -101,21 +97,14 @@ export default function VerifyEmailPage() {
             {state !== "loading" && (
               <div className="w-full max-w-xs space-y-3 mt-2">
                 {isSuccess && (
-                  <Button
-                    className="w-full bg-[#1a2744] hover:bg-[#243566] text-white font-semibold"
-                    onClick={() => setLocation("/")}
-                  >
+                  <Button fullWidth onPress={() => setLocation("/")}>
                     {t("signInToAccount")}
                   </Button>
                 )}
                 {isError && (
-                  <button
-                    type="button"
-                    onClick={() => setLocation("/")}
-                    className="w-full text-sm text-[#1a2744] hover:underline font-medium"
-                  >
+                  <Button variant="ghost" fullWidth onPress={() => setLocation("/")}>
                     {t("returnToSignIn")}
-                  </button>
+                  </Button>
                 )}
               </div>
             )}

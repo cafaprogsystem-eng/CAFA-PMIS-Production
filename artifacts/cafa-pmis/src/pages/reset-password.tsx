@@ -2,11 +2,10 @@ import { useState, useMemo, type FormEvent } from "react";
 import { useSearch, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, ArrowLeft, Loader2, CheckCircle2, ShieldAlert, Lock } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowLeft, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Alert, Button, Spinner } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
+import { PasswordField } from "@/components/password-field";
 
 function strengthScore(pw: string): { score: number; labelKey: string; color: string } {
   let s = 0;
@@ -63,8 +62,6 @@ export default function ResetPasswordPage() {
 
   const [password, setPassword]       = useState("");
   const [confirm, setConfirm]         = useState("");
-  const [showPw, setShowPw]           = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [busy, setBusy]               = useState(false);
   const [done, setDone]               = useState(false);
   const [error, setError]             = useState<string | null>(null);
@@ -116,7 +113,7 @@ export default function ResetPasswordPage() {
     return (
       <AuthShell>
         <div className="px-9 py-16 flex flex-col items-center justify-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-[#1E2D5B]" />
+          <Spinner size="lg" />
           <p className="text-sm text-gray-500">
             {t("validatingResetLink")}
           </p>
@@ -139,10 +136,9 @@ export default function ResetPasswordPage() {
           <p className="text-sm text-gray-500">
             {t("noTokenFound")}
           </p>
-          <button type="button" onClick={() => setLocation("/forgot-password")}
-            className="mt-2 text-sm text-[#1E2D5B] hover:underline font-medium">
+          <Button className="mt-2" onPress={() => setLocation("/forgot-password")}>
             {t("requestNewLink")}
-          </button>
+          </Button>
         </div>
       </AuthShell>
     );
@@ -161,10 +157,9 @@ export default function ResetPasswordPage() {
             {t("resetLinkUnavailable")}
           </h2>
         <p className="text-sm text-gray-500">{ERROR_KEYS[code] ? t(ERROR_KEYS[code]) : t("linkInvalidOrExpired")}</p>
-          <button type="button" onClick={() => setLocation("/forgot-password")}
-            className="mt-2 text-sm text-[#1E2D5B] hover:underline font-medium">
+          <Button className="mt-2" onPress={() => setLocation("/forgot-password")}>
             {t("requestANewLink")}
-          </button>
+          </Button>
         </div>
       </AuthShell>
     );
@@ -186,10 +181,9 @@ export default function ResetPasswordPage() {
             <p className="text-sm text-gray-500">
               {t("passwordResetDoneDesc")}
             </p>
-            <button type="button" onClick={() => setLocation("/login")}
-              className="mt-3 inline-block px-8 py-2.5 bg-[#1E2D5B] text-white text-sm font-semibold rounded-lg hover:bg-[#253972] transition-colors shadow-md">
+            <Button className="mt-3 px-8" onPress={() => setLocation("/login")}>
               {t("signIn")}
-            </button>
+            </Button>
           </div>
         ) : (
           /* ── Form ── */
@@ -205,40 +199,25 @@ export default function ResetPasswordPage() {
             </p>
 
             {error && (
-              <Alert variant="destructive" className="mb-5 py-2">
-                <AlertDescription className="text-xs">{error}</AlertDescription>
+              <Alert status="danger" role="alert" className="mb-5">
+                <Alert.Indicator />
+                <Alert.Content>
+                  {/* Title, not Description: only the title takes the danger colour. */}
+                  <Alert.Title>{error}</Alert.Title>
+                </Alert.Content>
               </Alert>
             )}
 
             <form className="space-y-4" onSubmit={onSubmit} noValidate>
               {/* New password */}
-              <div className="space-y-1.5">
-                <Label htmlFor="pw" className="text-sm font-medium text-gray-700">
-                  {t("newPasswordFieldLabel")}
-                </Label>
-                <div className="relative">
-                  <span className="absolute top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none start-3">
-                    <Lock className="h-4 w-4" />
-                  </span>
-                  <input
-                    id="pw"
-                    type={showPw ? "text" : "password"}
-                    autoComplete="new-password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    disabled={busy}
-                    required
-                     dir="ltr"
-                     aria-label={t("newPasswordFieldLabel")}
-                     className="w-full h-11 rounded-lg border border-gray-200 bg-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E2D5B]/20 focus:border-[#1E2D5B]/60 transition-colors ps-10 pe-11"
-                  />
-                  <button type="button" tabIndex={-1} onClick={() => setShowPw(v => !v)}
-                    className="absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors end-3">
-                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-
+              <PasswordField
+                id="pw"
+                label={t("newPasswordFieldLabel")}
+                value={password}
+                onChange={setPassword}
+                autoComplete="new-password"
+                isDisabled={busy}
+              >
                 {/* Strength bar */}
                 {password.length > 0 && (
                   <div className="flex items-center gap-2 mt-1">
@@ -261,57 +240,35 @@ export default function ResetPasswordPage() {
                     </p>
                   ))}
                 </div>
-              </div>
+              </PasswordField>
 
               {/* Confirm */}
-              <div className="space-y-1.5">
-                <Label htmlFor="confirm" className="text-sm font-medium text-gray-700">
-                  {t("confirmNewPassword")}
-                </Label>
-                <div className="relative">
-                  <span className="absolute top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none start-3">
-                    <Lock className="h-4 w-4" />
-                  </span>
-                  <input
-                    id="confirm"
-                    type={showConfirm ? "text" : "password"}
-                    autoComplete="new-password"
-                    placeholder="••••••••"
-                    value={confirm}
-                    onChange={e => setConfirm(e.target.value)}
-                    disabled={busy}
-                    required
-                     dir="ltr"
-                     aria-label={t("confirmNewPassword")}
-                     className={`w-full h-11 rounded-lg border bg-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 transition-colors ${mismatch ? "border-red-400 focus:ring-red-200" : "border-gray-200 focus:ring-[#1E2D5B]/20 focus:border-[#1E2D5B]/60"} ps-10 pe-11`}
-                  />
-                  <button type="button" tabIndex={-1} onClick={() => setShowConfirm(v => !v)}
-                    className="absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors end-3">
-                    {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                {mismatch && (
-                  <p className="text-xs text-red-500">
-                    {t("passwordsDoNotMatch")}
-                  </p>
-                )}
-              </div>
+              <PasswordField
+                id="confirm"
+                label={t("confirmNewPassword")}
+                value={confirm}
+                onChange={setConfirm}
+                autoComplete="new-password"
+                isDisabled={busy}
+                isInvalid={mismatch}
+                errorMessage={t("passwordsDoNotMatch")}
+              />
 
-              <Button type="submit" disabled={busy || !allPass || password !== confirm}
-                className="w-full h-11 bg-[#1E2D5B] hover:bg-[#253972] text-white text-sm font-semibold rounded-lg tracking-wide shadow-md hover:shadow-lg transition-all mt-1">
+              <Button type="submit" size="lg" fullWidth className="mt-1" isPending={busy}
+                isDisabled={busy || !allPass || password !== confirm}>
                 {busy
-                      ? <><Loader2 className="h-4 w-4 animate-spin" />{t("resetting")}</>
+                  ? <><Spinner size="sm" color="current" />{t("resetting")}</>
                   : t("resetPassword")
                 }
               </Button>
             </form>
 
             <div className="mt-5 flex justify-center">
-              <button type="button" onClick={() => setLocation("/login")}
-                className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors">
-                <ArrowLeft className="h-3.5 w-3.5" />
+              <Button variant="ghost" size="sm" onPress={() => setLocation("/login")}>
+                {/* "Back" points toward the reading start, so it mirrors in RTL. */}
+                <ArrowLeft className="h-3.5 w-3.5 rtl:-scale-x-100" />
                 {t("backToSignIn")}
-              </button>
+              </Button>
             </div>
 
           </>

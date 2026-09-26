@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearch } from "wouter";
 import { Mail, ArrowLeft } from "lucide-react";
+import { Button } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 
 export default function PasswordResetSentPage() {
@@ -27,20 +28,12 @@ export default function PasswordResetSentPage() {
             {t("resetLinkExpiry")}
           </p>
           <div className="w-full max-w-xs space-y-3">
-            <button
-              type="button"
-              onClick={() => setLocation("/login")}
-              className="w-full inline-flex items-center justify-center gap-1.5 text-sm text-[#1E2D5B] hover:underline font-medium"
-            >
+            <Button fullWidth onPress={() => setLocation("/login")}>
               <ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {t("returnToSignIn")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocation("/forgot-password")}
-              className="w-full text-sm text-gray-500 hover:text-gray-800 hover:underline transition-colors"
-            >
+            </Button>
+            <Button variant="ghost" fullWidth onPress={() => setLocation("/forgot-password")}>
               {t("didNotReceive")}
-            </button>
+            </Button>
           </div>
           <p className="text-xs text-gray-400 text-center max-w-sm leading-relaxed">
           {t("privacyNote")}

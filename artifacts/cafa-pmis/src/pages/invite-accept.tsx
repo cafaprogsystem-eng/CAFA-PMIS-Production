@@ -2,13 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Loader2, CheckCircle2, ShieldAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CheckCircle2, ShieldAlert } from "lucide-react";
+import { Alert, Button, Card, Spinner } from "@heroui/react";
 import { getLinkedStateLabel } from "@/components/state-label";
+import { PasswordField } from "@/components/password-field";
 
 type InviteInfo = {
   name: string;
@@ -124,13 +121,13 @@ export default function InviteAcceptPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-muted/40">
         <Card className="max-w-md w-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-destructive" /> {t("noInviteToken")}</CardTitle>
-            <CardDescription>{t(ERROR_KEYS["token_required"])}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={() => setLocation("/")}>{t("goToSignIn")}</Button>
-          </CardContent>
+          <Card.Header>
+            <Card.Title className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-destructive" /> {t("noInviteToken")}</Card.Title>
+            <Card.Description>{t(ERROR_KEYS["token_required"])}</Card.Description>
+          </Card.Header>
+          <Card.Footer>
+            <Button variant="outline" onPress={() => setLocation("/")}>{t("goToSignIn")}</Button>
+          </Card.Footer>
         </Card>
       </div>
     );
@@ -139,7 +136,7 @@ export default function InviteAcceptPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Spinner />
       </div>
     );
   }
@@ -148,13 +145,13 @@ export default function InviteAcceptPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-muted/40">
         <Card className="max-w-md w-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-destructive" /> {t("invitationUnavailable")}</CardTitle>
-            <CardDescription>{ERROR_KEYS[code] ? t(ERROR_KEYS[code]) : t("somethingWentWrong")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={() => setLocation("/")}>{t("goToSignIn")}</Button>
-          </CardContent>
+          <Card.Header>
+            <Card.Title className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-destructive" /> {t("invitationUnavailable")}</Card.Title>
+            <Card.Description>{ERROR_KEYS[code] ? t(ERROR_KEYS[code]) : t("somethingWentWrong")}</Card.Description>
+          </Card.Header>
+          <Card.Footer>
+            <Button variant="outline" onPress={() => setLocation("/")}>{t("goToSignIn")}</Button>
+          </Card.Footer>
         </Card>
       </div>
     );
@@ -166,12 +163,12 @@ export default function InviteAcceptPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 to-slate-100">
       <Card className="max-w-lg w-full">
-        <CardHeader>
+        <Card.Header>
           <div className="text-xs font-semibold text-primary tracking-wide uppercase">{t("cafaPMSEyebrow")}</div>
-          <CardTitle>{t("activateYourAccount")}</CardTitle>
-          <CardDescription>{t("activateYourAccountDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          <Card.Title>{t("activateYourAccount")}</Card.Title>
+          <Card.Description>{t("activateYourAccountDesc")}</Card.Description>
+        </Card.Header>
+        <Card.Content className="space-y-5">
           <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
             <div><span className="text-muted-foreground">{t("name")}: </span><span className="font-medium">{data.name}</span></div>
             <div><span className="text-muted-foreground">{t("email")}: </span><span className="font-medium">{data.email}</span></div>
@@ -182,9 +179,13 @@ export default function InviteAcceptPage() {
           </div>
 
           <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="pw">{t("newPasswordLabel")}</Label>
-               <Input id="pw" dir="ltr" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required />
+            <PasswordField
+              id="pw"
+              label={t("newPasswordLabel")}
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+            >
               <div className="flex items-center gap-2">
                 <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
                   <div className={`h-full transition-all ${strength.color}`} style={{ width: `${(strength.score / 5) * 100}%` }} />
@@ -192,22 +193,28 @@ export default function InviteAcceptPage() {
                  <span dir="rtl" className="text-xs text-muted-foreground w-20 text-end">{password ? t(`passwordStrength.${strength.labelKey}`) : ""}</span>
               </div>
               <p className="text-xs text-muted-foreground">{t("passwordAtLeastChars")}</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm">{t("confirmPasswordLabel")}</Label>
-               <Input id="confirm" dir="ltr" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
-            </div>
+            </PasswordField>
+            <PasswordField
+              id="confirm"
+              label={t("confirmPasswordLabel")}
+              value={confirm}
+              onChange={setConfirm}
+              autoComplete="new-password"
+            />
             {error && (
-              <Alert variant="destructive">
-                <AlertTitle>{t("couldntActivate")}</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
+              <Alert status="danger" role="alert">
+                <Alert.Indicator />
+                <Alert.Content>
+                  <Alert.Title>{t("couldntActivate")}</Alert.Title>
+                  <Alert.Description>{error}</Alert.Description>
+                </Alert.Content>
               </Alert>
             )}
-            <Button type="submit" className="w-full" disabled={submitting || password.length < 10 || password !== confirm}>
-                  {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("activating")}</> : <><CheckCircle2 className="h-4 w-4" /> {t("activateAccount")}</>}
+            <Button type="submit" fullWidth isPending={submitting} isDisabled={submitting || password.length < 10 || password !== confirm}>
+                  {submitting ? <><Spinner size="sm" color="current" /> {t("activating")}</> : <><CheckCircle2 className="h-4 w-4" /> {t("activateAccount")}</>}
             </Button>
           </form>
-        </CardContent>
+        </Card.Content>
       </Card>
     </div>
   );

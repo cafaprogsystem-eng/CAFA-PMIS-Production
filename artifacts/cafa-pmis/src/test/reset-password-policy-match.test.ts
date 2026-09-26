@@ -37,6 +37,7 @@ describe("RESET-PASSWORD-POLICY-MATCH", () => {
   });
 
   it("still gates submission on every rule passing and the confirmation matching", () => {
-    expect(src).toContain("disabled={busy || !allPass || password !== confirm}");
+    // HeroUI's Button takes isDisabled (React Aria) rather than disabled.
+    expect(src).toContain("isDisabled={busy || !allPass || password !== confirm}");
   });
 });
