@@ -18,6 +18,7 @@ import { notificationsRoutes } from "./routes/notifications";
 import { meRoutes } from "./routes/me";
 import { beneficiariesRoutes } from "./routes/beneficiaries";
 import { searchRoutes } from "./routes/search";
+import { usersRoutes } from "./routes/users";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -315,5 +316,6 @@ app.route("/", notificationsRoutes);
 app.route("/", meRoutes);
 app.route("/", beneficiariesRoutes);
 app.route("/", searchRoutes);
+app.route("/", usersRoutes);
 
 export default app;

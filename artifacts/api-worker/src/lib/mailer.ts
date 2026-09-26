@@ -284,3 +284,40 @@ export function renderVerifyEmail(env: Bindings, opts: {
   const text = `Hello ${opts.name},\n\nVerify your CAFA PMIS email:\n${link}\n\nExpires: ${expires}`;
   return { subject, html, text };
 }
+
+export function renderAccountActivatedEmail(env: Bindings, opts: { name: string; email: string }): { subject: string; html: string; text: string } {
+  const loginLink = publicAppUrl(env);
+  const subject = "Your CAFA system account has been activated";
+  const html = HEADER() + `
+    <h2 style="margin:0 0 16px;font-size:20px">Account activated</h2>
+    <p>Hello <strong>${opts.name}</strong>,</p>
+    <p>Your CAFA Program Management System account (<strong>${opts.email}</strong>) has been <strong>activated</strong>. You can now sign in.</p>
+    ${actionBtn("Sign in", loginLink)}
+  ` + FOOTER;
+  const text = `Hello ${opts.name},\n\nYour CAFA PMIS account has been activated. Sign in at: ${loginLink}`;
+  return { subject, html, text };
+}
+
+export function renderAccountSuspendedEmail(_env: Bindings, opts: { name: string; email: string }): { subject: string; html: string; text: string } {
+  const subject = "Your CAFA system account has been suspended";
+  const html = HEADER("#78350f") + `
+    <h2 style="margin:0 0 16px;font-size:20px">Account suspended</h2>
+    <p>Hello <strong>${opts.name}</strong>,</p>
+    <p>Your CAFA Program Management System account (<strong>${opts.email}</strong>) has been <strong>temporarily suspended</strong> and you will not be able to sign in until the suspension is lifted.</p>
+    <p style="font-size:13px;color:#6b7280">If you believe this is a mistake, please contact your system administrator.</p>
+  ` + FOOTER;
+  const text = `Hello ${opts.name},\n\nYour CAFA PMIS account has been temporarily suspended. Contact your administrator if you believe this is a mistake.`;
+  return { subject, html, text };
+}
+
+export function renderAccountDeactivatedEmail(_env: Bindings, opts: { name: string; email: string }): { subject: string; html: string; text: string } {
+  const subject = "Your CAFA system account has been deactivated";
+  const html = HEADER("#7f1d1d") + `
+    <h2 style="margin:0 0 16px;font-size:20px">Account deactivated</h2>
+    <p>Hello <strong>${opts.name}</strong>,</p>
+    <p>Your CAFA Program Management System account (<strong>${opts.email}</strong>) has been <strong>deactivated</strong> and you will no longer be able to sign in.</p>
+    <p style="font-size:13px;color:#6b7280">If you believe this is a mistake, please contact your system administrator.</p>
+  ` + FOOTER;
+  const text = `Hello ${opts.name},\n\nYour CAFA PMIS account has been deactivated. Contact your administrator if this is a mistake.`;
+  return { subject, html, text };
+}
