@@ -40,6 +40,9 @@ const UsersPage        = lazy(() => import("@/pages/users"));
 const Plans            = lazy(() => import("@/pages/plans"));
 const PlanDetail       = lazy(() => import("@/pages/plan-detail"));
 const NotFound         = lazy(() => import("@/pages/not-found"));
+// HeroUI Pro evaluation page: registered only in dev builds, so the module is
+// never referenced (and never bundled) in production.
+const HeroUIProSandbox = import.meta.env.DEV ? lazy(() => import("@/dev/heroui-pro-sandbox")) : null;
 const AccessDenied     = lazy(() => import("@/pages/access-denied"));
 const LoginPage        = lazy(() => import("@/pages/login"));
 const InviteAcceptPage = lazy(() => import("@/pages/invite-accept"));
@@ -217,6 +220,7 @@ function Router() {
           <Route path="/ai"><AiPage /></Route>
           {/* Keep saved settings bookmarks safe while moving everyone to the unified AI page. */}
           <Route path="/ai-settings"><Redirect to="/ai" /></Route>
+          {HeroUIProSandbox && <Route path="/dev/heroui-pro" component={HeroUIProSandbox} />}
           <Route component={NotFound} />
         </Switch>
       </Suspense>

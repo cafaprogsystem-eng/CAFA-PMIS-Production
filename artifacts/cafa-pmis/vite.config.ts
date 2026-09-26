@@ -33,6 +33,12 @@ const heroUiPrecompiledCss = path.join(
   path.dirname(createRequire(import.meta.url).resolve("@heroui/styles/package.json")),
   "dist/heroui.min.css",
 );
+// HeroUI Pro ships a precompiled stylesheet too (components layer plus
+// --chart-* tokens derived from --accent; no reset, no utilities).
+const heroUiProPrecompiledCss = path.join(
+  path.dirname(createRequire(import.meta.url).resolve("@heroui-pro/react/package.json")),
+  "dist/heroui-pro.min.css",
+);
 
 export default defineConfig({
   base: basePath,
@@ -156,6 +162,7 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "src"),
       "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
       "@heroui/styles/precompiled.css": heroUiPrecompiledCss,
+      "@heroui-pro/react/precompiled.css": heroUiProPrecompiledCss,
     },
     dedupe: ["react", "react-dom"],
   },
