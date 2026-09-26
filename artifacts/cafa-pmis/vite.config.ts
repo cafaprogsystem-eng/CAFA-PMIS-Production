@@ -163,6 +163,21 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // The entry chunk sat just under Workbox's 2 MiB precache limit; once
+        // shared components (ErrorState, the app shell) use HeroUI, React Aria
+        // lands in it and the offline precache would silently drop it. Keeping
+        // the UI libraries in their own chunk holds both files under the limit
+        // (both are precached) and lets that chunk stay cached across app
+        // releases.
+        manualChunks(id) {
+          if (/node_modules\/\.pnpm\/(@heroui|@heroui-pro|react-aria|@react-aria|react-stately|@react-stately|@react-types|@internationalized|tailwind-variants)[+@]/.test(id)) {
+            return "ui-vendor";
+          }
+        },
+      },
+    },
   },
   server: {
     port,
