@@ -664,45 +664,41 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
                 {/* Desktop View toggle (touch/narrow viewports) */}
                 <Tooltip delay={200}>
-                  <Tooltip.Trigger>
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="ghost"
-                      className="lg:hidden"
-                      onPress={toggleDesktopView}
-                      aria-label={desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
-                    >
-                      <MonitorSmartphone className={`h-4 w-4 ${desktopView ? "text-primary" : ""}`} />
-                    </Button>
-                  </Tooltip.Trigger>
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="ghost"
+                    className="lg:hidden"
+                    onPress={toggleDesktopView}
+                    aria-label={desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
+                  >
+                    <MonitorSmartphone className={`h-4 w-4 ${desktopView ? "text-primary" : ""}`} />
+                  </Button>
                   <Tooltip.Content placement="bottom">{desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}</Tooltip.Content>
                 </Tooltip>
 
                 {/* Sync status */}
                 {syncBadgeCount > 0 && (
                   <Tooltip delay={200}>
-                    <Tooltip.Trigger>
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="ghost"
-                        className={`relative ${failedCount > 0 || conflictCount > 0 ? "text-red-500 hover:text-red-600" : "text-amber-500 hover:text-amber-600"}`}
-                        onPress={() => navigate("/sync-status")}
-                        aria-label={tNav("items.syncStatus")}
-                      >
-                        {isSyncing
-                          ? <RefreshCw className="h-4 w-4 animate-spin" />
-                          : failedCount > 0 || conflictCount > 0
-                          ? <CloudOff className="h-4 w-4" />
-                          : <RefreshCw className="h-4 w-4" />
-                        }
-                        {/* -end-0.5: logical end positioning (right in LTR, left in RTL) */}
-                        <span className={`absolute -top-0.5 -end-0.5 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold text-white ${failedCount > 0 || conflictCount > 0 ? "bg-red-500" : "bg-amber-500"}`}>
-                          {syncBadgeCount > 9 ? "9+" : syncBadgeCount}
-                        </span>
-                      </Button>
-                    </Tooltip.Trigger>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="ghost"
+                      className={`relative ${failedCount > 0 || conflictCount > 0 ? "text-red-500 hover:text-red-600" : "text-amber-500 hover:text-amber-600"}`}
+                      onPress={() => navigate("/sync-status")}
+                      aria-label={tNav("items.syncStatus")}
+                    >
+                      {isSyncing
+                        ? <RefreshCw className="h-4 w-4 animate-spin" />
+                        : failedCount > 0 || conflictCount > 0
+                        ? <CloudOff className="h-4 w-4" />
+                        : <RefreshCw className="h-4 w-4" />
+                      }
+                      {/* -end-0.5: logical end positioning (right in LTR, left in RTL) */}
+                      <span className={`absolute -top-0.5 -end-0.5 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold text-white ${failedCount > 0 || conflictCount > 0 ? "bg-red-500" : "bg-amber-500"}`}>
+                        {syncBadgeCount > 9 ? "9+" : syncBadgeCount}
+                      </span>
+                    </Button>
                     <Tooltip.Content placement="bottom">
                       {isSyncing
                         ? tCommon("sync.syncingItems", { count: pendingCount })
