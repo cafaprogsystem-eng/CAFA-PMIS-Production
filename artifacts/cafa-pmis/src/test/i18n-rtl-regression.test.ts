@@ -500,7 +500,10 @@ describe("Sign-in identifier locale and wiring", () => {
     expect(authShellSource).toContain('className="cafa-brand hidden lg:flex flex-col flex-1 text-white items-start text-start');
     expect(authSource).toContain('aria-live="assertive"');
     expect(authSource).toContain('aria-controls="password"');
-    expect(authSource).toContain("aria-pressed={showPw}");
+    // HeroUI's ToggleButton renders aria-pressed from isSelected; the rendered
+    // attribute is asserted in login-ui.test.tsx.
+    expect(authSource).toContain("<ToggleButton");
+    expect(authSource).toContain("isSelected={showPw}");
     expect(authSource).not.toContain('tabIndex={-1}');
   });
 

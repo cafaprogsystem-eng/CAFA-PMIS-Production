@@ -2,11 +2,8 @@ import { useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, Loader2, Mail, Lock } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Alert, Button, Checkbox, InputGroup, Label, Spinner, TextField, ToggleButton } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 
 const RETURNING_USER_KEY = "cafa.hasSignedIn";
@@ -102,11 +99,16 @@ export default function LoginPage() {
         {error && (
           <Alert
             id="login-error"
-            variant="destructive"
+            status="danger"
+            role="alert"
             aria-live="assertive"
-            className="mb-5 py-2"
+            className="mb-5"
           >
-            <AlertDescription className="text-xs">{error}</AlertDescription>
+            <Alert.Indicator />
+            <Alert.Content>
+              {/* Title, not Description: only the title takes the danger colour. */}
+              <Alert.Title>{error}</Alert.Title>
+            </Alert.Content>
           </Alert>
         )}
 
@@ -119,107 +121,77 @@ export default function LoginPage() {
         >
 
           {/* Identifier */}
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="identifier"
-              className="text-sm font-medium text-gray-700"
-            >
-              {t("identifier")}
-            </Label>
-            <div className="relative">
-              <span className="absolute top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none start-3">
+          <TextField
+            id="identifier"
+            autoComplete="username"
+            value={identifier}
+            onChange={setIdentifier}
+            isDisabled={busy}
+            isInvalid={!!error}
+            fullWidth
+          >
+            <Label>{t("identifier")}</Label>
+            <InputGroup fullWidth>
+              <InputGroup.Prefix>
                 <Mail className="h-4 w-4" />
-              </span>
-              <input
-                id="identifier"
-                type="text"
-                dir="ltr"
-                autoComplete="username"
-                placeholder={t("identifierPh")}
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                disabled={busy}
-                required
-                aria-invalid={error ? "true" : undefined}
-                className="w-full h-[46px] rounded-[10px] border border-gray-300 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E2D5B]/25 focus:border-[#1E2D5B]/70 transition-colors ps-10 pe-3"
-              />
-            </div>
-          </div>
+              </InputGroup.Prefix>
+              <InputGroup.Input dir="ltr" placeholder={t("identifierPh")} />
+            </InputGroup>
+          </TextField>
 
           {/* Password */}
-          <div className="space-y-1.5">
+          <TextField
+            id="password"
+            type={showPw ? "text" : "password"}
+            autoComplete="current-password"
+            value={password}
+            onChange={setPassword}
+            isDisabled={busy}
+            isInvalid={!!error}
+            fullWidth
+          >
             <div className="flex items-center justify-between">
-              <Label
-                htmlFor="password"
-                className="text-sm font-medium text-gray-700"
-              >
-                {t("password")}
-              </Label>
-              <button
-                type="button"
-                onClick={() => setLocation("/forgot-password")}
-                className="text-xs text-[#2563eb] hover:underline font-medium"
-              >
+              <Label>{t("password")}</Label>
+              <Button variant="ghost" size="sm" onPress={() => setLocation("/forgot-password")}>
                 {t("forgotPassword")}
-              </button>
+              </Button>
             </div>
-            <div className="relative">
-              <span className="absolute top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none start-3">
+            <InputGroup fullWidth>
+              <InputGroup.Prefix>
                 <Lock className="h-4 w-4" />
-              </span>
-              <input
-                id="password"
-                type={showPw ? "text" : "password"}
-                dir="ltr"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={busy}
-                required
-                aria-invalid={error ? "true" : undefined}
-                className="w-full h-[46px] rounded-[10px] border border-gray-300 bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1E2D5B]/25 focus:border-[#1E2D5B]/70 transition-colors ps-10 pe-11"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPw((v) => !v)}
-                aria-label={showPw ? t("hidePassword") : t("showPassword")}
-                aria-controls="password"
-                aria-pressed={showPw}
-                className="absolute top-1/2 -translate-y-1/2 rounded-sm p-1 text-gray-400 hover:text-gray-600 transition-colors end-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E2D5B]/40"
-              >
-                {showPw ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </div>
+              </InputGroup.Prefix>
+              <InputGroup.Input dir="ltr" placeholder="••••••••" />
+              <InputGroup.Suffix>
+                <ToggleButton
+                  isIconOnly
+                  size="sm"
+                  variant="ghost"
+                  isSelected={showPw}
+                  onChange={setShowPw}
+                  aria-label={showPw ? t("hidePassword") : t("showPassword")}
+                  aria-controls="password"
+                >
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </ToggleButton>
+              </InputGroup.Suffix>
+            </InputGroup>
+          </TextField>
 
           {/* Remember me */}
-          <div className="flex items-center gap-2.5">
-            <Checkbox
-              id="remember-me"
-              checked={remember}
-              onCheckedChange={(v) => setRemember(v === true)}
-              disabled={busy}
-              className="h-[18px] w-[18px] border-gray-300 shrink-0"
-            />
-            <Label htmlFor="remember-me" className="cursor-pointer select-none text-sm text-gray-600">
-              {t("rememberMe")}
-            </Label>
-          </div>
+          <Checkbox isSelected={remember} onChange={setRemember} isDisabled={busy}>
+            <Checkbox.Content>
+              <Checkbox.Control>
+                <Checkbox.Indicator />
+              </Checkbox.Control>
+              <Label>{t("rememberMe")}</Label>
+            </Checkbox.Content>
+          </Checkbox>
 
           {/* Submit */}
-          <Button
-            type="submit"
-            disabled={busy}
-            className="w-full h-[46px] bg-[#1E2D5B] hover:bg-[#192752] hover:-translate-y-px active:bg-[#141f44] active:translate-y-0 text-white text-sm font-semibold rounded-[10px] tracking-wide shadow-[0_1px_3px_rgba(0,0,0,0.14)] hover:shadow-[0_3px_10px_rgba(30,45,91,0.28)] transition-all duration-[190ms] ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E2D5B] focus-visible:ring-offset-2"
-          >
+          <Button type="submit" size="lg" fullWidth isPending={busy}>
             {busy ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner size="sm" color="current" />
                 {t("signingIn")}
               </>
             ) : (

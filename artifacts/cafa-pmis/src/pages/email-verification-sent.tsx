@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearch } from "wouter";
-import { Mail, ArrowLeft, RefreshCw, Loader2 } from "lucide-react";
+import { Mail, ArrowLeft, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { Button, Spinner } from "@heroui/react";
 import cafaLogo from "@/assets/cafa-logo.png";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 function DotGrid() {
@@ -52,13 +52,9 @@ export default function EmailVerificationSentPage() {
   return (
     <div className="min-h-screen bg-[#eaecf0] flex flex-col">
       <header className="flex justify-start px-6 py-4">
-        <button
-          type="button"
-          onClick={() => setLocation("/")}
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
-        >
+        <Button variant="ghost" size="sm" onPress={() => setLocation("/")}>
           <ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {t("backToSignIn")}
-        </button>
+        </Button>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-4 pb-10">
@@ -78,26 +74,17 @@ export default function EmailVerificationSentPage() {
                 {t("verificationLinkExpiry")}
               </p>
               {email && (
-                <Button
-                  variant="outline"
-                  className="w-full text-sm"
-                  onClick={resend}
-                  disabled={resending}
-                >
+                <Button variant="outline" fullWidth onPress={resend} isPending={resending}>
                   {resending ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("resending")}</>
+                    <><Spinner size="sm" color="current" /> {t("resending")}</>
                   ) : (
                     <><RefreshCw className="h-3.5 w-3.5" /> {t("resendVerification")}</>
                   )}
                 </Button>
               )}
-              <button
-                type="button"
-                onClick={() => setLocation("/")}
-                className="w-full text-sm text-[#1a2744] hover:underline font-medium"
-              >
+              <Button variant="ghost" fullWidth onPress={() => setLocation("/")}>
                 {t("returnToSignIn")}
-              </button>
+              </Button>
             </div>
           </div>
 
