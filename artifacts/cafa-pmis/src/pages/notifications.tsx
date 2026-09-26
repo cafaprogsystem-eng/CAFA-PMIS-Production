@@ -170,8 +170,8 @@ export default function NotificationsPage() {
         <Tabs selectedKey={tab} onSelectionChange={(v) => setTab(v as "all" | "unread")}>
           <Tabs.ListContainer className="w-full sm:w-auto">
             <Tabs.List aria-label={t("statusFilter")}>
-              <Tabs.Tab id="all" className="h-7 px-2.5 text-xs">{t("all")}<Tabs.Indicator /></Tabs.Tab>
-              <Tabs.Tab id="unread" className="h-7 gap-1 px-2.5 text-xs">
+              <Tabs.Tab id="all" className="h-7 whitespace-nowrap px-2.5 text-xs">{t("all")}<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="unread" className="h-7 gap-1 whitespace-nowrap px-2.5 text-xs">
                 {t("unread")}
                 {unreadCount > 0 && (
                   <Chip size="sm" color="accent" variant="primary" className="h-4 min-w-4 px-1 text-[10px] leading-none">{unreadCount > 99 ? "99+" : unreadCount}</Chip>
