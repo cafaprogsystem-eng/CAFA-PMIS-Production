@@ -15,6 +15,7 @@ import {
 import { assertActiveState } from "../lib/state-master";
 import { VALID_SECTOR_SET } from "../lib/sectors";
 import { createRegistrationSession, validateRegistrationSession, closeRegistrationSession } from "../lib/plan-registration-session";
+import { deleteObjectSafely } from "../lib/storage";
 
 /**
  * Ported from artifacts/api-server/src/routes/plans.ts (3340 lines, 10
@@ -43,12 +44,17 @@ import { createRegistrationSession, validateRegistrationSession, closeRegistrati
  * consistency), and the PLAN-BD-2 hard/soft duplicate guard under an
  * advisory lock.
  *
- * Deferred to later batches: POST /plans/:planId/close-registration, DELETE
- * /plans/:planId, POST /plans/:planId/transitions, POST /plans/:planId/reopen.
+ * Batch C (this addition, final batch for plans.ts): POST
+ * /plans/:planId/close-registration, DELETE /plans/:planId, POST
+ * /plans/:planId/transitions (including the ~260-line transactional Submit
+ * sub-flow, which re-resolves and re-locks the plan's effective sector under
+ * FOR UPDATE/FOR SHARE before re-running the full 7-rule readiness check —
+ * never trusting the pre-transaction read), and POST /plans/:planId/reopen.
  *
- * Dropped (same reasoning as every prior file): notification creation and
- * realtime.broadcastUpdate — to be confirmed per call site as each later
- * batch reaches them.
+ * Dropped (same reasoning as every prior file): notification creation
+ * (notifyEntityActorsDeduped, notifyNextApprover) and
+ * realtime.broadcastUpdate / realtime.captureOperationalAudience (deferred to
+ * the Durable Objects phase).
  */
 
 export { PLAN_TRANSITIONS, PLAN_TRANSITION_PERMS };
@@ -808,6 +814,26 @@ function collectActivityProgressErrors(activities: ActivityInput[]): string[] {
     if (err) errors.push(`Activity ${i + 1} (${label}): ${err}`);
   }
   return errors;
+}
+
+/**
+ * Ported from artifacts/api-server/src/routes/comments.ts's
+ * unresolvedRequiredCorrections export — the one function plans.ts needs from
+ * that file (same reasoning as the identical duplication in
+ * routes/projects.ts's batch 2: porting the rest of comments.ts is not
+ * required for this one query).
+ */
+async function unresolvedRequiredCorrections(
+  db: QueryExecutor,
+  entityType: string,
+  entityId: number,
+): Promise<number> {
+  const { rows } = await db.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM comments
+     WHERE entity_type = $1 AND entity_id = $2 AND comment_type = 'required_correction' AND status = 'open'`,
+    [entityType, entityId],
+  );
+  return rows[0]?.n ?? 0;
 }
 
 export const plansRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -1835,7 +1861,7 @@ plansRoutes.patch("/plans/:planId", async (c) => {
         currency: string | null;
         budget_planned: number | null;
       }>(
-        `SELECT start_date, end_date, responsible_user_id, status, last_final_approved_at, updated_at, currency, budget_planned
+        `SELECT start_date, end_date, responsible_user_id, status, last_final_approved_at, updated_at, currency, budget_planned::float AS budget_planned
          FROM plans WHERE id = $1 FOR UPDATE`,
         [planId],
       );
@@ -1937,7 +1963,7 @@ plansRoutes.patch("/plans/:planId", async (c) => {
         budget_planned: number | null;
       }>(
         `SELECT start_date, end_date, COALESCE(localities, '[]'::jsonb) AS localities,
-                currency, budget_planned
+                currency, budget_planned::float AS budget_planned
          FROM plans WHERE id = $1 FOR UPDATE`,
         [planId],
       );
@@ -2167,6 +2193,640 @@ plansRoutes.patch("/plans/:planId", async (c) => {
     throw err;
   } finally {
     client.release();
+    close();
+  }
+});
+
+// ── Close Registration Session ────────────────────────────────────────────────
+// POST /plans/:planId/close-registration
+// Explicitly revokes an active Registration session, preventing further
+// creation-session PATCH calls. Called by the frontend when the user
+// explicitly cancels or closes Registration after a Draft has been saved.
+// The saved Draft is preserved; only the temporary edit privilege is removed.
+plansRoutes.post("/plans/:planId/close-registration", async (c) => {
+  const user = c.get("currentUser");
+  if (!user) return c.json({ error: "unauthorized" }, 401);
+  const { db, close } = openDb(c);
+  try {
+    const planId = Number(c.req.param("planId"));
+    if (!Number.isFinite(planId)) return c.json({ error: "invalid_plan_id" }, 400);
+
+    const rawBody = (await c.req.json().catch(() => ({}))) as Record<string, any>;
+    const rawToken: string = typeof rawBody.registrationToken === "string" ? rawBody.registrationToken : "";
+    if (!rawToken) {
+      return c.json({ error: "registrationToken_required" }, 400);
+    }
+
+    // Validate that the token belongs to this user+plan before closing it.
+    const sessionOk = await validateRegistrationSession(db, rawToken, planId, user.id);
+    if (!sessionOk) {
+      // Already expired or closed — treat as success (idempotent).
+      return c.json({ closed: true });
+    }
+
+    await closeRegistrationSession(db, planId, user.id, rawToken);
+    await logAudit(db, {
+      userId: user.id, action: "registration_closed", module: "plans", entityId: planId,
+    });
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    return c.json({ closed: true });
+  } finally {
+    close();
+  }
+});
+
+// ── Plan delete ────────────────────────────────────────────────────────────────
+// Durable delete: DB first, storage post-COMMIT.
+//   • The delete transaction begins by acquiring an exclusive row lock on the
+//     plan row (SELECT … FOR UPDATE), serialising against concurrent
+//     attachment uploads (which lock the same row via their FK check).
+//   • All DB rows are deleted inside a single atomic transaction (DB first).
+//   • Storage objects are deleted AFTER COMMIT (best-effort) — storage-before-DB
+//     is the unsafe order, since a DB rollback cannot restore an
+//     already-deleted storage object.
+plansRoutes.delete("/plans/:planId", requirePerm("plans.delete", "You do not have permission to delete this Plan."), async (c) => {
+  const user = c.get("currentUser")!;
+  const planId = Number(c.req.param("planId"));
+  const { db, pool, close } = openDb(c);
+  try {
+    const meta = await getPlanMeta(db, planId);
+    if (meta === undefined) return c.json({ error: "plan_not_found" }, 404);
+    const guard = assertAnySectorAllowed(user, meta.sectors);
+    if (!guard.ok) return c.json(guard.body, guard.status as any);
+    const stateGuard = assertPlanStateAllowed(user, meta.stateId, meta.locationType);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+
+    let attachmentObjectPaths: string[] = [];
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Lock the plan row exclusively. This blocks concurrent attachment
+      // uploads until we COMMIT, so the path-collection SELECT below is
+      // serialised with any in-flight upload.
+      await client.query(`SELECT id FROM plans WHERE id = $1 FOR UPDATE`, [planId]);
+      // Dropped: realtime.captureOperationalAudience (read-only audience
+      // snapshot for the post-delete broadcast — the broadcast itself is
+      // dropped, so there is nothing left to capture it for).
+
+      // Collect attachment paths atomically under the exclusive lock.
+      const attachmentPathsResult = await client.query<{ object_path: string }>(
+        `SELECT object_path FROM plan_attachments WHERE plan_id = $1
+         UNION ALL
+         SELECT object_path FROM attachments WHERE parent_type = 'plan' AND parent_id = $1
+         UNION ALL
+         SELECT object_path FROM attachment_upload_operations WHERE parent_type = 'plan' AND parent_id = $1
+         UNION ALL
+         SELECT final_object_path AS object_path FROM attachment_upload_operations
+          WHERE parent_type = 'plan' AND parent_id = $1 AND final_object_path IS NOT NULL`,
+        [planId],
+      );
+      attachmentObjectPaths = attachmentPathsResult.rows.map((r) => r.object_path);
+
+      // 1. Registration sessions — no FK to plans; must be cleaned explicitly.
+      await client.query(`DELETE FROM plan_registration_sessions WHERE plan_id = $1`, [planId]);
+
+      // 2. Comments — polymorphic reference; no FK.
+      await client.query(`DELETE FROM comments WHERE entity_type = 'plan' AND entity_id = $1`, [planId]);
+
+      // 3. Approvals — polymorphic reference; no FK. Full audit evidence is
+      // retained in audit_log (which is NEVER deleted — see below).
+      await client.query(`DELETE FROM approvals WHERE entity_type = 'plan' AND entity_id = $1`, [planId]);
+
+      // 4. Risks — two unbound integer columns reference plan data (no
+      // DB-level FK constraints). Operational risks must NOT be silently
+      // destroyed; SET NULL preserves them as plan-less/activity-less entries.
+      await client.query(
+        `UPDATE risks
+         SET plan_activity_id = NULL
+         WHERE plan_activity_id IN (
+           SELECT id FROM plan_activities WHERE plan_id = $1
+         )`,
+        [planId],
+      );
+      await client.query(`UPDATE risks SET plan_id = NULL WHERE plan_id = $1`, [planId]);
+
+      // 5. Plan attachments — DB metadata rows deleted atomically; storage
+      // objects deleted post-COMMIT (see below).
+      await client.query(`DELETE FROM plan_attachments WHERE plan_id = $1`, [planId]);
+      await client.query(
+        `INSERT INTO attachment_upload_cleanup_jobs
+           (operation_id, object_path, final_object_path)
+         SELECT operation_id, object_path, final_object_path
+         FROM attachment_upload_operations
+         WHERE parent_type = 'plan' AND parent_id = $1
+           AND status <> 'finalised'
+         ON CONFLICT (operation_id) DO NOTHING`,
+        [planId],
+      );
+      await client.query(`DELETE FROM attachment_upload_operations WHERE parent_type = 'plan' AND parent_id = $1`, [planId]);
+      await client.query(`DELETE FROM attachments WHERE parent_type = 'plan' AND parent_id = $1`, [planId]);
+
+      // 6. Plan activities — explicit delete (no FK cascade). risks.plan_activity_id
+      // has already been cleared above, so no dangling references remain.
+      await client.query(`DELETE FROM plan_activities WHERE plan_id = $1`, [planId]);
+
+      // 7. Plans — the plan row itself.
+      await client.query(`DELETE FROM plans WHERE id = $1`, [planId]);
+
+      // NOTE: audit_log rows referencing this plan are intentionally PRESERVED.
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // ── Post-COMMIT: delete storage objects (best-effort) ────────────────────
+    for (const objectPath of attachmentObjectPaths) {
+      try {
+        await deleteObjectSafely(c.env, objectPath);
+      } catch (storErr) {
+        console.error("[PLAN-DEL] post_commit storage_error planId=%d objectPath=%s err=%s", planId, objectPath, storErr);
+      }
+    }
+
+    await logAudit(db, { userId: user.id, action: "delete", module: "plans", entityId: planId });
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    return c.body(null, 204);
+  } finally {
+    close();
+  }
+});
+
+// ── Plan workflow transitions ─────────────────────────────────────────────────
+plansRoutes.post("/plans/:planId/transitions", async (c) => {
+  const user = c.get("currentUser");
+  if (!user) return c.json({ error: "unauthorized" }, 401);
+  const planId = Number(c.req.param("planId"));
+  const { db, pool, close } = openDb(c);
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, any>;
+    const action = String(body.action ?? "");
+    const transition = PLAN_TRANSITIONS[action];
+    if (!transition) return c.json({ error: `invalid_action:${action}` }, 400);
+    const transitionPerm = PLAN_TRANSITION_PERMS[action];
+    if (transitionPerm) {
+      const perms = permissionsFor(user);
+      if (!perms.includes("*") && !perms.includes(transitionPerm)) {
+        return c.json({ error: "forbidden", requiredPermission: transitionPerm }, 403);
+      }
+    }
+
+    const cur = await db.query<{ status: string; sector: string | null; project_id: number | null; stateId: number | null }>(
+      `SELECT status, sector, project_id, state_id AS "stateId" FROM plans WHERE id = $1`, [planId],
+    );
+    if (cur.rows.length === 0) return c.json({ error: "plan_not_found" }, 404);
+    const meta = await getPlanMeta(db, planId);
+    const sectorGuard = assertAnySectorAllowed(user, meta?.sectors ?? []);
+    if (!sectorGuard.ok) return c.json(sectorGuard.body, sectorGuard.status as any);
+    const stateGuard = assertPlanStateAllowed(user, cur.rows[0].stateId);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+    const fromStatus = cur.rows[0].status;
+    if (!transition.from.includes(fromStatus)) {
+      // PLAN-016: wrong-source status is a concurrency/state conflict → 409 Conflict.
+      return c.json({ error: `cannot_${action}_from_${fromStatus}` }, 409);
+    }
+
+    if (action === "submit") {
+      // ─── Transactional Submit For Approval ──────────────────────────────
+      // All validation, writes, and audit occur inside a single transaction
+      // with a FOR UPDATE lock on the Plan row. This closes the TOCTOU race
+      // between a concurrent PATCH / Save & Finish and this Submit, and also
+      // prevents two concurrent Submit requests from both succeeding.
+      class SubmitError extends Error {
+        constructor(public readonly code: string, public readonly httpStatus: number = 400) { super(code); }
+      }
+      let submitFromStatus = "";
+      const submitClient = await pool.connect();
+      try {
+        await submitClient.query("BEGIN");
+
+        // Lock the Plan row — row-level exclusive lock, same model as PATCH.
+        const lockedPlanResult = await submitClient.query<{
+          status: string;
+          description: string | null;
+          start_date: Date | string | null;
+          end_date: Date | string | null;
+          localities: unknown;
+          currency: string | null;
+          budget_planned: number | null;
+          planSector: string | null;
+          planSectors: unknown;
+          projectId: number | null;
+          stateId: number | null;
+        }>(
+          `SELECT status, description, start_date, end_date,
+                  COALESCE(localities, '[]'::jsonb) AS localities,
+                  currency, budget_planned::float AS budget_planned,
+                  NULLIF(sector, '') AS "planSector",
+                  COALESCE(sectors, '[]'::jsonb) AS "planSectors",
+                  project_id AS "projectId",
+                  state_id AS "stateId"
+           FROM plans
+           WHERE id = $1
+           FOR UPDATE`,
+          [planId],
+        );
+        if (lockedPlanResult.rows.length === 0) {
+          throw new SubmitError("plan_not_found");
+        }
+        const lockedPlan = lockedPlanResult.rows[0];
+        submitFromStatus = lockedPlan.status;
+
+        // Resolve effective sector — Plan sector takes precedence. If blank
+        // and a linked project exists, read the project sector with FOR
+        // SHARE (blocks a concurrent project UPDATE for the duration).
+        let effectiveSectors: string[] = normaliseSectors(lockedPlan.planSectors);
+        if (effectiveSectors.length === 0 && lockedPlan.planSector) {
+          effectiveSectors = [lockedPlan.planSector];
+        }
+        if (effectiveSectors.length === 0 && lockedPlan.projectId !== null) {
+          const projSectorResult = await submitClient.query<{ sector: string | null }>(
+            `SELECT NULLIF(sector, '') AS sector FROM projects WHERE id = $1 FOR SHARE`,
+            [lockedPlan.projectId],
+          );
+          const projSector = projSectorResult.rows[0]?.sector ?? null;
+          if (projSector) effectiveSectors = [projSector];
+        }
+
+        // Re-verify workflow eligibility from the locked Plan row — the
+        // pre-transaction fromStatus read cannot protect against a concurrent
+        // PATCH that changed status between that read and BEGIN.
+        if (!transition.from.includes(lockedPlan.status)) {
+          throw new SubmitError(`cannot_submit_from_${lockedPlan.status}`, 409);
+        }
+
+        // Re-check Plan-specific authorisation using locked Plan data.
+        const lockedSectorGuard = assertAnySectorAllowed(user, effectiveSectors);
+        if (!lockedSectorGuard.ok) {
+          throw new SubmitError(
+            (lockedSectorGuard.body as { error: string }).error,
+            lockedSectorGuard.status,
+          );
+        }
+        const lockedStateGuard = assertPlanStateAllowed(user, lockedPlan.stateId);
+        if (!lockedStateGuard.ok) {
+          throw new SubmitError((lockedStateGuard.body as { error: string }).error, lockedStateGuard.status);
+        }
+
+        // Read persisted Activities through the transaction client (after lock).
+        const lockedActsResult = await submitClient.query<{
+          title: string | null;
+          locality_name: string | null;
+          planned_date: Date | string | null;
+          priority: string | null;
+          target_beneficiaries: number | null;
+          budget_planned: number | null;
+          expected_result: string | null;
+        }>(
+          `SELECT title, locality_name, planned_date, priority,
+                  target_beneficiaries, budget_planned::float AS budget_planned, expected_result
+           FROM plan_activities WHERE plan_id = $1`,
+          [planId],
+        );
+
+        // Readiness validation — all existing rules, against locked DB state.
+        if (lockedActsResult.rows.length === 0) {
+          throw new SubmitError("at_least_one_activity_required");
+        }
+        if (!lockedPlan.description?.trim()) {
+          throw new SubmitError("description_required");
+        }
+        const submitPlanLocs = normalisePlanLocalities(lockedPlan.localities);
+        if (submitPlanLocs.length === 0) {
+          throw new SubmitError("geographical_coverage_required");
+        }
+
+        const submitCtx: PlanContext = {
+          startDate: pgDateToIso(lockedPlan.start_date ?? null),
+          endDate: pgDateToIso(lockedPlan.end_date ?? null),
+          localities: submitPlanLocs,
+        };
+        const submitActInputs: ActivityInput[] = lockedActsResult.rows.map((row) => ({
+          title: row.title ?? "",
+          localityName: row.locality_name ?? "",
+          plannedDate: pgDateToIso(row.planned_date) ?? "",
+          priority: row.priority ?? "",
+          targetBeneficiaries: row.target_beneficiaries ?? undefined,
+          budgetPlanned: row.budget_planned ?? undefined,
+          expectedResult: row.expected_result ?? "",
+        }));
+        const hasCompleteOnSubmit = submitActInputs.some(
+          (a) => validatePlanActivityReadiness(a, submitCtx) === null,
+        );
+        if (!hasCompleteOnSubmit) {
+          throw new SubmitError("at_least_one_complete_activity_required");
+        }
+
+        // Budget consistency — read from DB; do NOT trust frontend totals.
+        const submitActBudgetTotal = lockedActsResult.rows.reduce((s, row) => {
+          const v = Number(row.budget_planned ?? 0);
+          return s + (Number.isFinite(v) && v >= 0 ? v : 0);
+        }, 0);
+        const budgetIssueOnSubmit = validatePlanBudgetReadiness(
+          lockedPlan.currency ?? "",
+          lockedPlan.budget_planned ?? NaN,
+          submitActBudgetTotal,
+        );
+        if (budgetIssueOnSubmit) {
+          throw new SubmitError(budgetIssueOnSubmit);
+        }
+
+        // Revoke active Registration sessions — once the Plan leaves Draft,
+        // creation-session editing is permanently over.
+        await submitClient.query(
+          `UPDATE plan_registration_sessions
+           SET closed_at = NOW()
+           WHERE plan_id   = $1
+             AND closed_at IS NULL`,
+          [planId],
+        );
+
+        // Conditional status transition — WHERE id AND status = expected.
+        const transitionResult = await submitClient.query(
+          `UPDATE plans
+           SET status = $1, updated_at = NOW()
+           WHERE id = $2 AND status = $3`,
+          [transition.to, planId, lockedPlan.status],
+        );
+        if ((transitionResult.rowCount ?? 0) !== 1) {
+          throw new SubmitError(`cannot_submit_from_${lockedPlan.status}`);
+        }
+
+        await submitClient.query(
+          `INSERT INTO approvals (entity_type, entity_id, action, from_status, to_status, actor_id, comment)
+           VALUES ('plan', $1, $2, $3, $4, $5, $6)`,
+          [planId, action, lockedPlan.status, transition.to, user.id, body.comment ?? null],
+        );
+
+        await logAudit(submitClient, {
+          userId: user.id,
+          action,
+          module: "plans",
+          entityId: planId,
+          oldValue: lockedPlan.status,
+          newValue: transition.to,
+        });
+
+        await submitClient.query("COMMIT");
+      } catch (err) {
+        await submitClient.query("ROLLBACK").catch(() => {});
+        if (err instanceof SubmitError) {
+          return c.json({ error: err.code }, err.httpStatus as any);
+        }
+        throw err;
+      } finally {
+        submitClient.release();
+      }
+
+      // Dropped (deferred to the notifications-engine port): notifyEntityActorsDeduped
+      // ("resubmitted" notice) and notifyNextApprover (G-01, next approver in chain).
+      // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+      const plan = await getPlanById(db, planId);
+      return c.json(plan);
+      // Submit is fully self-contained; shared code below is for other actions.
+    }
+    if (action === "final_approve") {
+      const n = await unresolvedRequiredCorrections(db, "plan", planId);
+      if (n > 0) {
+        return c.json({ error: "unresolved_required_corrections", count: n }, 409);
+      }
+    }
+    const commentText = String(body.comment ?? "").trim();
+    if ((action === "request_revision" || action === "reject") && !commentText) {
+      return c.json({ error: "comment_required_for_revision_or_reject" }, 400);
+    }
+
+    // ─── PLAN-004: Atomic CAS Transition ─────────────────────────────────────────
+    // All non-submit transitions are wrapped in a single client transaction.
+    // The UPDATE includes an AND status = $expectedSource predicate (CAS).
+    // Notifications are sent AFTER COMMIT so a failed or stale transition
+    // produces none.
+    const transitionClient = await pool.connect();
+    try {
+      await transitionClient.query("BEGIN");
+
+      // ─── Completed-plan integrity gate (Wave 1) ────────────────────────────────
+      // The `complete` transition is only permitted when every eligible
+      // (non-cancelled) activity is completed at 100% progress, and at least
+      // one such activity exists. Race-safe: plan + activity rows locked
+      // FOR UPDATE. Applies to ALL roles — Full Access does not bypass this.
+      if (action === "complete") {
+        const lockedPlan = await transitionClient.query<{ status: string }>(
+          `SELECT status FROM plans WHERE id = $1 FOR UPDATE`,
+          [planId],
+        );
+        if (lockedPlan.rows.length === 0) {
+          await transitionClient.query("ROLLBACK");
+          return c.json({ error: "plan_not_found" }, 404);
+        }
+        if (lockedPlan.rows[0].status !== fromStatus || !transition.from.includes(lockedPlan.rows[0].status)) {
+          await transitionClient.query("ROLLBACK");
+          return c.json({
+            error: "plan_status_conflict",
+            message: "The plan status has changed; please refresh and try again.",
+          }, 409);
+        }
+        const acts = await transitionClient.query<{ status: string; progress_pct: number | null }>(
+          `SELECT status, progress_pct FROM plan_activities
+           WHERE plan_id = $1 AND status <> 'cancelled'
+           FOR UPDATE`,
+          [planId],
+        );
+        const incomplete =
+          acts.rows.length === 0 ||
+          acts.rows.some((a) => a.status !== "completed" || Number(a.progress_pct) !== 100);
+        if (incomplete) {
+          await transitionClient.query("ROLLBACK");
+          return c.json({
+            error: "plan_activities_incomplete",
+            message:
+              "This plan cannot be marked as completed. Every non-cancelled activity must be completed with 100% progress, and at least one non-cancelled activity must exist.",
+          }, 409);
+        }
+      }
+
+      // CAS UPDATE — only succeeds if the plan is still in the expected source status.
+      const casResult = await transitionClient.query(
+        action === "final_approve"
+          ? `UPDATE plans SET status = $1, updated_at = NOW(), last_final_approved_at = NOW()
+             WHERE id = $2 AND status = $3
+             RETURNING id`
+          : `UPDATE plans SET status = $1, updated_at = NOW()
+             WHERE id = $2 AND status = $3
+             RETURNING id`,
+        [transition.to, planId, fromStatus],
+      );
+
+      if ((casResult.rowCount ?? 0) === 0) {
+        await transitionClient.query("ROLLBACK");
+        return c.json({
+          error: "plan_status_conflict",
+          message: "The plan status has changed; please refresh and try again.",
+        }, 409);
+      }
+
+      await transitionClient.query(
+        `INSERT INTO approvals (entity_type, entity_id, action, from_status, to_status, actor_id, comment)
+         VALUES ('plan', $1, $2, $3, $4, $5, $6)`,
+        [planId, action, fromStatus, transition.to, user.id, body.comment ?? null],
+      );
+
+      if (commentText && (action === "request_revision" || action === "reject")) {
+        await transitionClient.query(
+          `INSERT INTO comments (entity_type, entity_id, comment_type, author_id, body)
+           VALUES ('plan', $1, $2, $3, $4)`,
+          [planId, action === "request_revision" ? "revision_request" : "rejection_reason", user.id, commentText],
+        );
+      }
+
+      await logAudit(transitionClient, {
+        userId: user.id,
+        action,
+        module: "plans",
+        entityId: planId,
+        oldValue: fromStatus,
+        newValue: transition.to,
+      });
+
+      await transitionClient.query("COMMIT");
+    } catch (err) {
+      await transitionClient.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      transitionClient.release();
+    }
+    // ─── End PLAN-004 CAS Transaction ────────────────────────────────────────────
+
+    // Dropped (deferred to the notifications-engine port): notifyEntityActorsDeduped
+    // (transition notice to entity actors) and notifyNextApprover (G-01, next
+    // approver in chain, resolved via meta?.sectors[0]).
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    const plan = await getPlanById(db, planId);
+    return c.json(plan);
+  } finally {
+    close();
+  }
+});
+
+// ─── Reopen For Editing ───────────────────────────────────────────────────────
+// POST /plans/:planId/reopen
+// Transitions an Approved (or post-approval) Plan back to Draft so it can be
+// edited and re-submitted through the full approval workflow.
+//
+// Rules:
+//  • Requires plans.reopen permission (separate from plans.update/plans.delete).
+//  • Only allowed from REOPENABLE_STATUSES (not terminal: completed/cancelled/archived).
+//  • A mandatory "reason" must be supplied in the request body.
+//  • Sets status = "draft"; last_final_approved_at is PRESERVED (never cleared).
+//  • Writes an approvals row and an audit log entry for the full history.
+//  • Idempotent: if already in a pre-approval editable state, returns current plan.
+plansRoutes.post("/plans/:planId/reopen", requirePerm("plans.reopen", "You do not have permission to reopen this Plan."), async (c) => {
+  const user = c.get("currentUser")!;
+  const { db, pool, close } = openDb(c);
+  try {
+    const planId = Number(c.req.param("planId"));
+    if (!Number.isFinite(planId)) return c.json({ error: "invalid_plan_id" }, 400);
+
+    const rawBody = (await c.req.json().catch(() => ({}))) as Record<string, any>;
+    const reason = String(rawBody.reason ?? "").trim();
+    if (!reason) return c.json({ error: "reason_required", message: "A reason for reopening is required." }, 400);
+
+    const meta = await getPlanMeta(db, planId);
+    if (meta === undefined) return c.json({ error: "plan_not_found" }, 404);
+
+    const sectorGuard = assertAnySectorAllowed(user, meta.sectors);
+    if (!sectorGuard.ok) return c.json(sectorGuard.body, sectorGuard.status as any);
+    const stateGuard = assertPlanStateAllowed(user, meta.stateId, meta.locationType);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+
+    // ─── PLAN-006: Reopen lock inside transaction ─────────────────────────────
+    // The SELECT … FOR UPDATE and the mutation UPDATE must be on the same
+    // client connection and inside the same BEGIN/COMMIT block, so a
+    // concurrent reopen attempt blocks until this one commits.
+    let currentStatus = "";
+    let planTitle = "";
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const cur = await client.query<{ status: string; code: string; title: string; last_final_approved_at: string | null }>(
+        `SELECT status, code, title, last_final_approved_at FROM plans WHERE id = $1 FOR UPDATE`,
+        [planId],
+      );
+      if (cur.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "plan_not_found" }, 404);
+      }
+      currentStatus = cur.rows[0].status;
+      planTitle = cur.rows[0].title;
+      const lastFinalApprovedAt = cur.rows[0].last_final_approved_at;
+
+      // Idempotency: inline editability check using the locked row and
+      // transaction client — equivalent to isPlanCurrentlyEditable() but
+      // consistent with the locked plan row.
+      let alreadyEditable: boolean;
+      if (!lastFinalApprovedAt) {
+        alreadyEditable = !POST_APPROVAL_LOCKED_STATUSES.has(currentStatus);
+      } else {
+        const reopenCheck = await client.query(
+          `SELECT 1 FROM approvals
+           WHERE entity_type = 'plan' AND entity_id = $1
+             AND action = 'reopen'
+             AND "timestamp" > $2
+           LIMIT 1`,
+          [planId, lastFinalApprovedAt],
+        );
+        alreadyEditable = reopenCheck.rows.length > 0 && !POST_APPROVAL_LOCKED_STATUSES.has(currentStatus);
+      }
+
+      if (alreadyEditable) {
+        await client.query("ROLLBACK");
+        const plan = await getPlanById(db, planId);
+        return c.json({ ...(plan as object), alreadyEditable: true });
+      }
+
+      // Not already editable. Terminal statuses cannot be reopened.
+      if (!REOPENABLE_STATUSES.has(currentStatus)) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "cannot_reopen_terminal", message: `Plans with status "${currentStatus}" cannot be reopened. Terminal plans require a separate approved business rule.` }, 409);
+      }
+
+      // Mutation — still holding the FOR UPDATE row lock.
+      await client.query(`UPDATE plans SET status = 'draft', updated_at = NOW() WHERE id = $1`, [planId]);
+      await client.query(
+        `INSERT INTO approvals (entity_type, entity_id, action, from_status, to_status, actor_id, comment)
+         VALUES ('plan', $1, 'reopen', $2, 'draft', $3, $4)`,
+        [planId, currentStatus, user.id, reason],
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+    // ─── End PLAN-006 Fix ─────────────────────────────────────────────────────
+
+    await logAudit(db, {
+      userId: user.id,
+      action: "reopen",
+      module: "plans",
+      entityId: planId,
+      oldValue: currentStatus,
+      newValue: JSON.stringify({ status: "draft", planTitle, reason, reopenedByRole: user.role }),
+    });
+
+    // Dropped (deferred to the notifications-engine port): notifyEntityActorsDeduped
+    // ("reopened" notice, mandatory:true).
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    const plan = await getPlanById(db, planId);
+    return c.json(plan);
+  } finally {
     close();
   }
 });
