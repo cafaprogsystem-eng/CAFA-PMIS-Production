@@ -6597,7 +6597,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
             ) : (
               <div className="overflow-x-auto" role="region" aria-label={t("list.tableAriaLabel")}>
                 <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--border))]">
+                  <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
                     {/* §26: Table columns — Report (title+period) · Status · [Activity] · Project · State · Sector · Frequency · Prepared By · Actions */}
                     <TableRow>
                       <TableHead className="min-w-[220px]">{t("list.title")}</TableHead>

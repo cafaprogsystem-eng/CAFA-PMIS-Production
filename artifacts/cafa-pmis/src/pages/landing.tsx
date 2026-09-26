@@ -221,7 +221,7 @@ function ModuleCard({ mod, delay = 0 }: { mod: ModuleItem; delay?: number }) {
     <div
        className="relative landing-fade-in group flex flex-col h-full min-h-[238px] rounded-[20px] border border-card-border shadow-[0_1px_4px_rgb(0_0_0/0.06),0_1px_2px_rgb(0_0_0/0.04)] p-5 cursor-pointer transition-all duration-[250ms] hover:-translate-y-1 hover:shadow-[0_18px_48px_rgb(0_0_0/0.13),0_4px_14px_rgb(0_0_0/0.07)] hover:border-primary/40"
       style={{
-         background: "linear-gradient(160deg, hsl(var(--card)) 0%, hsl(var(--muted) / 0.32) 100%)",
+         background: "linear-gradient(160deg, hsl(var(--cafa-card)) 0%, hsl(var(--cafa-muted) / 0.32) 100%)",
         ...(delay ? { transitionDelay: `${delay}ms` } : {}),
       }}
     >

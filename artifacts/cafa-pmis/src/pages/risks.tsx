@@ -1459,7 +1459,7 @@ export default function RisksPage() {
           ) : (
             <div className="overflow-x-auto" role="region" aria-label={t("common:risksPage.registerLabel")}>
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--border))]">
+                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
                   <TableRow>
                     <TableHead className="min-w-[200px]">{t("table.riskTitle")}</TableHead>
                     <TableHead>{t("table.category")}</TableHead>

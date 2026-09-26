@@ -390,7 +390,7 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--border))]">
+                    <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
                       <TableRow>
                         <TableHead>{t("settings.logUser")}</TableHead>
                         <TableHead>{t("settings.logRole")}</TableHead>

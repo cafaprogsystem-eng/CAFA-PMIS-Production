@@ -506,7 +506,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* ── Nav ───────────────────────────────────────────────── */}
-          <nav className="flex-1 min-h-0 overflow-y-auto px-2.5 py-3 [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-sidebar-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/25" style={{ scrollbarWidth: "thin", scrollbarColor: "hsl(var(--border)) transparent" }}>
+          <nav className="flex-1 min-h-0 overflow-y-auto px-2.5 py-3 [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-sidebar-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/25" style={{ scrollbarWidth: "thin", scrollbarColor: "hsl(var(--cafa-border)) transparent" }}>
             {navEntries.map((entry) => {
               const visibleItems = (entry.kind === "group" ? entry.group.items : [entry.item]).filter(Boolean);
               if (visibleItems.length === 0) return null;

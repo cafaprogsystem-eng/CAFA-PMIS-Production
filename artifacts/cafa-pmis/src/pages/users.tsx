@@ -808,7 +808,7 @@ export default function UsersPage() {
           <CardContent className="p-0">
             <div className="table-scroll" role="region" aria-label={t("ariaLabel.usersTable")} tabIndex={0}>
             <Table className="min-w-[1190px]">
-              <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--border))]">
+              <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
                 <TableRow>
                   <TableHead>{t("fields.name")}</TableHead>
                   <TableHead>{t("table.username")}</TableHead>

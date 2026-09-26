@@ -432,21 +432,21 @@ function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; proj
         <CardContent className="h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.monthly}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--cafa-border))" />
+              <XAxis dataKey="month" stroke="hsl(var(--cafa-muted-foreground))" fontSize={12} />
               {/* BUD-006: currency-aware axis/tooltip — no hardcoded "$" */}
               <YAxis
-                stroke="hsl(var(--muted-foreground))"
+                stroke="hsl(var(--cafa-muted-foreground))"
                 fontSize={12}
                 tickFormatter={(v) => displayCurrency ? `${displayCurrency} ${(v / 1000).toFixed(0)}k` : "—"}
               />
               <Tooltip
-                contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
+                contentStyle={{ backgroundColor: 'hsl(var(--cafa-card))', borderColor: 'hsl(var(--cafa-border))' }}
                 formatter={(v: number) => fmtMoney(v, projectInfo?.currency)}
               />
               <Legend />
-              <Line type="monotone" dataKey="planned" stroke="hsl(var(--primary))" strokeWidth={2} />
-              <Line type="monotone" dataKey="actual" stroke="hsl(var(--secondary))" strokeWidth={2} />
+              <Line type="monotone" dataKey="planned" stroke="hsl(var(--cafa-primary))" strokeWidth={2} />
+              <Line type="monotone" dataKey="actual" stroke="hsl(var(--cafa-secondary))" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>

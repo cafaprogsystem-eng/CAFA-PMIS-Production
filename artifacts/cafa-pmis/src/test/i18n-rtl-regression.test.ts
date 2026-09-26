@@ -624,8 +624,8 @@ describe("Business-module RTL production guardrails", () => {
   it("activates the Arabic-capable font stack and readable leading for Arabic documents", () => {
     const css = source("index.css");
     expect(css).toContain('html[lang="ar"] {');
-    expect(css).toContain("--app-font-sans: var(--app-font-arabic)");
-    expect(css).toContain("font-family: var(--app-font-arabic)");
+    expect(css).toContain("--cafa-font-sans: var(--cafa-font-arabic)");
+    expect(css).toContain("font-family: var(--cafa-font-arabic)");
     expect(css).toContain("line-height: 1.75");
     expect(css).toContain("html[lang=\"ar\"] :is(button, input, select, textarea)");
   });

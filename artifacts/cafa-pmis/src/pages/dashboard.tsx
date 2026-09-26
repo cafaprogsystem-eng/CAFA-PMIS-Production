@@ -879,7 +879,7 @@ function StatePerformanceTable({
               <th
                 scope="col"
                 aria-sort={(sortCol === "stateName" ? (sortDir === "asc" ? "ascending" : "descending") : "none") as React.AriaAttributes["aria-sort"]}
-                className="py-3 px-4 text-start text-xs font-medium text-muted-foreground sticky start-0 z-30 bg-muted/30 shadow-[1px_0_0_0_hsl(var(--border))] whitespace-nowrap"
+                className="py-3 px-4 text-start text-xs font-medium text-muted-foreground sticky start-0 z-30 bg-muted/30 shadow-[1px_0_0_0_hsl(var(--cafa-border))] whitespace-nowrap"
               >
                 <button
                   type="button"
@@ -950,7 +950,7 @@ function StatePerformanceTable({
                     className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${rowIdx % 2 === 1 ? "bg-muted/[0.03]" : ""}`}
                   >
                     {/* Sticky State cell */}
-                    <td className={`py-3 px-4 font-medium sticky start-0 z-10 shadow-[1px_0_0_0_hsl(var(--border))] transition-colors ${rowIdx % 2 === 1 ? "bg-muted/[0.03]" : "bg-card"}`}>
+                    <td className={`py-3 px-4 font-medium sticky start-0 z-10 shadow-[1px_0_0_0_hsl(var(--cafa-border))] transition-colors ${rowIdx % 2 === 1 ? "bg-muted/[0.03]" : "bg-card"}`}>
                       <Link
                         href={`/states/${state.stateId}`}
                         aria-label={t("aria.viewState", { name: getStateLabel({ name: state.stateName, nameAr: state.stateNameAr }, i18n.language) })}
@@ -1680,7 +1680,7 @@ const STATUS_COLORS: Record<string, string> = {
   coordination_approved: "#8b5cf6",              // violet-500
   technically_approved:  "#8b5cf6",              // violet-500 (same family)
   approved:              "#22c55e",              // green-500
-  active:                "hsl(var(--primary))", // primary    — success/active
+  active:                "hsl(var(--cafa-primary))", // primary    — success/active
   completed:             "#14b8a6",              // teal-500
   on_hold:               "#f59e0b",              // amber-500
   returned:              "#f97316",              // orange-500
@@ -1690,7 +1690,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 // Semantic colours — every metric must use the same colour across all charts
 const CC = {
-  achievement: "hsl(var(--primary))",   // blue  — beneficiaries achieved, indicator %
+  achievement: "hsl(var(--cafa-primary))",   // blue  — beneficiaries achieved, indicator %
   target:      "#10b981",               // emerald — target lines / approved / completed
   budgetPct:   "#f59e0b",               // amber  — budget utilisation %, progress %, spent
   donor:       "#8b5cf6",               // violet — donor budget
@@ -1958,16 +1958,16 @@ function PriorityActionsPanel({
 /* ── Chart tooltip style ─────────────────────────────────────────────── */
 const TT = {
   contentStyle: {
-    backgroundColor: "hsl(var(--card))",
-    borderColor:     "hsl(var(--border))",
+    backgroundColor: "hsl(var(--cafa-card))",
+    borderColor:     "hsl(var(--cafa-border))",
     borderRadius:    "10px",
     fontSize:        "12px",
     boxShadow:       "0 4px 16px rgba(0,0,0,0.09)",
     padding:         "8px 12px",
   },
-  labelStyle: { color: "hsl(var(--foreground))", fontWeight: 600, marginBottom: "4px", fontSize: "12px" },
-  itemStyle:  { color: "hsl(var(--muted-foreground))", fontSize: "11px", lineHeight: "18px" },
-  cursor:     { fill: "hsl(var(--muted)/0.35)" },
+  labelStyle: { color: "hsl(var(--cafa-foreground))", fontWeight: 600, marginBottom: "4px", fontSize: "12px" },
+  itemStyle:  { color: "hsl(var(--cafa-muted-foreground))", fontSize: "11px", lineHeight: "18px" },
+  cursor:     { fill: "hsl(var(--cafa-muted)/0.35)" },
 } as const;
 
 /* ── ChartCard wrapper (consistent card + header styling) ────────────── */
@@ -2019,7 +2019,7 @@ function RiskChartTooltip({
       <p style={TT.labelStyle}>{label}</p>
       <p style={TT.itemStyle}>{t("riskPanel.activeCriticalRisks")}: {crit}</p>
       <p style={TT.itemStyle}>{t("riskPanel.activeHighRisks")}: {high}</p>
-      <p style={{ ...TT.itemStyle, fontWeight: 600, color: "hsl(var(--foreground))" }}>
+      <p style={{ ...TT.itemStyle, fontWeight: 600, color: "hsl(var(--cafa-foreground))" }}>
         {t("riskPanel.combined")} {crit + high}
       </p>
     </div>
@@ -2247,13 +2247,13 @@ function RiskHorizontalChart({
                   <CartesianGrid
                     strokeDasharray="3 3"
                     horizontal={false}
-                    stroke="hsl(var(--border))"
+                    stroke="hsl(var(--cafa-border))"
                     strokeOpacity={0.35}
                   />
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="hsl(var(--cafa-muted-foreground))"
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
@@ -2261,12 +2261,12 @@ function RiskHorizontalChart({
                   <YAxis
                     type="category"
                     dataKey="name"
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="hsl(var(--cafa-muted-foreground))"
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
                     width={132}
-                    tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}
+                    tick={{ fill: "hsl(var(--cafa-foreground))", fontSize: 11 }}
                   />
                   <Tooltip content={RiskChartTooltip} cursor={TT.cursor} />
                   <Legend
@@ -2285,7 +2285,7 @@ function RiskHorizontalChart({
                       dataKey="critRisks"
                       position="right"
                       formatter={(v: number) => v > 0 ? String(v) : ""}
-                      style={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontVariantNumeric: "tabular-nums" }}
+                      style={{ fontSize: 10, fill: "hsl(var(--cafa-muted-foreground))", fontVariantNumeric: "tabular-nums" }}
                     />
                   </Bar>
                   <Bar
@@ -2299,7 +2299,7 @@ function RiskHorizontalChart({
                       dataKey="highRisks"
                       position="right"
                       formatter={(v: number) => v > 0 ? String(v) : ""}
-                      style={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontVariantNumeric: "tabular-nums" }}
+                      style={{ fontSize: 10, fill: "hsl(var(--cafa-muted-foreground))", fontVariantNumeric: "tabular-nums" }}
                     />
                   </Bar>
                 </BarChart>
@@ -2355,14 +2355,14 @@ function MonthlyTrendChart({
                   <stop offset="95%" stopColor={CC.target} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.4} />
               <XAxis
                 dataKey="month"
-                stroke="hsl(var(--muted-foreground))"
+                stroke="hsl(var(--cafa-muted-foreground))"
                 fontSize={11} tickLine={false} axisLine={false} tickMargin={6}
               />
               <YAxis
-                stroke="hsl(var(--muted-foreground))"
+                stroke="hsl(var(--cafa-muted-foreground))"
                 fontSize={11} tickLine={false} axisLine={false}
                 tickFormatter={fmtCompact}
                 width={40}
@@ -3961,7 +3961,7 @@ export default function Dashboard() {
     {
       name: t("projectStatus.other"),
       value: Math.max(0, (summary?.totalProjects ?? 0) - (summary?.activeProjects ?? 0) - (summary?.completedProjects ?? 0)),
-      color: "hsl(var(--muted-foreground)/0.35)",
+      color: "hsl(var(--cafa-muted-foreground)/0.35)",
     },
   ].filter(d => d.value > 0);
   const projectStatusTotal = projectStatusData.reduce((s, d) => s + d.value, 0);
@@ -4533,9 +4533,9 @@ export default function Dashboard() {
                           <div style={{ height: 260 }}>
                             <ResponsiveContainer width="100%" height="100%">
                               <BarChart data={(benBreakdown.byState ?? []).slice(0, 10)} layout="vertical" margin={{ top: 2, right: 16, left: 0, bottom: 2 }} barCategoryGap="30%">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
-                                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={fmtCompact} />
-                                <YAxis dataKey="stateName" type="category" stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} width={82} />
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.4} />
+                                <XAxis type="number" stroke="hsl(var(--cafa-muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={fmtCompact} />
+                                <YAxis dataKey="stateName" type="category" stroke="hsl(var(--cafa-muted-foreground))" fontSize={10} tickLine={false} axisLine={false} width={82} />
                                 <Tooltip contentStyle={TT.contentStyle} labelStyle={TT.labelStyle} itemStyle={TT.itemStyle} cursor={TT.cursor} formatter={(v: number) => [fmt(v), t("chartSeries.beneficiaries")]} />
                                 <Bar dataKey="total" name={t("chartSeries.beneficiaries")} fill={CC.achievement} radius={[0, 3, 3, 0]} />
                               </BarChart>
@@ -4550,9 +4550,9 @@ export default function Dashboard() {
                           <div style={{ height: 260 }}>
                             <ResponsiveContainer width="100%" height="100%">
                               <BarChart data={(benBreakdown.bySector ?? []).slice(0, 10)} layout="vertical" margin={{ top: 2, right: 16, left: 0, bottom: 2 }} barCategoryGap="30%">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
-                                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={fmtCompact} />
-                                <YAxis dataKey="sector" type="category" stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} width={92} tickFormatter={(v: string) => v.length > 13 ? `${v.slice(0, 12)}…` : v} />
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.4} />
+                                <XAxis type="number" stroke="hsl(var(--cafa-muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={fmtCompact} />
+                                <YAxis dataKey="sector" type="category" stroke="hsl(var(--cafa-muted-foreground))" fontSize={10} tickLine={false} axisLine={false} width={92} tickFormatter={(v: string) => v.length > 13 ? `${v.slice(0, 12)}…` : v} />
                                 <Tooltip contentStyle={TT.contentStyle} labelStyle={TT.labelStyle} itemStyle={TT.itemStyle} cursor={TT.cursor} formatter={(v: number) => [fmt(v), t("chartSeries.beneficiaries")]} />
                                 <Bar dataKey="total" name={t("chartSeries.beneficiaries")} fill={CC.achievement} radius={[0, 3, 3, 0]} />
                               </BarChart>
@@ -4980,17 +4980,17 @@ export default function Dashboard() {
                               barCategoryGap="20%"
                               barGap={2}
                             >
-                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" strokeOpacity={0.35} />
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.35} />
                               <XAxis
                                 type="number"
-                                stroke="hsl(var(--muted-foreground))"
+                                stroke="hsl(var(--cafa-muted-foreground))"
                                 fontSize={11} tickLine={false} axisLine={false} tickMargin={4}
                                 tickFormatter={fmtCompact}
                                 allowDecimals={false}
                               />
                               <YAxis
                                 dataKey="name" type="category"
-                                stroke="hsl(var(--muted-foreground))"
+                                stroke="hsl(var(--cafa-muted-foreground))"
                                 fontSize={11} tickLine={false} axisLine={false} width={130}
                                 tickFormatter={(v: string) => v.length > 18 ? `${v.slice(0, 17)}…` : v}
                               />
@@ -5011,7 +5011,7 @@ export default function Dashboard() {
                                 height={24}
                                 iconType="square"
                                 iconSize={9}
-                                wrapperStyle={{ fontSize: 11, color: "hsl(var(--muted-foreground))", paddingTop: 4 }}
+                                wrapperStyle={{ fontSize: 11, color: "hsl(var(--cafa-muted-foreground))", paddingTop: 4 }}
                               />
                               <Bar dataKey="total"  name={t("projectsTab.totalProjects")}  fill={CC.totalProj}   radius={[0, 3, 3, 0]} maxBarSize={10} />
                               <Bar dataKey="active" name={t("projectsTab.activeProjects")} fill={CC.achievement} radius={[0, 3, 3, 0]} maxBarSize={10} />
@@ -5067,7 +5067,7 @@ export default function Dashboard() {
                               className="cursor-pointer"
                             >
                               {statusChartData.map((d, i) => (
-                                <Cell key={i} fill={d.color} stroke="hsl(var(--card))" strokeWidth={2} />
+                                <Cell key={i} fill={d.color} stroke="hsl(var(--cafa-card))" strokeWidth={2} />
                               ))}
                             </Pie>
                             <Tooltip
@@ -5081,7 +5081,7 @@ export default function Dashboard() {
                               height={52}
                               iconType="square"
                               iconSize={9}
-                              wrapperStyle={{ fontSize: 11, color: "hsl(var(--muted-foreground))", lineHeight: "22px" }}
+                              wrapperStyle={{ fontSize: 11, color: "hsl(var(--cafa-muted-foreground))", lineHeight: "22px" }}
                               formatter={(value, entry) => {
                                 const count = (entry as unknown as { payload?: { count?: number } }).payload?.count ?? 0;
                                 return `${value}: ${fmt(count)}`;
@@ -5113,17 +5113,17 @@ export default function Dashboard() {
                             margin={{ top: 2, right: 44, left: 0, bottom: 4 }}
                             barCategoryGap="26%"
                           >
-                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" strokeOpacity={0.35} />
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.35} />
                             <XAxis
                               type="number"
-                              stroke="hsl(var(--muted-foreground))"
+                              stroke="hsl(var(--cafa-muted-foreground))"
                               fontSize={11} tickLine={false} axisLine={false} tickMargin={4}
                               tickFormatter={fmtCompact}
                               allowDecimals={false}
                             />
                             <YAxis
                               dataKey="name" type="category"
-                              stroke="hsl(var(--muted-foreground))"
+                              stroke="hsl(var(--cafa-muted-foreground))"
                               fontSize={11} tickLine={false} axisLine={false} width={150}
                               tickFormatter={(v: string) => v.length > 22 ? `${v.slice(0, 21)}…` : v}
                             />
@@ -5152,7 +5152,7 @@ export default function Dashboard() {
                                 dataKey="count"
                                 position="right"
                                 formatter={(v: number) => fmt(v)}
-                                style={{ fontSize: 11, fill: "hsl(var(--muted-foreground))", fontVariantNumeric: "tabular-nums" }}
+                                style={{ fontSize: 11, fill: "hsl(var(--cafa-muted-foreground))", fontVariantNumeric: "tabular-nums" }}
                               />
                             </Bar>
                           </BarChart>

@@ -1083,7 +1083,7 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
           <CardContent className="p-0">
             <div className="overflow-x-auto" role="region" aria-label={t("plansPage.ariaTable")}>
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--border))]">
+                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
                   <TableRow>
                     {/* Plan = Title (primary) + Code (secondary) — combined to prevent code wrapping */}
                     <SortableHead field="plan" label={t("table.plan")} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="min-w-[220px]" />

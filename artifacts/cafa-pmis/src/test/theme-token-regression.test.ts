@@ -27,13 +27,15 @@ let darkTokens: Record<string, string>;
 
 /**
  * Parse HSL custom-property values out of a CSS block.
- * Looks for lines like:  --foo:   220 43% 97.2%;
- * Returns a map of { '--foo': '220 43% 97.2%' }
+ * Looks for lines like:  --cafa-foo:   220 43% 97.2%;
+ * Returns a map of { '--foo': '220 43% 97.2%' } — the `cafa-` namespace
+ * (which keeps our tokens clear of HeroUI's same-named variables) is
+ * stripped so the assertions below read in palette terms.
  */
 function parseTokenBlock(block: string): Record<string, string> {
   const result: Record<string, string> = {};
-  // Match: --name: <value>; (value may include spaces, %, digits, dots)
-  const re = /--([\w-]+)\s*:\s*([^;/]+?)\s*;/g;
+  // Match: --cafa-name: <value>; (value may include spaces, %, digits, dots)
+  const re = /--cafa-([\w-]+)\s*:\s*([^;/]+?)\s*;/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(block)) !== null) {
     result[`--${m[1]}`] = m[2].trim();
