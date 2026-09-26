@@ -66,6 +66,23 @@ export default [
       // ── React ────────────────────────────────────────────────────────
       "react/react-in-jsx-scope": "off",   // Not needed with the new JSX transform
       "react/prop-types": "off",            // TypeScript handles this
+
+      // ── Icons ─────────────────────────────────────────────────────────
+      // lucide-react is the icon set; Tabler only fills gaps and goes through
+      // src/components/icons.ts so every use is deliberate and per-icon.
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          group: ["@tabler/icons-react", "@tabler/icons-react/*"],
+          message: "Use lucide-react first. If lucide has no suitable icon, add the Tabler icon to src/components/icons.ts and import it from \"@/components/icons\".",
+        }],
+      }],
+    },
+  },
+  {
+    // The one place Tabler icons are registered, plus their type shim.
+    files: ["src/components/icons.ts", "src/tabler-icons.d.ts"],
+    rules: {
+      "no-restricted-imports": "off",
     },
   },
   {
