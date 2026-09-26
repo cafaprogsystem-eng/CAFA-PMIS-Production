@@ -2,7 +2,7 @@ import { useState, useMemo, type FormEvent } from "react";
 import { useSearch, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, CheckCircle2, ShieldAlert } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, ShieldAlert } from "lucide-react";
 import { Alert, Button, Spinner } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 import { PasswordField } from "@/components/password-field";
@@ -200,7 +200,7 @@ export default function ResetPasswordPage() {
 
             {error && (
               <Alert status="danger" role="alert" className="mb-5">
-                <Alert.Indicator />
+                <Alert.Indicator><AlertCircle className="h-4 w-4" aria-hidden /></Alert.Indicator>
                 <Alert.Content>
                   {/* Title, not Description: only the title takes the danger colour. */}
                   <Alert.Title>{error}</Alert.Title>

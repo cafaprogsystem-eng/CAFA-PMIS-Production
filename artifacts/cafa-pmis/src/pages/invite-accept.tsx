@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, ShieldAlert } from "lucide-react";
+import { AlertCircle, CheckCircle2, ShieldAlert } from "lucide-react";
 import { Alert, Button, Card, Spinner } from "@heroui/react";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { PasswordField } from "@/components/password-field";
@@ -203,7 +203,7 @@ export default function InviteAcceptPage() {
             />
             {error && (
               <Alert status="danger" role="alert">
-                <Alert.Indicator />
+                <Alert.Indicator><AlertCircle className="h-4 w-4" aria-hidden /></Alert.Indicator>
                 <Alert.Content>
                   <Alert.Title>{t("couldntActivate")}</Alert.Title>
                   <Alert.Description>{error}</Alert.Description>

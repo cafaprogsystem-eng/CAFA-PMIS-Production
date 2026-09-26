@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { Alert, Button, Checkbox, InputGroup, Label, Spinner, TextField, ToggleButton } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 
@@ -104,7 +104,7 @@ export default function LoginPage() {
             aria-live="assertive"
             className="mb-5"
           >
-            <Alert.Indicator />
+            <Alert.Indicator><AlertCircle className="h-4 w-4" aria-hidden /></Alert.Indicator>
             <Alert.Content>
               {/* Title, not Description: only the title takes the danger colour. */}
               <Alert.Title>{error}</Alert.Title>

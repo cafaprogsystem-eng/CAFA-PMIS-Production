@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
-import { Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Alert, Button, InputGroup, Label, Spinner, TextField } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 
@@ -135,7 +135,7 @@ export default function ForgotPasswordPage() {
                         aria-live="assertive"
                         className="mb-5"
                       >
-                        <Alert.Indicator />
+                        <Alert.Indicator><AlertCircle className="h-4 w-4" aria-hidden /></Alert.Indicator>
                         <Alert.Content>
                           {/* Title, not Description: only the title takes the danger colour. */}
                           <Alert.Title>{error}</Alert.Title>
