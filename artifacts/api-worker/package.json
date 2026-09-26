@@ -17,7 +17,8 @@
     "bcryptjs": "^3.0.3",
     "hono": "^4.13.9",
     "openai": "^6.27.0",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260924.1",

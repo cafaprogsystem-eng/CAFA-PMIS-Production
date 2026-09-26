@@ -51,11 +51,18 @@ export interface QueryExecutor {
  * the real connection pooling/caching at the edge — a fresh, small local
  * Pool per request is Cloudflare's documented pattern for node-postgres, not
  * wasteful the way it would be against a directly-dialled database.
+ *
+ * `pool` is also returned (not just `db`) so routes that need a real
+ * transaction can call `pool.connect()` for a dedicated `PoolClient` — the
+ * `QueryExecutor` interface only types `.query()`, but a `PoolClient` from
+ * "pg" satisfies it too, so `client.query(...)` works the same way inside
+ * BEGIN/COMMIT/ROLLBACK as `db.query(...)` does outside one.
  */
-export function openDb(c: AppContext): { db: QueryExecutor; close: () => void } {
+export function openDb(c: AppContext): { db: QueryExecutor; pool: Pool; close: () => void } {
   const pool = new Pool({ connectionString: c.env.HYPERDRIVE.connectionString, max: 5 });
   return {
     db: pool,
+    pool,
     close: () => c.executionCtx.waitUntil(pool.end()),
   };
 }

@@ -2290,19 +2290,29 @@ router.patch("/projects/:projectId", requirePerm("projects.update"), async (req,
              incomingId, projectId],
           );
         } else {
-          // New activity (no id or id not owned by this project) — INSERT with zero spend
-          await client.query(
+          // New activity (no id or id not owned by this project) — INSERT with zero spend.
+          // FIXED: this previously did not push the new row's id onto
+          // matchedActivityIds, so the "delete activities removed from the
+          // payload" cleanup below deleted it again in the very same
+          // transaction whenever no existing activity matched (first time
+          // activities are added to a project, or every existing id
+          // changed) — confirmed live while porting this route to
+          // artifacts/api-worker. RETURNING id and pushing it here closes
+          // that gap.
+          const newActivityRow = await client.query<{ id: number }>(
             `INSERT INTO activities
                (project_id, output_id, indicator_id, state_id, locality_name,
                 code, title, description, target, status, planned_start, planned_end,
                 budget_planned, budget_spent, progress_pct)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,0)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,0,0)
+             RETURNING id`,
             [projectId, outputId, linkedIndicatorId, act.stateId ?? null,
              act.localityName?.trim() ?? null,
              `ACT-${outIdx}.${actIdx}`, act.title, act.description ?? null,
              act.target ?? 0, act.status ?? "planned",
              act.plannedStart, act.plannedEnd, act.budgetPlanned],
           );
+          matchedActivityIds.push(newActivityRow.rows[0].id);
         }
       }
     }

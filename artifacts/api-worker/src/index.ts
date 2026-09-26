@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
+import { ZodError } from "zod";
 import type { Bindings } from "./lib/db";
 import { openDb } from "./lib/db";
 import {
@@ -319,5 +320,50 @@ app.route("/", beneficiariesRoutes);
 app.route("/", searchRoutes);
 app.route("/", usersRoutes);
 app.route("/", projectsRoutes);
+
+/**
+ * Ported from artifacts/api-server/src/lib/error-handler.ts's
+ * createApiErrorHandler: routes call `.parse()` directly (see
+ * routes/projects.ts, routes/beneficiaries.ts) and rely on this catch-all to
+ * turn a thrown ZodError into a 400 with field details, exactly like the
+ * Express version's app-level error middleware — no per-route try/catch.
+ * A 5xx (or unrecognised) error is redacted to a generic message; only an
+ * error carrying an explicit `errorCode` string is trusted to surface its
+ * own .message to the client.
+ */
+app.onError((err, c) => {
+  if (err instanceof ZodError) {
+    const first = err.issues[0];
+    const fieldPath = first?.path.length ? first.path.join(".") : "input";
+    const message = first?.message ?? "Validation failed";
+    return c.json({
+      error: "validation_error",
+      detail: `${fieldPath}: ${message}`,
+      fields: err.issues.map((e) => ({ path: e.path.join("."), message: e.message })),
+    }, 400);
+  }
+
+  const anyErr = err as unknown as Record<string, unknown>;
+  const requestedStatus = typeof anyErr?.status === "number"
+    ? anyErr.status
+    : typeof anyErr?.statusCode === "number" ? anyErr.statusCode : 500;
+  const status = Number.isInteger(requestedStatus) && requestedStatus >= 400 && requestedStatus <= 599
+    ? requestedStatus
+    : 500;
+
+  console.error("[unhandled-error]", err);
+
+  if (status >= 500) {
+    return c.json({ error: "server_error", detail: "Internal Server Error" }, 500);
+  }
+
+  const errorCode = typeof anyErr?.errorCode === "string" ? anyErr.errorCode : null;
+  if (!errorCode) {
+    return c.json({ error: "request_failed", detail: "Request failed" }, status as 400);
+  }
+
+  const message = typeof anyErr?.message === "string" ? anyErr.message : "Request failed";
+  return c.json({ error: errorCode, detail: message }, status as 400);
+});
 
 export default app;

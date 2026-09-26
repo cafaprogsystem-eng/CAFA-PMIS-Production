@@ -182,6 +182,27 @@ export async function deleteObject(
   return { deleted: true, notFound: false };
 }
 
+/**
+ * Ported from artifacts/api-server/src/lib/objectStorage.ts's
+ * deleteStorageObjectSafely: idempotent wrapper used by deletion routes
+ * (e.g. the Project permanent-delete cascade) — treats a malformed/missing
+ * objectPath as already-deleted instead of failing the whole deletion.
+ */
+export async function deleteObjectSafely(
+  env: Bindings,
+  objectPath: string,
+): Promise<{ deleted: boolean }> {
+  try {
+    const result = await deleteObject(env, objectPath);
+    return { deleted: !result.notFound };
+  } catch (err) {
+    if (err instanceof ObjectNotFoundError) {
+      return { deleted: false }; // treat as already gone
+    }
+    throw err; // propagate transient/auth errors
+  }
+}
+
 /** Parses a presigned upload URL back into its canonical `/objects/...` path. */
 export function normalizeObjectEntityPath(env: Bindings, rawPath: string): string {
   if (!rawPath.startsWith("http")) return rawPath;
