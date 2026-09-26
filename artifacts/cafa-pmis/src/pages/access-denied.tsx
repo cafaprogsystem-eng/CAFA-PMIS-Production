@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { ShieldOff, ArrowLeft, Home } from "lucide-react";
 import { useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
+import { Button } from "@heroui/react";
 
 export default function AccessDeniedPage() {
   const { t } = useTranslation("errors");
@@ -24,18 +24,11 @@ export default function AccessDeniedPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button
-            variant="outline"
-            onClick={() => window.history.back()}
-            className="gap-2"
-          >
+          <Button variant="outline" onPress={() => window.history.back()}>
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             {t("goBack")}
           </Button>
-          <Button
-            onClick={() => navigate("/")}
-            className="gap-2"
-          >
+          <Button onPress={() => navigate("/")}>
             <Home className="h-4 w-4" />
             {t("goHome")}
           </Button>

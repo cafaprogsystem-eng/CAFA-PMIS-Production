@@ -106,7 +106,9 @@ describe("Audit Log workspace", () => {
 
     navigation.search = "?action=created&entityType=projects&page=2&pageSize=25";
     rerender(<AuditLogPage />);
-    expect(screen.getByRole("button", { name: /^Created/ })).toHaveAttribute("aria-pressed", "true");
+    // The action Select's trigger now also announces its value ("Created"),
+    // so pick the KPI toggle by its pressed state.
+    expect(screen.getByRole("button", { name: /^Created/, pressed: true })).toHaveAttribute("aria-pressed", "true");
 
     await user.keyboard("{Enter}");
     expect(navigation.navigate).toHaveBeenLastCalledWith(

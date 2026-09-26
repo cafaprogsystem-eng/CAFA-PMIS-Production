@@ -7,19 +7,9 @@ import {
 import {
   AUDIT_ACTION_CATEGORIES, normalizeAuditActionCategory, type AuditActionCategory,
 } from "@workspace/api-zod";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Alert, Button, Card, Chip, Input, InputGroup, Skeleton, Table, TextField } from "@heroui/react";
 import { ErrorState } from "@/components/ui/error-state";
+import { SelectField } from "@/components/select-field";
 import {
   ChevronDown, ChevronUp, Filter, Info, RefreshCw, Search, ShieldAlert, X,
 } from "lucide-react";
@@ -124,13 +114,13 @@ function AuditMetric({
 function ActionBadge({ entry, t }: { entry: AuditEntry; t: (key: string, values?: Record<string, unknown>) => string }) {
   const category = entry.actionCategory ?? "updated";
   return (
-    <Badge
-      variant="outline"
-      className={`whitespace-nowrap font-medium ${ACTION_STYLE[category] ?? "border-border bg-muted text-foreground"}`}
+    <Chip
+      size="sm"
+      className={`whitespace-nowrap border font-medium ${ACTION_STYLE[category] ?? "border-border bg-muted text-foreground"}`}
       aria-label={formatAction(entry.action, t)}
     >
       {formatAction(entry.action, t)}
-    </Badge>
+    </Chip>
   );
 }
 
@@ -212,13 +202,13 @@ export default function AuditLogPage() {
           <h1 className="flex items-center gap-2 text-2xl font-medium tracking-tight"><ShieldAlert className="h-6 w-6 text-primary" /> {t("auditLog.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("auditLog.subtitle")}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => audit.refetch()} isLoading={audit.isFetching} loadingText={t("auditLog.refreshing")} aria-label={t("auditLog.refresh")}>
-          <RefreshCw aria-hidden="true" /> {t("auditLog.refresh")}
+        <Button variant="outline" size="sm" onPress={() => audit.refetch()} isPending={audit.isFetching} aria-label={t("auditLog.refresh")}>
+          <RefreshCw className={`h-4 w-4 ${audit.isFetching ? "animate-spin" : ""}`} aria-hidden="true" /> {audit.isFetching ? t("auditLog.refreshing") : t("auditLog.refresh")}
         </Button>
       </div>
 
-      {isStateRole && <Alert className="border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"><Info className="h-4 w-4" /><AlertDescription>{t("auditLog.stateScope", { stateName: stateName ? ` (${stateName})` : "" })}</AlertDescription></Alert>}
-      {isTC && <Alert className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"><Info className="h-4 w-4" /><AlertDescription>{t("auditLog.sectorScope", { sector: userSector ? ` (${userSector})` : "" })}</AlertDescription></Alert>}
+      {isStateRole && <Alert status="accent"><Alert.Indicator><Info className="h-4 w-4" /></Alert.Indicator><Alert.Content><Alert.Title>{t("auditLog.stateScope", { stateName: stateName ? ` (${stateName})` : "" })}</Alert.Title></Alert.Content></Alert>}
+      {isTC && <Alert status="warning"><Alert.Indicator><Info className="h-4 w-4" /></Alert.Indicator><Alert.Content><Alert.Title>{t("auditLog.sectorScope", { sector: userSector ? ` (${userSector})` : "" })}</Alert.Title></Alert.Content></Alert>}
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {AUDIT_METRICS.map(({ category, tone }) => (
@@ -234,19 +224,36 @@ export default function AuditLogPage() {
         ))}
       </div>
 
-      <Card>
-        <CardContent className="p-0">
+      <Card className="gap-0 overflow-hidden p-0">
+        <Card.Content>
           <div className="flex flex-col gap-2 border-b p-3 lg:flex-row lg:items-center">
-            <div className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute inset-y-0 start-2.5 my-auto h-4 w-4 text-muted-foreground" /><Input className="ps-9" aria-label={t("auditLog.filters.searchLabel")} placeholder={t("auditLog.filters.searchPlaceholder")} value={route.search} onChange={(event) => updateRoute({ search: event.target.value, page: 1 }, true)} /></div>
+            <TextField className="min-w-0 flex-1" aria-label={t("auditLog.filters.searchLabel")} value={route.search} onChange={(search) => updateRoute({ search, page: 1 }, true)}>
+              <InputGroup fullWidth>
+                <InputGroup.Prefix><Search className="h-4 w-4" aria-hidden="true" /></InputGroup.Prefix>
+                <InputGroup.Input placeholder={t("auditLog.filters.searchPlaceholder")} />
+              </InputGroup>
+            </TextField>
             <div className="grid grid-cols-2 gap-2 sm:flex">
-              <Select value={route.action} onValueChange={(action) => updateRoute({ action: action as AuditActionCategory | "all", page: 1 })}><SelectTrigger className="w-full sm:w-36" aria-label={t("auditLog.filters.actionLabel")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("auditLog.filters.allActions")}</SelectItem>{AUDIT_ACTION_CATEGORIES.map((category) => <SelectItem key={category} value={category}>{t(`auditLog.actions.${category}`)}</SelectItem>)}</SelectContent></Select>
-              <Select value={route.entityType} onValueChange={(entityType) => updateRoute({ entityType, page: 1 })}><SelectTrigger className="w-full sm:w-40" aria-label={t("auditLog.filters.entityTypeLabel")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("auditLog.filters.allModules")}</SelectItem>{availableModules.map((item) => <SelectItem key={item} value={item}>{formatAction(item, t)}</SelectItem>)}</SelectContent></Select>
+              <SelectField
+                className="w-full sm:w-36"
+                aria-label={t("auditLog.filters.actionLabel")}
+                value={route.action}
+                onChange={(action) => updateRoute({ action: action as AuditActionCategory | "all", page: 1 })}
+                options={[{ value: "all", label: t("auditLog.filters.allActions") }, ...AUDIT_ACTION_CATEGORIES.map((category) => ({ value: category, label: t(`auditLog.actions.${category}`) }))]}
+              />
+              <SelectField
+                className="w-full sm:w-40"
+                aria-label={t("auditLog.filters.entityTypeLabel")}
+                value={route.entityType}
+                onChange={(entityType) => updateRoute({ entityType, page: 1 })}
+                options={[{ value: "all", label: t("auditLog.filters.allModules") }, ...availableModules.map((item) => ({ value: item, label: formatAction(item, t) }))]}
+              />
             </div>
             <div className="grid grid-cols-2 gap-2 sm:flex">
-              <Input type="date" className="w-full sm:w-[142px]" aria-label={t("auditLog.filters.from")} value={route.dateFrom} onChange={(event) => updateRoute({ dateFrom: event.target.value, page: 1 })} />
-              <Input type="date" className="w-full sm:w-[142px]" aria-label={t("auditLog.filters.to")} value={route.dateTo} onChange={(event) => updateRoute({ dateTo: event.target.value, page: 1 })} />
+              <Input type="date" className="w-full sm:w-[150px]" aria-label={t("auditLog.filters.from")} value={route.dateFrom} onChange={(event) => updateRoute({ dateFrom: event.target.value, page: 1 })} />
+              <Input type="date" className="w-full sm:w-[150px]" aria-label={t("auditLog.filters.to")} value={route.dateTo} onChange={(event) => updateRoute({ dateTo: event.target.value, page: 1 })} />
             </div>
-            {hasFilters && <Button variant="ghost" size="sm" onClick={() => updateRoute({ search: "", action: "all", entityType: "all", dateFrom: "", dateTo: "", page: 1 })}><X aria-hidden="true" /> {t("auditLog.filters.clear")}</Button>}
+            {hasFilters && <Button variant="ghost" size="sm" onPress={() => updateRoute({ search: "", action: "all", entityType: "all", dateFrom: "", dateTo: "", page: 1 })}><X className="h-4 w-4" aria-hidden="true" /> {t("auditLog.filters.clear")}</Button>}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs text-muted-foreground">
@@ -255,31 +262,33 @@ export default function AuditLogPage() {
             {result && <span>{t("auditLog.pageStatus", { page: result.page, totalPages: result.totalPages || 1 })}</span>}
           </div>
 
-          {audit.isLoading ? <div className="divide-y">{Array.from({ length: 8 }, (_, index) => <div key={index} className="flex gap-4 px-4 py-3"><Skeleton className="h-4 w-32" /><Skeleton className="h-4 w-36" /><Skeleton className="h-5 w-24 rounded-full" /><Skeleton className="h-4 flex-1" /></div>)}</div>
+          {audit.isLoading ? <div className="divide-y">{Array.from({ length: 8 }, (_, index) => <div key={index} className="flex gap-4 px-4 py-3"><Skeleton className="h-4 w-32 rounded" /><Skeleton className="h-4 w-36 rounded" /><Skeleton className="h-5 w-24 rounded-full" /><Skeleton className="h-4 flex-1 rounded" /></div>)}</div>
           : audit.isError ? <ErrorState variant="server" title={t("auditLog.error.title")} description={t("auditLog.error.description")} onRetry={() => audit.refetch()} />
           : result?.items.length === 0 ? <div className="flex flex-col items-center gap-2 px-4 py-14 text-center text-muted-foreground"><ShieldAlert className="h-8 w-8 opacity-30" /><p className="text-sm font-medium">{hasFilters ? t("auditLog.noFilteredEntries") : t("auditLog.noEntries")}</p><p className="text-xs">{hasFilters ? t("auditLog.noFilteredEntriesDesc") : t("auditLog.noEntriesDesc")}</p></div>
-          : <div className="overflow-x-auto" role="region" aria-label={t("auditLog.title")} tabIndex={0}>
-            <Table className="min-w-[900px]">
-              <TableHeader className="bg-muted/40"><TableRow><TableHead>{t("auditLog.timestamp")}</TableHead><TableHead>{t("auditLog.user")}</TableHead><TableHead>{t("auditLog.action")}</TableHead><TableHead>{t("auditLog.entity")}</TableHead><TableHead>{t("auditLog.change")}</TableHead><TableHead className="w-24 text-end">{t("auditLog.details")}</TableHead></TableRow></TableHeader>
-              <TableBody>{result?.items.map((entry) => <Fragment key={entry.id}>
-                <TableRow key={entry.id} className="group hover:bg-muted/40">
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(entry.timestamp)}</TableCell>
-                  <TableCell><div className="font-medium">{entry.userName ?? t("auditLog.system")}</div><div className="text-xs text-muted-foreground">{entry.userEmail ?? entry.userRole?.replace(/_/g, " ")}</div></TableCell>
-                  <TableCell><ActionBadge entry={entry} t={t} /></TableCell>
-                  <TableCell><div className="max-w-[250px] truncate text-sm" title={entry.entityReference ?? undefined}>{entry.entityReference ?? t("auditLog.noReference")}</div><div className="text-xs capitalize text-muted-foreground">{formatAction(entry.module, t)}</div></TableCell>
-                  <TableCell className="max-w-[180px] text-xs text-muted-foreground">{entry.changeSummary}{entry.usedOverride && <span className="ms-2 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">{t("auditLog.override")}</span>}</TableCell>
-                  <TableCell className="text-end"><Button variant="ghost" size="sm" aria-expanded={expanded === entry.id} aria-controls={`audit-detail-${entry.id}`} onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}>{expanded === entry.id ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}<span className="sr-only">{expanded === entry.id ? t("auditLog.hideDetails") : t("auditLog.showDetails")}</span></Button></TableCell>
-                </TableRow>
-                {expanded === entry.id && <TableRow key={`detail-${entry.id}`} id={`audit-detail-${entry.id}`}><TableCell colSpan={6} className="p-0"><AuditDetails entry={entry} t={t} /></TableCell></TableRow>}
-              </Fragment>)}</TableBody>
-            </Table>
-          </div>}
+          : <Table variant="secondary" className="rounded-none">
+            <Table.ScrollContainer role="region" aria-label={t("auditLog.title")} tabIndex={0}>
+              <Table.Content aria-label={t("auditLog.title")} className="min-w-[900px]">
+                <Table.Header><Table.Column>{t("auditLog.timestamp")}</Table.Column><Table.Column isRowHeader>{t("auditLog.user")}</Table.Column><Table.Column>{t("auditLog.action")}</Table.Column><Table.Column>{t("auditLog.entity")}</Table.Column><Table.Column>{t("auditLog.change")}</Table.Column><Table.Column className="w-24 text-end">{t("auditLog.details")}</Table.Column></Table.Header>
+                <Table.Body>{result?.items.map((entry) => <Fragment key={entry.id}>
+                  <Table.Row id={entry.id}>
+                    <Table.Cell className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(entry.timestamp)}</Table.Cell>
+                    <Table.Cell><div className="font-medium">{entry.userName ?? t("auditLog.system")}</div><div className="text-xs text-muted-foreground">{entry.userEmail ?? entry.userRole?.replace(/_/g, " ")}</div></Table.Cell>
+                    <Table.Cell><ActionBadge entry={entry} t={t} /></Table.Cell>
+                    <Table.Cell><div className="max-w-[250px] truncate text-sm" title={entry.entityReference ?? undefined}>{entry.entityReference ?? t("auditLog.noReference")}</div><div className="text-xs capitalize text-muted-foreground">{formatAction(entry.module, t)}</div></Table.Cell>
+                    <Table.Cell className="max-w-[180px] text-xs text-muted-foreground">{entry.changeSummary}{entry.usedOverride && <span className="ms-2 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">{t("auditLog.override")}</span>}</Table.Cell>
+                    <Table.Cell className="text-end"><Button isIconOnly variant="ghost" size="sm" aria-expanded={expanded === entry.id} aria-controls={`audit-detail-${entry.id}`} aria-label={expanded === entry.id ? t("auditLog.hideDetails") : t("auditLog.showDetails")} onPress={() => setExpanded(expanded === entry.id ? null : entry.id)}>{expanded === entry.id ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}</Button></Table.Cell>
+                  </Table.Row>
+                  {expanded === entry.id && <Table.Row id={`detail-${entry.id}`}><Table.Cell colSpan={6} className="p-0"><div id={`audit-detail-${entry.id}`}><AuditDetails entry={entry} t={t} /></div></Table.Cell></Table.Row>}
+                </Fragment>)}</Table.Body>
+              </Table.Content>
+            </Table.ScrollContainer>
+          </Table>}
 
           {result && result.totalPages > 1 && <div className="flex flex-col gap-2 border-t px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="text-muted-foreground">{t("auditLog.showingRange", { from: (result.page - 1) * result.pageSize + 1, to: Math.min(result.page * result.pageSize, result.total), total: result.total })}</div>
-            <div className="flex items-center gap-2"><Select value={String(route.pageSize)} onValueChange={(pageSize) => updateRoute({ pageSize: Number(pageSize), page: 1 })}><SelectTrigger className="h-9 w-24" aria-label={t("auditLog.filters.pageSizeLabel")}><SelectValue /></SelectTrigger><SelectContent>{[10, 25, 50, 100].map((size) => <SelectItem key={size} value={String(size)}>{t("auditLog.pageSize", { count: size })}</SelectItem>)}</SelectContent></Select><Button variant="outline" size="sm" disabled={result.page <= 1} onClick={() => updateRoute({ page: result.page - 1 })}>{t("auditLog.previous")}</Button><Button variant="outline" size="sm" disabled={result.page >= result.totalPages} onClick={() => updateRoute({ page: result.page + 1 })}>{t("auditLog.next")}</Button></div>
+            <div className="flex items-center gap-2"><SelectField className="w-28" aria-label={t("auditLog.filters.pageSizeLabel")} value={String(route.pageSize)} onChange={(pageSize) => updateRoute({ pageSize: Number(pageSize), page: 1 })} options={[10, 25, 50, 100].map((size) => ({ value: String(size), label: t("auditLog.pageSize", { count: size }) }))} /><Button variant="outline" size="sm" isDisabled={result.page <= 1} onPress={() => updateRoute({ page: result.page - 1 })}>{t("auditLog.previous")}</Button><Button variant="outline" size="sm" isDisabled={result.page >= result.totalPages} onPress={() => updateRoute({ page: result.page + 1 })}>{t("auditLog.next")}</Button></div>
           </div>}
-        </CardContent>
+        </Card.Content>
       </Card>
     </div>
   );
