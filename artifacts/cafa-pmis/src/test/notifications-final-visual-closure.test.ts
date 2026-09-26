@@ -63,14 +63,15 @@ describe("Notifications final visual closure", () => {
 
   it("NOTIF-FINAL-VIS-07 keeps preferences visually consistent", () => {
     expect(preferences).toContain("mx-auto max-w-3xl space-y-5 p-4 sm:p-6");
-    expect(preferences).toContain("rounded-lg shadow-none");
+    // Preference sections are HeroUI Cards (header + description + content).
+    expect(preferences).toContain("<Card.Description>");
     expect(preferences).toContain("gap-4 py-2.5");
     expect(preferences).toContain("grid grid-cols-1 gap-3 sm:grid-cols-2");
   });
 
   it("NOTIF-FINAL-VIS-08 keeps digest visibly unavailable", () => {
-    expect(preferences).toContain('RadioGroupItem value="daily" id="dig-daily" disabled');
-    expect(preferences).toContain('RadioGroupItem value="weekly" id="dig-weekly" disabled');
+    expect(preferences).toContain('value="daily" isDisabled');
+    expect(preferences).toContain('value="weekly" isDisabled');
     expect(preferences).toContain('t("comingSoon")');
     expect(preferences).toContain('digest: "immediate"');
   });
@@ -99,7 +100,7 @@ describe("Notifications final visual closure", () => {
     expect(page).toContain('aria-label={t("openNotification")}');
     expect(page).toContain('aria-label={t("unreadStatus")}');
     expect(page).toContain('role="img"');
-    expect(preferences).toContain("disabled={mandatory}");
+    expect(preferences).toContain("isDisabled={mandatory}");
   });
 
   it("NOTIF-FINAL-VIS-12 keeps Notification contracts outside visual code unchanged", () => {

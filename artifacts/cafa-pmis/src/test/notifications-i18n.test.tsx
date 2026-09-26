@@ -119,9 +119,9 @@ describe("NOTIF-I18N notification localisation", () => {
     expect(screen.getByText("طلبات الاعتماد")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("tab", { name: "التسليم" }));
     expect(await screen.findByText("ملخص يومي")).toBeInTheDocument();
-    expect(document.getElementById("dig-daily")).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /ملخص يومي/ })).toBeDisabled();
     expect(screen.getByText("ملخص أسبوعي")).toBeInTheDocument();
-    expect(document.getElementById("dig-weekly")).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /ملخص أسبوعي/ })).toBeDisabled();
   });
 
   it("NOTIF-I18N-06: formats recent notification timestamps in the active locale", () => {

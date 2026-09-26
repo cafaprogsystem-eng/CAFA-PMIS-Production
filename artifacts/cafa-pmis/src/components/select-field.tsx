@@ -13,6 +13,10 @@ type SelectFieldProps = {
   placeholder?: string;
   isDisabled?: boolean;
   className?: string;
+  /** Classes for the trigger button itself (sizing is usually set here). */
+  triggerClassName?: string;
+  /** Decorative icon shown before the value inside the trigger. */
+  icon?: ReactNode;
 };
 
 /**
@@ -21,7 +25,7 @@ type SelectFieldProps = {
  * strings, like the Radix Select it replaces.
  */
 export function SelectField({
-  value, onChange, options, label, placeholder, isDisabled, className, ...aria
+  value, onChange, options, label, placeholder, isDisabled, className, triggerClassName, icon, ...aria
 }: SelectFieldProps) {
   return (
     <Select
@@ -33,7 +37,8 @@ export function SelectField({
       className={className}
     >
       {label && <Label>{label}</Label>}
-      <Select.Trigger>
+      <Select.Trigger className={triggerClassName}>
+        {icon}
         <Select.Value />
         <Select.Indicator />
       </Select.Trigger>

@@ -8,7 +8,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button } from "@heroui/react";
 
 /* ─────────────────────────────────────────────────────────────────────
  * ErrorState
@@ -132,9 +132,8 @@ function ErrorState({
           {onRetry && (
             <Button
               variant="outline"
-              size={compact ? "sm" : "default"}
-              onClick={onRetry}
-              className="gap-1.5"
+              size={compact ? "sm" : "md"}
+              onPress={onRetry}
             >
               <RefreshCw className="h-3.5 w-3.5" />
               {retryLabel}

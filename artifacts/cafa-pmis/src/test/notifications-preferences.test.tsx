@@ -335,11 +335,13 @@ describe("NOTIF-UX-03 email verification awareness", () => {
     renderWithQuery(<NotificationPreferencesPage />);
     await user.click(screen.getByRole("tab", { name: /email/i }));
 
-    // At least one switch should have aria-disabled="true" (optional ones)
+    // At least one optional switch is exposed as disabled to assistive tech.
+    // React Aria switches are native checkbox inputs (role="switch"), so the
+    // disabled state is the element's own, not an aria-disabled attribute.
     await waitFor(() => {
       const allSwitches = screen.getAllByRole("switch");
-      const ariaDisabled = allSwitches.filter(sw => sw.getAttribute("aria-disabled") === "true");
-      expect(ariaDisabled.length).toBeGreaterThan(0);
+      const disabled = allSwitches.filter(sw => (sw as HTMLInputElement).disabled);
+      expect(disabled.length).toBeGreaterThan(0);
     });
   });
 });
@@ -369,7 +371,7 @@ describe("NOTIF-UX-03b email verification — switches truly disabled (keyboard)
     const switches = await screen.findAllByRole("switch");
     // At least one optional switch must carry the disabled attribute
     const disabledOptional = switches.filter(sw =>
-      sw.hasAttribute("disabled") && sw.getAttribute("aria-disabled") === "true",
+      sw.hasAttribute("disabled") && (sw as HTMLInputElement).disabled,
     );
     expect(disabledOptional.length).toBeGreaterThan(0);
   });
@@ -511,7 +513,7 @@ describe("NOTIF-UX-06 draft preserved across tab switches", () => {
     const inAppSwitches = screen.getAllByRole("switch");
     const firstOptional = inAppSwitches.find(sw => !sw.getAttribute("disabled"));
     if (!firstOptional) return;
-    const initialChecked = firstOptional.getAttribute("aria-checked") === "true";
+    const initialChecked = (firstOptional as HTMLInputElement).checked;
     await user.click(firstOptional);
 
     // Navigate away
@@ -523,7 +525,7 @@ describe("NOTIF-UX-06 draft preserved across tab switches", () => {
     const refreshedSwitches = screen.getAllByRole("switch");
     const refreshedOptional = refreshedSwitches.find(sw => !sw.getAttribute("disabled"));
     if (refreshedOptional) {
-      const newChecked = refreshedOptional.getAttribute("aria-checked") === "true";
+      const newChecked = (refreshedOptional as HTMLInputElement).checked;
       expect(newChecked).not.toBe(initialChecked);
     }
 
@@ -616,7 +618,7 @@ describe("NOTIF-UX-08 digest coming-soon guard", () => {
     // The default value is "immediate"
     expect(src).toContain('digest: "immediate"');
     // Daily and weekly radio items exist but are always disabled (Coming Soon)
-    expect(src).toContain('id="dig-daily" disabled');
-    expect(src).toContain('id="dig-weekly" disabled');
+    expect(src).toContain('value="daily" isDisabled');
+    expect(src).toContain('value="weekly" isDisabled');
   });
 });

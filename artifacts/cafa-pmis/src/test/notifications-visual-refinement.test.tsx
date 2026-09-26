@@ -135,7 +135,9 @@ describe("Notifications visual refinement — Phase 1", () => {
     renderWithQuery(<NotificationsPage />);
 
     expect(await screen.findByPlaceholderText("Search notifications…")).toHaveClass("h-9");
-    expect(screen.getByRole("combobox")).toHaveClass("h-9", "sm:w-44");
+    // HeroUI Select: the visible trigger is a button (React Aria also renders a
+    // hidden native <select>, which is what role "combobox" now matches).
+    expect(screen.getByRole("button", { name: /Filter by module/ })).toHaveClass("h-9", "sm:w-44");
     expect(screen.getByRole("tab", { name: "All" })).toHaveClass("h-7");
   });
 
@@ -160,7 +162,7 @@ describe("Notifications visual refinement — Phase 1", () => {
     const { container } = renderWithQuery(<NotificationPreferencesPage />);
 
     expect(screen.getByRole("heading", { name: "Notification Preferences" })).toHaveClass("text-2xl", "font-semibold");
-    expect(container.querySelector(".rounded-lg.shadow-none")).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="card"], .card')).toBeInTheDocument();
     expect(source("src/pages/notification-preferences.tsx")).toContain("gap-4 py-2.5");
   });
 
@@ -197,6 +199,6 @@ describe("Notifications visual refinement — Phase 1", () => {
     }
     expect(page).toContain("data?.pagination.hasMore");
     expect(prefs).toContain("digest: \"immediate\"");
-    expect(prefs).toContain("disabled={mandatory}");
+    expect(prefs).toContain("isDisabled={mandatory}");
   });
 });

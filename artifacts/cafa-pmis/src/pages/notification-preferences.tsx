@@ -3,16 +3,10 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Bell, Mail, Settings2, Lock, Save, Loader2, ChevronRight, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { ReactNode } from "react";
+import {
+  Alert, Button, Card, Chip, Input, Label, Radio, RadioGroup, Separator, Skeleton, Switch, Tabs, TextField,
+} from "@heroui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetProfile, useUpdateProfile, useGetMe, getGetProfileQueryKey, type UserProfile } from "@workspace/api-client-react";
 
@@ -123,6 +117,50 @@ function formatTimezoneLabel(tz: string): string {
   } catch {
     return tz;
   }
+}
+
+// ── Building blocks ───────────────────────────────────────────────────────────
+
+function RequiredChip({ label }: { label: string }) {
+  return (
+    <Chip size="sm" color="warning" variant="soft" className="h-5 gap-0.5 px-1.5 text-xs">
+      <Lock className="h-2.5 w-2.5" aria-hidden="true" /> {label}
+    </Chip>
+  );
+}
+
+/** One labelled on/off preference; the visible label also names the switch. */
+function PreferenceSwitch({
+  label, isSelected, onChange, isDisabled,
+}: { label: string; isSelected: boolean; onChange: (value: boolean) => void; isDisabled?: boolean }) {
+  return (
+    <Switch isSelected={isSelected} onChange={onChange} isDisabled={isDisabled} aria-label={label}>
+      <Switch.Content>
+        <Switch.Control>
+          <Switch.Thumb />
+        </Switch.Control>
+      </Switch.Content>
+    </Switch>
+  );
+}
+
+function RadioRow({
+  value, label, description, badge, isDisabled,
+}: { value: string; label: string; description: string; badge?: ReactNode; isDisabled?: boolean }) {
+  return (
+    <Radio value={value} isDisabled={isDisabled} className="px-3 py-2.5">
+      <Radio.Content>
+        <Radio.Control>
+          <Radio.Indicator />
+        </Radio.Control>
+        <Label>
+          <span className="font-medium">{label}</span>
+          {badge && <span className="ms-2 inline-flex align-middle">{badge}</span>}
+          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{description}</span>
+        </Label>
+      </Radio.Content>
+    </Radio>
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -269,75 +307,70 @@ export default function NotificationPreferencesPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="inapp">
-        <TabsList className="grid h-10 w-full grid-cols-3">
-          <TabsTrigger value="inapp" className="flex h-8 items-center gap-1.5 px-2 text-xs sm:text-sm">
-            <Bell className="h-3.5 w-3.5" aria-hidden="true" /> {t("tabInApp")}
-          </TabsTrigger>
-          <TabsTrigger value="email" className="flex h-8 items-center gap-1.5 px-2 text-xs sm:text-sm">
-            <Mail className="h-3.5 w-3.5" aria-hidden="true" /> {t("tabEmail")}
-          </TabsTrigger>
-          <TabsTrigger value="delivery" className="flex h-8 items-center gap-1.5 px-2 text-xs sm:text-sm">
-            <Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> {t("tabDelivery")}
-          </TabsTrigger>
-        </TabsList>
+      <Tabs defaultSelectedKey="inapp">
+        <Tabs.ListContainer className="w-full">
+          <Tabs.List aria-label={t("preferences.title")} className="grid w-full grid-cols-3">
+            <Tabs.Tab id="inapp" className="flex h-8 items-center gap-1.5 px-2 text-xs sm:text-sm">
+              <Bell className="h-3.5 w-3.5" aria-hidden="true" /> {t("tabInApp")}<Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="email" className="flex h-8 items-center gap-1.5 px-2 text-xs sm:text-sm">
+              <Mail className="h-3.5 w-3.5" aria-hidden="true" /> {t("tabEmail")}<Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="delivery" className="flex h-8 items-center gap-1.5 px-2 text-xs sm:text-sm">
+              <Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> {t("tabDelivery")}<Tabs.Indicator />
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
 
         {/* ── In-App Tab ── */}
-        <TabsContent value="inapp" className="mt-3">
-          <Card className="rounded-lg shadow-none">
-            <CardHeader className="px-4 pb-3 pt-4 sm:px-5">
-              <CardTitle className="text-base">{t("preferences.inAppNotifications")}</CardTitle>
-              <CardDescription>
-                {t("inAppDesc")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-0 px-4 pb-2 sm:px-5">
+        <Tabs.Panel id="inapp" className="mt-3">
+          <Card>
+            <Card.Header>
+              <Card.Title className="text-base">{t("preferences.inAppNotifications")}</Card.Title>
+              <Card.Description>{t("inAppDesc")}</Card.Description>
+            </Card.Header>
+            <Card.Content className="space-y-0">
               {INAPP_ITEMS.map(({ key, mandatory }, i) => (
                 <div key={key}>
                   <div className="flex items-center justify-between gap-4 py-2.5">
                     <div className="flex-1 pe-4">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{t(`preferences.inAppItems.${key}.label`)}</p>
-                        {mandatory && (
-                          <Badge variant="outline" className="text-xs h-4 px-1 py-0 border-warning/40 text-warning">
-                            <Lock className="h-2.5 w-2.5 me-0.5" /> {t("required")}
-                          </Badge>
-                        )}
+                        {mandatory && <RequiredChip label={t("required")} />}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{t(`preferences.inAppItems.${key}.description`)}</p>
                     </div>
-                    <Switch
-                      checked={prefs.inApp[key]}
-                      onCheckedChange={v => setInApp(key, v)}
-                      disabled={mandatory}
+                    <PreferenceSwitch
+                      label={t(`preferences.inAppItems.${key}.label`)}
+                      isSelected={prefs.inApp[key]}
+                      onChange={v => setInApp(key, v)}
+                      isDisabled={mandatory}
                     />
                   </div>
                   {i < INAPP_ITEMS.length - 1 && <Separator />}
                 </div>
               ))}
-            </CardContent>
+            </Card.Content>
           </Card>
-        </TabsContent>
+        </Tabs.Panel>
 
         {/* ── Email Tab ── */}
-        <TabsContent value="email" className="mt-3 space-y-3">
+        <Tabs.Panel id="email" className="mt-3 space-y-3">
           {/* Email verification banner — shown when the user's address is unverified */}
           {!emailVerified && (
-            <Alert className="border-warning/40 bg-warning/5">
-              <AlertCircle className="h-4 w-4 text-warning" aria-hidden="true" />
-              <AlertDescription className="text-sm">
-                {t("emailVerificationRequired")}
-              </AlertDescription>
+            <Alert status="warning">
+              <Alert.Indicator><AlertCircle className="h-4 w-4" aria-hidden="true" /></Alert.Indicator>
+              <Alert.Content>
+                <Alert.Title>{t("emailVerificationRequired")}</Alert.Title>
+              </Alert.Content>
             </Alert>
           )}
-          <Card className="rounded-lg shadow-none">
-            <CardHeader className="px-4 pb-3 pt-4 sm:px-5">
-              <CardTitle className="text-base">{t("preferences.emailNotifications")}</CardTitle>
-              <CardDescription>
-                {t("emailDesc")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-0 px-4 pb-2 sm:px-5">
+          <Card>
+            <Card.Header>
+              <Card.Title className="text-base">{t("preferences.emailNotifications")}</Card.Title>
+              <Card.Description>{t("emailDesc")}</Card.Description>
+            </Card.Header>
+            <Card.Content className="space-y-0">
               {EMAIL_ITEMS.map(({ key, mandatory }, i) => {
                 // Optional switches are fully disabled when email is unverified;
                 // mandatory security switches are always interactive (Required badge).
@@ -351,158 +384,111 @@ export default function NotificationPreferencesPage() {
                       <div className="flex-1 pe-4">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium">{t(`preferences.emailItems.${key}.label`)}</p>
-                          {mandatory && (
-                            <Badge variant="outline" className="text-xs h-4 px-1 py-0 border-warning/40 text-warning">
-                              <Lock className="h-2.5 w-2.5 me-0.5" /> {t("required")}
-                            </Badge>
-                          )}
+                          {mandatory && <RequiredChip label={t("required")} />}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{t(`preferences.emailItems.${key}.description`)}</p>
                       </div>
-                      <Switch
-                        checked={prefs.email[key]}
-                        onCheckedChange={v => setEmail(key, v)}
-                        disabled={isDisabled}
-                        aria-disabled={isDisabled}
+                      <PreferenceSwitch
+                        label={t(`preferences.emailItems.${key}.label`)}
+                        isSelected={prefs.email[key]}
+                        onChange={v => setEmail(key, v)}
+                        isDisabled={isDisabled}
                       />
                     </div>
                     {i < EMAIL_ITEMS.length - 1 && <Separator />}
                   </div>
                 );
               })}
-            </CardContent>
+            </Card.Content>
           </Card>
-        </TabsContent>
+        </Tabs.Panel>
 
         {/* ── Delivery Tab ── */}
-        <TabsContent value="delivery" className="mt-3 space-y-3">
+        <Tabs.Panel id="delivery" className="mt-3 space-y-3">
           {/* Delivery Option */}
-          <Card className="rounded-lg shadow-none">
-            <CardHeader className="px-4 pb-3 pt-4 sm:px-5">
-              <CardTitle className="text-base">{t("deliveryChannel")}</CardTitle>
-              <CardDescription>{t("deliveryChannelDesc")}</CardDescription>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 sm:px-5">
+          <Card>
+            <Card.Header>
+              <Card.Title className="text-base">{t("deliveryChannel")}</Card.Title>
+              <Card.Description>{t("deliveryChannelDesc")}</Card.Description>
+            </Card.Header>
+            <Card.Content>
               <RadioGroup
+                aria-label={t("deliveryChannel")}
                 value={prefs.deliveryOption}
-                onValueChange={v => setPrefs(p => ({ ...p, deliveryOption: v as NotifPrefs["deliveryOption"] }))}
-                className="divide-y rounded-md border"
+                onChange={v => setPrefs(p => ({ ...p, deliveryOption: v as NotifPrefs["deliveryOption"] }))}
+                className="gap-0 divide-y rounded-md border"
               >
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <RadioGroupItem value="both" id="del-both" />
-                  <Label htmlFor="del-both" className="cursor-pointer">
-                    <span className="font-medium">{t("deliveryBoth")}</span>
-                    <span className="text-xs text-muted-foreground ms-2">{t("deliveryBothDesc")}</span>
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <RadioGroupItem value="inapp_only" id="del-inapp" />
-                  <Label htmlFor="del-inapp" className="cursor-pointer">
-                    <span className="font-medium">{t("deliveryInAppOnly")}</span>
-                    <span className="text-xs text-muted-foreground ms-2">{t("deliveryInAppOnlyDesc")}</span>
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <RadioGroupItem value="email_only" id="del-email" />
-                  <Label htmlFor="del-email" className="cursor-pointer">
-                    <span className="font-medium">{t("deliveryEmailOnly")}</span>
-                    <span className="text-xs text-muted-foreground ms-2">{t("deliveryEmailOnlyDesc")}</span>
-                  </Label>
-                </div>
+                <RadioRow value="both" label={t("deliveryBoth")} description={t("deliveryBothDesc")} />
+                <RadioRow value="inapp_only" label={t("deliveryInAppOnly")} description={t("deliveryInAppOnlyDesc")} />
+                <RadioRow value="email_only" label={t("deliveryEmailOnly")} description={t("deliveryEmailOnlyDesc")} />
               </RadioGroup>
-            </CardContent>
+            </Card.Content>
           </Card>
 
           {/* Digest */}
-          <Card className="rounded-lg shadow-none">
-            <CardHeader className="px-4 pb-3 pt-4 sm:px-5">
-              <CardTitle className="text-base">{t("digestTitle")}</CardTitle>
-              <CardDescription>
-                {t("digestDesc")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 sm:px-5">
+          <Card>
+            <Card.Header>
+              <Card.Title className="text-base">{t("digestTitle")}</Card.Title>
+              <Card.Description>{t("digestDesc")}</Card.Description>
+            </Card.Header>
+            <Card.Content>
               <RadioGroup
+                aria-label={t("digestTitle")}
                 value={prefs.digest}
-                onValueChange={v => setPrefs(p => ({ ...p, digest: v as NotifPrefs["digest"] }))}
-                className="divide-y rounded-md border"
+                onChange={v => setPrefs(p => ({ ...p, digest: v as NotifPrefs["digest"] }))}
+                className="gap-0 divide-y rounded-md border"
               >
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <RadioGroupItem value="immediate" id="dig-now" />
-                  <Label htmlFor="dig-now" className="cursor-pointer">
-                    <span className="font-medium">{t("digestImmediate")}</span>
-                    <span className="text-xs text-muted-foreground ms-2">{t("digestImmediateDesc")}</span>
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2.5 text-muted-foreground">
-                  <RadioGroupItem value="daily" id="dig-daily" disabled />
-                  <Label htmlFor="dig-daily" className="cursor-not-allowed">
-                    <span className="font-medium">{t("digestDaily")}</span>
-                    <span className="ms-2 inline-flex align-middle"><Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">{t("comingSoon")}</Badge></span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{t("digestDailyDesc")}</span>
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2.5 text-muted-foreground">
-                  <RadioGroupItem value="weekly" id="dig-weekly" disabled />
-                  <Label htmlFor="dig-weekly" className="cursor-not-allowed">
-                    <span className="font-medium">{t("digestWeekly")}</span>
-                    <span className="ms-2 inline-flex align-middle"><Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">{t("comingSoon")}</Badge></span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{t("digestWeeklyDesc")}</span>
-                  </Label>
-                </div>
+                <RadioRow value="immediate" label={t("digestImmediate")} description={t("digestImmediateDesc")} />
+                <RadioRow
+                  value="daily" isDisabled label={t("digestDaily")} description={t("digestDailyDesc")}
+                  badge={<Chip size="sm" variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">{t("comingSoon")}</Chip>}
+                />
+                <RadioRow
+                  value="weekly" isDisabled label={t("digestWeekly")} description={t("digestWeeklyDesc")}
+                  badge={<Chip size="sm" variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">{t("comingSoon")}</Chip>}
+                />
               </RadioGroup>
-            </CardContent>
+            </Card.Content>
           </Card>
 
           {/* Quiet Hours */}
-          <Card className="rounded-lg shadow-none">
-            <CardHeader className="px-4 pb-3 pt-4 sm:px-5">
-              <CardTitle className="text-base">{t("quietHoursTitle")}</CardTitle>
-              <CardDescription>
-                {t("quietHoursDesc")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 px-4 pb-4 sm:px-5">
+          <Card>
+            <Card.Header>
+              <Card.Title className="text-base">{t("quietHoursTitle")}</Card.Title>
+              <Card.Description>{t("quietHoursDesc")}</Card.Description>
+            </Card.Header>
+            <Card.Content className="space-y-3">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium">{t("quietHoursEnable")}</p>
                   <p className="text-xs text-muted-foreground">{t("quietHoursEnableDesc")}</p>
                 </div>
-                <Switch
-                  checked={prefs.quietHours.enabled}
-                  onCheckedChange={v => setPrefs(p => ({ ...p, quietHours: { ...p.quietHours, enabled: v } }))}
+                <PreferenceSwitch
+                  label={t("quietHoursEnable")}
+                  isSelected={prefs.quietHours.enabled}
+                  onChange={v => setPrefs(p => ({ ...p, quietHours: { ...p.quietHours, enabled: v } }))}
                 />
               </div>
               {prefs.quietHours.enabled && (
                 <>
                   <Separator />
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="qh-start">{t("quietHoursStart")}</Label>
-                      <input
-                        id="qh-start"
-                        type="time"
-                        value={prefs.quietHours.start}
-                        onChange={e => setPrefs(p => ({
-                          ...p,
-                          quietHours: { ...p.quietHours, start: e.target.value },
-                        }))}
-                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="qh-end">{t("quietHoursEnd")}</Label>
-                      <input
-                        id="qh-end"
-                        type="time"
-                        value={prefs.quietHours.end}
-                        onChange={e => setPrefs(p => ({
-                          ...p,
-                          quietHours: { ...p.quietHours, end: e.target.value },
-                        }))}
-                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
+                    <TextField
+                      value={prefs.quietHours.start}
+                      onChange={v => setPrefs(p => ({ ...p, quietHours: { ...p.quietHours, start: v } }))}
+                      fullWidth
+                    >
+                      <Label>{t("quietHoursStart")}</Label>
+                      <Input id="qh-start" type="time" />
+                    </TextField>
+                    <TextField
+                      value={prefs.quietHours.end}
+                      onChange={v => setPrefs(p => ({ ...p, quietHours: { ...p.quietHours, end: v } }))}
+                      fullWidth
+                    >
+                      <Label>{t("quietHoursEnd")}</Label>
+                      <Input id="qh-end" type="time" />
+                    </TextField>
                   </div>
                   {/* Timezone is derived from the user's profile — displayed read-only */}
                   <div className="space-y-1.5">
@@ -518,14 +504,14 @@ export default function NotificationPreferencesPage() {
                   </div>
                 </>
               )}
-            </CardContent>
+            </Card.Content>
           </Card>
-        </TabsContent>
+        </Tabs.Panel>
       </Tabs>
 
       {/* Save button — disabled until a real change has been made */}
       <div className="flex justify-end border-t pt-1">
-        <Button onClick={handleSave} disabled={!isDirty || saving} className="h-9 gap-1.5">
+        <Button onPress={handleSave} isDisabled={!isDirty || saving} isPending={saving} className="h-9">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? t("saving") : t("savePreferences")}
         </Button>

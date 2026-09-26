@@ -182,6 +182,7 @@ describe("Notifications inbox visual refinement", () => {
     await waitFor(() => expect(api.markNotificationRead).toHaveBeenCalledWith(1));
     expect(navigation.setLocation).toHaveBeenCalledWith("/plans/10");
     expect(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Mark as read" })).toHaveClass("focus-visible:ring-2");
+    // HeroUI Button ("button" class) owns the keyboard focus ring.
+    expect(screen.getByRole("button", { name: "Mark as read" })).toHaveClass("button");
   });
 });

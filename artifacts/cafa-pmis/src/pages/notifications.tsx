@@ -7,14 +7,8 @@ import {
   AlertTriangle, MessageCircle, Upload, DollarSign, Info,
   Search, ExternalLink, Filter, Check,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button, Chip, InputGroup, Skeleton, Tabs, TextField } from "@heroui/react";
+import { SelectField } from "@/components/select-field";
 import {
   listNotifications,
   markAllNotificationsRead,
@@ -161,9 +155,9 @@ export default function NotificationsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => markAll.mutate()}
-            disabled={markAll.isPending}
-            className="h-8 shrink-0 gap-1.5 border-border/70 bg-transparent text-muted-foreground hover:text-foreground sm:mt-0.5"
+            onPress={() => markAll.mutate()}
+            isDisabled={markAll.isPending}
+            className="h-8 shrink-0 sm:mt-0.5"
           >
             <CheckCheck className="h-4 w-4" />
             {t("markAllRead")}
@@ -173,39 +167,36 @@ export default function NotificationsPage() {
 
       {/* Filters */}
       <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-card/60 p-2 sm:flex-row sm:items-center">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "all" | "unread")}>
-          <TabsList className="h-9 w-full bg-muted/50 p-1 sm:w-auto" aria-label={t("statusFilter")}>
-            <TabsTrigger value="all" className="h-7 px-2.5 text-xs">{t("all")}</TabsTrigger>
-            <TabsTrigger value="unread" className="h-7 gap-1 px-2.5 text-xs">
-              {t("unread")}
-              {unreadCount > 0 && (
-                <Badge className="h-4 min-w-4 px-1 text-[10px] leading-none">{unreadCount > 99 ? "99+" : unreadCount}</Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
+        <Tabs selectedKey={tab} onSelectionChange={(v) => setTab(v as "all" | "unread")}>
+          <Tabs.ListContainer className="w-full sm:w-auto">
+            <Tabs.List aria-label={t("statusFilter")}>
+              <Tabs.Tab id="all" className="h-7 px-2.5 text-xs">{t("all")}<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="unread" className="h-7 gap-1 px-2.5 text-xs">
+                {t("unread")}
+                {unreadCount > 0 && (
+                  <Chip size="sm" color="accent" variant="primary" className="h-4 min-w-4 px-1 text-[10px] leading-none">{unreadCount > 99 ? "99+" : unreadCount}</Chip>
+                )}
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
         </Tabs>
 
         <div className="flex w-full flex-col gap-2 sm:ms-auto sm:w-auto sm:flex-row">
-          <div className="relative min-w-0 flex-1 sm:w-64">
-            <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <Input
-              placeholder={t("searchPlaceholder")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full ps-8"
-            />
-          </div>
-          <Select value={module} onValueChange={setModule}>
-            <SelectTrigger className="h-9 w-full gap-1.5 sm:w-44" aria-label={t("moduleFilter")}>
-              <Filter className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODULE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{t(o.labelKey)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <TextField value={search} onChange={setSearch} aria-label={t("searchPlaceholder")} className="min-w-0 flex-1 sm:w-64">
+            <InputGroup fullWidth className="h-9">
+              <InputGroup.Prefix><Search className="h-4 w-4" aria-hidden="true" /></InputGroup.Prefix>
+              <InputGroup.Input placeholder={t("searchPlaceholder")} className="h-9" />
+            </InputGroup>
+          </TextField>
+          <SelectField
+            aria-label={t("moduleFilter")}
+            value={module}
+            onChange={setModule}
+            triggerClassName="h-9 w-full gap-1.5 sm:w-44"
+            icon={<Filter className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
+            options={MODULE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
+          />
         </div>
       </div>
 
@@ -231,7 +222,7 @@ export default function NotificationsPage() {
           <div className="px-4 py-10 text-center">
             <AlertTriangle className="h-8 w-8 text-destructive/60 mx-auto mb-3" />
             <p className="text-sm font-medium text-muted-foreground">{t("errorLoading")}</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
+            <Button variant="outline" size="sm" className="mt-3" onPress={() => void refetch()}>
               {t("retry")}
             </Button>
           </div>
@@ -294,29 +285,30 @@ export default function NotificationsPage() {
                 </div>
                 <div data-notification-actions className="flex items-center justify-end gap-0.5 sm:min-w-[4rem] sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                   {link && (
-                    <button
-                      type="button"
-                      className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="ghost"
                       aria-label={t("openNotification")}
-                      onClick={() => {
+                      onPress={() => {
                         if (isUnread) markRead.mutate(n.id);
                         setLocation(link);
                       }}
                     >
                       <ExternalLink className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
-                    </button>
+                    </Button>
                   )}
                   {isUnread && (
-                    <button
-                      type="button"
-                      className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="ghost"
                       aria-label={t("markAsRead")}
-                      title={t("markAsRead")}
-                      onClick={() => markRead.mutate(n.id)}
-                      disabled={markRead.isPending}
+                      onPress={() => markRead.mutate(n.id)}
+                      isDisabled={markRead.isPending}
                     >
                       <Check className="h-4 w-4" aria-hidden="true" />
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -328,7 +320,7 @@ export default function NotificationsPage() {
       {/* Load more */}
       {!isLoading && !isError && data?.pagination.hasMore && (
         <div className="text-center">
-          <Button variant="outline" size="sm" className="h-9" onClick={() => setLimit((l) => Math.min(l + 50, 200))}>
+          <Button variant="outline" size="sm" className="h-9" onPress={() => setLimit((l) => Math.min(l + 50, 200))}>
             {t("loadMore")}
           </Button>
         </div>

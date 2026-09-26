@@ -107,7 +107,9 @@ describe("Notifications inbox enterprise redesign", () => {
 
     expect(await screen.findByRole("tablist", { name: "Notification status" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search notifications…")).toHaveClass("h-9");
-    expect(screen.getByRole("combobox", { name: "Filter by module" })).toHaveClass("h-9", "sm:w-44");
+    // HeroUI Select: the visible trigger is a button (React Aria also renders a
+    // hidden native <select>, which is what role "combobox" now matches).
+    expect(screen.getByRole("button", { name: /Filter by module/ })).toHaveClass("h-9", "sm:w-44");
     expect(source("src/pages/notifications.tsx")).toContain("flex flex-col gap-2 rounded-lg border border-border/60 bg-card/60 p-2");
   });
 
@@ -189,7 +191,10 @@ describe("Notifications inbox enterprise redesign", () => {
     const page = source("src/pages/notifications.tsx");
     expect(page).toContain('dir="auto"');
     expect(page).toContain("[overflow-wrap:anywhere]");
-    expect(page).toContain("focus-visible:ring-2 focus-visible:ring-ring");
+    // Row actions are HeroUI icon Buttons, which draw the focus ring themselves
+    // (data-focus-visible) instead of via focus-visible:* utility classes.
+    expect(page).toContain('aria-label={t("markAsRead")}');
+    expect(page).toContain("isIconOnly");
     expect(page).toContain("rtl:rotate-180");
   });
 
