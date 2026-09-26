@@ -15,6 +15,9 @@ import { isAccountLocked, recordFailedLogin, clearAccountFailures } from "./lib/
 import { getOpenAIClient, buildSystemPrompt } from "./lib/ai";
 import { attachCurrentUser, requireAuth, type Variables } from "./lib/rbac";
 import { notificationsRoutes } from "./routes/notifications";
+import { meRoutes } from "./routes/me";
+import { beneficiariesRoutes } from "./routes/beneficiaries";
+import { searchRoutes } from "./routes/search";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -309,5 +312,8 @@ app.post("/ai/chat", attachCurrentUser, requireAuth, async (c) => {
 });
 
 app.route("/", notificationsRoutes);
+app.route("/", meRoutes);
+app.route("/", beneficiariesRoutes);
+app.route("/", searchRoutes);
 
 export default app;

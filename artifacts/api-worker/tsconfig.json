@@ -10,5 +10,8 @@
   },
   "include": [
     "src"
+  ],
+  "references": [
+    { "path": "../../lib/api-zod" }
   ]
 }

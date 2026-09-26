@@ -321,6 +321,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1056.0
         version: 3.1056.0
+      '@workspace/api-zod':
+        specifier: workspace:*
+        version: link:../../lib/api-zod
       '@xmldom/xmldom':
         specifier: ^0.9.12
         version: 0.9.12

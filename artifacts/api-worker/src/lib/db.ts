@@ -33,6 +33,8 @@ export interface Bindings {
   AI_DAILY_MESSAGE_LIMIT?: string;
   AI_INTEGRATIONS_OPENAI_API_KEY?: string;
   AI_INTEGRATIONS_OPENAI_BASE_URL?: string;
+  NODE_ENV?: string;
+  CAFA_DEMO_MODE?: string;
 }
 
 export type AppContext = Context<{ Bindings: Bindings; Variables: Variables }>;
