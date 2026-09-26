@@ -1,10 +1,12 @@
 /**
- * Ported from artifacts/api-server/src/lib/projectDataIntegrity.ts — only the
- * pure donor-name validation used by projects.ts's create/update routes.
- * isConfirmedUnlinkedPlaceholderDonor / scanFocusedProjectDonors back the
- * donor-integrity-scan and donor-correction endpoints, deferred with the rest
- * of the donor routes.
+ * Ported from artifacts/api-server/src/lib/projectDataIntegrity.ts. Batch 2
+ * ported only the pure donor-name validation; batch 3 adds
+ * isConfirmedUnlinkedPlaceholderDonor and scanFocusedProjectDonors for the
+ * donor-integrity-scan and donor-correction routes. runProjectDataIntegrityScan
+ * (a startup-time audit log, not an HTTP route) is not ported — there's no
+ * per-request equivalent of "log something once at boot" in a Worker.
  */
+import type { QueryExecutor } from "./db";
 
 /**
  * Values that communicate missing or test data, rather than a confirmed
@@ -56,4 +58,108 @@ export function validateDonorName(value: unknown): DonorValidationResult {
     error: "placeholder_donor",
     message: "Enter a confirmed donor organisation or select a registered donor.",
   };
+}
+
+/**
+ * A correction target is stronger than a generic placeholder-looking value:
+ * it must be unlinked legacy free text and must not be the deliberately
+ * recorded Unknown missing-donor state.
+ */
+export function isConfirmedUnlinkedPlaceholderDonor(input: {
+  donor: string | null;
+  donorId: number | null;
+  donorRegistryName: string | null;
+}): boolean {
+  return !isExplicitNoDonorMarker(input.donor)
+    && input.donorId === null
+    && input.donorRegistryName === null
+    && isPlaceholderLikeDonorName(input.donor);
+}
+
+export type SuspiciousProjectDonor = {
+  id: number;
+  code: string;
+  title: string;
+  status: string;
+  donor: string;
+  donorId: number | null;
+  budgetTotal: number | string | null;
+  currency: string | null;
+};
+
+export type FocusedProjectDonorFinding = SuspiciousProjectDonor & {
+  classification: "confirmed_placeholder" | "explicit_missing_donor";
+  provenance: "unlinked_free_text" | "explicit_missing_marker";
+};
+
+export type FocusedProjectDonorScan = {
+  confirmedPlaceholders: FocusedProjectDonorFinding[];
+  explicitMissingDonors: FocusedProjectDonorFinding[];
+};
+
+/**
+ * Read-only scan used by the administrative donor-correction workflow.
+ * Restricting the query to operational/submitted lifecycle states keeps the
+ * result focused, while requiring an unlinked donor value avoids flagging a
+ * legitimate registered donor whose display name happens to be short or
+ * placeholder-like.
+ */
+export async function scanFocusedProjectDonors(db: QueryExecutor): Promise<FocusedProjectDonorScan> {
+  const { rows } = await db.query<{
+    id: number;
+    code: string;
+    title: string;
+    status: string;
+    donor: string | null;
+    donor_id: number | null;
+    donor_registry_name: string | null;
+    budget_total: number | string | null;
+    currency: string | null;
+  }>(
+    `SELECT p.id, p.code, p.title, p.status, p.donor, p.donor_id,
+            d.name AS donor_registry_name, p.budget_total, p.currency
+       FROM projects p
+       LEFT JOIN donors d ON d.id = p.donor_id
+      WHERE p.deleted_at IS NULL
+        AND p.status IN ('submitted', 'approved', 'active')
+        AND p.donor IS NOT NULL
+        AND p.donor <> ''`,
+  );
+
+  const confirmedPlaceholders: FocusedProjectDonorFinding[] = [];
+  const explicitMissingDonors: FocusedProjectDonorFinding[] = [];
+  for (const row of rows) {
+    const base = {
+      id: row.id,
+      code: row.code,
+      title: row.title,
+      status: row.status,
+      donor: row.donor ?? "",
+      donorId: row.donor_id,
+      budgetTotal: row.budget_total,
+      currency: row.currency,
+    };
+    if (
+      isExplicitNoDonorMarker(row.donor)
+      && row.donor_id === null
+      && row.donor_registry_name === null
+    ) {
+      explicitMissingDonors.push({
+        ...base,
+        classification: "explicit_missing_donor",
+        provenance: "explicit_missing_marker",
+      });
+    } else if (isConfirmedUnlinkedPlaceholderDonor({
+      donor: row.donor,
+      donorId: row.donor_id,
+      donorRegistryName: row.donor_registry_name,
+    })) {
+      confirmedPlaceholders.push({
+        ...base,
+        classification: "confirmed_placeholder",
+        provenance: "unlinked_free_text",
+      });
+    }
+  }
+  return { confirmedPlaceholders, explicitMissingDonors };
 }

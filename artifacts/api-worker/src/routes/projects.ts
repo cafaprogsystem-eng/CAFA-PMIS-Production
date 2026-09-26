@@ -1,5 +1,11 @@
 import { Hono } from "hono";
-import { CreateProjectBody, TransitionProjectBody } from "@workspace/api-zod";
+import {
+  CreateProjectBody,
+  TransitionProjectBody,
+  AddProjectDocumentBody,
+  CorrectProjectDonorBody,
+  UpsertProjectStateAllocationsBody,
+} from "@workspace/api-zod";
 import type { Bindings, QueryExecutor } from "../lib/db";
 import { openDb } from "../lib/db";
 import {
@@ -16,12 +22,14 @@ import {
 } from "../lib/rbac";
 import { assertActiveState } from "../lib/state-master";
 import { VALID_SECTOR_SET, ASSISTANCE_MODALITY_SET, validateSubSectorsMulti } from "../lib/sectors";
-import { validateDonorName } from "../lib/project-data-integrity";
+import { validateDonorName, isConfirmedUnlinkedPlaceholderDonor, scanFocusedProjectDonors } from "../lib/project-data-integrity";
 import { verifyUploadToken } from "../lib/upload-token";
 import { SCHEDULED_FREQUENCIES, type ScheduledFrequency } from "../lib/report-constants";
 import { getProjectDeletionMode, validateDeletionReason } from "../lib/project-deletion";
 import { isExactDevelopmentTestRetirementTarget } from "../lib/development-test-retirement";
-import { deleteObjectSafely } from "../lib/storage";
+import { deleteObjectSafely, getObjectEntityFile, downloadObject, ObjectNotFoundError } from "../lib/storage";
+import { hasFullOperationalAccess } from "../lib/accessControl";
+import { contentDispositionHeader } from "../lib/content-disposition";
 
 /**
  * Ported from artifacts/api-server/src/routes/projects.ts. projects.ts is the
@@ -31,23 +39,42 @@ import { deleteObjectSafely } from "../lib/storage";
  * Batch 1 (committed earlier): GET /projects (list) + GET /projects/:projectId
  * (detail) — read paths only.
  *
- * Batch 2 (this addition): the core project lifecycle — POST /projects
+ * Batch 2 (committed earlier): the core project lifecycle — POST /projects
  * (create), PATCH /projects/:projectId (update), POST
  * /projects/:projectId/transitions (workflow), GET
  * /projects/:projectId/deletion-info, and DELETE /projects/:projectId
- * (permanent or soft, depending on approval history). These run inside real
- * Postgres transactions with row locking (budget allocation caps, optimistic
- * concurrency via x-base-revision, nested results-framework writes for
- * outputs/indicators/activities) and were deliberately scoped narrowly to
- * just this core CRUD+transitions cycle per an explicit decision to keep
- * batches focused.
+ * (permanent or soft, depending on approval history).
  *
- * Deferred to a batch 3: /merge, /duplicate-check, /donors*,
- * /development-test-retirement (the dedicated retirement action itself —
- * isExactDevelopmentTestRetirementTarget's *guard* is ported now since the
- * DELETE route depends on it), /donor-correction, /reporting-coverage,
- * /documents (project-level upload/download/delete), /activities,
- * /indicators, /budget, /state-allocations, /report-kpis.
+ * Batch 3 (this addition): GET/POST /donors, GET /projects/donor-integrity-scan,
+ * POST /projects/:projectId/donor-correction, GET /projects/duplicate-check,
+ * POST /projects/:projectId/merge, PATCH /projects/:projectId/reporting-coverage,
+ * GET/POST /projects/:projectId/documents, GET
+ * /projects/:projectId/documents/:documentId/download, DELETE
+ * /projects/:projectId/documents/:documentId, GET /projects/:projectId/report-kpis,
+ * GET /activities, GET /projects/:projectId/activities, GET
+ * /projects/:projectId/indicators, GET /projects/:projectId/budget, GET/POST
+ * /projects/:projectId/state-allocations.
+ *
+ * FIXED while porting (see the batch 3 report) at all three
+ * project_state_allocations INSERT sites in this file (project create,
+ * project update, and this batch's dedicated state-allocations replace
+ * route): the original coalesces every omitted allocation field —
+ * budgetAllocation, beneficiaryTarget, beneficiaryMale/Female/Boys/Girls,
+ * activityTarget, indicatorTarget — to `?? null`, but every one of those
+ * columns is `NOT NULL DEFAULT 0`. A caller omitting any of them (all are
+ * optional in the Zod schema) throws a live "violates not-null constraint"
+ * 500, confirmed here against Neon. Changed to `?? 0` at all three sites, in
+ * both this file and artifacts/api-server/src/routes/projects.ts.
+ *
+ * Intentionally NOT ported: POST /projects/:projectId/development-test-retirement.
+ * The original guards this with `if (process.env.NODE_ENV !== "development")
+ * return 404`, so in every real (non-dev) environment it is dead code — a
+ * one-off cleanup action for a single historical fixture (see
+ * lib/development-test-retirement.ts) that this fresh Neon database can never
+ * contain. Porting it would mean adding a NODE_ENV-gated route with no
+ * reachable path in any environment this Worker actually runs in.
+ * runProjectDataIntegrityScan (a startup-time audit log, not a route) is
+ * likewise not ported — see lib/project-data-integrity.ts's comment.
  *
  * Also not ported here (same reasoning as every prior batch): notification
  * creation (createNotificationDeduped, notifyEntityActors,
@@ -385,6 +412,9 @@ export const projectsRoutes = new Hono<{ Bindings: Bindings; Variables: Variable
 
 projectsRoutes.use("/projects", attachCurrentUser, requireAuth);
 projectsRoutes.use("/projects/*", attachCurrentUser, requireAuth);
+projectsRoutes.use("/donors", attachCurrentUser, requireAuth);
+projectsRoutes.use("/donors/*", attachCurrentUser, requireAuth);
+projectsRoutes.use("/activities", attachCurrentUser, requireAuth);
 
 // ── Project list ──────────────────────────────────────────────────────────────
 projectsRoutes.get("/projects", async (c) => {
@@ -458,6 +488,114 @@ projectsRoutes.get("/projects", async (c) => {
       params,
     );
     return c.json(rows);
+  } finally {
+    close();
+  }
+});
+
+// ── Donor-integrity scan / duplicate check ────────────────────────────────────
+// Registered here — BEFORE GET /projects/:projectId — because both are static
+// path segments in the exact same position as :projectId
+// ("/projects/donor-integrity-scan", "/projects/duplicate-check"). Hono, like
+// Express, resolves an ambiguous match in registration order: appended after
+// :projectId (as they originally were, mirroring their append-only position in
+// this batch), a request to either path was silently swallowed by the detail
+// route instead, which then did Number("donor-integrity-scan") → NaN and threw
+// binding NaN into an integer column — a live 500 caught during batch 3
+// testing, not a hypothetical. The Express original avoids this by registering
+// them near the top of the file, well before its own /projects/:projectId.
+projectsRoutes.get("/projects/donor-integrity-scan", requirePerm("projects.donor.correct"), async (c) => {
+  const { db, close } = openDb(c);
+  try {
+    const scan = await scanFocusedProjectDonors(db);
+    return c.json(scan);
+  } finally {
+    close();
+  }
+});
+
+// PRJ-002: Explicit project-domain permission guard prevents unauthorised
+// callers from enumerating Project metadata (any-projects-permission check
+// rather than a single requirePerm, so every project-domain role is covered).
+projectsRoutes.get("/projects/duplicate-check", async (c) => {
+  const user = c.get("currentUser");
+  if (!user) return c.json({ error: "unauthorized" }, 401);
+  const { db, close } = openDb(c);
+  try {
+    const callerPerms = permissionsFor(user);
+    const hasProjectAccess = hasPerm(callerPerms, "*") || callerPerms.some((p) => p.startsWith("projects."));
+    if (!hasProjectAccess) {
+      return c.json({ error: "forbidden", message: "You do not have access to project data." }, 403);
+    }
+
+    const agreementNumber = c.req.query("agreementNumber");
+    const donor = c.req.query("donor");
+    const title = c.req.query("title");
+    const excludeId = c.req.query("excludeId");
+    if (!agreementNumber?.trim()) return c.json({ matchType: "none" });
+
+    const tcSectors = tcSectorRestriction(user);
+    const isStateRole = user.role === "state_office_manager" || user.role === "state_program_officer";
+
+    // Fail-closed: TC with no assigned sectors sees nothing — no enumeration leak.
+    if (tcSectors !== null && tcSectors.length === 0) return c.json({ matchType: "none" });
+    // Fail-closed: State role with no stateId sees nothing.
+    if (isStateRole && (user.stateId ?? null) === null) return c.json({ matchType: "none" });
+
+    const excludeIdNum = excludeId ? parseInt(excludeId, 10) : null;
+    const params: unknown[] = [agreementNumber.trim()];
+    const excludeClause = excludeIdNum && !isNaN(excludeIdNum)
+      ? ` AND p.id != $${params.push(excludeIdNum)}`
+      : "";
+
+    let sectorClause = "";
+    if (tcSectors !== null) {
+      params.push(tcSectors);
+      sectorClause = ` AND (p.sector = ANY($${params.length}::text[]) OR EXISTS (
+  SELECT 1 FROM jsonb_array_elements_text(COALESCE(p.sectors, '[]'::jsonb)) s
+  WHERE s = ANY($${params.length}::text[])
+))`;
+    }
+
+    let stateClause = "";
+    if (isStateRole) {
+      params.push(user.stateId!);
+      stateClause = ` AND EXISTS (SELECT 1 FROM project_states ps WHERE ps.project_id = p.id AND ps.state_id = $${params.length})`;
+    }
+
+    // Response minimisation (PRJ-002): omit internal IDs, budget data,
+    // assignments, and State allocation data.
+    const { rows } = await db.query<Record<string, unknown>>(
+      `SELECT p.code, p.title, p.agreement_number AS "agreementNumber",
+              p.donor, p.sector,
+              COALESCE(p.sectors, '[]'::jsonb) AS sectors,
+              ARRAY(SELECT ps.state_id FROM project_states ps WHERE ps.project_id = p.id ORDER BY ps.state_id) AS "stateIds",
+              ARRAY(SELECT s.name FROM project_states ps JOIN states s ON s.id = ps.state_id WHERE ps.project_id = p.id ORDER BY ps.state_id) AS "stateNames",
+              ARRAY(SELECT s.name_ar FROM project_states ps JOIN states s ON s.id = ps.state_id WHERE ps.project_id = p.id ORDER BY ps.state_id) AS "stateNamesAr",
+              ARRAY(SELECT pfl.name FROM project_free_localities pfl WHERE pfl.project_id = p.id) AS localities
+       FROM projects p
+       WHERE LOWER(p.agreement_number) = LOWER($1)
+         AND p.deleted_at IS NULL${excludeClause}${sectorClause}${stateClause}
+       ORDER BY p.created_at DESC LIMIT 10`,
+      params,
+    );
+
+    if (rows.length === 0) return c.json({ matchType: "none" });
+
+    if (donor?.trim() && title?.trim()) {
+      const exact = rows.find(
+        (r) => (r.donor as string | null)?.toLowerCase() === donor.trim().toLowerCase()
+          && (r.title as string | null)?.toLowerCase() === title.trim().toLowerCase(),
+      );
+      if (exact) return c.json({ matchType: "exact", existingProject: exact });
+    }
+
+    if (title?.trim()) {
+      const warn = rows.find((r) => (r.title as string | null)?.toLowerCase() !== title.trim().toLowerCase());
+      if (warn) return c.json({ matchType: "agreement_warning", existingProject: warn });
+    }
+
+    return c.json({ matchType: "none" });
   } finally {
     close();
   }
@@ -895,14 +1033,14 @@ projectsRoutes.post("/projects", requirePerm("projects.create"), async (c) => {
         [
           projectId,
           alloc.stateId,
-          alloc.budgetAllocation ?? null,
-          alloc.beneficiaryTarget ?? null,
-          alloc.beneficiaryMale ?? null,
-          alloc.beneficiaryFemale ?? null,
-          alloc.beneficiaryBoys ?? null,
-          alloc.beneficiaryGirls ?? null,
-          alloc.activityTarget ?? null,
-          alloc.indicatorTarget ?? null,
+          alloc.budgetAllocation ?? 0,
+          alloc.beneficiaryTarget ?? 0,
+          alloc.beneficiaryMale ?? 0,
+          alloc.beneficiaryFemale ?? 0,
+          alloc.beneficiaryBoys ?? 0,
+          alloc.beneficiaryGirls ?? 0,
+          alloc.activityTarget ?? 0,
+          alloc.indicatorTarget ?? 0,
           alloc.stateLead ?? null,
           JSON.stringify(alloc.stateTeam ?? []),
           alloc.notes ?? null,
@@ -1364,10 +1502,10 @@ projectsRoutes.patch("/projects/:projectId", requirePerm("projects.update"), asy
             activity_target, indicator_target, state_lead, state_team, notes)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)`,
         [projectId, alloc.stateId,
-         alloc.budgetAllocation ?? null, alloc.beneficiaryTarget ?? null,
-         alloc.beneficiaryMale ?? null, alloc.beneficiaryFemale ?? null,
-         alloc.beneficiaryBoys ?? null, alloc.beneficiaryGirls ?? null,
-         alloc.activityTarget ?? null, alloc.indicatorTarget ?? null,
+         alloc.budgetAllocation ?? 0, alloc.beneficiaryTarget ?? 0,
+         alloc.beneficiaryMale ?? 0, alloc.beneficiaryFemale ?? 0,
+         alloc.beneficiaryBoys ?? 0, alloc.beneficiaryGirls ?? 0,
+         alloc.activityTarget ?? 0, alloc.indicatorTarget ?? 0,
          alloc.stateLead ?? null,
          JSON.stringify(alloc.stateTeam ?? []),
          alloc.notes ?? null],
@@ -2065,6 +2203,1200 @@ projectsRoutes.delete("/projects/:projectId", requirePerm("projects.delete"), as
 
     // Dropped: realtime.broadcastUpdate (Durable Objects phase).
     return c.json({ deletionMode: mode, projectId, projectCode: project.code });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+    close();
+  }
+});
+
+// ── Donors ────────────────────────────────────────────────────────────────────
+projectsRoutes.get("/donors", requirePerm("projects.view"), async (c) => {
+  const { db, close } = openDb(c);
+  try {
+    const { rows } = await db.query(
+      `SELECT id, name, abbreviation, country, contact_name AS "contactName",
+              contact_email AS "contactEmail", created_at AS "createdAt"
+       FROM donors ORDER BY name`,
+    );
+    return c.json(rows);
+  } finally {
+    close();
+  }
+});
+
+projectsRoutes.post("/donors", requirePerm("projects.create"), async (c) => {
+  const { db, close } = openDb(c);
+  try {
+    const body = await c.req.json<{
+      name?: string; abbreviation?: string; country?: string; contactName?: string; contactEmail?: string;
+    }>();
+    if (!body.name?.trim()) {
+      return c.json({ error: "name is required" }, 400);
+    }
+    const donorValidation = validateDonorName(body.name);
+    if (!donorValidation.ok) {
+      return c.json({ error: donorValidation.error, field: "name", message: donorValidation.message }, 422);
+    }
+    const { rows } = await db.query(
+      `INSERT INTO donors (name, abbreviation, country, contact_name, contact_email)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, abbreviation, country,
+                 contact_name AS "contactName", contact_email AS "contactEmail",
+                 created_at AS "createdAt"`,
+      [body.name.trim(), body.abbreviation ?? null, body.country ?? null, body.contactName ?? null, body.contactEmail ?? null],
+    );
+    return c.json(rows[0], 201);
+  } finally {
+    close();
+  }
+});
+
+// ── Administrative donor correction ────────────────────────────────────────────
+// Corrects only a confirmed, unlinked placeholder donor on an already
+// submitted/approved/active project. This deliberately does not use the
+// general project PATCH route: that route can replace nested project data and
+// is intentionally unavailable after submission. GET /projects/donor-integrity-scan
+// (the read-only scan backing this) is registered earlier in the file, before
+// GET /projects/:projectId — see that route's own comment for why.
+projectsRoutes.post("/projects/:projectId/donor-correction", requirePerm("projects.donor.correct"), async (c) => {
+  const user = c.get("currentUser")!;
+  const { db, pool, close } = openDb(c);
+  const client = await pool.connect();
+  try {
+    const parsed = CorrectProjectDonorBody.safeParse(await c.req.json());
+    if (!parsed.success || !parsed.data.reason.trim()) {
+      return c.json({ error: "correction_reason_required" }, 400);
+    }
+    const projectId = Number(c.req.param("projectId"));
+    if (!Number.isInteger(projectId) || projectId < 1) {
+      return c.json({ error: "invalid_project_id" }, 400);
+    }
+
+    await client.query("BEGIN");
+    const projectResult = await client.query<{
+      id: number; code: string; status: string; donor: string | null; donor_id: number | null; donor_registry_name: string | null;
+    }>(
+      `SELECT p.id, p.code, p.status, p.donor, p.donor_id,
+              d.name AS donor_registry_name
+         FROM projects p
+         LEFT JOIN donors d ON d.id = p.donor_id
+        WHERE p.id = $1 AND p.deleted_at IS NULL
+        FOR UPDATE OF p`,
+      [projectId],
+    );
+    const project = projectResult.rows[0];
+    if (!project) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "project_not_found" }, 404);
+    }
+    if (!["submitted", "approved", "active"].includes(project.status)) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "invalid_project_lifecycle", status: project.status }, 409);
+    }
+    if (!isConfirmedUnlinkedPlaceholderDonor({
+      donor: project.donor,
+      donorId: project.donor_id,
+      donorRegistryName: project.donor_registry_name,
+    })) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "donor_not_confirmed_placeholder" }, 409);
+    }
+
+    const nextDonorId: number | null = parsed.data.donorId;
+    let nextDonorName = "Unknown";
+    if (nextDonorId !== null) {
+      const donorResult = await client.query<{ id: number; name: string }>(
+        `SELECT id, name FROM donors WHERE id = $1 FOR KEY SHARE`,
+        [nextDonorId],
+      );
+      const donor = donorResult.rows[0];
+      if (!donor) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "invalid_donor_id" }, 422);
+      }
+      const donorValidation = validateDonorName(donor.name);
+      if (!donorValidation.ok) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "placeholder_donor", field: "donorId" }, 422);
+      }
+      nextDonorName = donor.name;
+    }
+
+    const reason = parsed.data.reason.trim();
+    const oldValue = JSON.stringify({ donor: project.donor, donorId: project.donor_id, provenance: "unlinked_free_text" });
+    const newValue = JSON.stringify({ donor: nextDonorName, donorId: nextDonorId, reason, correction: "administrative donor correction" });
+    const updated = await client.query<{ id: number; code: string; status: string; donor: string; donor_id: number | null }>(
+      `UPDATE projects
+          SET donor = $1, donor_id = $2, updated_at = NOW()
+        WHERE id = $3 AND deleted_at IS NULL
+        RETURNING id, code, status, donor, donor_id`,
+      [nextDonorName, nextDonorId, projectId],
+    );
+    if (updated.rows.length !== 1) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "project_changed" }, 409);
+    }
+    await logAudit(client, {
+      userId: user.id,
+      action: "donor_corrected",
+      module: "projects",
+      entityId: projectId,
+      oldValue,
+      newValue,
+    });
+    await client.query("COMMIT");
+
+    const result = updated.rows[0];
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    return c.json({
+      projectId: result.id,
+      projectCode: result.code,
+      status: result.status,
+      donor: result.donor,
+      donorId: result.donor_id,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+    close();
+  }
+});
+
+// ── Project merge ─────────────────────────────────────────────────────────────
+// PRJ-007: Sector and State scope guards — TC and SPO must have access to the
+// project before they can merge additional states/sectors/localities into it.
+projectsRoutes.post("/projects/:projectId/merge", requirePerm("projects.update"), async (c) => {
+  const user = c.get("currentUser")!;
+  const projectId = Number(c.req.param("projectId"));
+  const { db, pool, close } = openDb(c);
+  const client = await pool.connect();
+  try {
+    const { stateIds = [], sectors = [], localities = [] } = await c.req.json<{
+      stateIds?: number[]; sectors?: string[]; localities?: string[];
+    }>();
+
+    const { rows: [proj] } = await client.query<{ id: number; sector: string | null; sectors: string[] }>(
+      `SELECT id, sector, sectors FROM projects WHERE id = $1 AND deleted_at IS NULL`,
+      [projectId],
+    );
+    if (!proj) return c.json({ error: "not_found" }, 404);
+
+    // PRJ-BD-05: use effective sector set (union of primary + sectors[]).
+    const effectiveSectorsForMerge = [...new Set([
+      ...(proj.sector ? [proj.sector] : []),
+      ...(proj.sectors ?? []),
+    ])];
+    const sectorGuardMerge = assertEffectiveSectorAllowedForProject(user, effectiveSectorsForMerge);
+    if (!sectorGuardMerge.ok) return c.json(sectorGuardMerge.body, sectorGuardMerge.status as any);
+
+    const stateGuardMerge = await assertStateAllowed(db, user, projectId);
+    if (!stateGuardMerge.ok) return c.json(stateGuardMerge.body, stateGuardMerge.status as any);
+
+    // A state-role user's record-level access to this project does not expand
+    // their destination-State authority.
+    const isStateScopedMergeCaller = user.role === "state_program_officer" || user.role === "state_office_manager";
+    if (isStateScopedMergeCaller && stateIds.some((stateId) => Number(stateId) !== user.stateId)) {
+      return c.json({ error: "state_forbidden" }, 403);
+    }
+
+    // project_states links are operational writes — a merge must never add an
+    // inactive (or unknown) destination State. This happens before BEGIN, so
+    // no supplied State can be inserted before all have been validated.
+    for (const stateId of stateIds) {
+      const activeState = await assertActiveState(db, Number(stateId));
+      if (!activeState.ok) {
+        return c.json({ error: activeState.error, message: "Projects can only be assigned to active States." }, 422);
+      }
+    }
+
+    await client.query("BEGIN");
+
+    for (const sid of stateIds) {
+      await client.query(`INSERT INTO project_states (project_id, state_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [projectId, sid]);
+    }
+
+    if (sectors.length > 0) {
+      const invalidMergeSecs = sectors.filter((s) => !VALID_SECTOR_SET.has(s));
+      if (invalidMergeSecs.length > 0) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "invalid_sector", field: "sectors", code: "invalid_sector", message: `Unrecognised sector(s): ${invalidMergeSecs.join(", ")}` }, 422);
+      }
+      const mergeSeenSectors = new Set<string>();
+      const mergeDupSectors = sectors.filter((s) => {
+        if (mergeSeenSectors.has(s)) return true;
+        mergeSeenSectors.add(s);
+        return false;
+      });
+      if (mergeDupSectors.length > 0) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "duplicate_sector", field: "sectors", code: "duplicate_sector", message: `Duplicate sector(s): ${[...new Set(mergeDupSectors)].join(", ")}. Each sector must appear at most once.` }, 422);
+      }
+      const existing: string[] = proj.sectors ?? [];
+      const merged = [...new Set([...existing, ...sectors])];
+      await client.query(`UPDATE projects SET sectors = $1::jsonb WHERE id = $2`, [JSON.stringify(merged), projectId]);
+    }
+
+    for (const loc of localities) {
+      await client.query(
+        `INSERT INTO project_free_localities (project_id, name, display_order)
+         SELECT $1, $2,
+                COALESCE((SELECT MAX(display_order) FROM project_free_localities WHERE project_id = $1), 0) + 1
+         WHERE NOT EXISTS (
+           SELECT 1 FROM project_free_localities WHERE project_id = $1 AND LOWER(name) = LOWER($2)
+         )`,
+        [projectId, loc],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    const { rows: [updated] } = await client.query(`${projectSummarySelect} WHERE p.id = $1`, [projectId]);
+
+    await logAudit(db, { userId: user.id, action: "merge", module: "project", entityId: projectId, newValue: JSON.stringify({ stateIds, sectors, localities }) });
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    return c.json(updated);
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+    close();
+  }
+});
+
+// ── Reporting coverage correction ─────────────────────────────────────────────
+projectsRoutes.patch("/projects/:projectId/reporting-coverage", async (c) => {
+  const user = c.get("currentUser");
+  if (!user) return c.json({ error: "authentication_required" }, 401);
+  if (!["executive_director", "program_manager", "super_admin"].includes(user.role)) {
+    return c.json({ error: "reporting_coverage_management_required" }, 403);
+  }
+  const { pool, close } = openDb(c);
+  const client = await pool.connect();
+  let transactionOpen = false;
+  try {
+    const projectId = Number(c.req.param("projectId"));
+    if (!Number.isInteger(projectId) || projectId < 1) return c.json({ error: "invalid_project_id" }, 400);
+    await client.query("BEGIN");
+    transactionOpen = true;
+    const current = await client.query<{
+      status: string; sector: string | null; sectors: string[];
+      reportingStartDate: string; reportingEndDate: string;
+    }>(
+      `SELECT status, sector, COALESCE(sectors,'[]'::jsonb)::jsonb AS sectors,
+              reporting_start_date::text AS "reportingStartDate",
+              reporting_end_date::text AS "reportingEndDate"
+         FROM projects WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`,
+      [projectId],
+    );
+    const project = current.rows[0];
+    if (!project) return c.json({ error: "project_not_found" }, 404);
+    if (project.status === "draft") return c.json({ error: "reporting_coverage_requires_non_draft_project" }, 409);
+    const sectorGuard = assertEffectiveSectorAllowedForProject(user, [...new Set([...(project.sector ? [project.sector] : []), ...(project.sectors ?? [])])]);
+    if (!sectorGuard.ok) return c.json(sectorGuard.body, sectorGuard.status as any);
+    const isStateRole = ["state_program_officer", "state_office_manager"].includes(user.role);
+    if (isStateRole) {
+      const scope = await client.query(`SELECT 1 FROM project_states WHERE project_id=$1 AND state_id=$2 LIMIT 1`, [projectId, user.stateId]);
+      if (!user.stateId || !scope.rows.length) return c.json({ error: "state_scope_forbidden" }, 403);
+    }
+    const raw = await c.req.json<Record<string, unknown>>();
+    const coverage = resolveReportingCoverage(raw, "__missing__", "__missing__");
+    if (
+      !coverage ||
+      raw.reportingStartDate === undefined ||
+      raw.reportingEndDate === undefined ||
+      typeof raw.expectedReportingStartDate !== "string" ||
+      typeof raw.expectedReportingEndDate !== "string"
+    ) {
+      return c.json({ error: "invalid_reporting_coverage" }, 422);
+    }
+    if (
+      raw.expectedReportingStartDate !== project.reportingStartDate ||
+      raw.expectedReportingEndDate !== project.reportingEndDate
+    ) {
+      return c.json({ error: "reporting_coverage_conflict" }, 409);
+    }
+    await client.query(`UPDATE projects SET reporting_start_date=$1, reporting_end_date=$2, updated_at=NOW() WHERE id=$3`, [coverage.start, coverage.end, projectId]);
+    await logAudit(client, {
+      userId: user.id,
+      action: "reporting_coverage_updated",
+      module: "projects",
+      entityId: projectId,
+      oldValue: JSON.stringify({ reportingStartDate: project.reportingStartDate, reportingEndDate: project.reportingEndDate }),
+      newValue: JSON.stringify({ reportingStartDate: coverage.start, reportingEndDate: coverage.end }),
+    });
+    await client.query("COMMIT");
+    transactionOpen = false;
+    return c.json({ projectId, reportingStartDate: coverage.start, reportingEndDate: coverage.end });
+  } catch (error) {
+    if (transactionOpen) await client.query("ROLLBACK").catch(() => undefined);
+    transactionOpen = false;
+    throw error;
+  } finally {
+    if (transactionOpen) await client.query("ROLLBACK").catch(() => undefined);
+    client.release();
+    close();
+  }
+});
+
+// ── Project documents ─────────────────────────────────────────────────────────
+projectsRoutes.get("/projects/:projectId/documents", async (c) => {
+  const user = c.get("currentUser");
+  const projectId = Number(c.req.param("projectId"));
+  const { db, close } = openDb(c);
+  try {
+    const effectiveSectors = await getProjectEffectiveSectors(db, projectId);
+    if (!effectiveSectors) return c.json({ error: "project not found" }, 404);
+    const guard = assertEffectiveSectorAllowedForProject(user, effectiveSectors.all);
+    if (!guard.ok) return c.json(guard.body, guard.status as any);
+    const stateGuard = await assertStateAllowed(db, user, projectId);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+    const rows = await getDocuments(db, projectId);
+    return c.json(rows);
+  } finally {
+    close();
+  }
+});
+
+projectsRoutes.post("/projects/:projectId/documents", requirePerm("documents.upload"), async (c) => {
+  const user = c.get("currentUser")!;
+  const projectId = Number(c.req.param("projectId"));
+  const { db, pool, close } = openDb(c);
+  try {
+    const effectiveSectors = await getProjectEffectiveSectors(db, projectId);
+    if (!effectiveSectors) return c.json({ error: "project not found" }, 404);
+    const guard = assertEffectiveSectorAllowedForProject(user, effectiveSectors.all);
+    if (!guard.ok) return c.json(guard.body, guard.status as any);
+    const stateGuard = await assertStateAllowed(db, user, projectId);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+    // PRJ-BD-04: fully-atomic gate + insert for upload. SELECT … FOR UPDATE
+    // locks the project row, preventing a concurrent freeze transition from
+    // slipping a document into a project that becomes closed between the
+    // status read and the INSERT. Parse the body first so invalid payloads
+    // fail fast before acquiring a connection.
+    const body = AddProjectDocumentBody.parse(await c.req.json());
+
+    let uploadResult: { rows: Record<string, unknown>[] };
+    const uploadTxClient = await pool.connect();
+    try {
+      await uploadTxClient.query("BEGIN");
+
+      const { rows: projRows } = await uploadTxClient.query<{ status: string }>(
+        `SELECT status FROM projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        [projectId],
+      );
+      if (!projRows.length) {
+        await uploadTxClient.query("ROLLBACK");
+        return c.json({ error: "project_not_found" }, 404);
+      }
+
+      const projectStatus = projRows[0].status;
+      const uploadTxGate: "mutable" | "operational" | "frozen" =
+        ["completed", "closed"].includes(projectStatus) ? "frozen"
+        : ["approved", "active"].includes(projectStatus) ? "operational"
+        : "mutable";
+
+      if (uploadTxGate === "frozen") {
+        await uploadTxClient.query("ROLLBACK");
+        return c.json({
+          error: "project_documents_frozen",
+          message: "Project documents are locked because the project is closed.",
+        }, 409);
+      }
+      // "mutable" and "operational" → upload permitted
+
+      uploadResult = await uploadTxClient.query(
+        `INSERT INTO project_documents
+           (project_id, category, kind, file_name, content_type, size, object_path, uploaded_by_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, project_id AS "projectId", category, kind, file_name AS "fileName",
+                   content_type AS "contentType", size, object_path AS "objectPath",
+                   uploaded_at AS "uploadedAt"`,
+        [
+          projectId,
+          body.category ?? "optional",
+          body.kind,
+          body.fileName,
+          body.contentType,
+          body.size,
+          body.objectPath ?? "",
+          user.id,
+        ],
+      );
+      await uploadTxClient.query(
+        `INSERT INTO document_registry_entries
+          (source_kind, source_id, classification, confidentiality, related_record_type, related_record_id)
+         VALUES ('project_document', $1, 'Project Documents', 'internal', 'project', $2)
+         ON CONFLICT (source_kind, source_id) DO NOTHING`,
+        [uploadResult.rows[0].id, projectId],
+      );
+
+      await uploadTxClient.query("COMMIT");
+    } catch (uploadTxErr) {
+      await uploadTxClient.query("ROLLBACK").catch(() => {});
+      throw uploadTxErr;
+    } finally {
+      uploadTxClient.release();
+    }
+
+    // Post-commit: audit (best-effort, outside TX).
+    await logAudit(db, {
+      userId: user.id,
+      action: "document_upload",
+      module: "projects",
+      entityId: projectId,
+      newValue: `${body.kind}: ${body.fileName}`,
+    });
+    // Dropped (deferred to the notifications-engine port): notifyEntityActors
+    // ("document_uploaded" notice to project actors).
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    return c.json(toPublicDocumentDto({ ...uploadResult.rows[0], uploadedByName: user.name }), 201);
+  } finally {
+    close();
+  }
+});
+
+projectsRoutes.get("/projects/:projectId/documents/:documentId/download", requirePerm("documents.view"), async (c) => {
+  const user = c.get("currentUser")!;
+  const projectId = Number(c.req.param("projectId"));
+  const documentId = Number(c.req.param("documentId"));
+  const { db, close } = openDb(c);
+  try {
+    const effectiveSectors = await getProjectEffectiveSectors(db, projectId);
+    if (!effectiveSectors) return c.json({ error: "project not found" }, 404);
+    const guard = assertEffectiveSectorAllowedForProject(user, effectiveSectors.all);
+    if (!guard.ok) return c.json(guard.body, guard.status as any);
+    const stateGuard = await assertStateAllowed(db, user, projectId);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+
+    const { rows } = await db.query<{
+      id: number; fileName: string; contentType: string; objectPath: string | null; availabilityStatus: string;
+    }>(
+      `SELECT id, file_name AS "fileName", content_type AS "contentType",
+              object_path AS "objectPath", availability_status AS "availabilityStatus"
+       FROM project_documents WHERE id = $1 AND project_id = $2`,
+      [documentId, projectId],
+    );
+    if (!rows.length) return c.json({ error: "not_found" }, 404);
+    const doc = rows[0];
+    if (doc.availabilityStatus === "unavailable") {
+      return c.json({ error: "file_unavailable", message: "File Unavailable" }, 410);
+    }
+    if (!doc.objectPath) {
+      return c.json({ error: "file_unavailable", message: "Historical file requires owner reconciliation." }, 410);
+    }
+
+    // Canonical object-storage documents proxy-stream directly. Never redirect
+    // to a raw storage URL because that leaks an internal object identity.
+    try {
+      const rawPath = doc.objectPath;
+      const normalizedPath = rawPath.startsWith("/objects/") ? rawPath : `/objects/${rawPath}`;
+      const storageFile = await getObjectEntityFile(c.env, normalizedPath);
+      const storageResponse = await downloadObject(c.env, storageFile);
+      const headers = new Headers(storageResponse.headers);
+      headers.set("Content-Type", storageResponse.headers.get("Content-Type") || doc.contentType || "application/octet-stream");
+      headers.set("Content-Disposition", contentDispositionHeader(doc.fileName, "attachment"));
+      return new Response(storageResponse.body, { headers });
+    } catch (storageErr) {
+      if (storageErr instanceof ObjectNotFoundError) return c.json({ error: "file_not_found" }, 404);
+      throw storageErr;
+    }
+  } finally {
+    close();
+  }
+});
+
+projectsRoutes.delete("/projects/:projectId/documents/:documentId", requirePerm("documents.upload"), async (c) => {
+  const user = c.get("currentUser")!;
+  const projectId = Number(c.req.param("projectId"));
+  const documentId = Number(c.req.param("documentId"));
+  const { db, pool, close } = openDb(c);
+  try {
+    const effectiveSectors = await getProjectEffectiveSectors(db, projectId);
+    if (!effectiveSectors) return c.json({ error: "project not found" }, 404);
+    const guard = assertEffectiveSectorAllowedForProject(user, effectiveSectors.all);
+    if (!guard.ok) return c.json(guard.body, guard.status as any);
+    const stateGuard = await assertStateAllowed(db, user, projectId);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+
+    // PRJ-BD-04: fully-atomic gate + delete + audit. SELECT projects FOR UPDATE
+    // locks the project row so a concurrent status transition cannot sneak
+    // between the gate check and the DELETE. Storage cleanup would run
+    // post-commit (best-effort) — not needed here since project_documents
+    // rows only ever carry object_path metadata, no separate storage delete
+    // in the original either.
+    let isDeleteOverride = false;
+    let deleteOverrideReason: string | null = null;
+
+    const txClient = await pool.connect();
+    try {
+      await txClient.query("BEGIN");
+
+      const { rows: projRows } = await txClient.query<{ status: string }>(
+        `SELECT status FROM projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        [projectId],
+      );
+      if (!projRows.length) {
+        await txClient.query("ROLLBACK");
+        return c.json({ error: "project_not_found" }, 404);
+      }
+
+      const projectStatus = projRows[0].status;
+      const txGate: "mutable" | "operational" | "frozen" =
+        ["completed", "closed"].includes(projectStatus) ? "frozen"
+        : ["approved", "active"].includes(projectStatus) ? "operational"
+        : "mutable";
+
+      if (txGate === "frozen") {
+        await txClient.query("ROLLBACK");
+        return c.json({
+          error: "project_documents_frozen",
+          message: "Project documents are locked because the project is closed.",
+        }, 409);
+      }
+
+      if (txGate === "operational") {
+        const isOverrideActor = hasFullOperationalAccess(user);
+        if (!isOverrideActor) {
+          await txClient.query("ROLLBACK");
+          return c.json({
+            error: "project_document_locked_after_approval",
+            message: "This document cannot be deleted after project approval.",
+          }, 409);
+        }
+        const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+        const rawReason = String(body?.overrideReason ?? "").trim();
+        if (!rawReason) {
+          await txClient.query("ROLLBACK");
+          return c.json({
+            error: "override_reason_required",
+            message: "An override reason is required to delete a document from an approved project.",
+          }, 400);
+        }
+        isDeleteOverride = true;
+        deleteOverrideReason = rawReason;
+      }
+
+      // Delete and capture metadata atomically; no audit if the row is already gone.
+      const { rows: deletedRows } = await txClient.query<{ file_name: string; kind: string; category: string }>(
+        `WITH deleted AS (
+           DELETE FROM project_documents WHERE id = $1 AND project_id = $2
+           RETURNING id, file_name, kind, category
+         ),
+         registry_deleted AS (
+           DELETE FROM document_registry_entries dre
+           USING deleted
+           WHERE dre.source_kind = 'project_document' AND dre.source_id = deleted.id
+         )
+         SELECT file_name, kind, category FROM deleted`,
+        [documentId, projectId],
+      );
+      if (!deletedRows.length) {
+        await txClient.query("ROLLBACK");
+        return c.json({ error: "document_not_found" }, 404);
+      }
+
+      const deletedDoc = deletedRows[0];
+      const docLabel = `${deletedDoc.file_name} (${deletedDoc.kind})`;
+
+      await logAudit(txClient, {
+        userId: user.id,
+        action: isDeleteOverride ? "document_delete_override" : "document_delete",
+        module: "projects",
+        entityId: projectId,
+        oldValue: docLabel,
+        newValue: isDeleteOverride ? deleteOverrideReason : null,
+        usedOverride: isDeleteOverride,
+        overrideReason: isDeleteOverride ? deleteOverrideReason : null,
+      });
+
+      await txClient.query("COMMIT");
+    } catch (txErr) {
+      await txClient.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      txClient.release();
+    }
+
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    return c.body(null, 204);
+  } finally {
+    close();
+  }
+});
+
+// ── Project report KPIs (aggregated from project reports) ────────────────────
+// PRJ-034 — canonical KPI source contract: beneficiary/budget aggregates come
+// from the reports table's relational columns; activity completion/progress
+// KPIs come from the reports.activities JSONB array (per-report snapshots),
+// never JOINed against the relational activities table (that holds planned
+// Results-Framework activities, not reported progress — joining it would
+// double-count).
+projectsRoutes.get("/projects/:projectId/report-kpis", async (c) => {
+  const user = c.get("currentUser");
+  const projectId = Number(c.req.param("projectId"));
+  const { db, close } = openDb(c);
+  try {
+    const effectiveSectors = await getProjectEffectiveSectors(db, projectId);
+    if (!effectiveSectors) return c.json({ error: "project not found" }, 404);
+    const guard = assertEffectiveSectorAllowedForProject(user, effectiveSectors.all);
+    if (!guard.ok) return c.json(guard.body, guard.status as any);
+    const stateGuard = await assertStateAllowed(db, user, projectId);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+
+    const { rows } = await db.query<{
+      reportCount: string; beneficiariesReached: string; totalPlannedBudget: string; totalActualExpenditure: string; latestPeriod: string | null;
+    }>(`
+      SELECT
+        COUNT(*)::text AS "reportCount",
+        (COALESCE(SUM(r.beneficiaries_male),0) + COALESCE(SUM(r.beneficiaries_female),0) +
+         COALESCE(SUM(r.beneficiaries_boys),0) + COALESCE(SUM(r.beneficiaries_girls),0))::text AS "beneficiariesReached",
+        COALESCE(SUM(r.planned_budget), 0)::text AS "totalPlannedBudget",
+        COALESCE(SUM(r.actual_expenditure), 0)::text AS "totalActualExpenditure",
+        MAX(r.period) AS "latestPeriod"
+      FROM reports r
+      WHERE r.project_id = $1
+        AND r.report_type = 'project'
+        AND r.status NOT IN ('draft')
+    `, [projectId]);
+
+    const activitiesRes = await db.query<{ totalActivities: string; completedActivities: string; avgPercent: string }>(`
+      SELECT
+        COUNT(*)::text AS "totalActivities",
+        COUNT(*) FILTER (WHERE act->>'status' = 'Completed')::text AS "completedActivities",
+        COALESCE(AVG((act->>'percent')::numeric), 0)::text AS "avgPercent"
+      FROM reports r,
+           jsonb_array_elements(COALESCE(r.activities, '[]'::jsonb)) AS act
+      WHERE r.project_id = $1
+        AND r.report_type = 'project'
+        AND r.status NOT IN ('draft')
+    `, [projectId]);
+
+    const budgetStatusRes = await db.query<{ onBudget: string; underBudget: string; overBudget: string }>(`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE (act->>'plannedBudget')::numeric > 0
+            AND (act->>'actualExpenditure')::numeric = (act->>'plannedBudget')::numeric
+        )::text AS "onBudget",
+        COUNT(*) FILTER (
+          WHERE (act->>'plannedBudget')::numeric > 0
+            AND (act->>'actualExpenditure')::numeric < (act->>'plannedBudget')::numeric
+        )::text AS "underBudget",
+        COUNT(*) FILTER (
+          WHERE (act->>'plannedBudget')::numeric > 0
+            AND (act->>'actualExpenditure')::numeric > (act->>'plannedBudget')::numeric
+        )::text AS "overBudget"
+      FROM reports r,
+           jsonb_array_elements(COALESCE(r.activities, '[]'::jsonb)) AS act
+      WHERE r.project_id = $1
+        AND r.report_type = 'project'
+        AND r.status NOT IN ('draft')
+        AND (act->>'plannedBudget') IS NOT NULL
+    `, [projectId]);
+
+    const row = rows[0];
+    const actRow = activitiesRes.rows[0];
+    const bsRow = budgetStatusRes.rows[0];
+    const totalPlanned = Number(row.totalPlannedBudget);
+    const totalSpent = Number(row.totalActualExpenditure);
+
+    return c.json({
+      reportCount: Number(row.reportCount),
+      beneficiariesReached: Number(row.beneficiariesReached),
+      totalPlannedBudget: totalPlanned,
+      totalActualExpenditure: totalSpent,
+      burnRatePct: totalPlanned > 0 ? Math.round((totalSpent / totalPlanned) * 100) : 0,
+      totalActivities: Number(actRow.totalActivities),
+      completedActivities: Number(actRow.completedActivities),
+      activityCompletionPct: Number(actRow.totalActivities) > 0
+        ? Math.round((Number(actRow.completedActivities) / Number(actRow.totalActivities)) * 100)
+        : 0,
+      avgActivityProgressPct: Math.round(Number(actRow.avgPercent)),
+      latestPeriod: row.latestPeriod ?? null,
+      activitiesOnBudget: Number(bsRow?.onBudget ?? 0),
+      activitiesUnderBudget: Number(bsRow?.underBudget ?? 0),
+      activitiesOverBudget: Number(bsRow?.overBudget ?? 0),
+    });
+  } finally {
+    close();
+  }
+});
+
+// ── Project activities ────────────────────────────────────────────────────────
+
+// ── Scoped activities list — Activity Report selector ────────────────────────
+// Returns activities the current user is authorised to report on. Optional
+// ?projectId= narrows results to a specific project (a filter, not a security
+// boundary — the WHERE clause still enforces role scoping).
+projectsRoutes.get("/activities", async (c) => {
+  const user = c.get("currentUser");
+  if (!user) return c.json({ error: "unauthorized" }, 401);
+  const { db, close } = openDb(c);
+  try {
+    const projectIdQuery = c.req.query("projectId");
+    const projectId = projectIdQuery ? Number(projectIdQuery) : null;
+    const role = user.role ?? "";
+
+    // ── Explicit role allowlist (fail-closed) ────────────────────────────────
+    const ORG_WIDE_ROLES = new Set(["super_admin", "executive_director", "program_manager", "senior_program_coordinator"]);
+    const STATE_SCOPED_ROLES = new Set(["state_program_officer", "state_office_manager"]);
+    const SECTOR_SCOPED_ROLES = new Set(["technical_coordinator", "hq_sector_coordinator", "hq_sector_officer"]);
+    const ALL_KNOWN_ROLES = new Set([...ORG_WIDE_ROLES, ...STATE_SCOPED_ROLES, ...SECTOR_SCOPED_ROLES]);
+
+    if (!ALL_KNOWN_ROLES.has(role)) {
+      return c.json({ error: "role_not_authorised_for_activity_access" }, 403);
+    }
+
+    const params: unknown[] = [];
+    const conditions: string[] = [];
+
+    if (STATE_SCOPED_ROLES.has(role)) {
+      const userStateId = user.stateId ?? null;
+      if (userStateId === null) return c.json([]);
+      params.push(userStateId);
+      conditions.push(`(a.state_id = $${params.length} OR p.id IN (SELECT project_id FROM project_states WHERE state_id = $${params.length}))`);
+    }
+
+    // Technical Coordinator — sector-scoped ONLY (no state restriction).
+    if (role === "technical_coordinator") {
+      const tcSectors = user.sectors ?? [];
+      if (tcSectors.length === 0) return c.json([]);
+      params.push(tcSectors);
+      conditions.push(
+        `(p.sector = ANY($${params.length}::text[]) OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(p.sectors, '[]'::jsonb)) s WHERE s = ANY($${params.length}::text[])) OR (a.project_id IS NULL AND a.sector = ANY($${params.length}::text[])))`,
+      );
+    }
+
+    // HQ sector roles — restricted to their assigned sector; standalone activities included.
+    if (role === "hq_sector_coordinator" || role === "hq_sector_officer") {
+      const userSector = user.sector ?? null;
+      if (!userSector) return c.json([]);
+      params.push(userSector);
+      conditions.push(`(p.sector = $${params.length} OR (a.project_id IS NULL AND a.sector = $${params.length}))`);
+    }
+
+    // Optional project filter — narrows the list; does not widen the authorisation boundary.
+    if (projectId && !Number.isNaN(projectId)) {
+      params.push(projectId);
+      conditions.push(`a.project_id = $${params.length}`);
+    }
+
+    // Optional locationType filter — org-wide users may filter by HQ or state.
+    if (!STATE_SCOPED_ROLES.has(role)) {
+      const ltFilter = c.req.query("locationType") ?? null;
+      if (ltFilter === "hq") {
+        conditions.push(`a.location_type = 'hq'`);
+      } else if (ltFilter === "state") {
+        conditions.push(`(a.location_type = 'state' OR (a.location_type IS NULL AND a.state_id IS NOT NULL))`);
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const { rows } = await db.query(
+      `SELECT a.id, a.code, a.title, a.description, a.status,
+              a.progress_pct::float            AS "progressPct",
+              a.planned_start                  AS "plannedStart",
+              a.planned_end                    AS "plannedEnd",
+              a.output_id                      AS "outputId",
+              o.title                          AS "outputTitle",
+              a.indicator_id                   AS "indicatorId",
+              COALESCE(a.location_type, CASE WHEN a.state_id IS NOT NULL THEN 'state' ELSE NULL END) AS "locationType",
+              a.state_id                       AS "stateId",
+              s.name                           AS "stateName",
+              s.name_ar                        AS "stateNameAr",
+              a.locality_name                  AS "localityName",
+              a.project_id                     AS "projectId",
+              p.title                          AS "projectTitle",
+              p.code                           AS "projectCode",
+              p.sector                         AS "sector",
+              COALESCE(a.target::float, 0)     AS target,
+              COALESCE(a.budget_planned::float, 0) AS "budgetPlanned",
+              COALESCE(a.budget_spent::float, 0)   AS "budgetSpent"
+       FROM activities a
+       LEFT JOIN outputs o    ON o.id = a.output_id
+       LEFT JOIN states  s    ON s.id = a.state_id
+       LEFT JOIN projects p   ON p.id = a.project_id
+       ${whereClause}
+       ORDER BY a.code NULLS LAST, a.title
+       LIMIT 200`,
+      params,
+    );
+    return c.json(rows);
+  } finally {
+    close();
+  }
+});
+
+projectsRoutes.get("/projects/:projectId/activities", async (c) => {
+  const projectId = Number(c.req.param("projectId"));
+  const user = c.get("currentUser");
+  const { db, close } = openDb(c);
+  try {
+    const effectiveSectors = await getProjectEffectiveSectors(db, projectId);
+    if (!effectiveSectors) return c.json({ error: "project not found" }, 404);
+    const guard = assertEffectiveSectorAllowedForProject(user, effectiveSectors.all);
+    if (!guard.ok) return c.json(guard.body, guard.status as any);
+    const stateGuard = await assertStateAllowed(db, user, projectId);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+    const { rows } = await db.query(
+      `SELECT a.id, a.code, a.title, a.description, a.status, a.progress_pct AS "progressPct",
+              a.planned_start AS "plannedStart", a.planned_end AS "plannedEnd",
+              a.output_id AS "outputId", o.title AS "outputTitle",
+              a.indicator_id AS "indicatorId",
+              a.state_id AS "stateId", s.name AS "stateName", s.name_ar AS "stateNameAr",
+              a.locality_name AS "localityName",
+              COALESCE(a.target::float, 0) AS target,
+              a.budget_planned::float AS "budgetPlanned",
+              a.budget_spent::float AS "budgetSpent"
+       FROM activities a
+       LEFT JOIN outputs o ON o.id = a.output_id
+       LEFT JOIN states s ON s.id = a.state_id
+       WHERE a.project_id = $1 ORDER BY a.code`,
+      [projectId],
+    );
+    return c.json(rows);
+  } finally {
+    close();
+  }
+});
+
+projectsRoutes.get("/projects/:projectId/indicators", async (c) => {
+  const projectId = Number(c.req.param("projectId"));
+  const user = c.get("currentUser");
+  const { db, close } = openDb(c);
+  try {
+    const effectiveSectors = await getProjectEffectiveSectors(db, projectId);
+    if (!effectiveSectors) return c.json({ error: "project not found" }, 404);
+    const guard = assertEffectiveSectorAllowedForProject(user, effectiveSectors.all);
+    if (!guard.ok) return c.json(guard.body, guard.status as any);
+    const stateGuard = await assertStateAllowed(db, user, projectId);
+    if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
+    const { rows } = await db.query(
+      `SELECT id, code, title, unit, target::float AS target, achieved::float AS achieved,
+              output_id AS "outputId", sector
+       FROM indicators WHERE project_id = $1 ORDER BY code`,
+      [projectId],
+    );
+    return c.json(rows);
+  } finally {
+    close();
+  }
+});
+
+// ── Project budget ────────────────────────────────────────────────────────────
+// PRJ-014: budget.view is the established read-only financial permission
+// shared by every legitimate budget reader (PM, SPC, TC own-sector, ED, SOM
+// own-state, SPO own-state, Viewer, Super Admin) — projects.update would
+// exclude ED and SOM, who hold budget.view but not projects.update.
+projectsRoutes.get("/projects/:projectId/budget", requirePerm("budget.view"), async (c) => {
+  const projectId = Number(c.req.param("projectId"));
+  const user = c.get("currentUser")!;
+  const { db, close } = openDb(c);
+  try {
+    const proj = await db.query<{ total: number; sector: string | null; sectors: string[] }>(
+      `SELECT budget_total::float AS total, sector, COALESCE(sectors,'[]'::jsonb)::jsonb AS sectors FROM projects WHERE id = $1 AND deleted_at IS NULL`,
+      [projectId],
+    );
+    if (proj.rows.length === 0) return c.json({ error: "project not found" }, 404);
+
+    const effectiveSectorsForBudget = [...new Set([
+      ...(proj.rows[0].sector ? [proj.rows[0].sector] : []),
+      ...(proj.rows[0].sectors ?? []),
+    ])];
+    const sectorGuardBudget = assertEffectiveSectorAllowedForProject(user, effectiveSectorsForBudget);
+    if (!sectorGuardBudget.ok) return c.json(sectorGuardBudget.body, sectorGuardBudget.status as any);
+
+    const stateGuardBudget = await assertStateAllowed(db, user, projectId);
+    if (!stateGuardBudget.ok) return c.json(stateGuardBudget.body, stateGuardBudget.status as any);
+
+    const total = proj.rows[0].total;
+    const outputs = await db.query<{ id: number; code: string; title: string }>(
+      `SELECT id, code, title FROM outputs WHERE project_id = $1 ORDER BY code`,
+      [projectId],
+    );
+    const activities = await db.query<{
+      id: number; outputId: number | null; code: string; title: string;
+      planned: number; spent: number; plannedStart: string | null; plannedEnd: string | null;
+    }>(
+      `SELECT id, output_id AS "outputId", code, title,
+              budget_planned::float AS planned, budget_spent::float AS spent,
+              planned_start AS "plannedStart", planned_end AS "plannedEnd"
+       FROM activities WHERE project_id = $1 ORDER BY code`,
+      [projectId],
+    );
+    const lines = outputs.rows.map((o) => {
+      const acts = activities.rows.filter((a) => a.outputId === o.id);
+      const planned = acts.reduce((s, a) => s + Number(a.planned), 0);
+      const spent = acts.reduce((s, a) => s + Number(a.spent), 0);
+      const remaining = planned - spent;
+      // Null (not 0) when there's no valid planned amount to divide by —
+      // a manufactured 0% would misread as "fully unspent".
+      const burn = planned > 0 ? Math.round((spent / planned) * 100) : null;
+      return {
+        id: o.id,
+        label: `${o.code} — ${o.title}`,
+        level: "output",
+        planned,
+        spent,
+        remaining,
+        burnRatePct: burn,
+        children: acts.map((a) => {
+          const ap = Number(a.planned);
+          const sp = Number(a.spent);
+          return {
+            id: a.id,
+            label: `${a.code} — ${a.title}`,
+            level: "activity",
+            planned: ap,
+            spent: sp,
+            remaining: ap - sp,
+            burnRatePct: ap > 0 ? Math.round((sp / ap) * 100) : null,
+          };
+        }),
+      };
+    });
+    // Sum ALL activities, not just those grouped under an existing output —
+    // output_id is nullable by design (standalone activities), and their
+    // spend must still count toward the project total.
+    const spent = activities.rows.reduce((s, a) => s + Number(a.spent), 0);
+    const remaining = total - spent;
+    const burnRatePct = total > 0 ? Math.round((spent / total) * 100) : null;
+    // ── Monthly burn chart — deterministic, derived from activity date ranges ──
+    // Distribute each activity's budget linearly across its planned_start →
+    // planned_end window and accumulate per calendar month.
+    const now = new Date();
+    const monthly = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+      const monthLabel = monthStart.toLocaleString("en", { month: "short", year: "2-digit" });
+      let cumulPlanned = 0;
+      let cumulActual = 0;
+      for (const a of activities.rows) {
+        if (!a.plannedStart || !a.plannedEnd) continue;
+        const actStart = new Date(a.plannedStart);
+        const actEnd = new Date(a.plannedEnd);
+        const durationMs = actEnd.getTime() - actStart.getTime();
+        if (durationMs <= 0) continue;
+        const cappedEnd = monthEnd < actEnd ? monthEnd : actEnd;
+        const elapsedMs = Math.max(0, cappedEnd.getTime() - actStart.getTime());
+        const frac = Math.min(1, elapsedMs / durationMs);
+        cumulPlanned += frac * Number(a.planned);
+        cumulActual += frac * Number(a.spent);
+      }
+      monthly.push({ month: monthLabel, planned: Math.round(cumulPlanned), actual: Math.round(cumulActual) });
+    }
+    const alerts: Array<{ level: string; message: string }> = [];
+    if (burnRatePct !== null && burnRatePct > 80) alerts.push({ level: "high", message: `Burn rate at ${burnRatePct}% — review remaining activities` });
+    for (const line of lines) {
+      if (line.burnRatePct !== null && line.burnRatePct > 90) alerts.push({ level: "high", message: `${line.label} overspending (${line.burnRatePct}%)` });
+      else if (line.burnRatePct !== null && line.burnRatePct < 20 && total > 0) alerts.push({ level: "medium", message: `${line.label} under-utilized (${line.burnRatePct}%)` });
+    }
+    return c.json({ projectId, total, spent, remaining, burnRatePct, lines, monthly, alerts });
+  } finally {
+    close();
+  }
+});
+
+// ── State Allocations ─────────────────────────────────────────────────────────
+// PRJ-005: budget.view covers all legitimate allocation readers, including ED
+// and SOM who lack projects.update but must read allocation data in scope.
+projectsRoutes.get("/projects/:projectId/state-allocations", requirePerm("budget.view"), async (c) => {
+  const projectId = Number(c.req.param("projectId"));
+  const user = c.get("currentUser")!;
+  const { db, close } = openDb(c);
+  try {
+    const scopeSectorAlloc = await getProjectEffectiveSectors(db, projectId);
+    if (!scopeSectorAlloc) return c.json({ error: "project not found" }, 404);
+    const sectorGuardAllocGet = assertEffectiveSectorAllowedForProject(user, scopeSectorAlloc.all);
+    if (!sectorGuardAllocGet.ok) return c.json(sectorGuardAllocGet.body, sectorGuardAllocGet.status as any);
+
+    const stateGuardAllocGet = await assertStateAllowed(db, user, projectId);
+    if (!stateGuardAllocGet.ok) return c.json(stateGuardAllocGet.body, stateGuardAllocGet.status as any);
+
+    // Row-level filter: State roles see only their own State's allocation row.
+    const isStateRole = user.role === "state_program_officer" || user.role === "state_office_manager";
+    const stateIdFilter = isStateRole ? (user.stateId ?? null) : null;
+    const params: unknown[] = [projectId];
+    let stateClause = "";
+    if (stateIdFilter !== null) {
+      params.push(stateIdFilter);
+      stateClause = ` AND psa.state_id = $${params.length}`;
+    }
+    const { rows } = await db.query(
+      `SELECT psa.id, psa.project_id AS "projectId", psa.state_id AS "stateId",
+              s.name AS "stateName", s.name_ar AS "stateNameAr",
+              COALESCE(psa.budget_allocation::float, 0) AS "budgetAllocation",
+              COALESCE(psa.beneficiary_target, 0) AS "beneficiaryTarget",
+              COALESCE(psa.beneficiary_male, 0) AS "beneficiaryMale",
+              COALESCE(psa.beneficiary_female, 0) AS "beneficiaryFemale",
+              COALESCE(psa.beneficiary_boys, 0) AS "beneficiaryBoys",
+              COALESCE(psa.beneficiary_girls, 0) AS "beneficiaryGirls",
+              COALESCE(psa.activity_target, 0) AS "activityTarget",
+              COALESCE(psa.indicator_target, 0) AS "indicatorTarget",
+              psa.state_lead AS "stateLead",
+              COALESCE(psa.state_team, '[]'::jsonb) AS "stateTeam",
+              psa.notes,
+              psa.created_at AS "createdAt",
+              psa.updated_at AS "updatedAt"
+       FROM project_state_allocations psa
+       JOIN states s ON s.id = psa.state_id
+       WHERE psa.project_id = $1${stateClause}
+       ORDER BY s.name`,
+      params,
+    );
+    return c.json(rows);
+  } finally {
+    close();
+  }
+});
+
+projectsRoutes.post("/projects/:projectId/state-allocations", requirePerm("projects.update"), async (c) => {
+  const user = c.get("currentUser")!;
+  const { allocations } = UpsertProjectStateAllocationsBody.parse(await c.req.json());
+  const projectId = Number(c.req.param("projectId"));
+  const { db, pool, close } = openDb(c);
+  const client = await pool.connect();
+  try {
+    // Sector and state scope guards (mirrors other project mutation endpoints).
+    const scopeSector = await getProjectEffectiveSectors(db, projectId);
+    if (!scopeSector) return c.json({ error: "project not found" }, 404);
+    const sectorGuardAlloc = assertEffectiveSectorAllowedForProject(user, scopeSector.all);
+    if (!sectorGuardAlloc.ok) return c.json(sectorGuardAlloc.body, sectorGuardAlloc.status as any);
+    const stateGuardAlloc = await assertStateAllowed(db, user, projectId);
+    if (!stateGuardAlloc.ok) return c.json(stateGuardAlloc.body, stateGuardAlloc.status as any);
+
+    // PRJ-033: every supplied stateId must be linked to this project via
+    // project_states. Full Operational Access (PM/Super Admin) does NOT
+    // bypass this — a PM cannot allocate to a state not linked to the project.
+    if (allocations && allocations.length > 0) {
+      const suppliedStateIds = allocations.map((a) => a.stateId);
+      const { rows: linkedStateRows } = await db.query<{ state_id: number }>(
+        `SELECT state_id FROM project_states WHERE project_id = $1 AND state_id = ANY($2::int[])`,
+        [projectId, suppliedStateIds],
+      );
+      const linkedStateIdSet = new Set(linkedStateRows.map((r) => r.state_id));
+      const unlinked = suppliedStateIds.find((sid) => !linkedStateIdSet.has(sid));
+      if (unlinked !== undefined) {
+        return c.json({ error: "project_state_not_linked", message: "The specified state is not linked to this project." }, 422);
+      }
+      // A pre-existing inactive project_state relationship remains readable
+      // for history, but this replace-all allocation write is new financial
+      // work and must not add or refresh funds against an inactive State.
+      for (const stateId of suppliedStateIds) {
+        const activeState = await assertActiveState(db, Number(stateId));
+        if (!activeState.ok) {
+          return c.json({ error: activeState.error, message: "State allocations can only be created for active States." }, 422);
+        }
+      }
+    }
+
+    for (const alloc of allocations ?? []) {
+      if ((alloc.budgetAllocation ?? 0) < 0) {
+        return c.json({ error: "invalid_allocation", message: "Budget allocation cannot be negative." }, 422);
+      }
+    }
+
+    const allocTotal = (allocations ?? []).reduce((s, a) => s + (a.budgetAllocation ?? 0), 0);
+
+    await client.query("BEGIN");
+    // BUD-BD-01: read the project budget INSIDE the transaction under a row
+    // lock so a concurrent budget PATCH or allocation replace cannot race
+    // past the cap check.
+    const { rows: projBudgetRows } = await client.query<{ budget: number }>(
+      `SELECT COALESCE(budget_total::float, 0) AS budget FROM projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+      [projectId],
+    );
+    if (!projBudgetRows.length) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "project not found" }, 404);
+    }
+    const projectBudget = projBudgetRows[0].budget;
+    // Over-allocation guard: unconditional — applies when budget_total = 0
+    // too, and actor-independent (PM/SA cannot bypass).
+    if (allocTotal > projectBudget) {
+      await client.query("ROLLBACK");
+      return c.json({
+        error: "over_allocation",
+        message: `Total state allocations (${allocTotal.toFixed(2)}) would exceed the project budget (${projectBudget.toFixed(2)}).`,
+      }, 422);
+    }
+    await client.query(`DELETE FROM project_state_allocations WHERE project_id = $1`, [projectId]);
+    for (const alloc of allocations ?? []) {
+      await client.query(
+        `INSERT INTO project_state_allocations
+           (project_id, state_id, budget_allocation, beneficiary_target,
+            beneficiary_male, beneficiary_female, beneficiary_boys, beneficiary_girls,
+            activity_target, indicator_target, state_lead, state_team, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)`,
+        [
+          projectId,
+          alloc.stateId,
+          alloc.budgetAllocation ?? 0,
+          alloc.beneficiaryTarget ?? 0,
+          alloc.beneficiaryMale ?? 0,
+          alloc.beneficiaryFemale ?? 0,
+          alloc.beneficiaryBoys ?? 0,
+          alloc.beneficiaryGirls ?? 0,
+          alloc.activityTarget ?? 0,
+          alloc.indicatorTarget ?? 0,
+          alloc.stateLead ?? null,
+          JSON.stringify(alloc.stateTeam ?? []),
+          alloc.notes ?? null,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+
+    // BUD audit: state allocation replacement is a financial mutation and must be traceable.
+    await logAudit(db, {
+      userId: user.id,
+      action: "state_allocations_replace",
+      module: "projects",
+      entityId: projectId,
+      newValue: JSON.stringify((allocations ?? []).map((a) => ({ stateId: a.stateId, budgetAllocation: a.budgetAllocation ?? null }))),
+    });
+    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+
+    // Return allocations scoped to the requesting state role (same semantics as GET).
+    const isStateRolePost = user.role === "state_program_officer" || user.role === "state_office_manager";
+    const stateIdFilterPost = isStateRolePost ? (user.stateId ?? null) : null;
+    const postParams: unknown[] = [projectId];
+    let postStateClause = "";
+    if (stateIdFilterPost !== null) {
+      postParams.push(stateIdFilterPost);
+      postStateClause = ` AND psa.state_id = $${postParams.length}`;
+    }
+
+    const { rows } = await client.query(
+      `SELECT psa.id, psa.project_id AS "projectId", psa.state_id AS "stateId",
+              s.name AS "stateName", s.name_ar AS "stateNameAr",
+              COALESCE(psa.budget_allocation::float, 0) AS "budgetAllocation",
+              COALESCE(psa.beneficiary_target, 0) AS "beneficiaryTarget",
+              COALESCE(psa.beneficiary_male, 0) AS "beneficiaryMale",
+              COALESCE(psa.beneficiary_female, 0) AS "beneficiaryFemale",
+              COALESCE(psa.beneficiary_boys, 0) AS "beneficiaryBoys",
+              COALESCE(psa.beneficiary_girls, 0) AS "beneficiaryGirls",
+              COALESCE(psa.activity_target, 0) AS "activityTarget",
+              COALESCE(psa.indicator_target, 0) AS "indicatorTarget",
+              psa.state_lead AS "stateLead",
+              COALESCE(psa.state_team, '[]'::jsonb) AS "stateTeam",
+              psa.notes,
+              psa.created_at AS "createdAt",
+              psa.updated_at AS "updatedAt"
+       FROM project_state_allocations psa
+       JOIN states s ON s.id = psa.state_id
+       WHERE psa.project_id = $1${postStateClause}
+       ORDER BY s.name`,
+      postParams,
+    );
+    return c.json(rows);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     throw err;
