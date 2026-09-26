@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { Link, useLocation } from "wouter";
+import { useState, useEffect, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -13,8 +13,6 @@ import {
   AlertTriangle,
   ShieldAlert,
   UserCog,
-  Menu,
-  X,
   CalendarClock,
   CheckCircle2,
   LogOut,
@@ -31,9 +29,12 @@ import {
   Bell,
   Settings,
   Archive,
-  Globe,
   Check,
 } from "lucide-react";
+import { AppLayout as ShellLayout } from "@heroui-pro/react/app-layout";
+import { Sidebar } from "@heroui-pro/react/sidebar";
+import { Navbar } from "@heroui-pro/react/navbar";
+import { Avatar, Breadcrumbs, Button, Dropdown, Label, RouterProvider, Separator, Tooltip, type Key } from "@heroui/react";
 import { LiveClock } from "@/components/live-clock";
 import { AIChatWidget } from "@/components/ai-chat-widget";
 import { CommandPalette } from "@/components/command-palette";
@@ -55,20 +56,7 @@ import {
   useListSwitcherUsers,
   getListSwitcherUsersQueryKey,
 } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useLanguage, type Language } from "@/contexts/language-context";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { MessagesDropdown } from "@/components/messages-dropdown";
 import { GlobalSearch } from "@/components/global-search";
@@ -76,12 +64,7 @@ import { GlobalLocationSelector } from "@/components/global-location-selector";
 import { GlobalLanguageSwitcher } from "@/components/global-language-switcher";
 import { useLocationContext } from "@/contexts/location-context";
 import { RecordDetailProvider } from "@/contexts/record-detail-context";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 /* ─── Static page title map (English — used only for recent-item storage) ─ */
 const STATIC_PAGE_TITLES: Record<string, string> = {
@@ -121,61 +104,186 @@ type NavEntry =
   | { kind: "group"; group: NavGroup }
   | { kind: "item"; item: NavItem };
 
+type ShellUser = { name?: string | null; email?: string | null; roleLabel?: string | null; avatarUrl?: string | null };
+
+function UserAvatar({ user, className = "size-7" }: { user: ShellUser | undefined; className?: string }) {
+  return (
+    <Avatar className={`shrink-0 ${className}`}>
+      {user?.avatarUrl && <Avatar.Image src={`/api/storage${user.avatarUrl}`} alt={user.name ?? ""} className="object-cover" />}
+      <Avatar.Fallback className="bg-primary text-primary-foreground text-xs font-semibold">
+        {user?.name?.substring(0, 2).toUpperCase() ?? "??"}
+      </Avatar.Fallback>
+    </Avatar>
+  );
+}
+
+/**
+ * Navigation tree shared by the desktop sidebar and the mobile sheet, so the
+ * two can never drift apart. Group labels and item labels hide automatically
+ * in the collapsed icon rail, where each item shows its label as a tooltip.
+ */
+function SidebarNavigation({
+  entries, location, expandedKeys, onExpandedChange, menuLabel,
+}: {
+  entries: NavEntry[];
+  location: string;
+  expandedKeys: Set<Key>;
+  onExpandedChange: (keys: Set<Key>) => void;
+  menuLabel: (entry: NavEntry) => string;
+}) {
+  return (
+    <>
+      {entries.map((entry) => {
+        const visibleItems = (entry.kind === "group" ? entry.group.items : [entry.item]).filter(Boolean);
+        if (visibleItems.length === 0) return null;
+        return (
+          <Sidebar.Group key={entry.kind === "group" ? entry.group.title : entry.item.href}>
+            {entry.kind === "group"
+              ? <Sidebar.GroupLabel data-testid="sidebar-group-heading">{entry.group.title}</Sidebar.GroupLabel>
+              : <Sidebar.Separator />}
+            <Sidebar.Menu aria-label={menuLabel(entry)} expandedKeys={expandedKeys} onExpandedChange={onExpandedChange}>
+              {visibleItems.map((item) => {
+                const hasChildren = !!item.children?.length;
+                const isDirectlyActive = location === item.href;
+                const isActive = isDirectlyActive || (item.href !== "/" && item.href !== "#" && location.startsWith(item.href));
+                return (
+                  <Sidebar.MenuItem
+                    key={item.href}
+                    id={item.href}
+                    href={item.href}
+                    textValue={item.label}
+                    isCurrent={hasChildren ? isDirectlyActive : isActive}
+                  >
+                    <Sidebar.MenuIcon><item.icon className="size-4" aria-hidden /></Sidebar.MenuIcon>
+                    <Sidebar.MenuLabel>
+                      {item.displayLabel ?? item.label}
+                      {hasChildren && (
+                        <Sidebar.MenuTrigger>
+                          <Sidebar.MenuIndicator />
+                        </Sidebar.MenuTrigger>
+                      )}
+                    </Sidebar.MenuLabel>
+                    {hasChildren && (
+                      <Sidebar.Submenu>
+                        {item.children!.map((c) => (
+                          <Sidebar.MenuItem key={c.href} id={c.href} href={c.href} textValue={c.label} isCurrent={location === c.href}>
+                            <Sidebar.MenuLabel>{c.label}</Sidebar.MenuLabel>
+                          </Sidebar.MenuItem>
+                        ))}
+                      </Sidebar.Submenu>
+                    )}
+                  </Sidebar.MenuItem>
+                );
+              })}
+            </Sidebar.Menu>
+          </Sidebar.Group>
+        );
+      })}
+    </>
+  );
+}
+
+/** Profile + explicit sign-out, at the foot of the desktop sidebar and the mobile sheet. */
+function SidebarAccount({
+  user, onLogout, isLoggingOut, labels,
+}: {
+  user: ShellUser;
+  onLogout: () => void;
+  isLoggingOut: boolean;
+  labels: { account: string; profile: string; signOut: string };
+}) {
+  return (
+    <Sidebar.Menu aria-label={labels.account}>
+      <Sidebar.MenuItem id="profile" href="/profile" textValue={labels.profile} tooltip={user.name ?? labels.profile}>
+        <Sidebar.MenuIcon><UserAvatar user={user} className="size-5" /></Sidebar.MenuIcon>
+        <Sidebar.MenuLabel>
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-[12px] font-medium text-foreground">{user.name}</span>
+            <span className="truncate text-[10px] text-muted-foreground">{user.roleLabel}</span>
+          </span>
+        </Sidebar.MenuLabel>
+      </Sidebar.MenuItem>
+      <Sidebar.MenuItem
+        id="sign-out"
+        textValue={labels.signOut}
+        onAction={onLogout}
+        isDisabled={isLoggingOut}
+        data-testid="sidebar-footer-logout"
+      >
+        <Sidebar.MenuIcon><LogOut className="size-4" aria-hidden /></Sidebar.MenuIcon>
+        <Sidebar.MenuLabel>{labels.signOut}</Sidebar.MenuLabel>
+      </Sidebar.MenuItem>
+    </Sidebar.Menu>
+  );
+}
+
+/**
+ * Location scope picker for the mobile sheet (HQ-eligible roles only). The
+ * header GlobalLocationSelector is hidden below md, where this replaces it.
+ */
+function MobileLocationPicker() {
+  const locationCtx = useLocationContext();
+  const { t: tCommon, i18n } = useTranslation("common");
+  const [mobilePicker, setMobilePicker] = useState(false);
+  if (!locationCtx.isEditable) return null;
+  const selectedLabel = locationCtx.selectedStateId != null
+    ? (() => { const state = locationCtx.authorisedStates.find(s => s.id === locationCtx.selectedStateId); return state ? getStateLabel(state, i18n?.language) : tCommon("locationContext.allLocations"); })()
+    : tCommon("locationContext.allLocations");
+  return (
+    <div className="border-t border-sidebar-border px-2 py-2" data-testid="mobile-location-selector">
+      <button
+        type="button"
+        aria-label={`${tCommon("locationContext.activeLocation")}: ${selectedLabel}. ${tCommon("locationContext.changeLocation")}`}
+        aria-expanded={mobilePicker}
+        aria-haspopup="listbox"
+        onClick={() => setMobilePicker(p => !p)}
+        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 min-h-[36px] text-start hover:bg-accent/50 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      >
+        <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+        <span className="flex-1 min-w-0 text-[12px] font-medium text-foreground/80 truncate">{selectedLabel}</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-150 ${mobilePicker ? "rotate-180" : ""}`} aria-hidden="true" />
+      </button>
+      {mobilePicker && (
+        <div role="listbox" aria-label={tCommon("locationContext.label")} className="mt-1 max-h-52 overflow-y-auto rounded-md border border-border/60 bg-card shadow-sm">
+          {[{ id: null as number | null, label: tCommon("locationContext.allLocations") }, ...locationCtx.authorisedStates.map(state => ({ id: state.id as number | null, label: getStateLabel(state, i18n?.language) }))].map(option => {
+            const selected = locationCtx.selectedStateId === option.id;
+            return (
+              <button
+                key={option.id ?? "all"}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-[12px] text-start transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50 ${selected ? "font-semibold text-primary" : "text-foreground/70"}`}
+                onClick={() => { locationCtx.setSelectedStateId(option.id); setMobilePicker(false); }}
+              >
+                {selected ? <Check className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" /> : <span className="h-3 w-3 shrink-0" aria-hidden="true" />}
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main layout ────────────────────────────────────────────────────── */
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Persisted desktop preference for the icon rail (same key as before the
+  // HeroUI Pro shell, so existing users keep their choice).
   const [collapsed, setCollapsed] = useState(() =>
     typeof window !== "undefined" && localStorage.getItem("cafa.sidebarCollapsed") === "true"
   );
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches
-  );
-  const [scrolled, setScrolled] = useState(false);
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-  // A persisted desktop rail preference must never reduce the touch drawer to icons.
-  const sidebarCollapsed = collapsed && !isNarrowViewport;
-
-  const toggleExpanded = (href: string) => {
-    setExpandedItems(prev => {
-      const next = new Set(prev);
-      if (next.has(href)) next.delete(href); else next.add(href);
-      return next;
-    });
+  const sidebarCollapsed = collapsed;
+  const setSidebarOpen = (open: boolean) => {
+    setCollapsed(!open);
+    localStorage.setItem("cafa.sidebarCollapsed", String(!open));
   };
+  const [expandedKeys, setExpandedKeys] = useState<Set<Key>>(new Set());
   const [location, navigate] = useLocation();
   const [desktopView, setDesktopView] = useState(() =>
     typeof window !== "undefined" && localStorage.getItem("cafa.desktopView") === "true"
   );
-  const mainRef = useRef<HTMLElement>(null);
-
-  // Auto-close mobile drawer on route change
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [location]);
-
-  // Keep the visual rail state aligned with Tailwind's lg breakpoint.
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 1023px)");
-    const syncViewport = () => setIsNarrowViewport(media.matches);
-    syncViewport();
-    media.addEventListener("change", syncViewport);
-    return () => media.removeEventListener("change", syncViewport);
-  }, []);
-
-  // Track scroll position on main content for header shadow
-  useEffect(() => {
-    const el = mainRef.current;
-    if (!el) return;
-    const onScroll = () => setScrolled(el.scrollTop > 4);
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // Lock body scroll while mobile drawer is open
-  useEffect(() => {
-    document.body.style.overflow = sidebarOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [sidebarOpen]);
 
   // Apply desktop-view viewport override
   useEffect(() => {
@@ -198,21 +306,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
 
   const { t: tNav } = useTranslation("nav");
-  const { t: tCommon, i18n } = useTranslation("common");
+  const { t: tCommon } = useTranslation("common");
   const { lang, setLang, direction } = useLanguage();
 
-  // Direction-aware icons
-  // In RTL: collapse points right (toward the sidebar), breadcrumb sep points left
-  const CollapseIcon  = direction === "rtl" ? ChevronRight : ChevronLeft;
-  const BreadcrumbSep = direction === "rtl" ? ChevronLeft  : ChevronRight;
-  const SidebarExpandChevron = direction === "rtl" ? ChevronLeft : ChevronRight;
-  const sidebarTooltipSide = direction === "rtl" ? "left" : "right";
-  // `start-full` opens inward: it is left:100% in LTR and right:100% in RTL.
-  const sidebarLogoutTooltipPosition = "start-full ms-2";
+  // Direction-aware shell: HeroUI Pro positions the sidebar physically
+  // (sidebarSide), so it follows the reading direction explicitly.
+  const isRtl = direction === "rtl";
+  const BreadcrumbSep = isRtl ? ChevronLeft : ChevronRight;
 
   const { data: meData } = useGetMe();
-  const locationCtx = useLocationContext();
-  const [mobilePicker, setMobilePicker] = useState(false);
   const { record } = useRecentItems();
   const { socket } = useSocket();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -436,579 +538,157 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return crumbs;
   }, [location, routeTitleMap, tNav]);
 
+  // A Reports child route keeps its parent expanded, as before.
+  const reportsChildActive = location.startsWith("/reports/");
+  const effectiveExpandedKeys = useMemo(
+    () => (reportsChildActive ? new Set<Key>([...expandedKeys, "/reports"]) : expandedKeys),
+    [expandedKeys, reportsChildActive],
+  );
+  const navMenuLabel = (entry: NavEntry) => (entry.kind === "group" ? entry.group.title : entry.item.label);
+  const accountLabels = { account: tNav("user.myProfile"), profile: tNav("user.myProfile"), signOut: tNav("user.signOut") };
+
+  // In the icon rail the title hides (data-sidebar="label") and the logo
+  // carries the product name as a tooltip instead.
+  const brand = (
+    <Sidebar.Tooltip content={tNav("tooltips.platformName")} placement={isRtl ? "left" : "right"}>
+      <div className="flex min-w-0 items-center gap-2.5 px-1 py-1.5">
+        <img src={cafaLogo} alt={tNav("brand.name")} className="size-8 shrink-0 object-contain" />
+        <p data-testid="sidebar-brand-title" data-sidebar="label" className="whitespace-nowrap text-[16px] font-medium leading-tight tracking-tight text-foreground">{tNav("brand.name")}</p>
+      </div>
+    </Sidebar.Tooltip>
+  );
+  const navigation = (
+    <SidebarNavigation
+      entries={navEntries}
+      location={location}
+      expandedKeys={effectiveExpandedKeys}
+      onExpandedChange={setExpandedKeys}
+      menuLabel={navMenuLabel}
+    />
+  );
+
+  const onUserMenuAction = (key: Key) => {
+    if (key === "profile") navigate("/profile");
+    else if (key === "notification-preferences") navigate("/notification-preferences");
+    else if (key === "install") void install();
+    else if (key === "lang-en") setLang("en");
+    else if (key === "lang-ar") setLang("ar");
+    else if (key === "sign-out") void handleLogout();
+    else if (typeof key === "string" && key.startsWith("switch-")) handleRoleSwitch(Number(key.slice("switch-".length)));
+  };
+
   return (
     <RecordDetailProvider>
     <TooltipProvider delayDuration={200}>
-      <div className="flex h-screen overflow-hidden bg-background text-foreground">
-
-        {/* ── Mobile overlay ─────────────────────────────────────── */}
-        <div
-          className={`fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] lg:hidden transition-opacity duration-200
-            ${sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-
-        {/* ══════════════════════════════════════════════════════════
-            SIDEBAR — White, rounded active items
-            ══════════════════════════════════════════════════════════ */}
-        <aside
-          className={`
-            fixed inset-y-0 z-50 flex flex-col bg-sidebar border-sidebar-border
-            start-0 border-e
-            transition-all duration-300 ease-in-out
-            lg:static lg:sticky lg:top-0 lg:h-screen lg:self-start lg:translate-x-0
-            ${sidebarOpen ? "" : "max-lg:-translate-x-full max-lg:rtl:translate-x-full"}
-            ${sidebarCollapsed ? "w-[60px]" : "w-[212px]"}
-          `}
-        >
-          {/* ── Logo / brand ──────────────────────────────────────── */}
-          <div className={`relative flex shrink-0 items-center border-b border-sidebar-border ${sidebarCollapsed ? "h-16 justify-center px-2" : "h-16 px-3"}`}>
-            {sidebarCollapsed ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => { setCollapsed(false); localStorage.setItem("cafa.sidebarCollapsed", "false"); }}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-                    aria-label={tNav("tooltips.expandSidebar")}
-                  >
-                    <img src={cafaLogo} alt={tNav("brand.name")} className="h-8 w-8 object-contain" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side={sidebarTooltipSide} sideOffset={8} className="w-max whitespace-nowrap font-medium">{tNav("tooltips.platformName")}</TooltipContent>
-              </Tooltip>
-            ) : (
-              <div className="flex min-w-0 items-center gap-2.5 pe-10">
-                <img src={cafaLogo} alt={tNav("brand.name")} className="h-9 w-9 shrink-0 object-contain" />
-                <p data-testid="sidebar-brand-title" className="whitespace-nowrap text-[16px] font-medium leading-tight tracking-tight text-foreground">{tNav("brand.name")}</p>
-              </div>
-            )}
-            {/* Mobile: close drawer  |  Desktop: collapse to icon rail */}
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(false)}
-              className="absolute end-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar lg:hidden"
-              aria-label={tNav("tooltips.closeMenu")}
-            >
-              <X className="h-4 w-4" />
-            </button>
-            {!sidebarCollapsed && (
-                <button
-                  type="button"
-                  onClick={() => { setCollapsed(true); localStorage.setItem("cafa.sidebarCollapsed", "true"); }}
-                  className="absolute end-3 top-1/2 hidden h-8 w-8 -translate-y-1/2 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar lg:flex"
-                  aria-label={tNav("tooltips.collapseSidebar")}
-                >
-                  <CollapseIcon className="h-4 w-4" />
-                </button>
-            )}
-          </div>
-
-          {/* ── Nav ───────────────────────────────────────────────── */}
-          <nav className="flex-1 min-h-0 overflow-y-auto px-2.5 py-3 [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-sidebar-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/25" style={{ scrollbarWidth: "thin", scrollbarColor: "hsl(var(--cafa-border)) transparent" }}>
-            {navEntries.map((entry) => {
-              const visibleItems = (entry.kind === "group" ? entry.group.items : [entry.item]).filter(Boolean);
-              if (visibleItems.length === 0) return null;
-              return (
-                <div key={entry.kind === "group" ? entry.group.title : entry.item.href} className="mb-4 last:mb-0">
-                  {entry.kind === "group" && !sidebarCollapsed && (
-                    <p data-testid="sidebar-group-heading" className="mb-2 px-2 text-[10px] font-medium uppercase leading-none tracking-[0.12em] text-sidebar-foreground/55 select-none">
-                      {entry.group.title}
-                    </p>
-                  )}{entry.kind === "group" && sidebarCollapsed && <div className="my-2 border-t border-sidebar-border" />}
-                  <div className="space-y-0.5">
-                    {visibleItems.map((item) => {
-                      const hasChildren = !!item.children?.length;
-                      const isDirectlyActive = location === item.href;
-                      const hasActiveChild = hasChildren &&
-                        !!item.children?.some(c => location === c.href || (c.href !== "/" && location.startsWith(c.href)));
-                      const isActive =
-                        isDirectlyActive ||
-                        (item.href !== "/" && item.href !== "#" && location.startsWith(item.href));
-                      const isExpanded = hasChildren && (expandedItems.has(item.href) || hasActiveChild);
-
-                      const iconEl = (
-                        <item.icon className={`shrink-0 h-4 w-4 ${
-                          (isDirectlyActive && !hasActiveChild) ? "text-primary" :
-                          hasActiveChild ? "text-primary/80" :
-                          isActive ? "text-primary" : "opacity-60"
-                        }`} />
-                      );
-
-                      const handleClick = item.onClick
-                        ? (e: React.MouseEvent) => { e.preventDefault(); item.onClick!(); }
-                        : undefined;
-
-                      // ── Collapsed mode: icon + tooltip ────────────────
-                      if (sidebarCollapsed) {
-                        return (
-                          <Tooltip key={item.href + item.label}>
-                            <TooltipTrigger asChild>
-                              <Link
-                                href={item.href}
-                                onClick={handleClick}
-                                aria-current={isDirectlyActive ? "page" : hasActiveChild ? "location" : undefined}
-                                className={[
-                                  "flex min-h-9 items-center justify-center rounded-lg px-2 transition-colors duration-150 ease-out w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                                  isActive
-                                    ? "bg-sidebar-primary/10 text-sidebar-primary font-medium"
-                                    : "text-sidebar-foreground/70 font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                ].join(" ")}
-                              >
-                                {iconEl}
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent side={sidebarTooltipSide} sideOffset={8} className="w-max whitespace-nowrap font-medium">{item.label}</TooltipContent>
-                          </Tooltip>
-                        );
-                      }
-
-                      // ── Expanded mode with children: split link + chevron ──
-                      if (hasChildren) {
-                        const parentRowCls = hasActiveChild
-                          ? "bg-sidebar-primary/5 text-sidebar-primary"
-                          : (isDirectlyActive && !hasActiveChild)
-                          ? "bg-sidebar-primary/10 text-sidebar-primary font-medium"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
-
-                        return (
-                          <div key={item.href + item.label}>
-                            <div
-                              className={`flex min-h-9 items-center rounded-lg transition-colors duration-150 ease-out ${parentRowCls}`}
-                            >
-                              <Link
-                                href={item.href}
-                                onClick={handleClick}
-                                aria-current={isDirectlyActive ? "page" : undefined}
-                                className={[
-                                   "flex h-full min-w-0 flex-1 items-center gap-2 rounded-s-lg px-2.5 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40",
-                                   "font-medium",
-                                ].join(" ")}
-                                title={item.label}
-                              >
-                                {iconEl}
-                                <span className="truncate">{item.displayLabel ?? item.label}</span>
-                              </Link>
-                              <button
-                                type="button"
-                                onClick={() => toggleExpanded(item.href)}
-                                aria-expanded={isExpanded}
-                                aria-label={isExpanded
-                                  ? tNav("commandPalette.submenu.collapse", { label: item.label })
-                                  : tNav("commandPalette.submenu.expand",   { label: item.label })}
-                                className={[
-                                  "shrink-0 flex items-center justify-center w-6 h-6 me-1.5 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                                   hasActiveChild
-                                     ? "text-sidebar-primary/70 hover:text-sidebar-primary hover:bg-sidebar-accent"
-                                    : (isDirectlyActive && !hasActiveChild)
-                                     ? "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                                     : "text-sidebar-foreground/50 hover:text-sidebar-foreground",
-                                ].join(" ")}
-                              >
-                                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none ${isExpanded ? "rotate-0" : "-rotate-90"}`} />
-                              </button>
-                            </div>
-                            {isExpanded && (
-                               <div className="mb-1 ms-[22px] mt-1 space-y-0.5 border-s border-sidebar-border/60 ps-2.5">
-                                {item.children!.map((c) => {
-                                  const childActive = location === c.href;
-                                  return (
-                                    <Link
-                                      key={c.href}
-                                      href={c.href}
-                                        aria-current={childActive ? "page" : undefined}
-                                      title={c.label.length > 22 ? c.label : undefined}
-                                      className={[
-                                        "flex items-center rounded-md px-2 min-h-[32px] py-0.5 text-[12px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 truncate",
-                                         childActive
-                                           ? "bg-sidebar-primary/10 text-sidebar-primary font-medium"
-                                           : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                      ].join(" ")}
-                                    >
-                                      {c.label}
-                                    </Link>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      // ── Expanded mode without children: normal link ────
-                      return (
-                        <Link
-                          key={item.href + item.label}
-                          href={item.href}
-                          onClick={handleClick}
-                          aria-current={isActive ? "page" : undefined}
-                          title={item.label}
-                          className={[
-                             "flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
-                            isActive
-                               ? "bg-sidebar-primary/10 text-sidebar-primary font-medium"
-                               : "text-sidebar-foreground/70 font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                          ].join(" ")}
-                        >
-                          {iconEl}
-                          <span className="truncate">{item.displayLabel ?? item.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </nav>
-
-          {/* ── Mobile location selector — HQ-eligible roles only ────── */}
-          {/* Hidden on desktop (lg+) — the header GlobalLocationSelector handles desktop.
-              State-scoped roles (isEditable=false) see nothing — matching desktop behaviour. */}
-          {locationCtx.isEditable && !sidebarCollapsed && (
-            <div
-              className="lg:hidden shrink-0 border-t border-sidebar-border px-2 py-2"
-              data-testid="mobile-location-selector"
-            >
-              <button
-                type="button"
-                aria-label={`${tCommon("locationContext.activeLocation")}: ${
-                  locationCtx.selectedStateId != null
-                    ? (() => { const state = locationCtx.authorisedStates.find(s => s.id === locationCtx.selectedStateId); return state ? getStateLabel(state, i18n?.language) : ""; })()
-                    : tCommon("locationContext.allLocations")
-                }. ${tCommon("locationContext.changeLocation")}`}
-                aria-expanded={mobilePicker}
-                aria-haspopup="listbox"
-                onClick={() => setMobilePicker(p => !p)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 min-h-[36px] text-start hover:bg-accent/50 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              >
-                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-                <span className="flex-1 min-w-0 text-[12px] font-medium text-foreground/80 truncate">
-                  {locationCtx.selectedStateId != null
-                    ? (() => { const state = locationCtx.authorisedStates.find(s => s.id === locationCtx.selectedStateId); return state ? getStateLabel(state, i18n?.language) : tCommon("locationContext.allLocations"); })()
-                    : tCommon("locationContext.allLocations")}
-                </span>
-                <ChevronDown
-                  className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-150 ${mobilePicker ? "rotate-180" : ""}`}
-                  aria-hidden="true"
-                />
-              </button>
-
-              {mobilePicker && (
-                <div
-                  role="listbox"
-                  aria-label={tCommon("locationContext.label")}
-                  className="mt-1 max-h-52 overflow-y-auto rounded-md border border-border/60 bg-card shadow-sm"
-                >
-                  {/* All Locations option */}
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={locationCtx.selectedStateId === null}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-[12px] text-start transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50 ${
-                      locationCtx.selectedStateId === null ? "font-semibold text-primary" : "text-foreground/70"
-                    }`}
-                    onClick={() => { locationCtx.setSelectedStateId(null); setMobilePicker(false); }}
-                  >
-                    {locationCtx.selectedStateId === null && <Check className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />}
-                    {locationCtx.selectedStateId !== null && <span className="h-3 w-3 shrink-0" aria-hidden="true" />}
-                    {tCommon("locationContext.allLocations")}
-                  </button>
-                  {/* State list */}
-                  {locationCtx.authorisedStates.map(state => (
-                    <button
-                      key={state.id}
-                      type="button"
-                      role="option"
-                      aria-selected={locationCtx.selectedStateId === state.id}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-[12px] text-start transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50 ${
-                        locationCtx.selectedStateId === state.id ? "font-semibold text-primary" : "text-foreground/70"
-                      }`}
-                      onClick={() => { locationCtx.setSelectedStateId(state.id); setMobilePicker(false); }}
-                    >
-                      {locationCtx.selectedStateId === state.id && <Check className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />}
-                      {locationCtx.selectedStateId !== state.id && <span className="h-3 w-3 shrink-0" aria-hidden="true" />}
-                      {getStateLabel(state, i18n?.language)}
-                    </button>
-                  ))}
-                </div>
+    {/* Every React Aria link in the shell and the pages (sidebar, navbar,
+        breadcrumbs, menus) routes through wouter instead of reloading. */}
+    <RouterProvider navigate={navigate}>
+      <ShellLayout
+        navigate={navigate}
+        sidebarSide={isRtl ? "right" : "left"}
+        sidebarOpen={!sidebarCollapsed}
+        onSidebarOpenChange={setSidebarOpen}
+        scrollMode="content"
+        sidebar={
+          <>
+            <Sidebar>
+              <Sidebar.Header>{brand}</Sidebar.Header>
+              <Sidebar.Content>{navigation}</Sidebar.Content>
+              {meData?.user && (
+                <Sidebar.Footer>
+                  <SidebarAccount user={meData.user} onLogout={handleLogout} isLoggingOut={isLoggingOut} labels={accountLabels} />
+                </Sidebar.Footer>
               )}
-            </div>
-          )}
-
-          {meData?.user && (
-            <div className={`shrink-0 border-t border-sidebar-border ${sidebarCollapsed ? "flex flex-col items-center gap-1 py-2" : "px-2 py-2"}`}>
-              {sidebarCollapsed ? (
-                <>
-                  {/* Collapsed: avatar keeps the profile/language menu, with a separate logout control. */}
-                  <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-sidebar-accent focus:outline-none focus:ring-2 focus:ring-ring"
-                      aria-label={`${meData.user.name ?? "User"} — ${tNav("user.myProfile")}`}
-                    >
-                      <Avatar className="h-7 w-7 shrink-0">
-                        {meData.user.avatarUrl && <AvatarImage src={`/api/storage${meData.user.avatarUrl}`} alt={meData.user.name ?? ""} className="object-cover" />}
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                          {meData.user.name?.substring(0, 2).toUpperCase() ?? "??"}
-                        </AvatarFallback>
-                      </Avatar>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent side="right" align="end" className="w-52">
-                    <DropdownMenuLabel className="font-normal py-2.5">
-                      <p className="text-sm font-semibold text-foreground">{meData.user.name}</p>
-                      <p className="text-xs text-muted-foreground">{meData.user.roleLabel}</p>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/profile" className="cursor-pointer flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        {tNav("user.myProfile")}
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {/* Language switcher */}
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="cursor-pointer">
-                        <Globe className="h-4 w-4 me-2 text-muted-foreground" />
-                        {tNav("language.switch")}
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent>
-                        {(["en", "ar"] as Language[]).map((code) => (
-                          <DropdownMenuItem
-                            key={code}
-                            onSelect={() => setLang(code)}
-                            className="cursor-pointer gap-2"
-                          >
-                            <Check className={`h-3.5 w-3.5 shrink-0 ${lang === code ? "opacity-100" : "opacity-0"}`} />
-                            {code === "en" ? tNav("language.en") : tNav("language.ar")}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={handleLogout}
-                      disabled={isLoggingOut}
-                      data-testid="mobile-sidebar-logout"
-                      className="cursor-pointer text-destructive focus:text-destructive"
-                    >
-                      <LogOut className="h-4 w-4 me-2" />
-                      {tNav("user.signOut")}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                  </DropdownMenu>
-                <div className="group relative">
-                      <button
-                        type="button"
-                        onClick={handleLogout}
-                      disabled={isLoggingOut}
-                      data-testid="sidebar-rail-logout"
-                      aria-describedby="sidebar-logout-tooltip"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        aria-label={tNav("user.signOut")}
-                        title={tNav("user.signOut")}
-                      >
-                        <LogOut className="h-4 w-4" />
-                      </button>
-                  <span
-                    id="sidebar-logout-tooltip"
-                    role="tooltip"
-                    className={`pointer-events-none absolute top-1/2 z-[60] -translate-y-1/2 whitespace-nowrap rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground opacity-0 shadow-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${sidebarLogoutTooltipPosition}`}
-                  >
-                    {tNav("user.signOut")}
-                  </span>
-                </div>
-                </>
-              ) : (
-                <div className="space-y-1">
-                {/* Expanded: user identity menu followed by an explicit logout action. */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition-colors duration-150 hover:bg-sidebar-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                      aria-label={`${meData.user.name ?? "User"} — ${tNav("user.myProfile")}`}
-                      title={meData.user.name && meData.user.name.length > 20 ? meData.user.name : undefined}
-                    >
-                      <Avatar className="h-7 w-7 shrink-0">
-                        {meData.user.avatarUrl && <AvatarImage src={`/api/storage${meData.user.avatarUrl}`} alt={meData.user.name ?? ""} className="object-cover" />}
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                          {meData.user.name?.substring(0, 2).toUpperCase() ?? "??"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12px] font-medium leading-tight text-foreground">{meData.user.name}</p>
-                        <p className="mt-[1px] truncate text-[10px] leading-tight text-muted-foreground/70">{meData.user.roleLabel}</p>
-                      </div>
-                      <SidebarExpandChevron className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent side="top" align="start" sideOffset={6} className="w-56">
-                    <DropdownMenuLabel className="font-normal py-2.5">
-                      <p className="truncate text-sm font-medium text-foreground">{meData.user.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">{meData.user.roleLabel}</p>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/profile" className="cursor-pointer flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        {tNav("user.myProfile")}
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {/* Language switcher */}
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="cursor-pointer">
-                        <Globe className="h-4 w-4 me-2 text-muted-foreground" />
-                        {tNav("language.switch")}
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent>
-                        {(["en", "ar"] as Language[]).map((code) => (
-                          <DropdownMenuItem
-                            key={code}
-                            onSelect={() => setLang(code)}
-                            className="cursor-pointer gap-2"
-                          >
-                            <Check className={`h-3.5 w-3.5 shrink-0 ${lang === code ? "opacity-100" : "opacity-0"}`} />
-                            {code === "en" ? tNav("language.en") : tNav("language.ar")}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={handleLogout}
-                      disabled={isLoggingOut}
-                      data-testid="sidebar-profile-logout"
-                      className="cursor-pointer text-destructive focus:text-destructive"
-                    >
-                      <LogOut className="h-4 w-4 me-2" />
-                      {tNav("user.signOut")}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    disabled={isLoggingOut}
-                    data-testid="sidebar-footer-logout"
-                    className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label={tNav("user.signOut")}
-                  >
-                    <LogOut className="h-4 w-4 shrink-0" />
-                    <span>{tNav("user.signOut")}</span>
-                  </button>
-                </div>
+              <Sidebar.Rail />
+            </Sidebar>
+            <Sidebar.Mobile>
+              <Sidebar.Header>{brand}</Sidebar.Header>
+              <Sidebar.Content>{navigation}</Sidebar.Content>
+              <MobileLocationPicker />
+              {meData?.user && (
+                <Sidebar.Footer>
+                  <SidebarAccount user={meData.user} onLogout={handleLogout} isLoggingOut={isLoggingOut} labels={accountLabels} />
+                </Sidebar.Footer>
               )}
-            </div>
-          )}
-        </aside>
+            </Sidebar.Mobile>
+          </>
+        }
+        navbar={
+          <Navbar maxWidth="full">
+            <Navbar.Header className="gap-3">
+              <ShellLayout.MenuToggle aria-label={tNav("tooltips.openMenu")} />
+              <Sidebar.Trigger aria-label={sidebarCollapsed ? tNav("tooltips.expandSidebar") : tNav("tooltips.collapseSidebar")} />
 
-        {/* ══════════════════════════════════════════════════════════
-            MAIN CONTENT AREA
-            ══════════════════════════════════════════════════════════ */}
-        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-
-          {/* ══════════════════════════════════════════════════════
-              HEADER — sticky, clean, premium
-              ══════════════════════════════════════════════════════ */}
-          <header className={`
-            sticky top-0 z-30 flex h-[72px] shrink-0 items-center justify-between
-            bg-background/95 backdrop-blur-sm border-b border-border
-            px-4 sm:px-6 gap-4 transition-shadow duration-200
-            ${scrolled ? "shadow-sm" : ""}
-          `}>
-
-            {/* Left: hamburger (mobile) + breadcrumb/title */}
-            <div className="flex items-center gap-3 min-w-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-colors duration-150"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-              >
-                {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              </Button>
-
-              {/* Breadcrumb — show on md+, plain title on mobile */}
+              {/* Breadcrumb on md+ for nested routes, plain title otherwise */}
               <div className="min-w-0">
                 {breadcrumbs.length > 2 ? (
-                  <nav className="hidden md:flex items-center gap-1 text-sm" aria-label={tCommon("breadcrumb")}>
+                  <Breadcrumbs
+                    className="hidden md:flex"
+                    aria-label={tCommon("breadcrumb")}
+                    separator={<BreadcrumbSep className="h-3 w-3 text-muted-foreground/40 shrink-0" aria-hidden />}
+                  >
                     {breadcrumbs.map((crumb, i) => (
-                      <span key={i} className="flex items-center gap-1">
-                        {i > 0 && <BreadcrumbSep className="h-3 w-3 text-muted-foreground/40 shrink-0" />}
-                        {crumb.href ? (
-                          <Link href={crumb.href} className="text-sm text-muted-foreground/70 hover:text-foreground transition-colors duration-150 truncate max-w-[120px]">
-                            {crumb.label}
-                          </Link>
-                        ) : (
-                          <span className="text-sm font-semibold text-foreground truncate max-w-[160px]">{crumb.label}</span>
-                        )}
-                      </span>
+                      <Breadcrumbs.Item key={i} href={crumb.href} className={crumb.href ? "max-w-[120px] truncate text-sm text-muted-foreground/70" : "max-w-[160px] truncate text-sm font-semibold text-foreground"}>
+                        {crumb.label}
+                      </Breadcrumbs.Item>
                     ))}
-                  </nav>
+                  </Breadcrumbs>
                 ) : null}
                 <h1 className={`font-semibold text-foreground truncate leading-tight ${breadcrumbs.length > 2 ? "text-sm md:hidden" : "text-[15px]"}`}>
                   {pageTitle}
                 </h1>
               </div>
 
-              {/* Live date & time — desktop/tablet only (hidden on mobile) */}
-              {/* border-s/ps-3/ms-0.5: logical start border/padding/margin */}
+              {/* Live date & time — desktop/tablet only */}
               <div className="hidden md:flex items-center gap-2 shrink-0 border-s border-border/40 ps-3 ms-0.5">
                 <LiveClock timezone={(meData?.user as unknown as Record<string, string | undefined>)?.timezone} />
               </div>
-            </div>
 
-            {/* Center: search */}
-            <div className="hidden md:flex flex-1 max-w-[420px] mx-4">
-              <GlobalSearch />
-            </div>
-
-            {/* Right: actions */}
-            <div className="flex items-center gap-0.5 shrink-0">
-
-              <GlobalLanguageSwitcher />
-
-              {/* Global location scope selector — HQ roles only, hidden on mobile */}
-              <div className="hidden md:flex me-1">
-                <GlobalLocationSelector />
+              {/* Search — takes the free space between title and actions, centred */}
+              <div className="hidden md:flex min-w-0 flex-1 justify-center px-2">
+                <div className="w-full max-w-[420px]">
+                  <GlobalSearch />
+                </div>
               </div>
 
-              {/* Notification bell */}
-              <NotificationsBell />
+              <div className="flex items-center gap-0.5 shrink-0">
+                <GlobalLanguageSwitcher />
 
-              {/* Messages */}
-              <MessagesDropdown />
+                {/* Global location scope selector — HQ roles only, hidden on mobile */}
+                <div className="hidden md:flex me-1">
+                  <GlobalLocationSelector />
+                </div>
 
-              {/* Desktop View toggle */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 lg:hidden text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-colors duration-150"
-                    onClick={toggleDesktopView}
-                    aria-label={desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
-                  >
-                    <MonitorSmartphone className={`h-4 w-4 ${desktopView ? "text-primary" : ""}`} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
-                </TooltipContent>
-              </Tooltip>
+                <NotificationsBell />
+                <MessagesDropdown />
 
-              {/* Sync status */}
-              {syncBadgeCount > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
+                {/* Desktop View toggle (touch/narrow viewports) */}
+                <Tooltip delay={200}>
+                  <Tooltip.Trigger>
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="ghost"
+                      className="lg:hidden"
+                      onPress={toggleDesktopView}
+                      aria-label={desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
+                    >
+                      <MonitorSmartphone className={`h-4 w-4 ${desktopView ? "text-primary" : ""}`} />
+                    </Button>
+                  </Tooltip.Trigger>
+                  <Tooltip.Content placement="bottom">{desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}</Tooltip.Content>
+                </Tooltip>
+
+                {/* Sync status */}
+                {syncBadgeCount > 0 && (
+                  <Tooltip delay={200}>
+                    <Tooltip.Trigger>
                       <Button
+                        isIconOnly
+                        size="sm"
                         variant="ghost"
-                        size="icon"
-                        className={`relative h-9 w-9 ${failedCount > 0 || conflictCount > 0 ? "text-red-500 hover:text-red-600" : "text-amber-500 hover:text-amber-600"}`}
-                        onClick={() => navigate("/sync-status")}
+                        className={`relative ${failedCount > 0 || conflictCount > 0 ? "text-red-500 hover:text-red-600" : "text-amber-500 hover:text-amber-600"}`}
+                        onPress={() => navigate("/sync-status")}
                         aria-label={tNav("items.syncStatus")}
                       >
                         {isSyncing
@@ -1022,147 +702,97 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           {syncBadgeCount > 9 ? "9+" : syncBadgeCount}
                         </span>
                       </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {isSyncing
-                      ? tCommon("sync.syncingItems", { count: pendingCount })
-                      : failedCount > 0
-                      ? tCommon("sync.syncFailures", { count: failedCount })
-                      : tCommon("sync.offlineChangesPending", { count: pendingCount })
-                    }
-                  </TooltipContent>
-                </Tooltip>
-              )}
+                    </Tooltip.Trigger>
+                    <Tooltip.Content placement="bottom">
+                      {isSyncing
+                        ? tCommon("sync.syncingItems", { count: pendingCount })
+                        : failedCount > 0
+                        ? tCommon("sync.syncFailures", { count: failedCount })
+                        : tCommon("sync.offlineChangesPending", { count: pendingCount })
+                      }
+                    </Tooltip.Content>
+                  </Tooltip>
+                )}
 
-              {/* User menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                {/* User menu */}
+                <Dropdown>
                   <Button
                     variant="ghost"
-                    className="relative h-9 w-auto rounded-full ps-1 pe-2.5 flex items-center gap-2 hover:bg-accent/80 ms-1 transition-colors duration-150"
+                    className="ms-1 h-9 gap-2 rounded-full ps-1 pe-2.5"
                     aria-label={`${meData?.user?.name ?? "User"} — ${tNav("user.myProfile")}`}
                   >
-                    <Avatar className="h-7 w-7">
-                      {meData?.user?.avatarUrl && <AvatarImage src={`/api/storage${meData.user.avatarUrl}`} alt={meData.user.name ?? ""} className="object-cover" />}
-                      <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                        {meData?.user?.name?.substring(0, 2).toUpperCase() ?? "??"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="hidden sm:flex flex-col items-start leading-tight">
+                    <UserAvatar user={meData?.user} />
+                    <span className="hidden sm:flex flex-col items-start leading-tight">
                       <span className="text-sm font-semibold text-foreground">{meData?.user?.name ?? tCommon("loading")}</span>
                       <span className="text-xs text-muted-foreground/80">{meData?.user?.roleLabel ?? tCommon("role")}</span>
-                    </div>
+                    </span>
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64" align="end" forceMount>
-                  <DropdownMenuLabel className="font-normal py-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
-                        {meData?.user?.avatarUrl && <AvatarImage src={`/api/storage${meData.user.avatarUrl}`} alt={meData.user.name ?? ""} className="object-cover" />}
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                          {meData?.user?.name?.substring(0, 2).toUpperCase() ?? "??"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col space-y-0.5">
-                        <p className="text-sm font-semibold text-foreground">{meData?.user?.name}</p>
-                        <p className="text-xs text-muted-foreground">{meData?.user?.email}</p>
+                  <Dropdown.Popover placement="bottom end" className="w-64">
+                    <div className="flex items-center gap-3 px-3 py-3">
+                      <UserAvatar user={meData?.user} className="size-9" />
+                      <div className="flex min-w-0 flex-col">
+                        <p className="truncate text-sm font-semibold text-foreground">{meData?.user?.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{meData?.user?.email}</p>
                       </div>
                     </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/profile" className="cursor-pointer flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      {tNav("user.myProfile")}
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/notification-preferences" className="cursor-pointer flex items-center gap-2">
-                      <Settings className="h-4 w-4 text-muted-foreground" />
-                      {tNav("user.notificationPreferences")}
-                    </Link>
-                  </DropdownMenuItem>
-                  {isInstallable && (
-                    <DropdownMenuItem onClick={install} className="cursor-pointer flex items-center gap-2">
-                      <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
-                      {tNav("user.installApp")}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger
-                      data-testid="header-language-switcher"
-                      className="cursor-pointer"
-                    >
-                      <Globe className="h-4 w-4 me-2 text-muted-foreground" />
-                      {tNav("language.switch")}
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      {(["en", "ar"] as Language[]).map((code) => (
-                        <DropdownMenuItem
-                          key={code}
-                          data-testid={`header-language-${code}`}
-                          onSelect={() => setLang(code)}
-                          className="cursor-pointer gap-2"
-                        >
-                          <Check className={`h-3.5 w-3.5 shrink-0 ${lang === code ? "opacity-100" : "opacity-0"}`} />
-                          {code === "en" ? tNav("language.en") : tNav("language.ar")}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={handleLogout}
-                    disabled={isLoggingOut}
-                    data-testid="header-profile-logout"
-                    className="cursor-pointer text-destructive focus:text-destructive"
-                  >
-                    <LogOut className="h-4 w-4 me-2" />
-                    {tNav("user.signOut")}
-                  </DropdownMenuItem>
-                  {demoModeEnabled && isSuperAdmin && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="font-normal">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          {tNav("development.switchUser")}
-                        </p>
-                      </DropdownMenuLabel>
-                      <div className="max-h-60 overflow-y-auto">
-                        {switcherUsers.map((u) => (
-                          <DropdownMenuItem
-                            key={u.id}
-                            onClick={() => handleRoleSwitch(u.id)}
-                            className={`flex items-center gap-2 cursor-pointer ${u.id === meData?.user?.id ? "bg-accent" : ""}`}
-                          >
-                            <div className="flex flex-col flex-1 min-w-0">
-                              <span className="font-medium text-sm truncate">{u.name}</span>
-                              <span className="text-xs text-muted-foreground">{u.roleLabel} · {u.scope.toUpperCase()}</span>
-                            </div>
-                            {u.id === meData?.user?.id && (
-                              <CheckCircle2 className="shrink-0 h-4 w-4 text-primary" />
-                            )}
-                          </DropdownMenuItem>
+                    <Separator />
+                    <Dropdown.Menu aria-label={tNav("user.myProfile")} onAction={onUserMenuAction}>
+                      <Dropdown.Item id="profile" textValue={tNav("user.myProfile")}>
+                        <User className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        <Label>{tNav("user.myProfile")}</Label>
+                      </Dropdown.Item>
+                      <Dropdown.Item id="notification-preferences" textValue={tNav("user.notificationPreferences")}>
+                        <Settings className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        <Label>{tNav("user.notificationPreferences")}</Label>
+                      </Dropdown.Item>
+                      {isInstallable ? (
+                        <Dropdown.Item id="install" textValue={tNav("user.installApp")}>
+                          <MonitorSmartphone className="h-4 w-4 text-muted-foreground" aria-hidden />
+                          <Label>{tNav("user.installApp")}</Label>
+                        </Dropdown.Item>
+                      ) : null}
+                      <Dropdown.Section aria-label={tNav("language.switch")} data-testid="header-language-switcher">
+                        {(["en", "ar"] as Language[]).map((code) => (
+                          <Dropdown.Item key={code} id={`lang-${code}`} textValue={code === "en" ? tNav("language.en") : tNav("language.ar")} data-testid={`header-language-${code}`}>
+                            <Check className={`h-3.5 w-3.5 shrink-0 ${lang === code ? "opacity-100" : "opacity-0"}`} aria-hidden />
+                            <Label>{code === "en" ? tNav("language.en") : tNav("language.ar")}</Label>
+                          </Dropdown.Item>
                         ))}
-                      </div>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </header>
-
-          {/* ── Page content ─────────────────────────────────────── */}
-          <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-5 lg:p-6 xl:p-8 page-enter">
-            {children}
-          </main>
+                      </Dropdown.Section>
+                      <Dropdown.Item id="sign-out" textValue={tNav("user.signOut")} variant="danger" isDisabled={isLoggingOut} data-testid="header-profile-logout">
+                        <LogOut className="h-4 w-4" aria-hidden />
+                        <Label>{tNav("user.signOut")}</Label>
+                      </Dropdown.Item>
+                      {demoModeEnabled && isSuperAdmin ? (
+                        <Dropdown.Section aria-label={tNav("development.switchUser")}>
+                          {switcherUsers.map((u) => (
+                            <Dropdown.Item key={u.id} id={`switch-${u.id}`} textValue={u.name} className={u.id === meData?.user?.id ? "bg-accent" : ""}>
+                              <div className="flex min-w-0 flex-1 flex-col">
+                                <span className="truncate text-sm font-medium">{u.name}</span>
+                                <span className="text-xs text-muted-foreground">{u.roleLabel} · {u.scope.toUpperCase()}</span>
+                              </div>
+                              {u.id === meData?.user?.id && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
+                            </Dropdown.Item>
+                          ))}
+                        </Dropdown.Section>
+                      ) : null}
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown>
+              </div>
+            </Navbar.Header>
+          </Navbar>
+        }
+      >
+        <div className="p-4 md:p-5 lg:p-6 xl:p-8 page-enter">
+          {children}
         </div>
-      </div>
+      </ShellLayout>
       {/* ── AI Chat Widget ───────────────────────────────────── */}
       <AIChatWidget />
       {/* ── Command Palette ──────────────────────────────────── */}
       <CommandPalette />
+    </RouterProvider>
     </TooltipProvider>
     </RecordDetailProvider>
   );

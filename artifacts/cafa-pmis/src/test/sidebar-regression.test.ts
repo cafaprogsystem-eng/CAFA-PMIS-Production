@@ -323,65 +323,54 @@ describe("Sidebar brand hierarchy", () => {
     expect(layoutSource).not.toContain("Enterprise Programme Management Platform");
   });
 
-  it("uses a compact logo/title row with a subtle divider, never a decorative card", () => {
-    expect(layoutSource).toContain('sidebarCollapsed ? "h-16 justify-center px-2" : "h-16 px-3"');
-    expect(layoutSource).toContain('className="h-9 w-9 shrink-0 object-contain"');
-    expect(layoutSource).toContain('data-testid="sidebar-brand-title"');
+  it("uses a compact logo/title row whose title hides in the icon rail", () => {
+    expect(layoutSource).toContain('className="size-8 shrink-0 object-contain"');
+    expect(layoutSource).toContain('data-testid="sidebar-brand-title" data-sidebar="label"');
     expect(layoutSource).toContain("text-[16px] font-medium leading-tight");
-    expect(layoutSource).toContain("border-b border-sidebar-border");
+    expect(layoutSource).toContain("<Sidebar.Header>{brand}</Sidebar.Header>");
     expect(layoutSource).not.toContain("bg-primary flex items-center justify-center shadow-sm");
   });
 
   it("keeps the collapsed brand tooltip limited to the product name", () => {
-    expect(layoutSource).toContain('{tNav("tooltips.platformName")}');
+    expect(layoutSource).toContain('<Sidebar.Tooltip content={tNav("tooltips.platformName")}');
     expect(layoutSource).not.toContain('tNav("brand.subtitle")');
   });
 
-  it("keeps compact collapse and expand controls keyboard accessible", () => {
-    expect(layoutSource).toContain('aria-label={tNav("tooltips.collapseSidebar")}');
-    expect(layoutSource).toContain('aria-label={tNav("tooltips.expandSidebar")}');
-    expect(layoutSource).toContain("h-8 w-8 -translate-y-1/2 shrink-0 cursor-pointer");
-    expect(layoutSource).toContain("focus-visible:ring-2 focus-visible:ring-ring");
-    expect(layoutSource).toContain("focus-visible:ring-offset-sidebar");
+  it("keeps collapse, expand and mobile-menu controls named for assistive tech", () => {
+    expect(layoutSource).toContain('<Sidebar.Trigger aria-label={sidebarCollapsed ? tNav("tooltips.expandSidebar") : tNav("tooltips.collapseSidebar")} />');
+    expect(layoutSource).toContain('<ShellLayout.MenuToggle aria-label={tNav("tooltips.openMenu")} />');
+    expect(layoutSource).toContain("<Sidebar.Rail />");
   });
 
-  it("uses subdued section labels and controlled group spacing", () => {
+  it("uses translated section labels for every navigation group", () => {
     expect(layoutSource).toContain('data-testid="sidebar-group-heading"');
-    expect(layoutSource).toContain("mb-2 px-2 text-[10px] font-medium uppercase leading-none tracking-[0.12em] text-sidebar-foreground/55");
-    expect(layoutSource).toContain('className="mb-4 last:mb-0"');
-    expect(layoutSource).toContain('className="space-y-0.5"');
     for (const title of ["groups.programmeManagement", "groups.communication", "groups.dataManagement", "groups.administration"]) {
       expect(layoutSource).toContain(`title: tNav("${title}")`);
     }
   });
 
-  it("preserves expanded and collapsed rail presentation invariants", () => {
-    expect(layoutSource).toContain('sidebarCollapsed ? "w-[60px]" : "w-[212px]"');
-    expect(layoutSource).toContain('sidebarCollapsed ? "h-16 justify-center px-2"');
-    expect(layoutSource).toContain('className="h-8 w-8 object-contain"');
-    expect(layoutSource).toContain("hidden h-8 w-8 -translate-y-1/2 shrink-0");
-    expect(layoutSource).toContain("lg:flex");
+  it("persists the desktop icon-rail preference under the existing key", () => {
+    expect(layoutSource).toContain('localStorage.getItem("cafa.sidebarCollapsed") === "true"');
+    expect(layoutSource).toContain('localStorage.setItem("cafa.sidebarCollapsed", String(!open));');
+    expect(layoutSource).toContain("sidebarOpen={!sidebarCollapsed}");
+    expect(layoutSource).toContain("onSidebarOpenChange={setSidebarOpen}");
   });
 });
 
-describe("Responsive rail and RTL tooltip safety", () => {
-  it("uses the same breakpoint as Tailwind lg so a persisted desktop rail never collapses the mobile drawer", () => {
-    expect(layoutSource).toContain('window.matchMedia("(max-width: 1023px)")');
-    expect(layoutSource).toContain("const sidebarCollapsed = collapsed && !isNarrowViewport;");
-    expect(layoutSource).toContain("if (sidebarCollapsed)");
-    expect(layoutSource).toContain("locationCtx.isEditable && !sidebarCollapsed");
+describe("Responsive rail and RTL placement", () => {
+  it("gives the mobile sheet the full navigation regardless of the desktop rail preference", () => {
+    const mobile = layoutSource.slice(layoutSource.indexOf("<Sidebar.Mobile>"), layoutSource.indexOf("</Sidebar.Mobile>"));
+    expect(mobile).toContain("<Sidebar.Content>{navigation}</Sidebar.Content>");
+    expect(mobile).toContain("<MobileLocationPicker />");
+    expect(mobile).toContain("<SidebarAccount");
   });
 
-  it("opens every collapsed sidebar tooltip toward the viewport in RTL", () => {
-    expect(layoutSource).toContain('const sidebarTooltipSide = direction === "rtl" ? "left" : "right";');
-    expect(layoutSource).toContain('const sidebarLogoutTooltipPosition = "start-full ms-2";');
-    const sidebarSource = layoutSource.slice(
-      layoutSource.indexOf("<aside"),
-      layoutSource.indexOf("</aside>")
-    );
-    expect((sidebarSource.match(/side=\{sidebarTooltipSide\}/g) ?? []).length).toBe(2);
-    expect((sidebarSource.match(/w-max whitespace-nowrap font-medium/g) ?? []).length).toBe(2);
-    expect(sidebarSource).not.toContain('TooltipContent side="right"');
+  it("puts the sidebar and its sheet on the reading-start side in Arabic", () => {
+    // Sheet sides are physical; desktop placement uses flex order, which
+    // index.css resets for RTL so the panel stays at the right edge.
+    expect(layoutSource).toContain('sidebarSide={isRtl ? "right" : "left"}');
+    const css = fs.readFileSync(path.resolve(__dirname, "../index.css"), "utf8");
+    expect(css).toMatch(/\[dir="rtl"\] \.sidebar--right,[\s\S]*?order: 0;/);
   });
 });
 
@@ -551,41 +540,28 @@ describe("Profile footer — role label", () => {
 });
 
 describe("Profile footer — logout affordances", () => {
-  it("provides a visible expanded logout row beneath the dynamic identity area", () => {
-    expect(layoutSource).toContain("Expanded: user identity menu followed by an explicit logout action.");
-    expect(layoutSource).toContain('className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-[12px] font-medium text-muted-foreground');
-    expect(layoutSource).toContain('<span>{tNav("user.signOut")}</span>');
-  });
-
-  it("provides a separate collapsed logout icon with an accessible name and tooltip", () => {
-    expect(layoutSource).toContain("Collapsed: avatar keeps the profile/language menu, with a separate logout control.");
-    expect(layoutSource).toContain('aria-label={tNav("user.signOut")}');
-    expect(layoutSource).toContain('aria-describedby="sidebar-logout-tooltip"');
-    expect(layoutSource).toContain('id="sidebar-logout-tooltip"');
-    expect(layoutSource).toContain('role="tooltip"');
-    expect(layoutSource).toContain("${sidebarLogoutTooltipPosition}");
-    expect(layoutSource).toContain("group-hover:opacity-100 group-focus-within:opacity-100");
-    expect(layoutSource).toContain('title={tNav("user.signOut")}');
+  it("provides a visible sign-out row beneath the identity row (icon + tooltip in the rail)", () => {
+    const account = layoutSource.slice(layoutSource.indexOf("function SidebarAccount("), layoutSource.indexOf("function MobileLocationPicker("));
+    expect(account).toContain('id="sign-out"');
+    expect(account).toContain("<Sidebar.MenuLabel>{labels.signOut}</Sidebar.MenuLabel>");
+    expect(account).toContain('<LogOut className="size-4" aria-hidden />');
+    expect(account).toContain("textValue={labels.signOut}");
   });
 
   it("routes each sidebar logout control through the canonical cleanup handler", () => {
-    const sidebarSource = layoutSource.slice(
-      layoutSource.indexOf('{meData?.user && ('),
-      layoutSource.indexOf("</aside>")
-    );
-    expect((sidebarSource.match(/onClick={handleLogout}/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect((layoutSource.match(/onLogout=\{handleLogout\}/g) ?? []).length).toBe(2);
+    expect(layoutSource).toContain("onAction={onLogout}");
+    expect(layoutSource).toContain("isDisabled={isLoggingOut}");
     expect(layoutSource).toContain('await fetch("/api/auth/logout", { method: "POST", credentials: "include" })');
     expect(layoutSource).toContain("if (!response.ok) throw new Error");
     expect(layoutSource).toContain("await Promise.allSettled([");
     expect(layoutSource).toContain("clearOfflineData()");
   });
 
-  it("keeps long account names safely truncated in the footer and dropdown", () => {
-    const footerSource = layoutSource.slice(
-      layoutSource.indexOf('{meData?.user && ('),
-      layoutSource.indexOf("</aside>")
-    );
-    expect((footerSource.match(/\btruncate\b/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(footerSource).toContain('title={meData.user.name && meData.user.name.length > 20 ? meData.user.name : undefined}');
+  it("keeps long account names safely truncated in the footer and the header menu", () => {
+    const account = layoutSource.slice(layoutSource.indexOf("function SidebarAccount("), layoutSource.indexOf("function MobileLocationPicker("));
+    expect((account.match(/\btruncate\b/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    const menu = layoutSource.slice(layoutSource.indexOf("{/* User menu */}"));
+    expect((menu.match(/\btruncate\b/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });

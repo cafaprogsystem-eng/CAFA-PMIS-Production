@@ -9,7 +9,11 @@ const source = readFileSync(
 
 describe("logout client contract", () => {
   it("uses one guarded handler for every visible logout entry point", () => {
-    expect(source.match(/onClick=\{handleLogout\}/g)).toHaveLength(5);
+    // Sidebar account menu (desktop + mobile sheet) and the header user menu.
+    expect(source.match(/onLogout=\{handleLogout\}/g)).toHaveLength(2);
+    expect(source).toContain("onAction={onLogout}");
+    expect(source).toContain('else if (key === "sign-out") void handleLogout();');
+    expect(source.match(/handleLogout/g)?.length).toBe(4); // definition + the three wirings above
     expect(source).toContain(
       "const [isLoggingOut, setIsLoggingOut] = useState(false)",
     );

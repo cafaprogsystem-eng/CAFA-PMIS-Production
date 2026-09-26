@@ -333,6 +333,18 @@
     padding-inline: calc(var(--spacing) * 3);
   }
 
+  /* ── HeroUI Pro app shell: sidebar side in Arabic ────────────────
+     The shell passes side="right" in RTL because the mobile Sidebar.Mobile
+     sheet is positioned and animated with physical sides. On desktop, Pro
+     places the sidebar with flex `order`, which already follows the reading
+     direction, so its `.sidebar--right { order: 1 }` would push the panel to
+     the end of the row — the left edge in Arabic. Resetting the order keeps
+     the desktop sidebar (expanded and icon rail) at the right edge. */
+  [dir="rtl"] .sidebar--right,
+  [dir="rtl"] .sidebar__offcanvas-wrapper[data-side="right"] {
+    order: 0;
+  }
+
   /* ── Enterprise card ─────────────────────────────────────────── */
   .card-enterprise {
     @apply bg-card rounded-xl border border-card-border shadow-sm;

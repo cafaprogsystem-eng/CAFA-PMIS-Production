@@ -116,11 +116,14 @@ describe("AI navigation consolidation", () => {
     expect(administration).not.toContain('href: "/manual"');
     expect(manualEntry).toContain('href: "/manual"');
     expect(manualEntry).toContain('label: tNav("items.systemManual")');
-    expect(layout).toContain('{entry.kind === "group" && !sidebarCollapsed && (');
-    expect(layout).toContain('{entry.kind === "group" && sidebarCollapsed && <div');
+    // HeroUI Pro shell: group labels hide automatically in the icon rail, and
+    // one SidebarNavigation renders the entries for both the desktop sidebar
+    // and the mobile sheet.
+    expect(layout).toContain('<Sidebar.GroupLabel data-testid="sidebar-group-heading">{entry.group.title}</Sidebar.GroupLabel>');
     expect(layout).toContain('href={item.href}');
     expect(layout).toContain('focus-visible:ring-2');
-    expect((layout.match(/navEntries\.map/g) ?? []).length).toBe(1);
+    expect((layout.match(/entries\.map\(/g) ?? []).length).toBe(1);
+    expect((layout.match(/entries=\{navEntries\}/g) ?? []).length).toBe(1);
   });
 
   it("keeps canonical AI and Manual destinations available to saved navigation consumers", () => {
