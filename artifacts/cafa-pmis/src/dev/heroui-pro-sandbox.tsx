@@ -8,13 +8,14 @@
  * rather than in the locale files because this page never ships.
  */
 import { useMemo, useState } from "react";
-import { Chip, type Selection, type SortDescriptor } from "@heroui/react";
+import { Chip, type Selection } from "@heroui/react";
 import { KPI } from "@heroui-pro/react/kpi";
 import { KPIGroup } from "@heroui-pro/react/kpi-group";
 import { NumberValue } from "@heroui-pro/react/number-value";
 import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import { FolderKanban, ShieldAlert, Users, Wallet } from "lucide-react";
 import { useLanguage } from "@/contexts/language-context";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type Lang = "ar" | "en";
 const COPY = {
@@ -78,7 +79,9 @@ export default function HeroUIProSandbox() {
   const { lang } = useLanguage();
   const L = (key: keyof typeof COPY) => COPY[key][lang];
   const [selected, setSelected] = useState<Selection>(new Set());
-  const [sort, setSort] = useState<SortDescriptor>({ column: "reached", direction: "descending" });
+  // KPIGroup has no responsive orientation of its own; four cards do not fit
+  // side by side on a phone.
+  const isMobile = useIsMobile();
 
   const columns = useMemo<DataGridColumn<ProjectRow>[]>(() => [
     { id: "code", header: L("code"), cell: (p) => <span className="font-mono text-xs">{p.code}</span>, width: 140, allowsSorting: true, sortFn: (a, b) => a.code.localeCompare(b.code) },
@@ -102,7 +105,7 @@ export default function HeroUIProSandbox() {
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold">{L("kpiHeading")}</h2>
-        <KPIGroup>
+        <KPIGroup orientation={isMobile ? "vertical" : "horizontal"}>
           <KPI>
             <KPI.Header>
               <KPI.Icon><FolderKanban className="h-4 w-4" aria-hidden /></KPI.Icon>
@@ -166,10 +169,10 @@ export default function HeroUIProSandbox() {
           columns={columns}
           getRowId={(p) => p.id}
           selectionMode="multiple"
+          showSelectionCheckboxes
           selectedKeys={selected}
           onSelectionChange={setSelected}
-          sortDescriptor={sort}
-          onSortChange={setSort}
+          defaultSortDescriptor={{ column: "reached", direction: "descending" }}
         />
       </section>
     </div>
