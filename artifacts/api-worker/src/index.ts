@@ -19,6 +19,7 @@ import { meRoutes } from "./routes/me";
 import { beneficiariesRoutes } from "./routes/beneficiaries";
 import { searchRoutes } from "./routes/search";
 import { usersRoutes } from "./routes/users";
+import { projectsRoutes } from "./routes/projects";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -317,5 +318,6 @@ app.route("/", meRoutes);
 app.route("/", beneficiariesRoutes);
 app.route("/", searchRoutes);
 app.route("/", usersRoutes);
+app.route("/", projectsRoutes);
 
 export default app;
