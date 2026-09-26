@@ -5,6 +5,16 @@ compatibility_flags = ["nodejs_compat"]
 
 # Same Neon database created in the Phase 1 connectivity proof
 # (project cafa-pmis-cloudflare, aws-eu-central-1).
+#
+# Caching is explicitly DISABLED on this config (via `wrangler hyperdrive
+# update <id> --caching-disabled`, not expressible in this file) — Hyperdrive
+# caches SELECT responses for 60s by default and, per its own docs, "does
+# not purge or invalidate cached read query responses when your application
+# writes to your database." Confirmed live: a PATCH /notifications/:id/read
+# was immediately followed by a GET /notifications still showing the row
+# unread. Recreating this Hyperdrive config must pass --caching-disabled
+# again, or every route in this app silently regains up to ~60s of
+# read-your-own-writes staleness.
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "feceb30510ff449897f114637dc5569e"

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
-import type { AppContext, Bindings, QueryExecutor } from "./lib/db";
+import type { Bindings } from "./lib/db";
 import { openDb } from "./lib/db";
 import {
   createSession,
@@ -13,16 +13,17 @@ import {
 } from "./lib/session";
 import { isAccountLocked, recordFailedLogin, clearAccountFailures } from "./lib/rate-limit-store";
 import { getOpenAIClient, buildSystemPrompt } from "./lib/ai";
+import { attachCurrentUser, requireAuth, type Variables } from "./lib/rbac";
+import { notificationsRoutes } from "./routes/notifications";
 
 /**
- * Phase 2 proof: session/auth on Hono + Hyperdrive, ported from
- * artifacts/api-server's routes/auth.ts + lib/session.ts + lib/rate-limit-store.ts.
- *
- * Deliberately out of scope here (belongs to the later, larger CRUD-routes
- * phase): permissionsFor()/RBAC, audit logging, email flows (invite/reset/
- * verify), and the express-rate-limit IP-based limiter. This proves the
- * identifier → lockout → bcrypt → session → cookie path end to end, which
- * every other route will build on.
+ * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
+ * check of their own — auth IS the thing being established) and does not
+ * use attachCurrentUser/requireAuth, since attachCurrentUser depends on a
+ * session already existing. Every other route mounted below (starting with
+ * /ai/chat and routes/notifications.ts) uses lib/rbac.ts's
+ * attachCurrentUser + requireAuth (+ requirePerm where a route needs more
+ * than "any authenticated user") — the bulk CRUD-routes phase's foundation.
  */
 
 interface UserRow extends Record<string, unknown> {
@@ -60,7 +61,7 @@ function dummyPasswordHashFor(): string {
   return dummyPasswordHash;
 }
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 app.post("/auth/login", async (c) => {
   const body = await c.req.json<LoginBody>().catch((): LoginBody => ({}));
@@ -175,31 +176,9 @@ app.post("/auth/logout", async (c) => {
 
 // ── AI Assistant (ported from routes/ai.ts's /ai/chat only — see lib/ai.ts) ──
 
-interface AiUserRow extends Record<string, unknown> {
-  id: number;
-  name: string;
-  role: string;
-  role_label: string;
-  state_id: number | null;
-  state_name: string | null;
-  sector: string | null;
-}
+app.post("/ai/chat", attachCurrentUser, requireAuth, async (c) => {
+  const user = c.get("currentUser")!;
 
-async function currentAiUser(c: AppContext, db: QueryExecutor): Promise<AiUserRow | null> {
-  const session = await getActiveSession(c, db);
-  if (!session) return null;
-  const { rows } = await db.query<AiUserRow>(
-    `SELECT u.id, u.name, u.role, u.role_label, u.state_id, s.name AS state_name, u.sector
-       FROM users u
-       LEFT JOIN states s ON s.id = u.state_id
-      WHERE u.id = $1 AND u.status = 'active'
-      LIMIT 1`,
-    [session.userId],
-  );
-  return rows[0] ?? null;
-}
-
-app.post("/ai/chat", async (c) => {
   // Not wrapped in try/finally around the whole handler: once streamSSE()
   // returns, its callback keeps running in the background (Hono doesn't
   // await it — see hono/dist/helper/streaming/sse.js's fire-and-forget
@@ -207,9 +186,6 @@ app.post("/ai/chat", async (c) => {
   // queries. Each early-return guard below closes db itself; the streaming
   // path closes it only after its final INSERT.
   const { db, close } = openDb(c);
-
-  const user = await currentAiUser(c, db);
-  if (!user) { close(); return c.json({ error: "unauthenticated" }, 401); }
 
   // Guard 1: environment-level flag.
   if (String(c.env.AI_ENABLED ?? "").toLowerCase() !== "true") {
@@ -270,8 +246,8 @@ app.post("/ai/chat", async (c) => {
 
   const systemPrompt = buildSystemPrompt({
     user: {
-      name: user.name, role: user.role, roleLabel: user.role_label,
-      stateName: user.state_name, sector: user.sector,
+      name: user.name, role: user.role, roleLabel: user.roleLabel,
+      stateName: user.stateName, sector: user.sector,
     },
     currentPage: currentModule,
     lang: responseLang,
@@ -331,5 +307,7 @@ app.post("/ai/chat", async (c) => {
     }
   });
 });
+
+app.route("/", notificationsRoutes);
 
 export default app;

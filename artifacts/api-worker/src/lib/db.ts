@@ -1,5 +1,19 @@
 import { Pool } from "pg";
 import type { Context } from "hono";
+import type { CurrentUser } from "./rbac";
+import type { AuthenticatedSession } from "./session";
+
+/**
+ * Lives here (not lib/rbac.ts, which is where it conceptually belongs)
+ * purely to break an import cycle: AppContext needs Variables and Variables
+ * needs CurrentUser, but CurrentUser is defined in rbac.ts, which itself
+ * imports Bindings/QueryExecutor/AppContext from this file. Both imports
+ * below are type-only, so this compiles away — nothing circular at runtime.
+ */
+export interface Variables {
+  currentUser?: CurrentUser;
+  authSession?: AuthenticatedSession;
+}
 
 export interface Bindings {
   HYPERDRIVE: Hyperdrive;
@@ -21,7 +35,7 @@ export interface Bindings {
   AI_INTEGRATIONS_OPENAI_BASE_URL?: string;
 }
 
-export type AppContext = Context<{ Bindings: Bindings }>;
+export type AppContext = Context<{ Bindings: Bindings; Variables: Variables }>;
 
 export interface QueryExecutor {
   query<T extends Record<string, unknown>>(
