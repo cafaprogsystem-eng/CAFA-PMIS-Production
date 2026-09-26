@@ -13,6 +13,7 @@
     "@aws-sdk/client-s3": "^3.1056.0",
     "@aws-sdk/s3-request-presigner": "^3.1056.0",
     "@workspace/api-zod": "workspace:*",
+    "@workspace/plan-transitions": "workspace:*",
     "@xmldom/xmldom": "^0.9.12",
     "bcryptjs": "^3.0.3",
     "hono": "^4.13.9",

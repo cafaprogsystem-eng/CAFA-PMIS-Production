@@ -324,6 +324,9 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
+      '@workspace/plan-transitions':
+        specifier: workspace:*
+        version: link:../../lib/plan-transitions
       '@xmldom/xmldom':
         specifier: ^0.9.12
         version: 0.9.12
