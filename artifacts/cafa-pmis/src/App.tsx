@@ -4,6 +4,7 @@ import { QueryCache, QueryClient, QueryClientProvider, MutationCache, useQuery, 
 import { ApiError } from "@workspace/api-client-react";
 import { Loader2 } from "lucide-react";
 import { DirectionProvider } from "@radix-ui/react-direction";
+import { I18nProvider } from "@heroui/react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
@@ -299,21 +300,30 @@ function AuthGate() {
   );
 }
 
-// ── Radix DirectionProvider bridge ───────────────────────────────────────
+// ── Direction bridge (Radix + HeroUI/React Aria) ─────────────────────────
 // Radix portal-based components (Dialog, Popover, Select, DropdownMenu, etc.)
 // escape the DOM tree — they need an explicit DirectionProvider to receive
-// the current text direction. This wrapper reads from LanguageContext, which
-// must already be mounted above it.
-function RadixDirectionBridge({ children }: { children: ReactNode }) {
-  const { direction } = useLanguage();
-  return <DirectionProvider dir={direction}>{children}</DirectionProvider>;
+// the current text direction. HeroUI (React Aria) ignores `dir` entirely and
+// derives direction, keyboard navigation and date/number formatting from
+// its locale, which otherwise defaults to the browser's. The Arabic locale
+// pins the Gregorian calendar and Latin digits to match the rest of the app.
+// This wrapper reads from LanguageContext, which must already be mounted.
+const REACT_ARIA_LOCALE = { ar: "ar-u-ca-gregory-nu-latn", en: "en-GB" } as const;
+
+function DirectionBridge({ children }: { children: ReactNode }) {
+  const { lang, direction } = useLanguage();
+  return (
+    <DirectionProvider dir={direction}>
+      <I18nProvider locale={REACT_ARIA_LOCALE[lang]}>{children}</I18nProvider>
+    </DirectionProvider>
+  );
 }
 
 function App() {
   return (
     <QueryClientProvider client={appQueryClient}>
       <LanguageProvider>
-        <RadixDirectionBridge>
+        <DirectionBridge>
           <TooltipProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
@@ -334,7 +344,7 @@ function App() {
             <Toaster />
             <SonnerToaster />
           </TooltipProvider>
-        </RadixDirectionBridge>
+        </DirectionBridge>
       </LanguageProvider>
     </QueryClientProvider>
   );
