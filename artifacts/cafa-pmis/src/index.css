@@ -233,6 +233,9 @@
   --field-foreground:    hsl(var(--cafa-foreground));
   --field-border:        hsl(var(--cafa-input));
   --field-border-width:  1px;
+  /* Referenced by HeroUI's invalid-field styles but never defined in the
+     package (3.2.6); undefined, the border falls back to the text colour. */
+  --color-field-border-invalid: hsl(var(--cafa-destructive));
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -315,6 +318,20 @@
    COMPONENT UTILITIES
    ══════════════════════════════════════════════════════════════════════ */
 @layer components {
+
+  /* ── HeroUI: input padding beside a prefix/suffix ──────────────────
+     HeroUI removes an input's inline-start padding after a prefix (and
+     inline-end before a suffix), so text sits flush against the divider.
+     Worse, logical padding resolves against the input's OWN direction, so
+     an ltr field (email, username, password, phone) in an Arabic page
+     loses padding on its far edge instead. Symmetric padding gives the
+     same result in both languages. HeroUI's rule is
+     `.input-group:has([data-slot=…]) .input-group__input` (0,3,0); the
+     doubled class makes this (0,3,0) too and it is declared later in the
+     same layer, so it wins without !important. */
+  .input-group .input-group__input.input-group__input {
+    padding-inline: calc(var(--spacing) * 3);
+  }
 
   /* ── Enterprise card ─────────────────────────────────────────── */
   .card-enterprise {

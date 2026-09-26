@@ -5,11 +5,6 @@ import { Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Alert, Button, InputGroup, Label, Spinner, TextField } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 
-// Auth pages keep their own navy brand rather than the app palette; these
-// override HeroUI's primary button tokens without touching its shape.
-const BRAND_BUTTON =
-  "[--button-bg:#1E2D5B] [--button-bg-hover:#192752] [--button-bg-pressed:#141f44] [--button-fg:white]";
-
 export default function ForgotPasswordPage() {
   const [, setLocation] = useLocation();
   const { t } = useTranslation("auth");
@@ -114,7 +109,7 @@ export default function ForgotPasswordPage() {
                       </Alert>
                     )}
 
-                    <Button variant="ghost" className="mt-1 text-[#1E2D5B]" onPress={() => setLocation("/login")}>
+                    <Button variant="ghost" className="mt-1" onPress={() => setLocation("/login")}>
                       {backIcon}
                       {t("returnToSignIn")}
                     </Button>
@@ -169,14 +164,11 @@ export default function ForgotPasswordPage() {
                           <InputGroup.Prefix>
                             <Mail className="h-4 w-4" />
                           </InputGroup.Prefix>
-                          {/* HeroUI drops the input's inline-start padding beside a prefix,
-                              but an ltr input inside an rtl group puts its "start" on the
-                              far edge — symmetric padding keeps both directions correct. */}
-                          <InputGroup.Input dir="ltr" placeholder={t("emailPh")} className="px-3" />
+                          <InputGroup.Input dir="ltr" placeholder={t("emailPh")} />
                         </InputGroup>
                       </TextField>
 
-                      <Button type="submit" size="lg" fullWidth isPending={busy} className={BRAND_BUTTON}>
+                      <Button type="submit" size="lg" fullWidth isPending={busy}>
                         {busy ? (
                           <>
                             <Spinner size="sm" color="current" />
