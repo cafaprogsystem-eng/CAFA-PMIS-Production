@@ -2062,7 +2062,7 @@ router.patch("/plans/:planId", async (req, res, next) => {
           currency: string | null;
           budget_planned: number | null;
         }>(
-          `SELECT start_date, end_date, responsible_user_id, status, last_final_approved_at, updated_at, currency, budget_planned
+          `SELECT start_date, end_date, responsible_user_id, status, last_final_approved_at, updated_at, currency, budget_planned::float AS budget_planned
            FROM plans WHERE id = $1 FOR UPDATE`,
           [planId],
         );
@@ -2191,7 +2191,7 @@ router.patch("/plans/:planId", async (req, res, next) => {
           budget_planned: number | null;
         }>(
           `SELECT start_date, end_date, COALESCE(localities, '[]'::jsonb) AS localities,
-                  currency, budget_planned
+                  currency, budget_planned::float AS budget_planned
            FROM plans WHERE id = $1 FOR UPDATE`,
           [planId],
         );
@@ -2765,7 +2765,7 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
         }>(
           `SELECT status, description, start_date, end_date,
                   COALESCE(localities, '[]'::jsonb) AS localities,
-                  currency, budget_planned,
+                  currency, budget_planned::float AS budget_planned,
                   NULLIF(sector, '') AS "planSector",
                   COALESCE(sectors, '[]'::jsonb) AS "planSectors",
                   project_id AS "projectId",
@@ -2838,7 +2838,7 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
           expected_result: string | null;
         }>(
           `SELECT title, locality_name, planned_date, priority,
-                  target_beneficiaries, budget_planned, expected_result
+                  target_beneficiaries, budget_planned::float AS budget_planned, expected_result
            FROM plan_activities WHERE plan_id = $1`,
           [planId],
         );
