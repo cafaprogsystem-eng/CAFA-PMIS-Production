@@ -745,7 +745,14 @@
     "missing": "missing",
     "issues": "Issue",
     "issues_other": "Issues",
-    "noneFound": "No data issues found."
+    "noneFound": "No data issues found.",
+    "codes": {
+      "unlinked": "No linked donor record",
+      "name_mismatch": "Donor name differs from the registered donor",
+      "missing": "Donor not specified",
+      "missing_currency": "Currency not specified"
+    },
+    "listSeparator": ", "
   },
   "filterScope": {
     "risksDetail": "Risk metrics may respond to supported State and Sector filters. Approval Queue is based on the authenticated user's actionable workflow. Drafts In My Scope is based on the user's authorised Draft scope. Not every widget responds to the global State, Sector and date filters.",

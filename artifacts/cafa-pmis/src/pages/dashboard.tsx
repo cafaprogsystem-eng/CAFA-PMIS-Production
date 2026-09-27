@@ -2605,6 +2605,16 @@ type DonorRow = DonorPortfolioEntry & {
   portfolioShare:  number | null;
 };
 
+/** Translated label for a donor data-issue code (the API sends stable codes:
+ *  unlinked, name_mismatch, missing, missing_currency). Unknown codes stay readable. */
+function donorIssueLabel(code: string, t: TFn): string {
+  return t(`donorIssues.codes.${code}`, { defaultValue: code.replaceAll("_", " ") });
+}
+
+function donorIssuesText(codes: string[], t: TFn): string {
+  return codes.map(code => donorIssueLabel(code, t)).join(t("donorIssues.listSeparator"));
+}
+
 function DonorStatusBadge({ status }: { status: string }) {
   const { t } = useTranslation("dashboard");
   const cfgMap: Record<string, { label: string; color: "success" | "warning" | "danger" }> = {
@@ -2734,7 +2744,7 @@ function DonorPortfolioCard({
         </div>
         {row.dataIssues?.length ? (
           <p className="mt-3 text-[10px] text-amber-700 dark:text-amber-400">
-            {t("donorCommon.dataQuality")} {row.dataIssues.join(", ").replaceAll("_", " ")}
+            {t("donorCommon.dataQuality")} {donorIssuesText(row.dataIssues, t)}
           </p>
         ) : null}
         {projects.length > 0 && (
@@ -2805,7 +2815,7 @@ function DonorPortfolioCompactRow({
       {isExpanded && (
         <div id={`donor-compact-detail-${row.donorKey}`} className="px-3 pb-3">
           <DonorProjectLinks row={row} />
-          {row.dataIssues?.length ? <p className="mt-2 text-[10px] text-amber-700 dark:text-amber-400">{t("donorCommon.dataQuality")} {row.dataIssues.join(", ").replaceAll("_", " ")}</p> : null}
+          {row.dataIssues?.length ? <p className="mt-2 text-[10px] text-amber-700 dark:text-amber-400">{t("donorCommon.dataQuality")} {donorIssuesText(row.dataIssues, t)}</p> : null}
         </div>
       )}
     </div>
@@ -3333,7 +3343,7 @@ export function DonorPortfolioTable({
                           )}
                           <div>{t("donorIssues.currency")}: {d.currency ? <span className="font-medium text-foreground">{d.currency}</span> : <span className="italic">{t("donorIssues.missing")}</span>}</div>
                           {issues.length > 0 && (
-                            <div>{t("donorIssues.issues", { count: issues.length })}: <span className="font-medium text-foreground">{issues.join(", ")}</span></div>
+                            <div>{t("donorIssues.issues", { count: issues.length })}: <span className="font-medium text-foreground">{donorIssuesText(issues, t)}</span></div>
                           )}
                         </dl>
                       </div>
