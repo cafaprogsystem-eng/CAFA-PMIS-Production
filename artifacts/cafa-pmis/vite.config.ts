@@ -179,6 +179,12 @@ export default defineConfig({
         // (both are precached) and lets that chunk stay cached across app
         // releases.
         manualChunks(id) {
+          // HeroUI Pro's data and chart components (KPI pulls in recharts)
+          // are only used by lazily-loaded screens; left out of ui-vendor so
+          // they load with those screens instead of at start-up.
+          if (/@heroui-pro\/react\/dist\/components\/(kpi|kpi-group|data-grid|number-value|trend-chip|[a-z-]*chart[a-z-]*)\//.test(id)) {
+            return undefined;
+          }
           if (/node_modules\/\.pnpm\/(@heroui|@heroui-pro|@gravity-ui|react-aria|@react-aria|react-stately|@react-stately|@react-types|@internationalized|tailwind-variants)[+@]/.test(id)) {
             return "ui-vendor";
           }

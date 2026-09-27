@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLiveQuery } from "dexie-react-hooks";
 import { formatDistanceToNow } from "date-fns";
@@ -11,38 +11,62 @@ import { db, type SyncQueueItem, type SyncStatus, type AttachmentQueueItem, type
 import { syncService } from "@/lib/offline/sync-service";
 import { dismissAttachment, tryUploadAttachment } from "@/lib/offline/attachment-store";
 import { useSyncContext } from "@/contexts/sync-context";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
-} from "@/components/ui/card";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { Alert, AlertDialog, Button, Card, Chip, Tabs } from "@heroui/react";
+import { KPI } from "@heroui-pro/react/kpi";
+import { KPIGroup } from "@heroui-pro/react/kpi-group";
+import { Segment } from "@heroui-pro/react/segment";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 
 /* ── Sync queue status ────────────────────────────────────────────────── */
 
-const STATUS_META: Record<SyncStatus, { labelKey: string; color: string; Icon: React.ElementType }> = {
-  "local-draft": { labelKey: "sync.statusLocalDraft", color: "bg-slate-100 text-slate-800 border-slate-200", Icon: Clock },
-  pending:  { labelKey: "sync.statusPending",  color: "bg-amber-100 text-amber-800 border-amber-200",  Icon: Clock },
-  syncing:  { labelKey: "sync.statusSyncing",  color: "bg-blue-100 text-blue-800 border-blue-200",     Icon: Loader2 },
-  synced:   { labelKey: "sync.statusSynced",   color: "bg-emerald-100 text-emerald-800 border-emerald-200", Icon: CheckCircle2 },
-  failed:   { labelKey: "sync.statusFailed",   color: "bg-red-100 text-red-800 border-red-200",        Icon: AlertCircle },
-  conflict: { labelKey: "sync.statusConflict", color: "bg-purple-100 text-purple-800 border-purple-200", Icon: GitMerge },
+type ChipColor = "default" | "accent" | "success" | "warning" | "danger";
+
+const STATUS_META: Record<SyncStatus, { labelKey: string; color: ChipColor; Icon: React.ElementType }> = {
+  "local-draft": { labelKey: "sync.statusLocalDraft", color: "default", Icon: Clock },
+  pending:  { labelKey: "sync.statusPending",  color: "warning", Icon: Clock },
+  syncing:  { labelKey: "sync.statusSyncing",  color: "default", Icon: Loader2 },
+  synced:   { labelKey: "sync.statusSynced",   color: "success", Icon: CheckCircle2 },
+  failed:   { labelKey: "sync.statusFailed",   color: "danger",  Icon: AlertCircle },
+  conflict: { labelKey: "sync.statusConflict", color: "accent",  Icon: GitMerge },
 };
 
 function StatusBadge({ status }: { status: SyncStatus }) {
   const { t } = useTranslation("common");
   const { labelKey, color, Icon } = STATUS_META[status];
   return (
-    <Badge variant="outline" className={`gap-1 border ${color} text-xs`}>
-      <Icon className={`h-3 w-3 ${status === "syncing" ? "animate-spin" : ""}`} />
+    <Chip size="sm" variant="soft" color={color} className="gap-1">
+      <Icon className="size-3" />
       {t(labelKey)}
-    </Badge>
+    </Chip>
+  );
+}
+
+/** Icon button that asks for confirmation (HeroUI AlertDialog) before removing. */
+function ConfirmRemove({ label, title, description, confirmLabel, cancelLabel, onConfirm }: {
+  label: string; title: string; description: string; confirmLabel: string; cancelLabel: string; onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog>
+      <Button isIconOnly size="sm" variant="ghost" aria-label={label} className="text-muted-foreground">
+        <Trash2 className="size-4" />
+      </Button>
+      <AlertDialog.Backdrop isKeyboardDismissDisabled={false}>
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="sm:max-w-[420px]">
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="danger"><Trash2 className="size-5" /></AlertDialog.Icon>
+              <AlertDialog.Heading>{title}</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body><p>{description}</p></AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button slot="close" variant="tertiary">{cancelLabel}</Button>
+              <Button slot="close" variant="danger" onPress={onConfirm}>{confirmLabel}</Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
+    </AlertDialog>
   );
 }
 
@@ -111,9 +135,9 @@ function ConflictDetailPanel({
       .map(([k, v]) => {
         const changed = highlight?.has(k);
         return (
-          <div key={k} className={`flex gap-1.5 ${changed ? "bg-amber-50 rounded px-1 -mx-1" : ""}`}>
-            <span className="font-medium text-gray-600 shrink-0 min-w-[80px]">{k}:</span>
-            <span className={`truncate ${changed ? "text-amber-800 font-medium" : "text-gray-800"}`}>
+          <div key={k} className={`flex gap-1.5 ${changed ? "bg-warning/10 rounded px-1 -mx-1" : ""}`}>
+            <span className="font-medium text-muted-foreground shrink-0 min-w-[80px]">{k}:</span>
+            <span className={`truncate ${changed ? "text-warning font-medium" : "text-foreground"}`}>
               {displayVal(v)}
             </span>
           </div>
@@ -134,73 +158,70 @@ function ConflictDetailPanel({
     : null;
 
   return (
-    <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-semibold text-purple-900">
-        <GitMerge className="h-4 w-4 shrink-0" />
+    <div className="rounded-xl border border-border bg-[var(--surface-secondary)] p-3 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <GitMerge className="size-4 shrink-0 text-[var(--accent)]" />
         {t("sync.conflictHeading")}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* ── Local version ── */}
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+          <p className="text-xs font-medium text-muted-foreground">
             {t("sync.yourOfflineChange")}
-            <span className="ms-1.5 font-normal normal-case text-purple-500">
+            <span className="ms-1.5 font-normal">
               ({item.method} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })})
             </span>
           </p>
-          <div className="rounded bg-white border border-purple-200 p-2 text-xs space-y-1 max-h-44 overflow-y-auto">
+          <div className="rounded-lg bg-[var(--surface)] border border-border p-2 text-xs space-y-1 max-h-44 overflow-y-auto">
             {localData ? renderFields(localData) : (
-              <p className="text-gray-400 italic">{t("sync.noPayloadCaptured")}</p>
+              <p className="text-muted-foreground italic">{t("sync.noPayloadCaptured")}</p>
             )}
           </div>
         </div>
 
         {/* ── Server version ── */}
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+          <p className="text-xs font-medium text-muted-foreground">
             {t("sync.currentServerState")}
             {serverState && serverUpdatedAt && (
-              <span className="ms-1.5 font-normal normal-case text-purple-500">
+              <span className="ms-1.5 font-normal">
                 {t("sync.serverUpdatedAgo", { ago: formatDistanceToNow(new Date(String(serverUpdatedAt)), { addSuffix: true }) })}
               </span>
             )}
           </p>
 
           {!serverState && !loading && !fetchError && serverUrl && (
-            <button
-              onClick={loadServer}
-              className="w-full flex items-center justify-center gap-2 rounded border border-purple-300 bg-white px-2 py-4 text-xs text-purple-700 hover:bg-purple-50 transition-colors"
-            >
-              <ServerCrash className="h-4 w-4" />
+            <Button variant="outline" fullWidth className="h-auto py-4 text-xs" onPress={loadServer}>
+              <ServerCrash className="size-4" />
               {t("sync.loadServerVersion")}
-            </button>
+            </Button>
           )}
 
           {!serverUrl && (
-            <div className="rounded bg-white border border-purple-200 p-3 text-xs text-gray-400 italic">
+            <div className="rounded-lg bg-[var(--surface)] border border-border p-3 text-xs text-muted-foreground italic">
               {t("sync.serverStateUnavailable")}
             </div>
           )}
 
           {loading && (
-            <div className="rounded bg-white border border-purple-200 p-4 flex items-center justify-center gap-2 text-xs text-gray-500">
-              <Loader2 className="h-4 w-4 animate-spin" /> {t("sync.fetchingServerState")}
+            <div className="rounded-lg bg-[var(--surface)] border border-border p-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="size-4" /> {t("sync.fetchingServerState")}
             </div>
           )}
 
           {fetchError && (
-            <div className="rounded bg-red-50 border border-red-200 p-2 text-xs text-red-700">
+            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2 text-xs text-destructive">
               <span className="font-medium">{t("sync.failedToLoad")}</span> {fetchError}
               <button onClick={loadServer} className="ms-2 underline">{t("sync.retry")}</button>
             </div>
           )}
 
           {serverState && (
-            <div className="rounded bg-white border border-purple-200 p-2 text-xs space-y-1 max-h-44 overflow-y-auto">
+            <div className="rounded-lg bg-[var(--surface)] border border-border p-2 text-xs space-y-1 max-h-44 overflow-y-auto">
               {renderFields(serverState, changedKeys)}
               {changedKeys.size > 0 && (
-                <p className="text-xs text-amber-600 mt-1">
+                <p className="text-xs text-warning mt-1">
                   ⚠ {t("sync.fieldsDiffer", { count: changedKeys.size })}
                 </p>
               )}
@@ -210,32 +231,16 @@ function ConflictDetailPanel({
       </div>
 
       {/* Action buttons */}
-      <div className="flex flex-wrap gap-2 pt-1 border-t border-purple-200">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onRetry}
-          className="gap-1.5 text-xs border-purple-300 text-purple-900 hover:bg-purple-100"
-        >
-          <RotateCcw className="h-3 w-3" /> {t("sync.keepLocalRetry")}
+      <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+        <Button size="sm" variant="outline" onPress={onRetry}>
+          <RotateCcw className="size-3.5" /> {t("sync.keepLocalRetry")}
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onDiscard}
-          className="gap-1.5 text-xs border-red-300 text-red-700 hover:bg-red-50"
-        >
-          <Trash2 className="h-3 w-3" /> {t("sync.acceptServerDiscard")}
+        <Button size="sm" variant="danger-soft" onPress={onDiscard}>
+          <Trash2 className="size-3.5" /> {t("sync.acceptServerDiscard")}
         </Button>
         {serverUrl && !serverState && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={loadServer}
-            disabled={loading}
-            className="gap-1.5 text-xs text-purple-600"
-          >
-            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ServerCrash className="h-3 w-3" />}
+          <Button size="sm" variant="ghost" onPress={loadServer} isDisabled={loading}>
+            {loading ? <Loader2 className="size-3.5" /> : <ServerCrash className="size-3.5" />}
             {t("sync.compareVersionsFirst")}
           </Button>
         )}
@@ -259,12 +264,12 @@ function QueueItemRow({ item }: { item: SyncQueueItem }) {
   };
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border border-border rounded-xl overflow-hidden bg-[var(--surface)]">
       <div className="flex items-center gap-3">
         <div
           role="button"
           tabIndex={0}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg p-3 text-start transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl p-3 text-start transition-colors hover:bg-[var(--default)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-inset"
           onClick={() => setExpanded(!expanded)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -278,8 +283,8 @@ function QueueItemRow({ item }: { item: SyncQueueItem }) {
         >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-sm">{item.label}</span>
-            <Badge variant="secondary" className="text-xs">{item.module}</Badge>
+            <span className="font-medium text-sm text-foreground">{item.label}</span>
+            <Chip size="sm" variant="soft" color="default">{item.module}</Chip>
             <StatusBadge status={item.syncStatus} />
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -289,47 +294,34 @@ function QueueItemRow({ item }: { item: SyncQueueItem }) {
             {item.retryCount > 0 && ` · ${t("sync.retriesLabel", { count: item.retryCount })}`}
           </p>
         </div>
-          {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180" />}
+          {expanded ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" />}
         </div>
         <div className="flex items-center gap-2 shrink-0 pe-3">
           {item.syncStatus === "failed" && (
-            <Button size="sm" variant="outline" onClick={handleRetry} className="h-7 gap-1 text-xs">
-              <RotateCcw className="h-3 w-3" /> {t("sync.retry")}
+            <Button size="sm" variant="outline" onPress={handleRetry}>
+              <RotateCcw className="size-3.5" /> {t("sync.retry")}
             </Button>
           )}
           {item.syncStatus !== "synced" && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" aria-label={t("sync.discardThisChange")}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{t("sync.discardThisChangeTitle")}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("sync.discardThisChangeDesc", { label: item.label })}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>{t("sync.cancel")}</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDiscard} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                    {t("sync.discard")}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmRemove
+              label={t("sync.discardThisChange")}
+              title={t("sync.discardThisChangeTitle")}
+              description={t("sync.discardThisChangeDesc", { label: item.label })}
+              confirmLabel={t("sync.discard")}
+              cancelLabel={t("sync.cancel")}
+              onConfirm={handleDiscard}
+            />
           )}
         </div>
       </div>
 
       {expanded && (
-        <div id={`sync-queue-detail-${item.id}`} className="border-t bg-muted/20 px-3 py-2 space-y-1.5 text-xs text-muted-foreground">
+        <div id={`sync-queue-detail-${item.id}`} className="border-t border-border bg-[var(--surface-secondary)]/60 px-3 py-2 space-y-1.5 text-xs text-muted-foreground">
           <div><span className="font-medium text-foreground">{t("sync.clientId")}</span> {item.clientId}</div>
           {item.entityId && <div><span className="font-medium text-foreground">{t("sync.entityId")}</span> {item.entityId}</div>}
           {item.syncedAt && <div><span className="font-medium text-foreground">{t("sync.syncedLabel")}</span> {formatDistanceToNow(new Date(item.syncedAt), { addSuffix: true })}</div>}
           {item.lastError && (
-            <div className="rounded bg-red-50 border border-red-100 p-2 text-red-700">
+            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2 text-destructive">
               <span className="font-medium">{t("sync.errorLabel")}</span> {item.lastError}
             </div>
           )}
@@ -339,7 +331,7 @@ function QueueItemRow({ item }: { item: SyncQueueItem }) {
             item.body && (
               <details className="mt-1">
                 <summary className="cursor-pointer font-medium text-foreground">{t("sync.payload")}</summary>
-                <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-xs">
+                <pre className="mt-1 overflow-auto rounded-lg bg-[var(--default)] p-2 text-xs text-foreground" dir="ltr">
                   {(() => { try { return JSON.stringify(JSON.parse(item.body), null, 2); } catch { return item.body; } })()}
                 </pre>
               </details>
@@ -353,34 +345,34 @@ function QueueItemRow({ item }: { item: SyncQueueItem }) {
 
 /* ── Attachment queue ─────────────────────────────────────────────────── */
 
-const ATTACHMENT_META: Record<AttachmentStatus, { labelKey: string; color: string; Icon: React.ElementType; hintKey: string }> = {
+const ATTACHMENT_META: Record<AttachmentStatus, { labelKey: string; color: ChipColor; Icon: React.ElementType; hintKey: string }> = {
   pending: {
     labelKey: "sync.attPending",
-    color: "bg-amber-100 text-amber-800 border-amber-200",
+    color: "warning",
     Icon: Clock,
     hintKey: "sync.attPendingHint",
   },
   uploading: {
     labelKey: "sync.attUploading",
-    color: "bg-blue-100 text-blue-800 border-blue-200",
+    color: "default",
     Icon: Loader2,
     hintKey: "sync.attUploadingHint",
   },
   uploaded: {
     labelKey: "sync.attUploaded",
-    color: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    color: "success",
     Icon: CheckCircle2,
     hintKey: "sync.attUploadedHint",
   },
   failed: {
     labelKey: "sync.attFailed",
-    color: "bg-red-100 text-red-800 border-red-200",
+    color: "danger",
     Icon: XCircle,
     hintKey: "sync.attFailedHint",
   },
   "re-select-required": {
     labelKey: "sync.attReSelect",
-    color: "bg-orange-100 text-orange-800 border-orange-200",
+    color: "warning",
     Icon: AlertTriangle,
     hintKey: "sync.attReSelectHint",
   },
@@ -390,10 +382,10 @@ function AttachmentStatusBadge({ status }: { status: AttachmentStatus }) {
   const { t } = useTranslation("common");
   const { labelKey, color, Icon } = ATTACHMENT_META[status];
   return (
-    <Badge variant="outline" className={`gap-1 border ${color} text-xs`}>
-      <Icon className={`h-3 w-3 ${status === "uploading" ? "animate-spin" : ""}`} />
+    <Chip size="sm" variant="soft" color={color} className="gap-1">
+      <Icon className="size-3" />
       {t(labelKey)}
-    </Badge>
+    </Chip>
   );
 }
 
@@ -424,14 +416,14 @@ function AttachmentRow({ item, isOnline }: { item: AttachmentQueueItem; isOnline
   };
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border border-border rounded-xl overflow-hidden bg-[var(--surface)]">
       <div className="flex items-center gap-3 p-3">
-        <div className="shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
-          <Paperclip className="h-4 w-4 text-slate-500" />
+        <div className="shrink-0 size-8 rounded-full bg-[var(--default)] flex items-center justify-center">
+          <Paperclip className="size-4 text-muted-foreground" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-sm truncate max-w-[200px]">{item.fileName}</span>
+            <span className="font-medium text-sm text-foreground truncate max-w-[200px]">{item.fileName}</span>
             <AttachmentStatusBadge status={item.status} />
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -441,35 +433,24 @@ function AttachmentRow({ item, isOnline }: { item: AttachmentQueueItem; isOnline
           </p>
           <p className="text-xs text-muted-foreground mt-1 italic">{t(meta.hintKey)}</p>
           {item.lastError && (
-            <p className="text-xs text-red-600 mt-1">{t("sync.errorLabel")} {item.lastError}</p>
+            <p className="text-xs text-destructive mt-1">{t("sync.errorLabel")} {item.lastError}</p>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {(item.status === "failed") && isOnline && (
-            <Button size="sm" variant="outline" onClick={handleRetry} className="h-7 gap-1 text-xs">
-              <UploadCloud className="h-3 w-3" /> {t("sync.retry")}
+            <Button size="sm" variant="outline" onPress={handleRetry}>
+              <UploadCloud className="size-3.5" /> {t("sync.retry")}
             </Button>
           )}
           {item.status !== "uploading" && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" aria-label={t("sync.removeAttachmentEntry")}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{t("sync.removeAttachmentTitle")}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("sync.removeAttachmentDesc", { fileName: item.fileName })}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>{t("sync.cancel")}</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDismiss}>{t("sync.remove")}</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmRemove
+              label={t("sync.removeAttachmentEntry")}
+              title={t("sync.removeAttachmentTitle")}
+              description={t("sync.removeAttachmentDesc", { fileName: item.fileName })}
+              confirmLabel={t("sync.remove")}
+              cancelLabel={t("sync.cancel")}
+              onConfirm={handleDismiss}
+            />
           )}
         </div>
       </div>
@@ -487,6 +468,8 @@ export default function SyncStatusPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [pageTab, setPageTab] = useState<PageTab>("queue");
   const { isOnline, connectivityState, isSyncing, triggerSync, clearSynced, attachmentCount } = useSyncContext();
+  // KPIGroup has no responsive orientation of its own.
+  const isMobile = useIsMobile();
 
   const allItems = useLiveQuery(
     () => db.syncQueue.orderBy("createdAt").reverse().toArray(),
@@ -516,170 +499,180 @@ export default function SyncStatusPage() {
     toast.info(t("sync.itemsQueuedForRetry", { count: failed.length }));
   };
 
+  const connectivityLabel = connectivityState === "online"
+    ? t("sync.online")
+    : connectivityState === "offline"
+      ? t("sync.offline")
+      : connectivityState === "checking"
+        ? t("sync.checkingConnection")
+        : connectivityState === "degraded"
+          ? t("sync.serviceUnavailable")
+          : connectivityState === "auth-required"
+            ? t("sync.authenticationRequired")
+            : t("sync.accessDenied");
+
+  const stats = [
+    { key: "pending", label: t("sync.pending"), count: counts.pending, status: "warning" as const, Icon: Clock },
+    { key: "synced", label: t("sync.synced"), count: counts.synced, status: "success" as const, Icon: CheckCircle2 },
+    { key: "failed", label: t("sync.failed"), count: counts.failed, status: "danger" as const, Icon: AlertCircle },
+    { key: "conflict", label: t("sync.conflicts"), count: counts.conflict, status: undefined, Icon: GitMerge },
+  ];
+
+  const filters: { id: FilterTab; label: string; count: number }[] = [
+    { id: "all", label: t("all"), count: counts.all },
+    { id: "pending", label: t("sync.pending"), count: counts.pending },
+    { id: "synced", label: t("sync.synced"), count: counts.synced },
+    { id: "failed", label: t("sync.failed"), count: counts.failed },
+    { id: "conflict", label: t("sync.conflicts"), count: counts.conflict },
+  ].filter((f) => f.id === "all" || f.count > 0) as { id: FilterTab; label: string; count: number }[];
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-foreground text-xl font-semibold">{t("sync.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-1">
             {t("sync.description")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge
-            variant={connectivityState === "online" ? "default" : "secondary"}
-            className={`gap-1.5 ${
-              connectivityState === "online"
-                ? "bg-emerald-600"
-                : connectivityState === "offline" ? "bg-amber-500" : "bg-orange-500"
-            }`}
-          >
-            {connectivityState === "online"
-              ? <Wifi className="h-3 w-3" />
-              : <WifiOff className="h-3 w-3" />}
-            {connectivityState === "online"
-              ? t("sync.online")
-              : connectivityState === "offline"
-                ? t("sync.offline")
-                : connectivityState === "checking"
-                  ? t("sync.checkingConnection")
-                  : connectivityState === "degraded"
-                    ? t("sync.serviceUnavailable")
-                    : connectivityState === "auth-required"
-                      ? t("sync.authenticationRequired")
-                      : t("sync.accessDenied")}
-          </Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Chip size="sm" variant="soft" color={connectivityState === "online" ? "success" : "warning"} className="gap-1">
+            {connectivityState === "online" ? <Wifi className="size-3" /> : <WifiOff className="size-3" />}
+            {connectivityLabel}
+          </Chip>
           {counts.synced > 0 && (
-            <Button size="sm" variant="outline" onClick={clearSynced} className="gap-1.5">
-              <Trash2 className="h-3.5 w-3.5" /> {t("sync.clearSynced")}
+            <Button size="sm" variant="outline" onPress={clearSynced}>
+              <Trash2 className="size-3.5" /> {t("sync.clearSynced")}
             </Button>
           )}
           {(counts.failed > 0 || counts.conflict > 0) && (
-            <Button size="sm" variant="outline" onClick={handleRetryAll} className="gap-1.5">
-              <RotateCcw className="h-3.5 w-3.5" /> {t("sync.retryAll")}
+            <Button size="sm" variant="outline" onPress={handleRetryAll}>
+              <RotateCcw className="size-3.5" /> {t("sync.retryAll")}
             </Button>
           )}
           <Button
             size="sm"
-            onClick={triggerSync}
-            disabled={!isOnline || isSyncing || (counts.pending + counts.failed === 0)}
-            className="gap-1.5 bg-[#1a2744] hover:bg-[#1a2744]/90 text-white"
+            onPress={triggerSync}
+            isDisabled={!isOnline || isSyncing || (counts.pending + counts.failed === 0)}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? <Loader2 className="size-3.5" /> : <RefreshCw className="size-3.5" />}
             {isSyncing ? t("sync.syncing") : t("sync.syncNow")}
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {([
-          { label: t("sync.pending"), count: counts.pending, color: "text-amber-600 bg-amber-50 border-amber-100" },
-          { label: t("sync.synced"),  count: counts.synced,  color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
-          { label: t("sync.failed"),  count: counts.failed,  color: "text-red-600 bg-red-50 border-red-100" },
-          { label: t("sync.conflicts"), count: counts.conflict, color: "text-purple-600 bg-purple-50 border-purple-100" },
-        ] as const).map(({ label, count, color }) => (
-          <Card key={label} className={`border ${color.split(" ")[2]}`}>
-            <CardContent className="p-4">
-              <p className={`text-2xl font-bold ${color.split(" ")[0]}`}>{count}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-            </CardContent>
-          </Card>
+      {/* Stats — HeroUI Pro KPI group */}
+      <KPIGroup orientation={isMobile ? "vertical" : "horizontal"}>
+        {stats.map(({ key, label, count, status, Icon }, index) => (
+          <Fragment key={key}>
+            {index > 0 && <KPIGroup.Separator />}
+            <KPI>
+              <KPI.Header>
+                <KPI.Icon status={status}><Icon className="size-4" aria-hidden /></KPI.Icon>
+                <KPI.Title>{label}</KPI.Title>
+              </KPI.Header>
+              <KPI.Content>
+                <KPI.Value value={count} />
+              </KPI.Content>
+            </KPI>
+          </Fragment>
         ))}
-      </div>
+      </KPIGroup>
 
       {/* Main tabs: Queue | Attachments */}
-      <Tabs value={pageTab} onValueChange={(v) => setPageTab(v as PageTab)}>
-        <TabsList>
-          <TabsTrigger value="queue">
-            {t("sync.actionQueue")}
-            {counts.all > 0 && (
-              <Badge variant="secondary" className="ms-1.5 text-xs px-1.5"><bdi dir="ltr">{counts.all}</bdi></Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="attachments">
-            {t("sync.attachments")}
-            {attachmentCount > 0 && (
-              <Badge variant="secondary" className="ms-1.5 text-xs px-1.5 bg-orange-100 text-orange-700"><bdi dir="ltr">{attachmentCount}</bdi></Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
+      <Tabs selectedKey={pageTab} onSelectionChange={(v) => setPageTab(v as PageTab)}>
+        <Tabs.ListContainer>
+          <Tabs.List aria-label={t("sync.title")}>
+            <Tabs.Tab id="queue" className="gap-1.5 whitespace-nowrap">
+              {t("sync.actionQueue")}
+              {counts.all > 0 && <Chip size="sm" variant="soft" color="default"><bdi dir="ltr">{counts.all}</bdi></Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="attachments" className="gap-1.5 whitespace-nowrap">
+              {t("sync.attachments")}
+              {attachmentCount > 0 && <Chip size="sm" variant="soft" color="warning"><bdi dir="ltr">{attachmentCount}</bdi></Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
 
         {/* ── Action Queue tab ─────────────────────────────────────────── */}
-        <TabsContent value="queue" className="mt-4">
+        <Tabs.Panel id="queue" className="mt-4">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{t("sync.actionQueue")}</CardTitle>
-              <CardDescription>
-                {t("sync.actionQueueDesc")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+            <Card.Header>
+              <Card.Title className="text-base">{t("sync.actionQueue")}</Card.Title>
+              <Card.Description>{t("sync.actionQueueDesc")}</Card.Description>
+            </Card.Header>
+            <Card.Content>
               {allItems.length === 0 ? (
                 <div className="py-12 text-center">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto mb-3" />
-                  <p className="text-sm font-medium text-gray-700">{t("sync.noOfflineActions")}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t("sync.noOfflineActionsDesc")}
-                  </p>
+                  <CheckCircle2 className="size-10 text-success mx-auto mb-3" />
+                  <p className="text-sm font-medium text-foreground">{t("sync.noOfflineActions")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t("sync.noOfflineActionsDesc")}</p>
                 </div>
               ) : (
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as FilterTab)}>
-                  <TabsList className="mb-4">
-                    <TabsTrigger value="all">{t("all")} ({counts.all})</TabsTrigger>
-                    {counts.pending > 0 && <TabsTrigger value="pending">{t("sync.pending")} ({counts.pending})</TabsTrigger>}
-                    {counts.synced > 0 && <TabsTrigger value="synced">{t("sync.synced")} ({counts.synced})</TabsTrigger>}
-                    {counts.failed > 0 && <TabsTrigger value="failed">{t("sync.failed")} ({counts.failed})</TabsTrigger>}
-                    {counts.conflict > 0 && <TabsTrigger value="conflict">{t("sync.conflicts")} ({counts.conflict})</TabsTrigger>}
-                  </TabsList>
-                  <TabsContent value={activeTab} className="space-y-2 m-0">
+                <div className="space-y-4">
+                  {/* Status filter — HeroUI Pro Segment */}
+                  <div className="overflow-x-auto">
+                    <Segment
+                      aria-label={t("sync.title")}
+                      size="sm"
+                      selectedKey={activeTab}
+                      onSelectionChange={(key) => setActiveTab(key as FilterTab)}
+                    >
+                      {filters.map((f) => (
+                        <Segment.Item key={f.id} id={f.id} className="whitespace-nowrap">
+                          {f.label} (<bdi dir="ltr">{f.count}</bdi>)
+                        </Segment.Item>
+                      ))}
+                    </Segment>
+                  </div>
+                  <div className="space-y-2">
                     {filtered.length === 0 ? (
                       <p className="text-sm text-muted-foreground py-4 text-center">{t("sync.noItemsInCategory")}</p>
                     ) : (
                       filtered.map((item) => <QueueItemRow key={item.id} item={item} />)
                     )}
-                  </TabsContent>
-                </Tabs>
+                  </div>
+                </div>
               )}
-            </CardContent>
+            </Card.Content>
           </Card>
-        </TabsContent>
+        </Tabs.Panel>
 
         {/* ── Attachments tab ──────────────────────────────────────────── */}
-        <TabsContent value="attachments" className="mt-4">
+        <Tabs.Panel id="attachments" className="mt-4">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{t("sync.attachmentQueue")}</CardTitle>
-              <CardDescription>
-                {t("sync.attachmentQueueDesc")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+            <Card.Header>
+              <Card.Title className="text-base">{t("sync.attachmentQueue")}</Card.Title>
+              <Card.Description>{t("sync.attachmentQueueDesc")}</Card.Description>
+            </Card.Header>
+            <Card.Content>
               {allAttachments.length === 0 ? (
                 <div className="py-12 text-center">
-                  <Paperclip className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-medium text-gray-700">{t("sync.noPendingAttachments")}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t("sync.noPendingAttachmentsDesc")}
-                  </p>
+                  <Paperclip className="size-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm font-medium text-foreground">{t("sync.noPendingAttachments")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t("sync.noPendingAttachmentsDesc")}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {/* Re-select required notice */}
                   {allAttachments.some(a => a.status === "re-select-required") && (
-                    <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 flex gap-2 text-sm text-orange-800 mb-4">
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                      <span>{t("sync.reSelectRequired")}</span>
-                    </div>
+                    <Alert status="warning" className="mb-4">
+                      <Alert.Indicator><AlertTriangle className="size-4" aria-hidden /></Alert.Indicator>
+                      <Alert.Content>
+                        <Alert.Title>{t("sync.reSelectRequired")}</Alert.Title>
+                      </Alert.Content>
+                    </Alert>
                   )}
                   {allAttachments.map((item) => (
                     <AttachmentRow key={item.id} item={item} isOnline={isOnline} />
                   ))}
                 </div>
               )}
-            </CardContent>
+            </Card.Content>
           </Card>
-        </TabsContent>
+        </Tabs.Panel>
       </Tabs>
     </div>
   );

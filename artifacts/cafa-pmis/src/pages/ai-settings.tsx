@@ -1,18 +1,16 @@
-import { useState, useEffect, type MouseEvent } from "react";
+import { Fragment, useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Bot, Settings, ToggleLeft, ToggleRight, RefreshCw,
-  Search, Download, Activity, Users, MessageSquare, Globe, Shield
+  Bot, Settings, RefreshCw, Loader2,
+  Download, Activity, Users, MessageSquare, Globe, Shield,
 } from "@/components/icons";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, Button, Card, Chip, Description, Label, SearchField, Skeleton, Switch, Tabs, TextArea, TextField } from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
+import { KPI } from "@heroui-pro/react/kpi";
+import { KPIGroup } from "@heroui-pro/react/kpi-group";
+import { SelectField } from "@/components/select-field";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useGetMe } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import { formatDateTime } from "@/lib/format";
@@ -55,6 +53,8 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
   const [responseLang, setResponseLang] = useState("auto");
   const [logSearch, setLogSearch] = useState("");
   const [tab, setTab] = useState("settings");
+  // KPIGroup has no responsive orientation of its own.
+  const isMobile = useIsMobile();
 
   // `me` resolves asynchronously, so canManageSettings is false on the very
   // first render even for an admin — correct the default tab once it lands,
@@ -124,23 +124,13 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
     },
   });
 
-  // Explicit enable/disable handlers — each hardcodes the value it sends so there
-  // is no ambiguity from reading a potentially stale query snapshot.
-  const handleEnable = (e: MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    saveMut.mutate({ enabled: "true", systemPromptExtra: extraPrompt, responseLanguage: responseLang });
+  // The status switch sends the exact value it was flipped to, so there is no
+  // ambiguity from reading a potentially stale query snapshot.
+  const setAssistantEnabled = (next: boolean) => {
+    saveMut.mutate({ enabled: next ? "true" : "false", systemPromptExtra: extraPrompt, responseLanguage: responseLang });
   };
 
-  const handleDisable = (e: MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    saveMut.mutate({ enabled: "false", systemPromptExtra: extraPrompt, responseLanguage: responseLang });
-  };
-
-  const savePrompt = (e: MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const savePrompt = () => {
     saveMut.mutate({
       enabled: settings?.enabled ?? "true",
       systemPromptExtra: extraPrompt,
@@ -165,6 +155,24 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
     a.click();
   };
 
+  // Chat log columns (HeroUI Pro DataGrid); sortable by user and time.
+  const logColumns = useMemo<DataGridColumn<LogMsg>[]>(() => [
+    { id: "user", header: t("settings.logUser"), isRowHeader: true, allowsSorting: true, minWidth: 140,
+      sortFn: (a, b) => a.userName.localeCompare(b.userName),
+      cell: (m) => <span className="text-sm font-medium text-foreground">{m.userName}</span> },
+    { id: "role", header: t("settings.logRole"), minWidth: 130,
+      cell: (m) => <Chip size="sm" variant="soft" color="default" className="capitalize">{m.userRole.replace(/_/g, " ")}</Chip> },
+    { id: "type", header: t("settings.logType"), width: 110,
+      cell: (m) => <Chip size="sm" variant="soft" color={m.role === "user" ? "accent" : "default"}>{m.role}</Chip> },
+    { id: "page", header: t("settings.logPage"), width: 110,
+      cell: (m) => <span className="font-mono text-xs text-muted-foreground">{m.module ?? "—"}</span> },
+    { id: "message", header: t("settings.logMessage"), minWidth: 260,
+      cell: (m) => <p className="line-clamp-2 text-xs text-foreground/80">{m.content}</p> },
+    { id: "time", header: t("settings.logTime"), allowsSorting: true, width: 170,
+      sortFn: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      cell: (m) => <span className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(m.createdAt)}</span> },
+  ], [t]);
+
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -185,256 +193,197 @@ export function AIAdministrationPanel({ showHeading = true }: { showHeading?: bo
     <div className="space-y-6">
       {/* UAT mode notice — shown when the AI_ENABLED env var is not set on the server */}
       {settings && !envEnabled && (
-        <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-          <span className="mt-0.5 text-base">⚙️</span>
-          <div>
-            <p className="font-semibold">{t("settings.uatTitle")}</p>
-            <p className="mt-0.5">{t("settings.uatDesc")}</p>
-          </div>
-        </div>
+        <Alert status="warning">
+          <Alert.Indicator><Settings className="size-4" aria-hidden /></Alert.Indicator>
+          <Alert.Content>
+            <Alert.Title>{t("settings.uatTitle")}</Alert.Title>
+            <Alert.Description>{t("settings.uatDesc")}</Alert.Description>
+          </Alert.Content>
+        </Alert>
       )}
 
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-3">
         {showHeading && (
           <div>
             <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
               <Bot className="size-5 text-primary" /> {t("settings.title")}
             </h1>
-            <p className="text-muted-foreground mt-1">{t("settings.subtitle")}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t("settings.subtitle")}</p>
           </div>
         )}
-        <Badge className={enabled && envEnabled ? "bg-success/10 text-success border-success/20" : "bg-muted text-muted-foreground border-border"}>
+        <Chip size="sm" variant="soft" color={enabled && envEnabled ? "success" : enabled ? "warning" : "default"}>
           {enabled && envEnabled ? t("settings.statusActive") : enabled ? t("settings.statusUat") : t("settings.statusDisabled")}
-        </Badge>
+        </Chip>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          {canManageSettings && (
-            <TabsTrigger value="settings" className="gap-1.5"><Settings className="h-3.5 w-3.5" /> {t("settings.tabSettings")}</TabsTrigger>
-          )}
-          <TabsTrigger value="logs" className="gap-1.5"><Activity className="h-3.5 w-3.5" /> {t("settings.tabLogs")}</TabsTrigger>
-        </TabsList>
+      <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(String(key))}>
+        <Tabs.ListContainer>
+          <Tabs.List aria-label={t("settings.title")}>
+            {canManageSettings ? (
+              <Tabs.Tab id="settings" className="gap-1.5 whitespace-nowrap"><Settings className="size-3.5" aria-hidden /> {t("settings.tabSettings")}<Tabs.Indicator /></Tabs.Tab>
+            ) : null}
+            <Tabs.Tab id="logs" className="gap-1.5 whitespace-nowrap"><Activity className="size-3.5" aria-hidden /> {t("settings.tabLogs")}<Tabs.Indicator /></Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
 
         {/* ── Settings tab — ai.settings.manage only (a logs-only viewer, e.g. program_manager, never sees this) ── */}
         {canManageSettings && (
-        <TabsContent value="settings" className="space-y-5 mt-5">
+        <Tabs.Panel id="settings" className="space-y-4 mt-5">
           {settingsLoading ? (
             <div className="space-y-4">
-              <div className="rounded-xl border p-5 space-y-3">
-                <Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-64" />
-                <div className="flex items-center justify-between pt-1"><div className="space-y-1.5"><Skeleton className="h-4 w-48" /><Skeleton className="h-3 w-60" /></div><Skeleton className="h-9 w-24 rounded-md" /></div>
-              </div>
-              <div className="rounded-xl border p-5 space-y-3">
-                <Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-64" />
-                <Skeleton className="h-9 w-48 rounded-md" />
-              </div>
-              <div className="rounded-xl border p-5 space-y-3">
-                <Skeleton className="h-4 w-52" /><Skeleton className="h-3 w-80" />
-                <Skeleton className="h-28 w-full rounded-md" /><Skeleton className="h-9 w-28 rounded-md" />
-              </div>
+              <Skeleton className="h-32 w-full rounded-2xl" />
+              <Skeleton className="h-32 w-full rounded-2xl" />
+              <Skeleton className="h-56 w-full rounded-2xl" />
             </div>
           ) : (
             <>
               {/* Enable / disable */}
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">{t("settings.assistantStatus")}</CardTitle>
-                  <CardDescription>{t("settings.assistantStatusDesc")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-sm">{enabled ? t("settings.aiEnabled") : t("settings.aiDisabled")}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {enabled ? t("settings.aiEnabledDesc") : t("settings.aiDisabledDesc")}
-                      </p>
-                    </div>
-                    {enabled ? (
-                      <Button type="button" variant="outline" onClick={handleDisable} disabled={saveMut.isPending}
-                        className="gap-2 text-destructive border-destructive/20 hover:bg-destructive/10">
-                        <ToggleRight className="h-4 w-4" />
-                        {saveMut.isPending ? t("settings.saving") : t("settings.disable")}
-                      </Button>
-                    ) : (
-                      <Button type="button" variant="outline" onClick={handleEnable} disabled={saveMut.isPending}
-                        className="gap-2 text-success border-success/20 hover:bg-success/10">
-                        <ToggleLeft className="h-4 w-4" />
-                        {saveMut.isPending ? t("settings.saving") : t("settings.enable")}
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
+                <Card.Header>
+                  <Card.Title className="text-base">{t("settings.assistantStatus")}</Card.Title>
+                  <Card.Description>{t("settings.assistantStatusDesc")}</Card.Description>
+                </Card.Header>
+                <Card.Content>
+                  <Switch isSelected={enabled} onChange={setAssistantEnabled} isDisabled={saveMut.isPending} className="w-full">
+                    <Switch.Content className="w-full justify-between gap-4">
+                      <div className="flex flex-col gap-0.5">
+                        <Label>{enabled ? t("settings.aiEnabled") : t("settings.aiDisabled")}</Label>
+                        <Description>{enabled ? t("settings.aiEnabledDesc") : t("settings.aiDisabledDesc")}</Description>
+                      </div>
+                      <Switch.Control><Switch.Thumb /></Switch.Control>
+                    </Switch.Content>
+                  </Switch>
+                </Card.Content>
               </Card>
 
               {/* Response language */}
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><Globe className="h-4 w-4" /> {t("settings.responseLanguage")}</CardTitle>
-                  <CardDescription>{t("settings.responseLanguageDesc")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Select value={responseLang} onValueChange={setResponseLang}>
-                    <SelectTrigger className="w-full sm:w-[200px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">{t("settings.langAuto")}</SelectItem>
-                      <SelectItem value="en">{t("settings.langEn")}</SelectItem>
-                      <SelectItem value="ar">{t("settings.langAr")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </CardContent>
+                <Card.Header>
+                  <Card.Title className="text-base flex items-center gap-2"><Globe className="size-4 text-muted-foreground" /> {t("settings.responseLanguage")}</Card.Title>
+                  <Card.Description>{t("settings.responseLanguageDesc")}</Card.Description>
+                </Card.Header>
+                <Card.Content>
+                  <SelectField
+                    aria-label={t("settings.responseLanguage")}
+                    value={responseLang}
+                    onChange={setResponseLang}
+                    options={[
+                      { value: "auto", label: t("settings.langAuto") },
+                      { value: "en", label: t("settings.langEn") },
+                      { value: "ar", label: t("settings.langAr") },
+                    ]}
+                    className="w-full sm:w-[240px]"
+                    triggerClassName="w-full"
+                  />
+                </Card.Content>
               </Card>
 
               {/* System prompt extra */}
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><MessageSquare className="h-4 w-4" /> {t("settings.additionalInstructions")}</CardTitle>
-                  <CardDescription>
-                    {t("settings.additionalInstructionsDesc")}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <textarea
-                    value={extraPrompt}
-                    onChange={e => setExtraPrompt(e.target.value)}
-                    rows={6}
-                    placeholder={t("settings.promptPlaceholder")}
-                    className="w-full text-sm border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y leading-relaxed"
-                  />
-                  <Button type="button" onClick={savePrompt} disabled={saveMut.isPending}>
-              {saveMut.isPending ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> {t("settings.saving")}</> : t("settings.save")}
+                <Card.Header>
+                  <Card.Title className="text-base flex items-center gap-2"><MessageSquare className="size-4 text-muted-foreground" /> {t("settings.additionalInstructions")}</Card.Title>
+                  <Card.Description>{t("settings.additionalInstructionsDesc")}</Card.Description>
+                </Card.Header>
+                <Card.Content className="space-y-3">
+                  <TextField value={extraPrompt} onChange={setExtraPrompt} aria-label={t("settings.additionalInstructions")} fullWidth>
+                    <TextArea rows={6} placeholder={t("settings.promptPlaceholder")} className="resize-y leading-relaxed" />
+                  </TextField>
+                  <Button onPress={savePrompt} isDisabled={saveMut.isPending}>
+                    {saveMut.isPending ? <><Loader2 className="size-4" /> {t("settings.saving")}</> : t("settings.save")}
                   </Button>
-                </CardContent>
+                </Card.Content>
               </Card>
 
               {/* Security notice */}
-              <Card className="border-warning/30 bg-warning/10">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2 text-warning"><Shield className="h-4 w-4" /> {t("settings.securityTitle")}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-warning/80 space-y-1">
-                  <p>• {t("settings.security1")}</p>
-                  <p>• {t("settings.security2")}</p>
-                  <p>• {t("settings.security3")}</p>
-                  <p>• {t("settings.security4")}</p>
-                </CardContent>
-              </Card>
+              <Alert status="warning">
+                <Alert.Indicator><Shield className="size-4" aria-hidden /></Alert.Indicator>
+                <Alert.Content>
+                  <Alert.Title>{t("settings.securityTitle")}</Alert.Title>
+                  <ul className="mt-1 list-disc space-y-0.5 ps-4 text-xs text-muted-foreground">
+                    <li>{t("settings.security1")}</li>
+                    <li>{t("settings.security2")}</li>
+                    <li>{t("settings.security3")}</li>
+                    <li>{t("settings.security4")}</li>
+                  </ul>
+                </Alert.Content>
+              </Alert>
             </>
           )}
-        </TabsContent>
+        </Tabs.Panel>
         )}
 
         {/* ── Logs tab ─────────────────────────────────────────────────────── */}
-        <TabsContent value="logs" className="space-y-5 mt-5">
-          {/* Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Tabs.Panel id="logs" className="space-y-4 mt-5">
+          {/* Stats — HeroUI Pro KPI group */}
+          <KPIGroup orientation={isMobile ? "vertical" : "horizontal"}>
             {[
-              { label: t("settings.totalMessages"), value: logsData?.total ?? "—", icon: MessageSquare, color: "" },
-              { label: t("settings.sessions"), value: sessions || "—", icon: Activity, color: "text-info" },
-              { label: t("settings.uniqueUsers"), value: uniqueUsers || "—", icon: Users, color: "text-primary" },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <Card key={label}>
-                <CardContent className="pt-5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon className={`h-4 w-4 ${color || "text-muted-foreground"}`} />
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                  </div>
-                  <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                </CardContent>
-              </Card>
+              { key: "messages", label: t("settings.totalMessages"), value: logsData?.total, Icon: MessageSquare },
+              { key: "sessions", label: t("settings.sessions"), value: logsData ? sessions : undefined, Icon: Activity },
+              { key: "users", label: t("settings.uniqueUsers"), value: logsData ? uniqueUsers : undefined, Icon: Users },
+            ].map(({ key, label, value, Icon }, index) => (
+              <Fragment key={key}>
+                {index > 0 && <KPIGroup.Separator />}
+                <KPI>
+                  <KPI.Header>
+                    <KPI.Icon><Icon className="size-4" aria-hidden /></KPI.Icon>
+                    <KPI.Title>{label}</KPI.Title>
+                  </KPI.Header>
+                  <KPI.Content>
+                    {value === undefined ? <span className="text-2xl font-semibold text-muted-foreground">—</span> : <KPI.Value value={value} />}
+                  </KPI.Content>
+                </KPI>
+              </Fragment>
             ))}
-          </div>
+          </KPIGroup>
 
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{t("settings.chatLog")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-3 mb-4">
-                <div className="relative flex-1">
-                  <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder={t("settings.searchLogs")} className="ps-9" value={logSearch}
-                    onChange={e => setLogSearch(e.target.value)} />
-                </div>
-                <Button variant="outline" size="sm" onClick={() => qc.invalidateQueries({ queryKey: ["ai-logs"] })} className="gap-1.5">
-                  <RefreshCw className="h-3.5 w-3.5" /> {t("settings.refresh")}
+            <Card.Header>
+              <Card.Title className="text-base">{t("settings.chatLog")}</Card.Title>
+            </Card.Header>
+            <Card.Content className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <SearchField value={logSearch} onChange={setLogSearch} aria-label={t("settings.searchLogs")} className="min-w-0 flex-1 basis-60">
+                  <SearchField.Group className="w-full">
+                    <SearchField.SearchIcon />
+                    <SearchField.Input placeholder={t("settings.searchLogs")} />
+                    <SearchField.ClearButton />
+                  </SearchField.Group>
+                </SearchField>
+                <Button variant="outline" size="sm" onPress={() => qc.invalidateQueries({ queryKey: ["ai-logs"] })}>
+                  <RefreshCw className="size-3.5" /> {t("settings.refresh")}
                 </Button>
-                <Button variant="outline" size="sm" onClick={exportLogs} className="gap-1.5">
-                  <Download className="h-3.5 w-3.5" /> {t("settings.exportCsv")}
+                <Button variant="outline" size="sm" onPress={exportLogs}>
+                  <Download className="size-3.5" /> {t("settings.exportCsv")}
                 </Button>
               </div>
 
               {logsLoading ? (
-                <div className="divide-y -mx-4 border-t">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="flex items-center gap-4 px-4 py-3">
-                      <Skeleton className="h-4 w-28" />
-                      <Skeleton className="h-5 w-28 rounded-full" />
-                      <Skeleton className="h-5 w-16 rounded-full" />
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-4 flex-1 max-w-xs" />
-                      <Skeleton className="h-4 w-32" />
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
                 </div>
               ) : !logsData?.messages.length ? (
                 <div className="text-center py-14">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <Bot className="h-8 w-8 opacity-30" />
+                    <Bot className="size-8 opacity-30" />
                     <p className="text-sm font-medium">{t("settings.noLogs")}</p>
                     {logSearch && <p className="text-xs">{t("settings.clearSearch")}</p>}
                   </div>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
-                      <TableRow>
-                        <TableHead>{t("settings.logUser")}</TableHead>
-                        <TableHead>{t("settings.logRole")}</TableHead>
-                        <TableHead>{t("settings.logType")}</TableHead>
-                        <TableHead>{t("settings.logPage")}</TableHead>
-                        <TableHead>{t("settings.logMessage")}</TableHead>
-                        <TableHead className="whitespace-nowrap">{t("settings.logTime")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {logsData.messages.map(m => (
-                        <TableRow key={m.id} className="hover:bg-muted/50 transition-colors">
-                          <TableCell>
-                            <div className="font-medium text-sm">{m.userName}</div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs capitalize">{m.userRole.replace(/_/g, " ")}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={m.role === "user"
-                              ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/10 text-xs"
-                              : "bg-muted text-muted-foreground border-border hover:bg-muted text-xs"}>
-                              {m.role}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground font-mono">{m.module ?? "—"}</TableCell>
-                          <TableCell className="max-w-xs">
-                            <p className="text-xs text-foreground/70 line-clamp-2">{m.content}</p>
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                            {formatDateTime(m.createdAt)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <DataGrid
+                  aria-label={t("settings.chatLog")}
+                  data={logsData.messages}
+                  columns={logColumns}
+                  getRowId={(m) => m.id}
+                  defaultSortDescriptor={{ column: "time", direction: "descending" }}
+                />
               )}
               {logsData && (
-                <p className="text-xs text-muted-foreground mt-3">{logsData.total} {t("settings.totalMessages")}</p>
+                <p className="text-xs text-muted-foreground">{logsData.total} {t("settings.totalMessages")}</p>
               )}
-            </CardContent>
+            </Card.Content>
           </Card>
-        </TabsContent>
+        </Tabs.Panel>
       </Tabs>
     </div>
   );
