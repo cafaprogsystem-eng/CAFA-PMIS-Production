@@ -576,5 +576,11 @@
     "projectTitle": "Project details",
     "planTitle": "Plan details",
     "description": "Authorised record information and actions"
-  }
+  },
+  "output": "Output",
+  "unit": "Unit",
+  "fileName": "File Name",
+  "uploadedBy": "Uploaded By",
+  "submittedBy": "Submitted By",
+  "period": "Period"
 }

@@ -129,14 +129,16 @@ const EXCLUDED_FILE_PATTERNS: ReadonlyArray<string> = [
  */
 // Refreshed after fixing the 4 "File Unavailable" hardcoded strings in
 // pages/files.tsx (1) and pages/messages.tsx (3) — Communication/File &
-// Archive review, item 18. The 3 remaining hits (activity-report-detail.tsx,
-// voice-note-panel.tsx, project-detail.tsx) are outside that review's scope.
-const BASELINE_FINGERPRINT_COUNT = 3;
-const BASELINE_FINGERPRINT_SHA256 = "ca42d88b9614f382267216c3a2097dcf31dfa6db5d13cc2e20b99cc58f43a405";
+// Archive review, item 18. Refreshed again when the project-detail Documents
+// tab moved to HeroUI and its strings to projects:detail.docs.* — the 2
+// remaining hits (activity-report-detail.tsx, voice-note-panel.tsx) are
+// outside that change's scope.
+const BASELINE_FINGERPRINT_COUNT = 2;
+const BASELINE_FINGERPRINT_SHA256 = "53b48c9a5a73f648afcac91211168545585080eae74817895fa38935b3cce66f";
 const BASELINE_CATEGORY_COUNTS: Readonly<Record<string, number>> = {
   "aria-label": 0,
   "column-header": 0,
-  "jsx-text": 3,
+  "jsx-text": 2,
   "placeholder": 0,
   "title-attr": 0,
   "toast-call": 0,

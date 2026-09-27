@@ -196,7 +196,9 @@
       "operational": "تشغيلي",
       "financial": "مالي",
       "programmatic": "برنامجي",
-      "environmental": "بيئي"
+      "environmental": "بيئي",
+      "access": "الوصول",
+      "compliance": "الامتثال"
     },
     "likelihoods": {
       "low": "منخفض",

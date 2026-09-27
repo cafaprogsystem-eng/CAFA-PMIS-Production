@@ -196,7 +196,9 @@
       "operational": "Operational",
       "financial": "Financial",
       "programmatic": "Programmatic",
-      "environmental": "Environmental"
+      "environmental": "Environmental",
+      "access": "Access",
+      "compliance": "Compliance"
     },
     "likelihoods": {
       "low": "Low",

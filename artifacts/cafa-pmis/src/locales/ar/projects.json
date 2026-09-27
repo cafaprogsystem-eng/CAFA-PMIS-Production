@@ -315,7 +315,34 @@
       "statusConflict": "تغيّرت حالة المشروع؛ يرجى التحديث والمحاولة مرة أخرى."
     },
     "documentsTab": "المستندات",
-    "sectionsAria": "أقسام المشروع"
+    "sectionsAria": "أقسام المشروع",
+    "docs": {
+      "lockedOperational": "المستندات مقفلة — يمكنك رفع ملفات داعمة، لكن لا يمكن حذف المستندات الحالية إلا باستثناء.",
+      "lockedFrozen": "المستندات مقفلة لأن هذا المشروع مكتمل.",
+      "count_zero": "لا توجد مستندات",
+      "count_one": "مستند واحد",
+      "count_two": "مستندان",
+      "count_few": "{{count}} مستندات",
+      "count_many": "{{count}} مستندًا",
+      "count_other": "{{count}} مستند",
+      "badgeFrozen": "مغلق — مقفل",
+      "badgeOperational": "معتمد — محمي",
+      "uploading": "جارٍ الرفع…",
+      "upload": "رفع مستند",
+      "emptyFrozen": "لا توجد مستندات محفوظة لهذا المشروع.",
+      "emptyMutable": "لم تُرفع مستندات بعد. استخدم زر الرفع لإضافة ملفات.",
+      "unavailable": "الملف غير متاح",
+      "deleteAria": "حذف {{name}}",
+      "deleteOverrideAria": "حذف {{name}} (يتطلب استثناء)",
+      "overrideTooltip": "حذف المستند (يتطلب استثناء — سيُسجَّل في سجل المراجعة)",
+      "lockedTooltip": "لا يمكن حذف المستندات بعد اعتماد المشروع.",
+      "overrideTitle": "حذف مستند من مشروع معتمد؟",
+      "overrideDescription": "هذا المشروع معتمد بالفعل. حذف مستند موجود يتطلب استثناءً خاصًا، وسيُسجَّل في سجل المراجعة.",
+      "overrideReasonLabel": "سبب الاستثناء (مطلوب)",
+      "overrideReasonRequired": "سبب الاستثناء مطلوب.",
+      "deleting": "جارٍ الحذف…",
+      "deleteDocument": "حذف المستند"
+    }
   },
   "form": {
     "tabs": {
@@ -605,5 +632,37 @@
       "annual": "سنوي"
     }
   },
-  "projectActionsAria": "إجراءات المشروع"
+  "projectActionsAria": "إجراءات المشروع",
+  "activityStatus": {
+    "planned": "مخطط",
+    "not_started": "لم يبدأ",
+    "in_progress": "قيد التنفيذ",
+    "delayed": "متأخر",
+    "completed": "مكتمل",
+    "on_hold": "متوقف مؤقتاً",
+    "cancelled": "ملغى"
+  },
+  "documentKinds": {
+    "pca": "اتفاقية تعاون برامجي (PCA)",
+    "ip_agreement": "اتفاقية شريك تنفيذي",
+    "grant_agreement": "اتفاقية منحة",
+    "mou": "مذكرة تفاهم",
+    "contract": "عقد",
+    "partnership_agreement": "اتفاقية شراكة",
+    "detailed_budget": "ميزانية تفصيلية",
+    "approved_budget": "ميزانية معتمدة",
+    "financial_annex": "ملحق مالي",
+    "proposal": "مقترح",
+    "logframe": "الإطار المنطقي",
+    "workplan": "خطة العمل",
+    "donor_communications": "مراسلات المانح",
+    "amendments": "تعديلات",
+    "technical_annexes": "ملاحق فنية",
+    "other": "أخرى"
+  },
+  "documentCategories": {
+    "agreement": "الاتفاقية",
+    "budget": "الميزانية",
+    "optional": "داعم"
+  }
 }

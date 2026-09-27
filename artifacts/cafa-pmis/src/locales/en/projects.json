@@ -311,7 +311,30 @@
       "statusConflict": "The project status has changed; please refresh and try again."
     },
     "documentsTab": "Documents",
-    "sectionsAria": "Project sections"
+    "sectionsAria": "Project sections",
+    "docs": {
+      "lockedOperational": "Documents are locked — you may upload supporting files but cannot delete existing documents without an override.",
+      "lockedFrozen": "Documents are locked because this Project is completed.",
+      "count_one": "{{count}} Document",
+      "count_other": "{{count}} Documents",
+      "badgeFrozen": "Closed — locked",
+      "badgeOperational": "Approved — protected",
+      "uploading": "Uploading…",
+      "upload": "Upload Document",
+      "emptyFrozen": "No documents are stored for this project.",
+      "emptyMutable": "No documents uploaded yet. Use the Upload button to add files.",
+      "unavailable": "File Unavailable",
+      "deleteAria": "Delete {{name}}",
+      "deleteOverrideAria": "Delete {{name}} (override required)",
+      "overrideTooltip": "Delete document (override required — will be audited)",
+      "lockedTooltip": "Documents cannot be deleted after project approval.",
+      "overrideTitle": "Delete Approved Project Document?",
+      "overrideDescription": "This project has already been approved. Deleting an existing document requires an exceptional override and will be recorded in the audit history.",
+      "overrideReasonLabel": "Override Reason (required)",
+      "overrideReasonRequired": "An override reason is required.",
+      "deleting": "Deleting…",
+      "deleteDocument": "Delete Document"
+    }
   },
   "form": {
     "tabs": {
@@ -601,5 +624,37 @@
       "annual": "Annual"
     }
   },
-  "projectActionsAria": "Project actions"
+  "projectActionsAria": "Project actions",
+  "activityStatus": {
+    "planned": "Planned",
+    "not_started": "Not Started",
+    "in_progress": "In Progress",
+    "delayed": "Delayed",
+    "completed": "Completed",
+    "on_hold": "On Hold",
+    "cancelled": "Cancelled"
+  },
+  "documentKinds": {
+    "pca": "PCA",
+    "ip_agreement": "IP Agreement",
+    "grant_agreement": "Grant Agreement",
+    "mou": "MoU",
+    "contract": "Contract",
+    "partnership_agreement": "Partnership Agreement",
+    "detailed_budget": "Detailed Budget",
+    "approved_budget": "Approved Budget",
+    "financial_annex": "Financial Annex",
+    "proposal": "Proposal",
+    "logframe": "Logframe",
+    "workplan": "Workplan",
+    "donor_communications": "Donor Communications",
+    "amendments": "Amendments",
+    "technical_annexes": "Technical Annexes",
+    "other": "Other"
+  },
+  "documentCategories": {
+    "agreement": "Agreement",
+    "budget": "Budget",
+    "optional": "Supporting"
+  }
 }

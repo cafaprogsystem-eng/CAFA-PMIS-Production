@@ -15,14 +15,7 @@ import {
   requestUploadUrl,
   scanProjectDonorIntegrity,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@heroui/react";
 import {
   Table,
   TableBody,
@@ -31,24 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency, formatDate, formatDateTime, formatPercent, formatStatusLabel, hasPerm, severityBadgeVariant } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime, formatPercent, formatStatusLabel, hasPerm } from "@/lib/format";
 import { ProjectStatusBadge, ProgressBar } from "./projects";
 import { CheckCircle2, ArrowLeft, DollarSign, Users, Target, Activity as ActivityIcon, AlertCircle, FileText, TrendingUp, Plus, Shield, Building2, CalendarDays, Hash, Tag, Pencil, Trash2, Lock, Upload, Archive } from "@/components/icons";
 import { ErrorState } from "@/components/ui/error-state";
@@ -62,8 +39,9 @@ import { useTranslation } from "react-i18next";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { StateLabel } from "@/components/state-label";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
-import { Alert, Button as HButton, Chip, Tabs, Input as HInput, Label as HLabel, Link as HLink, Modal, TextArea as HTextArea, TextField } from "@heroui/react";
+import { Alert, Button as HButton, Card as HCard, Separator as HSeparator, Chip, ProgressBar as HProgressBar, Tabs, Input as HInput, Label as HLabel, Link as HLink, Modal, TextArea as HTextArea, TextField } from "@heroui/react";
 import { KPI } from "@heroui-pro/react/kpi";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import { SelectField } from "@/components/select-field";
 
 type Action = "submit" | "technical_review" | "coordination_review" | "final_approve" | "activate" | "close" | "reject" | "request_revision";
@@ -408,6 +386,7 @@ function CreateProjectRiskDialog({
   const { toast } = useToast();
   const { t } = useTranslation("projects");
   const { t: tCommon } = useTranslation("common");
+  const { t: tRisks } = useTranslation("risks");
 
   function reset() {
     setF({ title: "", category: "Programmatic", likelihood: "medium", impact: "medium",
@@ -436,80 +415,67 @@ function CreateProjectRiskDialog({
   }
 
   const level = computeRiskLevelFE(f.likelihood, f.impact);
+  const levelOptions = (["low", "medium", "high"] as const).map(v => ({ value: v, label: tCommon(v) }));
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
-      <DialogTrigger asChild>
-              <Button size="sm" variant="outline"><Plus className="h-3 w-3" />{t("detail.newRisk")}</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("detail.logNewRisk")}</DialogTitle>
-          <DialogDescription>{t("detail.logNewRiskDesc")}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 py-1">
-          <div>
-            <Label>{t("detail.riskTitle")}</Label>
-            <Input value={f.title} onChange={(e) => setF(p => ({ ...p, title: e.target.value }))} placeholder={t("detail.riskBriefDesc")} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>{t("detail.riskCategory")}</Label>
-              <Select value={f.category} onValueChange={(v) => setF(p => ({ ...p, category: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{RISK_CATS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>{t("detail.riskState")}</Label>
-              <Select value={f.stateId} onValueChange={(v) => setF(p => ({ ...p, stateId: v }))}>
-                <SelectTrigger><SelectValue placeholder={t("detail.riskSelectState")} /></SelectTrigger>
-                <SelectContent>{projectStates.map(s => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>{t("detail.riskProbability")}</Label>
-              <Select value={f.likelihood} onValueChange={(v) => setF(p => ({ ...p, likelihood: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">{tCommon("low")}</SelectItem>
-                  <SelectItem value="medium">{tCommon("medium")}</SelectItem>
-                  <SelectItem value="high">{tCommon("high")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>{t("detail.riskImpact")}</Label>
-              <Select value={f.impact} onValueChange={(v) => setF(p => ({ ...p, impact: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">{tCommon("low")}</SelectItem>
-                  <SelectItem value="medium">{tCommon("medium")}</SelectItem>
-                  <SelectItem value="high">{tCommon("high")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Shield className="h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground">{t("detail.riskComputedLevel")}</span>
-            <Badge variant={severityBadgeVariant(level)}>{level}</Badge>
-          </div>
-          <div>
-            <Label>{t("detail.riskDueDate")}</Label>
-            <Input type="date" value={f.dueDate} onChange={(e) => setF(p => ({ ...p, dueDate: e.target.value }))} />
-          </div>
-          <div>
-            <Label>{t("detail.riskMitigationPlan")}</Label>
-            <Textarea rows={2} value={f.mitigationPlan} onChange={(e) => setF(p => ({ ...p, mitigationPlan: e.target.value }))} placeholder={t("detail.riskMitigationPlaceholder")} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>{tCommon("cancel")}</Button>
-          <Button onClick={submit} disabled={createRisk.isPending}>{createRisk.isPending ? tCommon("savingData") : t("detail.saveRisk")}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <HButton size="sm" variant="outline" onPress={() => setOpen(true)}>
+        <Plus className="size-3.5" aria-hidden="true" />{t("detail.newRisk")}
+      </HButton>
+      <Modal isOpen={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+        <Modal.Backdrop>
+          <Modal.Container size="md">
+            <Modal.Dialog>
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{t("detail.logNewRisk")}</Modal.Heading>
+                <p className="text-sm text-[var(--muted)]">{t("detail.logNewRiskDesc")}</p>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-3">
+                <TextField value={f.title} onChange={(v) => setF(p => ({ ...p, title: v }))} fullWidth>
+                  <HLabel>{t("detail.riskTitle")}</HLabel>
+                  <HInput placeholder={t("detail.riskBriefDesc")} />
+                </TextField>
+                <div className="grid grid-cols-2 gap-3">
+                  <SelectField
+                    label={t("detail.riskCategory")}
+                    value={f.category}
+                    onChange={(v) => setF(p => ({ ...p, category: v }))}
+                    options={RISK_CATS.map(c => ({ value: c, label: tRisks(`presentation.categories.${c.toLowerCase()}`, { defaultValue: c }) }))}
+                  />
+                  <SelectField
+                    label={t("detail.riskState")}
+                    value={f.stateId}
+                    onChange={(v) => setF(p => ({ ...p, stateId: v }))}
+                    placeholder={t("detail.riskSelectState")}
+                    options={projectStates.map(st => ({ value: String(st.id), label: <StateLabel state={st} />, textValue: st.name }))}
+                  />
+                  <SelectField label={t("detail.riskProbability")} value={f.likelihood} onChange={(v) => setF(p => ({ ...p, likelihood: v }))} options={levelOptions} />
+                  <SelectField label={t("detail.riskImpact")} value={f.impact} onChange={(v) => setF(p => ({ ...p, impact: v }))} options={levelOptions} />
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Shield className="size-4 text-[var(--muted)]" aria-hidden="true" />
+                  <span className="text-[var(--muted)]">{t("detail.riskComputedLevel")}</span>
+                  <Chip size="sm" variant="soft" color={RISK_LEVEL_CHIP[level] ?? "default"}>{tRisks(`presentation.riskLevels.${level}`, { defaultValue: level })}</Chip>
+                </div>
+                <TextField value={f.dueDate} onChange={(v) => setF(p => ({ ...p, dueDate: v }))} fullWidth>
+                  <HLabel>{t("detail.riskDueDate")}</HLabel>
+                  <HInput type="date" />
+                </TextField>
+                <TextField value={f.mitigationPlan} onChange={(v) => setF(p => ({ ...p, mitigationPlan: v }))} fullWidth>
+                  <HLabel>{t("detail.riskMitigationPlan")}</HLabel>
+                  <HTextArea rows={2} placeholder={t("detail.riskMitigationPlaceholder")} />
+                </TextField>
+              </Modal.Body>
+              <Modal.Footer>
+                <HButton variant="secondary" onPress={() => { setOpen(false); reset(); }}>{tCommon("cancel")}</HButton>
+                <HButton onPress={submit} isDisabled={createRisk.isPending}>{createRisk.isPending ? tCommon("savingData") : t("detail.saveRisk")}</HButton>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+    </>
   );
 }
 
@@ -540,6 +506,24 @@ function useProjectReportKpis(projectId: number) {
     staleTime: 60_000,
   });
 }
+
+/** Long text in a grid cell: wraps (max three lines) in its own direction,
+ *  aligned with the column; the full value stays in the tooltip. */
+function WrapText({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <span className="block"><span dir="auto" className={`inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end leading-snug ${className}`} title={typeof children === "string" ? children : undefined}>{children}</span></span>;
+}
+
+/** Thin HeroUI ProgressBar with an accessible name. */
+function Meter({ value, color = "accent", label }: { value: number; color?: "accent" | "success" | "warning" | "danger"; label: string }) {
+  return (
+    <HProgressBar size="sm" value={Math.min(100, Math.max(0, value))} color={color} aria-label={label} className="w-full">
+      <HProgressBar.Track><HProgressBar.Fill /></HProgressBar.Track>
+    </HProgressBar>
+  );
+}
+
+/** Chip colour for a risk level. */
+const RISK_LEVEL_CHIP: Record<string, "default" | "success" | "warning" | "danger"> = { low: "success", medium: "warning", high: "danger", critical: "danger" };
 
 /* Project KPI — Pro KPI "With Footer"; value is a pre-formatted string. */
 function DetailKpi({ icon: Icon, status, label, value, sub, href }: {
@@ -600,6 +584,8 @@ export default function ProjectDetailPage({
   } = useListProjectStateAllocations(projectId);
   const { t, i18n } = useTranslation("projects");
   const { t: tCommon } = useTranslation("common");
+  const { t: tRisks } = useTranslation("risks");
+  const { t: tReports } = useTranslation("reports");
   const { toast } = useToast();
   const hasEditParam = !embedded && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("edit");
   const canRunDonorIntegrityScan = hasPerm(me?.permissions, "projects.donor.correct");
@@ -857,7 +843,7 @@ export default function ProjectDetailPage({
   // PRJ-BD-04: Override delete (PM/SA on operational projects)
   async function handleOverrideDocDelete() {
     const reason = overrideReason.trim();
-    if (!reason) { setOverrideReasonError("An override reason is required."); return; }
+    if (!reason) { setOverrideReasonError(t("detail.docs.overrideReasonRequired")); return; }
     if (!overrideDeleteDialog) return;
     setIsOverrideDeleting(true);
     try {
@@ -1235,86 +1221,72 @@ export default function ProjectDetailPage({
           <div className="grid gap-5 md:grid-cols-2">
 
             {/* Budget summary */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">{t("detail.budget")}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <HCard>
+              <HCard.Header className="pb-3">
+                <HCard.Title className="text-base">{t("detail.budget")}</HCard.Title>
+              </HCard.Header>
+              <HCard.Content className="space-y-4">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <div className="text-xs text-muted-foreground mb-1">{t("detail.totalLabel")}</div>
+                  <div className="rounded-xl bg-[var(--default)] p-3">
+                    <div className="mb-1 text-xs text-[var(--muted)]">{t("detail.totalLabel")}</div>
                     <div className="text-sm font-semibold tabular-nums leading-snug">{formatCurrency(budgetTotal, projectCurrency)}</div>
                   </div>
-                  <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 p-3">
-                    <div className="text-xs text-amber-700 dark:text-amber-400 mb-1">{t("detail.spentLabel")}</div>
-                    <div className="text-sm font-semibold tabular-nums leading-snug text-amber-700 dark:text-amber-400">{formatCurrency(budgetSpent, projectCurrency)}</div>
+                  <div className="rounded-xl bg-[color-mix(in_oklab,var(--warning)_12%,transparent)] p-3">
+                    <div className="mb-1 text-xs text-[var(--warning)]">{t("detail.spentLabel")}</div>
+                    <div className="text-sm font-semibold tabular-nums leading-snug text-[var(--warning)]">{formatCurrency(budgetSpent, projectCurrency)}</div>
                   </div>
-                  <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 p-3">
-                    <div className="text-xs text-emerald-700 dark:text-emerald-400 mb-1">{t("detail.remainingLabel")}</div>
-                    <div className="text-sm font-semibold tabular-nums leading-snug text-emerald-700 dark:text-emerald-400">{formatCurrency(budgetTotal - budgetSpent, projectCurrency)}</div>
+                  <div className="rounded-xl bg-[color-mix(in_oklab,var(--success)_12%,transparent)] p-3">
+                    <div className="mb-1 text-xs text-[var(--success)]">{t("detail.remainingLabel")}</div>
+                    <div className="text-sm font-semibold tabular-nums leading-snug text-[var(--success)]">{formatCurrency(budgetTotal - budgetSpent, projectCurrency)}</div>
                   </div>
                 </div>
                 {(() => {
                   // BUD-006: 0/0 utilisation is undefined — show "—", never 0% or 100%.
                   const pct = budgetTotal > 0 ? Math.round((budgetSpent / budgetTotal) * 100) : null;
                   const barPct = pct ?? 0;
-                  const barColor = barPct >= 90 ? "bg-destructive" : barPct >= 75 ? "bg-warning" : "bg-primary";
-                  const txtColor = barPct >= 90 ? "text-destructive" : barPct >= 75 ? "text-warning" : "text-foreground";
+                  const barColor = barPct >= 90 ? "danger" : barPct >= 75 ? "warning" : "accent";
+                  const txtColor = barPct >= 90 ? "text-[var(--danger)]" : barPct >= 75 ? "text-[var(--warning)]" : "text-foreground";
                   return (
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">{t("detail.utilisation")}</span>
                         <span className={`font-medium tabular-nums ${txtColor}`}>{formatPercent(pct)}</span>
                       </div>
-                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${barColor}`}
-                          style={{ width: `${barPct}%` }}
-                          role="progressbar"
-                          aria-label={`Budget utilisation ${formatPercent(pct)}`}
-                          aria-valuenow={barPct}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                        />
-                      </div>
+                      <Meter value={barPct} color={barColor} label={`${t("detail.utilisation")} ${formatPercent(pct)}`} />
                     </div>
                   );
                 })()}
-              </CardContent>
-            </Card>
+              </HCard.Content>
+            </HCard>
 
             {/* Implementation progress */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">{t("detail.progressCard")}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <HCard>
+              <HCard.Header className="pb-3">
+                <HCard.Title className="text-base">{t("detail.progressCard")}</HCard.Title>
+              </HCard.Header>
+              <HCard.Content className="space-y-4">
                 {/* Activities */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{t("detail.activities")}</span>
                     <span className="font-medium tabular-nums">{activitiesCompletion}%</span>
                   </div>
-                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-violet-500 rounded-full transition-all duration-300" style={{ width: `${activitiesCompletion}%` }} role="progressbar" aria-label={`Activities completion ${activitiesCompletion}%`} aria-valuenow={activitiesCompletion} aria-valuemin={0} aria-valuemax={100} />
-                  </div>
+                  <Meter value={activitiesCompletion} label={`${t("detail.activities")} ${activitiesCompletion}%`} />
                   <div className="text-xs text-muted-foreground">
                     {activities.filter(a => a.status === "completed").length} {t("detail.of")} {activities.length} {t("detail.completed")}
                   </div>
                 </div>
-                <Separator />
+                <HSeparator />
                 {/* Indicators */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{t("detail.indicatorProgressLabel")}</span>
                     <span className="font-medium tabular-nums">{indicatorAvg}%</span>
                   </div>
-                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-teal-500 rounded-full transition-all duration-300" style={{ width: `${indicatorAvg}%` }} role="progressbar" aria-label={`Indicator progress ${indicatorAvg}%`} aria-valuenow={indicatorAvg} aria-valuemin={0} aria-valuemax={100} />
-                  </div>
+                  <Meter value={indicatorAvg} color="success" label={`${t("detail.indicatorProgressLabel")} ${indicatorAvg}%`} />
                   <div className="text-xs text-muted-foreground">{t("detail.avgAcross")} {indicators.length} {indicators.length !== 1 ? t("detail.indicators_plural") : t("detail.indicator")}</div>
                 </div>
-                <Separator />
+                <HSeparator />
                 {/* Beneficiaries */}
                 {(() => {
                   const pct = beneficiariesTarget > 0 ? Math.min(100, Math.round((beneficiariesReached / beneficiariesTarget) * 100)) : 0;
@@ -1324,31 +1296,29 @@ export default function ProjectDetailPage({
                         <span className="text-muted-foreground">{t("detail.beneficiaries")}</span>
                         <span className="font-medium tabular-nums">{pct}%</span>
                       </div>
-                      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} role="progressbar" aria-label={`Beneficiaries reached ${pct}%`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} />
-                      </div>
+                      <Meter value={pct} color="success" label={`${t("detail.beneficiaries")} ${pct}%`} />
                       <div className="text-xs text-muted-foreground">
                         {beneficiariesReached.toLocaleString()} {t("detail.of")} {beneficiariesTarget.toLocaleString()} {t("detail.target")}
                       </div>
                     </div>
                   );
                 })()}
-              </CardContent>
-            </Card>
+              </HCard.Content>
+            </HCard>
           </div>
 
           {/* ── B: Reporting & Risks ── */}
           <div className="grid gap-5 md:grid-cols-2">
 
             {/* Reporting status */}
-            <Card>
-              <CardHeader className="pb-3">
+            <HCard>
+              <HCard.Header className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{t("detail.reports")}</CardTitle>
+                  <HCard.Title className="text-base">{t("detail.reports")}</HCard.Title>
                   <span className="text-xs text-muted-foreground tabular-nums">{reports.length} {t("detail.reportsTotal")}</span>
                 </div>
-              </CardHeader>
-              <CardContent>
+              </HCard.Header>
+              <HCard.Content>
                 {reports.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t("detail.noReports")}</p>
                 ) : (() => {
@@ -1397,18 +1367,18 @@ export default function ProjectDetailPage({
                     </div>
                   );
                 })()}
-              </CardContent>
-            </Card>
+              </HCard.Content>
+            </HCard>
 
             {/* Risks summary */}
-            <Card>
-              <CardHeader className="pb-3">
+            <HCard>
+              <HCard.Header className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{t("detail.risks")}</CardTitle>
+                  <HCard.Title className="text-base">{t("detail.risks")}</HCard.Title>
                   <span className="text-xs text-muted-foreground tabular-nums">{risks.length} {t("detail.risksLogged")}</span>
                 </div>
-              </CardHeader>
-              <CardContent>
+              </HCard.Header>
+              <HCard.Content>
                 {risks.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t("detail.noRisks")}</p>
                 ) : (() => {
@@ -1453,20 +1423,20 @@ export default function ProjectDetailPage({
                     </div>
                   );
                 })()}
-              </CardContent>
-            </Card>
+              </HCard.Content>
+            </HCard>
           </div>
 
           {/* ── C: Description & Outputs ── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{t("detail.descriptionObjectives")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <HCard>
+            <HCard.Header className="pb-3">
+              <HCard.Title className="text-base">{t("detail.descriptionObjectives")}</HCard.Title>
+            </HCard.Header>
+            <HCard.Content className="space-y-4">
               <p className="text-sm whitespace-pre-wrap text-foreground/80">
                 {project.description || <span className="text-muted-foreground">{t("detail.noDescription")}</span>}
               </p>
-              <Separator />
+              <HSeparator />
               {outputs.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("detail.noOutputs")}</p>
               ) : (
@@ -1485,15 +1455,15 @@ export default function ProjectDetailPage({
                   </ul>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </HCard.Content>
+          </HCard>
 
           {/* ── D: Project details ── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{t("detail.projectDetails")}</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <HCard>
+            <HCard.Header className="pb-3">
+              <HCard.Title className="text-base">{t("detail.projectDetails")}</HCard.Title>
+            </HCard.Header>
+            <HCard.Content>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
                 <div>
                   <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("detail.donor")}</dt>
@@ -1504,11 +1474,11 @@ export default function ProjectDetailPage({
                   <dd className="font-medium">
                     {project.sector}
                     {project.assistanceModality && (
-                      <Badge variant="outline" className="ms-2 text-xs font-normal">{project.assistanceModality}</Badge>
+                      <Chip size="sm" variant="soft" className="ms-2">{project.assistanceModality}</Chip>
                     )}
                     {project.subSectors && project.subSectors.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {project.subSectors.map(s => <Badge key={s} variant="secondary" className="text-xs font-normal">{s}</Badge>)}
+                        {project.subSectors.map(s => <Chip key={s} size="sm" variant="soft">{s}</Chip>)}
                       </div>
                     )}
                   </dd>
@@ -1541,23 +1511,23 @@ export default function ProjectDetailPage({
                   <dd className="font-medium">{formatDate(project.endDate)}</dd>
                 </div>
               </dl>
-            </CardContent>
-          </Card>
+            </HCard.Content>
+          </HCard>
 
-          <Card>
-            <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+          <HCard>
+            <HCard.Header className="pb-3 flex-row items-center justify-between space-y-0">
               <div>
-                <CardTitle className="text-base">{t("detail.reportingConfiguration")}</CardTitle>
-                <CardDescription>{t("detail.reportingConfigurationDescription")}</CardDescription>
+                <HCard.Title className="text-base">{t("detail.reportingConfiguration")}</HCard.Title>
+                <HCard.Description>{t("detail.reportingConfigurationDescription")}</HCard.Description>
               </div>
               {canManageReportingCoverage && (
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={openReportingConfigurationEditor}>
-                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                <HButton size="sm" variant="outline" onPress={openReportingConfigurationEditor}>
+                  <Pencil className="size-4" aria-hidden="true" />
                   {t("detail.editReportingConfiguration")}
-                </Button>
+                </HButton>
               )}
-            </CardHeader>
-            <CardContent>
+            </HCard.Header>
+            <HCard.Content>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
                 <div>
                   <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("detail.reportingStartDate")}</dt>
@@ -1568,16 +1538,16 @@ export default function ProjectDetailPage({
                   <dd className="font-medium">{project.reportingEndDate ? formatDate(project.reportingEndDate) : <span className="text-muted-foreground">{t("detail.notConfigured")}</span>}</dd>
                 </div>
               </dl>
-            </CardContent>
-          </Card>
+            </HCard.Content>
+          </HCard>
 
           {/* ── E: Recent activity (from approval history) ── */}
           {approvalHistory.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">{t("detail.recentActivity")}</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <HCard>
+              <HCard.Header className="pb-3">
+                <HCard.Title className="text-base">{t("detail.recentActivity")}</HCard.Title>
+              </HCard.Header>
+              <HCard.Content>
                 <ol className="space-y-4">
                   {approvalHistory.slice(0, 4).map(h => (
                     <li key={h.id} className="flex items-start gap-3">
@@ -1600,82 +1570,52 @@ export default function ProjectDetailPage({
                     </li>
                   ))}
                 </ol>
-              </CardContent>
-            </Card>
+              </HCard.Content>
+            </HCard>
           )}
 
         </Tabs.Panel>
 
         <Tabs.Panel id="activities" className="pt-4">
-          <Card><CardContent className="p-0">
-            <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{tCommon("code")}</TableHead><TableHead>{tCommon("title")}</TableHead><TableHead>{tCommon("status")}</TableHead>
-                  <TableHead>{t("detail.progress")}</TableHead><TableHead>{tCommon("startDate")}</TableHead><TableHead>{tCommon("output")}</TableHead>
-                  <TableHead>{tCommon("state")}</TableHead><TableHead>{tCommon("budget")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {activities.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
-                      {t("detail.noActivities")}
-                    </TableCell>
-                  </TableRow>
-                )}
-                {activities.map(a => (
-                  <TableRow key={a.id}>
-                    <TableCell className="w-20 font-mono text-xs"><bdi dir="ltr">{a.code}</bdi></TableCell>
-                    <TableCell className="font-medium">
-                      <span className="block max-w-[200px] truncate" title={a.title}>{a.title}</span>
-                    </TableCell>
-                    <TableCell><Badge variant="outline">{formatStatusLabel(a.status)}</Badge></TableCell>
-                    <TableCell className="w-32"><ProgressBar value={a.progressPct} max={100} /></TableCell>
-                    <TableCell className="text-xs"><bdi dir="ltr">{formatDate(a.plannedStart)} – {formatDate(a.plannedEnd)}</bdi></TableCell>
-                    <TableCell className="text-sm">{a.outputTitle || "—"}</TableCell>
-                    <TableCell className="text-sm">{a.stateName ? getLinkedStateLabel(a, i18n?.language) : "—"}</TableCell>
-                    <TableCell className="text-xs text-end min-w-[130px]"><bdi dir="ltr">{formatCurrency(a.budgetSpent, projectCurrency)} / {formatCurrency(a.budgetPlanned, projectCurrency)}</bdi></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            </div>
-          </CardContent></Card>
+          <DataGrid
+            aria-label={t("detail.activities")}
+            data={activities}
+            getRowId={(a) => a.id}
+            contentClassName="min-w-[1100px]"
+            renderEmptyState={() => <p className="py-8 text-center text-sm text-[var(--muted)]">{t("detail.noActivities")}</p>}
+            columns={[
+              { id: "code", header: tCommon("code"), width: 80, cell: (a) => <span className="font-mono text-xs"><bdi dir="ltr">{a.code}</bdi></span> },
+              { id: "title", header: tCommon("title"), isRowHeader: true, width: 220, cell: (a) => <WrapText className="font-medium">{a.title}</WrapText> },
+              { id: "status", header: tCommon("status"), width: 120, cell: (a) => <Chip size="sm" variant="soft" className="whitespace-nowrap" color={a.status === "completed" ? "success" : a.status === "delayed" ? "warning" : a.status === "in_progress" ? "accent" : "default"}>{t(`activityStatus.${a.status}`, { defaultValue: formatStatusLabel(a.status) })}</Chip> },
+              { id: "progress", header: t("detail.progress"), width: 120, cell: (a) => <ProgressBar className="w-full min-w-0" value={a.progressPct} max={100} /> },
+              { id: "dates", header: tCommon("startDate"), width: 190, cell: (a) => <span className="whitespace-nowrap text-xs"><bdi dir="ltr">{formatDate(a.plannedStart)} – {formatDate(a.plannedEnd)}</bdi></span> },
+              { id: "output", header: tCommon("output"), width: 200, cell: (a) => <WrapText className="text-sm text-[var(--muted)]">{a.outputTitle || "—"}</WrapText> },
+              { id: "state", header: tCommon("state"), width: 110, cell: (a) => <span className="text-sm">{a.stateName ? getLinkedStateLabel(a, i18n?.language) : "—"}</span> },
+              { id: "budget", header: tCommon("budget"), width: 170, align: "end", cell: (a) => (
+                <span className="text-xs leading-tight tabular-nums">
+                  <bdi dir="ltr" className="block font-medium">{formatCurrency(a.budgetSpent, projectCurrency)}</bdi>
+                  <span className="whitespace-nowrap text-[var(--muted)]">{t("detail.of")} <bdi dir="ltr">{formatCurrency(a.budgetPlanned, projectCurrency)}</bdi></span>
+                </span>
+              ) },
+            ] satisfies DataGridColumn<(typeof activities)[number]>[]}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel id="indicators" className="pt-4">
-          <Card><CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{tCommon("code")}</TableHead><TableHead>{tCommon("title")}</TableHead><TableHead>{tCommon("unit")}</TableHead>
-                  <TableHead className="text-end">{tCommon("target")}</TableHead><TableHead className="text-end">{tCommon("actual")}</TableHead>
-                  <TableHead>{t("detail.progress")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {indicators.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">
-                      {t("detail.noIndicators")}
-                    </TableCell>
-                  </TableRow>
-                )}
-                {indicators.map(i => (
-                  <TableRow key={i.id}>
-                    <TableCell className="font-mono text-xs">{i.code}</TableCell>
-                    <TableCell className="font-medium">{i.title}</TableCell>
-                    <TableCell className="text-sm">{i.unit}</TableCell>
-                    <TableCell className="text-end">{i.target.toLocaleString()}</TableCell>
-                    <TableCell className="text-end">{i.achieved.toLocaleString()}</TableCell>
-                    <TableCell><ProgressBar value={i.achieved} max={i.target} /></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent></Card>
+          <DataGrid
+            aria-label={t("detail.indicators")}
+            data={indicators}
+            getRowId={(i) => i.id}
+            renderEmptyState={() => <p className="py-8 text-center text-sm text-[var(--muted)]">{t("detail.noIndicators")}</p>}
+            columns={[
+              { id: "code", header: tCommon("code"), width: 90, cell: (i) => <span className="font-mono text-xs"><bdi dir="ltr">{i.code}</bdi></span> },
+              { id: "title", header: tCommon("title"), isRowHeader: true, cell: (i) => <WrapText className="font-medium">{i.title}</WrapText> },
+              { id: "unit", header: tCommon("unit"), width: 110, cell: (i) => <span dir="auto" className="text-sm">{i.unit}</span> },
+              { id: "target", header: tCommon("target"), width: 100, align: "end", cell: (i) => <span className="tabular-nums">{i.target.toLocaleString()}</span> },
+              { id: "achieved", header: tCommon("actual"), width: 100, align: "end", cell: (i) => <span className="tabular-nums">{i.achieved.toLocaleString()}</span> },
+              { id: "progress", header: t("detail.progress"), width: 150, cell: (i) => <ProgressBar className="w-full min-w-0" value={i.achieved} max={i.target} /> },
+            ] satisfies DataGridColumn<(typeof indicators)[number]>[]}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel id="budget" className="pt-4">
@@ -1687,78 +1627,75 @@ export default function ProjectDetailPage({
             const isOverspent = utilisation !== null && utilisation > 100;
             const hasNegativeRemaining = remaining < 0;
             return (
-              <Card>
-                <CardHeader className="pb-4">
+              <HCard>
+                <HCard.Header className="pb-4">
                   <div className="flex items-start justify-between flex-wrap gap-3">
                     <div className="space-y-1">
-                      <CardTitle>{t("detail.projectBudget")}</CardTitle>
-                      <CardDescription>{t("detail.projectBudgetDescription")}</CardDescription>
+                      <HCard.Title>{t("detail.projectBudget")}</HCard.Title>
+                      <HCard.Description>{t("detail.projectBudgetDescription")}</HCard.Description>
                     </div>
-                    <div className="rounded-md border bg-muted/40 px-3 py-2 text-end">
-                      <p className="text-xs text-muted-foreground">{t("detail.projectCurrency")}</p>
+                    <div className="rounded-xl bg-[var(--default)] px-3 py-2 text-end">
+                      <p className="text-xs text-[var(--muted)]">{t("detail.projectCurrency")}</p>
                       <p className="font-medium tabular-nums">{projectCurrency || "—"}</p>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-5">
+                </HCard.Header>
+                <HCard.Content className="space-y-5">
                   <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-lg border bg-card p-4">
-                      <dt className="text-xs font-medium text-muted-foreground">{t("detail.projectBudget")}</dt>
+                    <div className="rounded-xl bg-[var(--default)] p-4">
+                      <dt className="text-xs font-medium text-[var(--muted)]">{t("detail.projectBudget")}</dt>
                       <dd className="mt-1.5 text-lg font-medium tabular-nums">{formatCurrency(budgetTotal, projectCurrency)}</dd>
                     </div>
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
-                      <dt className="text-xs font-medium text-amber-800 dark:text-amber-300">{t("detail.spentLabel")}</dt>
-                      <dd className="mt-1.5 text-lg font-medium tabular-nums text-amber-800 dark:text-amber-300">{formatCurrency(budgetSpent, projectCurrency)}</dd>
+                    <div className="rounded-xl bg-[color-mix(in_oklab,var(--warning)_12%,transparent)] p-4">
+                      <dt className="text-xs font-medium text-[var(--warning)]">{t("detail.spentLabel")}</dt>
+                      <dd className="mt-1.5 text-lg font-medium tabular-nums text-[var(--warning)]">{formatCurrency(budgetSpent, projectCurrency)}</dd>
                     </div>
-                    <div className={`rounded-lg border p-4 ${hasNegativeRemaining ? "border-destructive/50 bg-destructive/5" : "border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"}`}>
-                      <dt className={`text-xs font-medium ${hasNegativeRemaining ? "text-destructive" : "text-emerald-800 dark:text-emerald-300"}`}>{t("detail.remainingLabel")}</dt>
-                      <dd className={`mt-1.5 text-lg font-medium tabular-nums ${hasNegativeRemaining ? "text-destructive" : "text-emerald-800 dark:text-emerald-300"}`}>{formatCurrency(remaining, projectCurrency)}</dd>
-                      {hasNegativeRemaining && <p className="mt-1 text-xs text-destructive">{t("detail.negativeRemaining")}</p>}
+                    <div className={`rounded-xl p-4 ${hasNegativeRemaining ? "bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]" : "bg-[color-mix(in_oklab,var(--success)_12%,transparent)]"}`}>
+                      <dt className={`text-xs font-medium ${hasNegativeRemaining ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>{t("detail.remainingLabel")}</dt>
+                      <dd className={`mt-1.5 text-lg font-medium tabular-nums ${hasNegativeRemaining ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>{formatCurrency(remaining, projectCurrency)}</dd>
+                      {hasNegativeRemaining && <p className="mt-1 text-xs text-[var(--danger)]">{t("detail.negativeRemaining")}</p>}
                     </div>
-                    <div className={`rounded-lg border p-4 ${isOverspent ? "border-destructive/50 bg-destructive/5" : "bg-muted/30"}`}>
-                      <dt className={`text-xs font-medium ${isOverspent ? "text-destructive" : "text-muted-foreground"}`}>{t("detail.utilisation")}</dt>
-                      <dd className={`mt-1.5 text-lg font-medium tabular-nums ${isOverspent ? "text-destructive" : ""}`}>{formatPercent(utilisation)}</dd>
-                      {isOverspent && <p className="mt-1 text-xs text-destructive">{t("detail.overBudget")}</p>}
+                    <div className={`rounded-xl p-4 ${isOverspent ? "bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]" : "bg-[var(--default)]"}`}>
+                      <dt className={`text-xs font-medium ${isOverspent ? "text-[var(--danger)]" : "text-[var(--muted)]"}`}>{t("detail.utilisation")}</dt>
+                      <dd className={`mt-1.5 text-lg font-medium tabular-nums ${isOverspent ? "text-[var(--danger)]" : ""}`}>{formatPercent(utilisation)}</dd>
+                      {isOverspent && <p className="mt-1 text-xs text-[var(--danger)]">{t("detail.overBudget")}</p>}
                     </div>
                   </dl>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="text-muted-foreground">{t("detail.utilisation")}</span>
-                      <span className={`font-medium tabular-nums ${isOverspent ? "text-destructive" : ""}`}>{formatPercent(utilisation)}</span>
+                      <span className="text-[var(--muted)]">{t("detail.utilisation")}</span>
+                      <span className={`font-medium tabular-nums ${isOverspent ? "text-[var(--danger)]" : ""}`}>{formatPercent(utilisation)}</span>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted" aria-label={`${t("detail.utilisation")} ${formatPercent(utilisation)}`}>
-                      {utilisation !== null && (
-                        <div
-                          className={`h-full rounded-full ${isOverspent ? "bg-destructive" : utilisation >= 75 ? "bg-warning" : "bg-primary"}`}
-                          style={{ width: `${Math.min(100, utilisation)}%` }}
-                        />
-                      )}
-                    </div>
-                    {isOverspent && <p className="text-xs text-muted-foreground">{t("detail.utilisationScaleNote")}</p>}
+                    <Meter
+                      value={utilisation ?? 0}
+                      color={isOverspent ? "danger" : (utilisation ?? 0) >= 75 ? "warning" : "accent"}
+                      label={`${t("detail.utilisation")} ${formatPercent(utilisation)}`}
+                    />
+                    {isOverspent && <p className="text-xs text-[var(--muted)]">{t("detail.utilisationScaleNote")}</p>}
                   </div>
 
-                  <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-3 rounded-xl bg-[var(--default)] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <p className="text-sm font-medium">{t("detail.stateAllocationContext")}</p>
-                      <p className="text-xs leading-relaxed text-muted-foreground">{t("detail.stateAllocationContextDescription")}</p>
+                      <p className="text-xs leading-relaxed text-[var(--muted)]">{t("detail.stateAllocationContextDescription")}</p>
                     </div>
-                    <Link href={`/budget?projectId=${projectId}`} className="shrink-0">
-                      <Button variant="outline" size="sm">{t("detail.openFullBudget")}</Button>
-                    </Link>
+                    <HButton variant="outline" size="sm" className="shrink-0" onPress={() => setLocation(`/budget?projectId=${projectId}`)}>
+                      {t("detail.openFullBudget")}
+                    </HButton>
                   </div>
-                </CardContent>
-              </Card>
+                </HCard.Content>
+              </HCard>
             );
           })()}
         </Tabs.Panel>
 
         <Tabs.Panel id="risks" className="pt-4">
-          <Card>
-            <CardHeader className="py-3 px-4 flex flex-row items-center justify-between gap-2 flex-wrap">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+          <HCard>
+            <HCard.Header className="py-3 px-4 flex flex-row items-center justify-between gap-2 flex-wrap">
+              <HCard.Title className="text-sm font-medium text-muted-foreground">
                 {risks.length} {t("detail.riskForProject")}
-              </CardTitle>
+              </HCard.Title>
               <div className="flex items-center gap-2">
                 {hasPerm(me?.permissions, "risks.create") && (
                   <CreateProjectRiskDialog
@@ -1771,81 +1708,49 @@ export default function ProjectDetailPage({
                   {t("detail.viewAll")}
                 </Link>
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-            <div className="overflow-x-auto">
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>{tCommon("title")}</TableHead><TableHead>{tCommon("category")}</TableHead>
-                <TableHead>{t("detail.riskProbability")}</TableHead><TableHead>{t("detail.riskImpact")}</TableHead>
-                <TableHead>{t("detail.riskComputedLevel").replace(":", "")}</TableHead>
-                <TableHead>{tCommon("status")}</TableHead><TableHead>{tCommon("dueDate")}</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {risks.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">{t("detail.noRisks")} {t("detail.newRisk")}</TableCell></TableRow>
-                )}
-                {risks.map(r => {
-                  const rl = (r as typeof r & { riskLevel?: string }).riskLevel;
-                  const impact = (r as typeof r & { impact?: string }).impact || r.severity;
-                  const dueDate = (r as typeof r & { dueDate?: string }).dueDate;
-                  const isOverdue = dueDate && new Date(dueDate) < new Date() && r.status !== "closed";
-                  return (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium">
-                        <span className="block max-w-[200px] truncate" title={r.title}>{r.title}</span>
-                      </TableCell>
-                      <TableCell className="capitalize">{r.category}</TableCell>
-                      <TableCell className="text-sm capitalize">{r.likelihood}</TableCell>
-                      <TableCell className="text-sm capitalize">{impact}</TableCell>
-                      <TableCell>
-                        {rl ? <Badge variant={severityBadgeVariant(rl)}>{rl}</Badge> : <Badge variant="outline">{r.severity}</Badge>}
-                      </TableCell>
-                      <TableCell><Badge variant="outline">{(r.status ?? "open").replace(/_/g, " ")}</Badge></TableCell>
-                      <TableCell className={`text-sm ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                        {dueDate ? formatDate(dueDate) : "—"}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-            </div>
-            </CardContent>
-          </Card>
+            </HCard.Header>
+            <HCard.Content className="p-0">
+              <DataGrid
+                aria-label={t("detail.risks")}
+                data={risks}
+                getRowId={(r) => r.id}
+                contentClassName="min-w-[860px]"
+                renderEmptyState={() => <p className="py-8 text-center text-sm text-[var(--muted)]">{t("detail.noRisks")} {t("detail.newRisk")}</p>}
+                columns={[
+                  { id: "title", header: tCommon("title"), isRowHeader: true, width: 240, cell: (r) => <WrapText className="font-medium">{r.title}</WrapText> },
+                  { id: "category", header: tCommon("category"), width: 120, cell: (r) => <span dir="auto" className="text-sm">{tRisks(`presentation.categories.${r.category.toLowerCase()}`, { defaultValue: r.category })}</span> },
+                  { id: "likelihood", header: t("detail.riskProbability"), width: 110, cell: (r) => <span className="text-sm">{tRisks(`presentation.likelihoods.${r.likelihood}`, { defaultValue: r.likelihood })}</span> },
+                  { id: "impact", header: t("detail.riskImpact"), width: 100, cell: (r) => { const impact = (r as typeof r & { impact?: string }).impact || r.severity; return <span className="text-sm">{tRisks(`presentation.riskLevels.${impact}`, { defaultValue: impact })}</span>; } },
+                  { id: "level", header: t("detail.riskComputedLevel").replace(":", ""), width: 110, cell: (r) => { const level = (r as typeof r & { riskLevel?: string }).riskLevel || r.severity; return <Chip size="sm" variant="soft" color={RISK_LEVEL_CHIP[level] ?? "default"}>{tRisks(`presentation.riskLevels.${level}`, { defaultValue: level })}</Chip>; } },
+                  { id: "status", header: tCommon("status"), width: 120, cell: (r) => <Chip size="sm" variant="soft">{tRisks(`status.${r.status ?? "open"}`, { defaultValue: (r.status ?? "open").replace(/_/g, " ") })}</Chip> },
+                  { id: "due", header: tCommon("dueDate"), width: 110, cell: (r) => {
+                    const dueDate = (r as typeof r & { dueDate?: string }).dueDate;
+                    const isOverdue = !!dueDate && new Date(dueDate) < new Date() && r.status !== "closed";
+                    return <span className={`whitespace-nowrap text-sm ${isOverdue ? "font-medium text-[var(--danger)]" : "text-[var(--muted)]"}`}><bdi dir="ltr">{dueDate ? formatDate(dueDate) : "—"}</bdi></span>;
+                  } },
+                ] satisfies DataGridColumn<(typeof risks)[number]>[]}
+              />
+            </HCard.Content>
+          </HCard>
         </Tabs.Panel>
 
         <Tabs.Panel id="reports" className="pt-4 space-y-4">
           {hasPerm(me?.permissions, "reports.view") && (
             <PmrCompletenessPanel projectId={projectId} projectReportingFrequency={((project as unknown as Record<string, unknown>).reportingFrequency as "monthly" | "quarterly" | "annual" | null) ?? null} />
           )}
-          <Card><CardContent className="p-0">
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>{tCommon("title")}</TableHead><TableHead>{tCommon("period")}</TableHead>
-                <TableHead>{tCommon("type")}</TableHead><TableHead>{tCommon("status")}</TableHead>
-                <TableHead>{tCommon("submittedBy")}</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {reports.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">
-                      {t("detail.noReportsProject")}
-                    </TableCell>
-                  </TableRow>
-                )}
-                {reports.map(r => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.title}</TableCell>
-                    <TableCell className="text-sm">{r.period}</TableCell>
-                    <TableCell><Badge variant="outline">{r.kind}</Badge></TableCell>
-                    <TableCell><ProjectStatusBadge status={r.status} /></TableCell>
-                    <TableCell className="text-sm">{r.submittedByName}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent></Card>
+          <DataGrid
+            aria-label={t("detail.reports")}
+            data={reports}
+            getRowId={(r) => r.id}
+            renderEmptyState={() => <p className="py-8 text-center text-sm text-[var(--muted)]">{t("detail.noReportsProject")}</p>}
+            columns={[
+              { id: "title", header: tCommon("title"), isRowHeader: true, cell: (r) => <WrapText className="font-medium">{r.title}</WrapText> },
+              { id: "period", header: tCommon("period"), width: 110, cell: (r) => <span className="text-sm tabular-nums"><bdi dir="ltr">{r.period}</bdi></span> },
+              { id: "type", header: tCommon("type"), width: 150, cell: (r) => <Chip size="sm" variant="soft">{tReports(`types.${r.reportType ?? r.kind}`, { defaultValue: r.kind })}</Chip> },
+              { id: "status", header: tCommon("status"), width: 150, cell: (r) => <ProjectStatusBadge status={r.status} /> },
+              { id: "by", header: tCommon("submittedBy"), width: 170, cell: (r) => <WrapText className="text-sm text-[var(--muted)]">{r.submittedByName}</WrapText> },
+            ] satisfies DataGridColumn<(typeof reports)[number]>[]}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel id="beneficiaries" className="pt-4">
@@ -1865,24 +1770,25 @@ export default function ProjectDetailPage({
             return (
               <>
                 {isStateRole && (
-                  <div className="mb-4 rounded-md border border-info/30 bg-info/10 px-4 py-3 text-sm text-info">
-                    {t("detail.stateRoleInfo")}
-                  </div>
+                  <Alert status="accent">
+                    <Alert.Indicator />
+                    <Alert.Content><Alert.Description>{t("detail.stateRoleInfo")}</Alert.Description></Alert.Content>
+                  </Alert>
                 )}
                 {isStateAllocationsLoading ? (
-                  <Card aria-busy="true" aria-label={t("detail.loadingAllocations")}>
-                    <CardHeader className="pb-3">
+                  <HCard aria-busy="true" aria-label={t("detail.loadingAllocations")}>
+                    <HCard.Header className="pb-3">
                       <Skeleton className="h-5 w-48" />
                       <Skeleton className="h-4 w-80 max-w-full" />
-                    </CardHeader>
-                    <CardContent className="space-y-3">
+                    </HCard.Header>
+                    <HCard.Content className="space-y-3">
                       <Skeleton className="h-10 w-full" />
                       <Skeleton className="h-10 w-full" />
                       <Skeleton className="h-10 w-4/5" />
-                    </CardContent>
-                  </Card>
+                    </HCard.Content>
+                  </HCard>
                 ) : isStateAllocationsError ? (
-                  <Card>
+                  <HCard>
                     <ErrorState
                       compact
                       variant="server"
@@ -1891,16 +1797,16 @@ export default function ProjectDetailPage({
                       onRetry={() => refetchStateAllocations()}
                       retryLabel={t("detail.retry")}
                     />
-                  </Card>
+                  </HCard>
                 ) : !stateAllocations || stateAllocations.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-8 text-center">
+                  <HCard>
+                    <HCard.Content className="py-8 text-center">
                       <p className="text-sm font-medium">{isStateRole
                         ? t("detail.noStateAllocation")
                         : t("detail.noAllocations")}</p>
-                      {!isStateRole && <p className="mt-1 text-xs text-muted-foreground">{t("detail.noAllocationsDescription")}</p>}
-                    </CardContent>
-                  </Card>
+                      {!isStateRole && <p className="mt-1 text-xs text-[var(--muted)]">{t("detail.noAllocationsDescription")}</p>}
+                    </HCard.Content>
+                  </HCard>
                 ) : (
                   <div className="space-y-4">
                     {/* Project-level donor targets — only for HQ roles */}
@@ -1925,16 +1831,16 @@ export default function ProjectDetailPage({
                     {isStateRole && stateAllocations.length === 1 && (() => {
                       const alloc = stateAllocations[0];
                       return (
-                          <Card className="border-primary/20 bg-primary/5">
-                          <CardHeader className="pb-2">
+                          <HCard className="bg-[color-mix(in_oklab,var(--accent)_6%,var(--surface))]">
+                          <HCard.Header className="pb-2">
                             <div className="flex items-center gap-2">
-                                <CardTitle className="text-base">{t("detail.yourStateAllocation")} {getLinkedStateLabel(alloc, i18n?.language)}</CardTitle>
+                                <HCard.Title className="text-base">{t("detail.yourStateAllocation")} {getLinkedStateLabel(alloc, i18n?.language)}</HCard.Title>
                               {myStateId && alloc.stateId === myStateId && (
-                                <Badge variant="submitted" className="text-xs">{t("detail.yourStateTag")}</Badge>
+                                <Chip size="sm" variant="soft" color="accent">{t("detail.yourStateTag")}</Chip>
                               )}
                             </div>
-                          </CardHeader>
-                          <CardContent>
+                          </HCard.Header>
+                          <HCard.Content>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div><p className="text-xs text-muted-foreground">{t("detail.budgetAllocation")}{projectCurrency ? ` (${projectCurrency})` : ""}</p><p className="font-medium tabular-nums">{alloc.budgetAllocation != null ? formatCurrency(alloc.budgetAllocation, projectCurrency) : "—"}</p></div>
                               <div><p className="text-xs text-muted-foreground">{t("detail.beneficiaryTarget")}</p><p className="font-medium tabular-nums">{alloc.beneficiaryTarget != null ? alloc.beneficiaryTarget.toLocaleString() : "—"}</p></div>
@@ -1949,20 +1855,20 @@ export default function ProjectDetailPage({
                             </div>
                             {alloc.stateLead && <p className="mt-3 text-xs text-muted-foreground">{t("detail.stateLead")}: <span className="font-medium text-foreground">{alloc.stateLead}</span></p>}
                             {alloc.notes && <p className="mt-1 text-xs text-muted-foreground">{t("detail.notes")}: {alloc.notes}</p>}
-                          </CardContent>
-                        </Card>
+                          </HCard.Content>
+                        </HCard>
                       );
                     })()}
 
                     {/* HQ roles: full per-state allocation table */}
                     {!isStateRole && (
                       <>
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardTitle>{t("detail.allocationTitle")}</CardTitle>
-                            <CardDescription>{t("detail.allocationDescription", { currency: projectCurrency || "—" })}</CardDescription>
-                          </CardHeader>
-                          <CardContent className="p-0">
+                        <HCard>
+                          <HCard.Header className="pb-3">
+                            <HCard.Title>{t("detail.allocationTitle")}</HCard.Title>
+                            <HCard.Description>{t("detail.allocationDescription", { currency: projectCurrency || "—" })}</HCard.Description>
+                          </HCard.Header>
+                          <HCard.Content className="p-0">
                             <div className="overflow-x-auto">
                             <Table aria-label={t("detail.allocationTableAria")}>
                               <TableHeader>
@@ -1997,15 +1903,15 @@ export default function ProjectDetailPage({
                               </TableBody>
                             </Table>
                             </div>
-                          </CardContent>
-                        </Card>
+                          </HCard.Content>
+                        </HCard>
                         {(() => {
                           const totalBudget = stateAllocations.reduce((s, a) => s + a.budgetAllocation, 0);
                           const totalBenef = stateAllocations.reduce((s, a) => s + a.beneficiaryTarget, 0);
                           const totalAct = stateAllocations.reduce((s, a) => s + (a.activityTarget ?? 0), 0);
                           const totalInd = stateAllocations.reduce((s, a) => s + (a.indicatorTarget ?? 0), 0);
                           return (
-                            <div className="grid grid-cols-2 gap-4 rounded-md border bg-muted/40 p-3 text-sm md:grid-cols-4">
+                            <div className="grid grid-cols-2 gap-4 rounded-xl bg-[var(--default)] p-3 text-sm md:grid-cols-4">
                               <div><div className="text-xs text-muted-foreground">{t("detail.totalAllocatedBudget")}{projectCurrency ? ` (${projectCurrency})` : ""}</div><div className="font-medium tabular-nums">{formatCurrency(totalBudget, projectCurrency)}</div></div>
                               <div><div className="text-xs text-muted-foreground">{t("detail.totalBeneficiaryTargets")}</div><div className="font-medium tabular-nums">{totalBenef.toLocaleString()}</div></div>
                               <div><div className="text-xs text-muted-foreground">{t("detail.totalActivityTargets")}</div><div className="font-medium tabular-nums">{totalAct.toLocaleString()}</div></div>
@@ -2023,34 +1929,36 @@ export default function ProjectDetailPage({
         </Tabs.Panel>
 
         <Tabs.Panel id="history" className="pt-4">
-          <Card>
-            <CardHeader><CardTitle>{t("detail.approvalHistory")}</CardTitle></CardHeader>
-            <CardContent>
+          <HCard>
+            <HCard.Header><HCard.Title>{t("detail.approvalHistory")}</HCard.Title></HCard.Header>
+            <HCard.Content>
               {approvalHistory.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">{t("detail.noTransitions")}</p>
+                <p className="text-sm text-[var(--muted)] text-center py-6">{t("detail.noTransitions")}</p>
               ) : (
-                <ol className="relative border-s border-border ms-3 space-y-6">
+                <ol className="relative ms-3 space-y-6 border-s border-[var(--separator)]">
                   {approvalHistory.map(h => (
                     <li key={h.id} className="ms-6">
-                      <span className="absolute -start-3 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                        <CheckCircle2 className="h-3 w-3" />
+                      <span className="absolute -start-3 flex size-6 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-foreground)]">
+                        <CheckCircle2 className="size-3.5" aria-hidden="true" />
                       </span>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium">{h.action.replaceAll("_", " ")}</span>
-                        <Badge variant="outline" className="text-xs">{h.fromStatus} → {h.toStatus}</Badge>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{t(`detail.actions.${h.action}`, { defaultValue: h.action.replaceAll("_", " ") })}</span>
+                        <Chip size="sm" variant="soft">
+                          {t(`status.${h.fromStatus}`, { defaultValue: h.fromStatus })} <span aria-hidden="true" className="rtl:rotate-180 inline-block">→</span> {t(`status.${h.toStatus}`, { defaultValue: h.toStatus })}
+                        </Chip>
                       </div>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        {h.actorName} ({h.actorRole}) • {formatDateTime(h.timestamp)}
+                      <div className="mt-1 text-sm text-[var(--muted)]">
+                        <span dir="auto">{h.actorName}</span> (<span dir="auto">{h.actorRole}</span>) • <bdi dir="ltr">{formatDateTime(h.timestamp)}</bdi>
                       </div>
                       {h.comment && (
-                        <div className="mt-2 text-sm bg-muted p-2 rounded">{h.comment}</div>
+                        <div dir="auto" className="mt-2 rounded-xl bg-[var(--default)] p-2.5 text-sm">{h.comment}</div>
                       )}
                     </li>
                   ))}
                 </ol>
               )}
-            </CardContent>
-          </Card>
+            </HCard.Content>
+          </HCard>
         </Tabs.Panel>
 
         <Tabs.Panel id="voice-notes" className="pt-4">
@@ -2074,151 +1982,113 @@ export default function ProjectDetailPage({
             />
             {/* Document gate status messages */}
             {docGate === "operational" && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 mb-4" role="note">
-                <Lock className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
-                <span>Documents are locked — you may upload supporting files but cannot delete existing documents without an override.</span>
-              </div>
+              <Alert status="warning" className="mb-4">
+                <Alert.Indicator><Lock className="size-4" aria-hidden="true" /></Alert.Indicator>
+                <Alert.Content><Alert.Description>{t("detail.docs.lockedOperational")}</Alert.Description></Alert.Content>
+              </Alert>
             )}
             {docGate === "frozen" && (
-              <div className="flex items-start gap-2 rounded-md border border-muted-foreground/30 bg-muted px-4 py-3 text-sm text-muted-foreground mb-4" role="note">
-                <Lock className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
-                <span>Documents are locked because this Project is completed.</span>
-              </div>
+              <Alert className="mb-4">
+                <Alert.Indicator><Lock className="size-4" aria-hidden="true" /></Alert.Indicator>
+                <Alert.Content><Alert.Description>{t("detail.docs.lockedFrozen")}</Alert.Description></Alert.Content>
+              </Alert>
             )}
-            <Card>
-              <CardHeader className="py-3 px-4 flex flex-row items-center justify-between gap-2 flex-wrap">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {projectDocuments.length} {projectDocuments.length === 1 ? "Document" : "Documents"}
+            <HCard>
+              <HCard.Header className="flex-row flex-wrap items-center justify-between gap-2">
+                <HCard.Title className="flex items-center gap-2 text-sm font-medium text-[var(--muted)]">
+                  {t("detail.docs.count", { count: projectDocuments.length })}
                   {docGate === "frozen" && (
-                    <Badge variant="outline" className="ms-2 text-xs gap-1 font-normal text-muted-foreground">
-                      <Lock className="h-3 w-3" aria-hidden="true" />
-                      Closed — locked
-                    </Badge>
+                    <Chip size="sm" variant="soft"><Lock className="size-3" aria-hidden="true" />{t("detail.docs.badgeFrozen")}</Chip>
                   )}
                   {docGate === "operational" && (
-                    <Badge variant="outline" className="ms-2 text-xs gap-1 font-normal text-amber-700 border-amber-300">
-                      <Lock className="h-3 w-3" aria-hidden="true" />
-                      Approved — protected
-                    </Badge>
+                    <Chip size="sm" variant="soft" color="warning"><Lock className="size-3" aria-hidden="true" />{t("detail.docs.badgeOperational")}</Chip>
                   )}
-                </CardTitle>
+                </HCard.Title>
                 {hasPerm(me?.permissions, "documents.upload") && docGate !== "frozen" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 gap-1.5"
-                    disabled={isUploading}
-                    onClick={() => uploadInputRef.current?.click()}
-                  >
-                    <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-                    {isUploading ? "Uploading…" : "Upload Document"}
-                  </Button>
+                  <HButton size="sm" variant="outline" isDisabled={isUploading} onPress={() => uploadInputRef.current?.click()}>
+                    <Upload className="size-3.5" aria-hidden="true" />
+                    {isUploading ? t("detail.docs.uploading") : t("detail.docs.upload")}
+                  </HButton>
                 )}
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{tCommon("fileName")}</TableHead>
-                      <TableHead>{tCommon("category")}</TableHead>
-                      <TableHead>{tCommon("type")}</TableHead>
-                      <TableHead>{tCommon("uploadedBy")}</TableHead>
-                      <TableHead>{tCommon("date")}</TableHead>
-                      <TableHead className="w-[52px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {projectDocuments.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">
-                          {docGate === "frozen"
-                            ? "No documents are stored for this project."
-                            : "No documents uploaded yet. Use the Upload button to add files."}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    {projectDocuments.map((doc) => (
-                      <TableRow key={doc.id}>
-                        <TableCell>
-                          {doc.availabilityStatus === "unavailable" ? (
-                            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground max-w-[320px]">
-                              <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                              <span className="truncate">{doc.fileName}</span>
-                              <span role="status" className="shrink-0 text-xs">File Unavailable</span>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => { void handleDocumentDownload(doc); }}
-                              className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1.5 max-w-[320px] truncate"
-                              title={doc.fileName}
-                            >
-                              <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                              <span className="truncate">{doc.fileName}</span>
-                            </button>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm capitalize">{doc.category}</TableCell>
-                        <TableCell className="text-sm capitalize">{doc.kind}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{doc.uploadedByName ?? "—"}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{formatDate(doc.uploadedAt)}</TableCell>
-                        <TableCell>
-                          {/* mutable → normal delete */}
-                          {docGate === "mutable" && hasPerm(me?.permissions, "documents.upload") && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                              onClick={() => handleNormalDocDelete(doc.id)}
-                              aria-label={`Delete ${doc.fileName}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                            </Button>
-                          )}
-                          {/* operational + override actor → amber trash with dialog */}
-                          {docGate === "operational" && isDocOverrideActor && hasPerm(me?.permissions, "documents.upload") && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40"
-                                  onClick={() => {
-                                    setOverrideDeleteDialog({ docId: doc.id, fileName: doc.fileName });
-                                    setOverrideReason("");
-                                    setOverrideReasonError("");
-                                  }}
-                                  aria-label={`Delete ${doc.fileName} (override required)`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete document (override required — will be audited)</TooltipContent>
-                            </Tooltip>
-                          )}
-                          {/* operational + ordinary actor → lock icon */}
-                          {docGate === "operational" && !isDocOverrideActor && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground/50" aria-label={t("detail.documentLockedAria")}>
-                                  <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>Documents cannot be deleted after project approval.</TooltipContent>
-                            </Tooltip>
-                          )}
-                          {/* frozen → no affordance */}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+              </HCard.Header>
+              <HCard.Content>
+                <DataGrid
+                  aria-label={t("detail.documentsTab")}
+                  data={projectDocuments}
+                  getRowId={(doc) => doc.id}
+                  contentClassName="min-w-[760px]"
+                  renderEmptyState={() => (
+                    <p className="py-8 text-center text-sm text-[var(--muted)]">
+                      {docGate === "frozen" ? t("detail.docs.emptyFrozen") : t("detail.docs.emptyMutable")}
+                    </p>
+                  )}
+                  columns={[
+                    { id: "file", header: tCommon("fileName"), isRowHeader: true, width: 280, cell: (doc) => doc.availabilityStatus === "unavailable" ? (
+                      <span className="inline-flex max-w-full items-start gap-1.5 text-sm text-[var(--muted)]">
+                        <FileText className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        <span dir="auto" className="break-all">{doc.fileName}</span>
+                        <span role="status" className="shrink-0 text-xs">{t("detail.docs.unavailable")}</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { void handleDocumentDownload(doc); }}
+                        className="inline-flex max-w-[320px] items-start gap-1.5 text-start text-sm font-medium text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+                        title={doc.fileName}
+                      >
+                        <FileText className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        <span dir="auto" className="line-clamp-2 break-all">{doc.fileName}</span>
+                      </button>
+                    ) },
+                    { id: "category", header: tCommon("category"), width: 120, cell: (doc) => <span className="text-sm">{t(`documentCategories.${doc.category}`, { defaultValue: doc.category })}</span> },
+                    { id: "kind", header: tCommon("type"), width: 150, cell: (doc) => <span className="text-sm">{t(`documentKinds.${doc.kind}`, { defaultValue: doc.kind.replace(/_/g, " ") })}</span> },
+                    { id: "by", header: tCommon("uploadedBy"), width: 150, cell: (doc) => <WrapText className="text-sm text-[var(--muted)]">{doc.uploadedByName ?? "—"}</WrapText> },
+                    { id: "date", header: tCommon("date"), width: 110, cell: (doc) => <span className="whitespace-nowrap text-sm text-[var(--muted)]"><bdi dir="ltr">{formatDate(doc.uploadedAt)}</bdi></span> },
+                    { id: "actions", header: <span className="sr-only">{t("table.actions")}</span>, width: 60, align: "end", cell: (doc) => (
+                      <>
+                        {docGate === "mutable" && hasPerm(me?.permissions, "documents.upload") && (
+                          <HButton isIconOnly size="sm" variant="ghost" onPress={() => handleNormalDocDelete(doc.id)} aria-label={t("detail.docs.deleteAria", { name: doc.fileName })}>
+                            <Trash2 className="size-3.5" aria-hidden="true" />
+                          </HButton>
+                        )}
+                        {docGate === "operational" && isDocOverrideActor && hasPerm(me?.permissions, "documents.upload") && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HButton
+                                isIconOnly size="sm" variant="ghost" className="text-[var(--warning)]"
+                                onPress={() => {
+                                  setOverrideDeleteDialog({ docId: doc.id, fileName: doc.fileName });
+                                  setOverrideReason("");
+                                  setOverrideReasonError("");
+                                }}
+                                aria-label={t("detail.docs.deleteOverrideAria", { name: doc.fileName })}
+                              >
+                                <Trash2 className="size-3.5" aria-hidden="true" />
+                              </HButton>
+                            </TooltipTrigger>
+                            <TooltipContent>{t("detail.docs.overrideTooltip")}</TooltipContent>
+                          </Tooltip>
+                        )}
+                        {docGate === "operational" && !isDocOverrideActor && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex size-7 items-center justify-center text-[var(--muted)]" aria-label={t("detail.documentLockedAria")}>
+                                <Lock className="size-3.5" aria-hidden="true" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>{t("detail.docs.lockedTooltip")}</TooltipContent>
+                          </Tooltip>
+                        )}
+                      </>
+                    ) },
+                  ] satisfies DataGridColumn<(typeof projectDocuments)[number]>[]}
+                />
+              </HCard.Content>
+            </HCard>
 
             {/* Override delete dialog — PM / Super Admin only on operational projects */}
-            <Dialog
-              open={!!overrideDeleteDialog}
+            <Modal
+              isOpen={!!overrideDeleteDialog}
               onOpenChange={(o) => {
                 if (!o && !isOverrideDeleting) {
                   setOverrideDeleteDialog(null);
@@ -2227,44 +2097,42 @@ export default function ProjectDetailPage({
                 }
               }}
             >
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Delete Approved Project Document?</DialogTitle>
-                  <DialogDescription>
-                    This project has already been approved. Deleting an existing document
-                    requires an exceptional override and will be recorded in the audit history.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2">
-                  <Label htmlFor="doc-override-reason">Override Reason (required)</Label>
-                  <Textarea
-                    id="doc-override-reason"
-                    rows={3}
-                    placeholder={t("detail.overrideReasonPlaceholder")}
-                    value={overrideReason}
-                    onChange={(e) => {
-                      setOverrideReason(e.target.value);
-                      if (overrideReasonError) setOverrideReasonError("");
-                    }}
-                  />
-                  {overrideReasonError && (
-                    <p className="text-sm text-destructive" role="alert">{overrideReasonError}</p>
-                  )}
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => { setOverrideDeleteDialog(null); setOverrideReason(""); setOverrideReasonError(""); }}
-                    disabled={isOverrideDeleting}
-                  >
-                    Cancel
-                  </Button>
-                  <Button variant="destructive" onClick={handleOverrideDocDelete} disabled={isOverrideDeleting}>
-                    {isOverrideDeleting ? "Deleting…" : "Delete Document"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+              <Modal.Backdrop>
+                <Modal.Container size="md">
+                  <Modal.Dialog>
+                    <Modal.CloseTrigger />
+                    <Modal.Header>
+                      <Modal.Heading>{t("detail.docs.overrideTitle")}</Modal.Heading>
+                      <p className="text-sm text-[var(--muted)]">{t("detail.docs.overrideDescription")}</p>
+                    </Modal.Header>
+                    <Modal.Body>
+                      <TextField
+                        value={overrideReason}
+                        onChange={(v) => { setOverrideReason(v); if (overrideReasonError) setOverrideReasonError(""); }}
+                        isInvalid={!!overrideReasonError}
+                        fullWidth
+                      >
+                        <HLabel>{t("detail.docs.overrideReasonLabel")}</HLabel>
+                        <HTextArea rows={3} placeholder={t("detail.overrideReasonPlaceholder")} />
+                        {overrideReasonError && <p className="text-sm text-[var(--danger)]" role="alert">{overrideReasonError}</p>}
+                      </TextField>
+                    </Modal.Body>
+                    <Modal.Footer>
+                      <HButton
+                        variant="secondary"
+                        onPress={() => { setOverrideDeleteDialog(null); setOverrideReason(""); setOverrideReasonError(""); }}
+                        isDisabled={isOverrideDeleting}
+                      >
+                        {tCommon("cancel")}
+                      </HButton>
+                      <HButton variant="danger" onPress={handleOverrideDocDelete} isDisabled={isOverrideDeleting}>
+                        {isOverrideDeleting ? t("detail.docs.deleting") : t("detail.docs.deleteDocument")}
+                      </HButton>
+                    </Modal.Footer>
+                  </Modal.Dialog>
+                </Modal.Container>
+              </Modal.Backdrop>
+            </Modal>
           </Tabs.Panel>
         )}
 

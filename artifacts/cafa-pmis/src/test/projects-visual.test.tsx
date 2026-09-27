@@ -359,6 +359,7 @@ vi.mock("@/components/delete-project-dialog", () => ({
 
 // ── Import the page under test ────────────────────────────────────────────────
 import ProjectsPage from "@/pages/projects";
+import enProjects from "@/locales/en/projects.json";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PRJ-VIS-01: Primary action present
@@ -679,11 +680,12 @@ describe("PRJ-OPS-VIS-01 — activity spend is read-only, never in an Input", ()
 
 describe("PRJ-OPS-VIS-02 — activity status is human-readable; underlying value unchanged", () => {
   it("status is displayed through formatStatusLabel inside a Badge (human-readable)", () => {
+    // Translated label, falling back to formatStatusLabel for unknown statuses.
     expect(detailSrc).toContain(
-      '<Badge variant="outline">{formatStatusLabel(a.status)}</Badge>'
+      't(`activityStatus.${a.status}`, { defaultValue: formatStatusLabel(a.status) })'
     );
-    // Raw enum is never rendered directly as badge text
-    expect(detailSrc).not.toContain('<Badge variant="outline">{a.status}</Badge>');
+    // Raw enum is never rendered directly as chip text
+    expect(detailSrc).not.toMatch(/>\{a\.status\}<\/Chip>/);
   });
   it("underlying activity status value is not mutated — no assignment to a.status", () => {
     expect(detailSrc).not.toMatch(/a\.status\s*=[^=]/);
@@ -694,7 +696,7 @@ describe("PRJ-OPS-VIS-02 — activity status is human-readable; underlying value
     expect(mockActivity.status).toBe("in_progress");
   });
   it("progress uses ProgressBar with the API progressPct, no re-derivation", () => {
-    expect(detailSrc).toContain("<ProgressBar value={a.progressPct} max={100} />");
+    expect(detailSrc).toContain('<ProgressBar className="w-full min-w-0" value={a.progressPct} max={100} />');
     expect(detailSrc).not.toMatch(/a\.progressPct\s*[*+/-]/);
   });
 });
@@ -729,13 +731,13 @@ describe("PRJ-OPS-VIS-05 — missing state figures show em dash, not 0", () => {
 });
 
 describe("PRJ-OPS-VIS-06 — document lifecycle badges are icon + text, not colour only", () => {
-  it("frozen badge pairs a Lock icon with 'Closed — locked' text", () => {
-    expect(detailSrc).toContain("Closed — locked");
-    expect(detailSrc).toMatch(/Lock className="h-3 w-3"[\s\S]{0,120}Closed — locked/);
+  it("frozen badge pairs a Lock icon with the translated 'Closed — locked' text", () => {
+    expect(detailSrc).toMatch(/<Lock className="size-3" aria-hidden="true" \/>\{t\("detail\.docs\.badgeFrozen"\)\}/);
+    expect(enProjects.detail.docs.badgeFrozen).toBe("Closed — locked");
   });
-  it("operational badge pairs a Lock icon with 'Approved — protected' text", () => {
-    expect(detailSrc).toContain("Approved — protected");
-    expect(detailSrc).toMatch(/Lock className="h-3 w-3"[\s\S]{0,120}Approved — protected/);
+  it("operational badge pairs a Lock icon with the translated 'Approved — protected' text", () => {
+    expect(detailSrc).toMatch(/<Lock className="size-3" aria-hidden="true" \/>\{t\("detail\.docs\.badgeOperational"\)\}/);
+    expect(enProjects.detail.docs.badgeOperational).toBe("Approved — protected");
   });
 });
 
@@ -761,11 +763,13 @@ describe("PRJ-OPS-VIS-08 — reports rows show human-readable status", () => {
   });
 });
 
-describe("PRJ-OPS-VIS-09 — long activity title renders in a bounded, truncated cell", () => {
-  it("activity and risk title spans carry a positive width bound + truncate + title attr", () => {
-    // The bound lives on the span (block max-w-[200px] truncate), never max-w-0 on the cell
-    expect(detailSrc).toMatch(/block max-w-\[200px\] truncate" title=\{a\.title\}/);
-    expect(detailSrc).toMatch(/block max-w-\[200px\] truncate" title=\{r\.title\}/);
+describe("PRJ-OPS-VIS-09 — long activity title wraps inside a bounded cell", () => {
+  it("activity and risk titles wrap (max three lines) with the full text in a title attr", () => {
+    // Long text wraps instead of truncating (product decision); WrapText caps it
+    // at three lines and keeps the full value in the tooltip.
+    expect(detailSrc).toContain('<WrapText className="font-medium">{a.title}</WrapText>');
+    expect(detailSrc).toContain('<WrapText className="font-medium">{r.title}</WrapText>');
+    expect(detailSrc).toMatch(/function WrapText[\s\S]{0,400}line-clamp-3[\s\S]{0,200}title=\{typeof children === "string"/);
     expect(detailSrc).not.toContain("max-w-0");
   });
   it("rendered: long activity title truncates inside a 200px-bounded span with full text in title attr", () => {
@@ -784,15 +788,18 @@ describe("PRJ-OPS-VIS-09 — long activity title renders in a bounded, truncated
     // Full text remains accessible even when visually truncated
     expect(span).toHaveTextContent(longTitle.slice(0, 40));
   });
-  it("activities and risks tables are wrapped in overflow-x-auto guards", () => {
+  it("activities and risks tables scroll horizontally inside their grids", () => {
+    // Pro DataGrid scrolls inside its own container; each table sets a minimum
+    // content width so columns never squeeze. The tab bar and the allocation
+    // table keep their explicit overflow-x-auto guards.
+    expect(detailSrc).toContain('contentClassName="min-w-[1100px]"');
+    expect(detailSrc).toContain('contentClassName="min-w-[860px]"');
     const guards = detailSrc.match(/overflow-x-auto/g) ?? [];
-    // tab bar + activities + risks + state allocations
-    expect(guards.length).toBeGreaterThanOrEqual(4);
+    expect(guards.length).toBeGreaterThanOrEqual(2);
   });
-  it("document filename link truncates with an accessible title attribute", () => {
-    expect(detailSrc).toMatch(
-      /max-w-\[320px\] truncate"\s*title=\{doc\.fileName\}/
-    );
+  it("document filename link wraps (two lines) with an accessible title attribute", () => {
+    expect(detailSrc).toMatch(/max-w-\[320px\][^"]*"\s*title=\{doc\.fileName\}/);
+    expect(detailSrc).toContain('<span dir="auto" className="line-clamp-2 break-all">{doc.fileName}</span>');
   });
 });
 
@@ -820,9 +827,9 @@ describe("PRJ-OPS-VIS-10 — no Projects functional contract changed", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("PRJ-FINAL-VIS-01 — activity status column shows human-readable label", () => {
-  it("Activities table badge uses formatStatusLabel, not raw enum", () => {
+  it("Activities table status uses a translated label with formatStatusLabel fallback, not raw enum", () => {
     expect(detailSrc).toContain(
-      '<Badge variant="outline">{formatStatusLabel(a.status)}</Badge>'
+      't(`activityStatus.${a.status}`, { defaultValue: formatStatusLabel(a.status) })'
     );
   });
   it("formatStatusLabel humanises all known activity statuses", () => {
@@ -913,12 +920,11 @@ describe("PRJ-FINAL-VIS-08 — document lifecycle banners/badges present, no sto
 });
 
 describe("PRJ-FINAL-VIS-09 — activities table overflow guard and bounded titles", () => {
-  it("activities table retains overflow-x-auto wrapper", () => {
-    const guards = detailSrc.match(/overflow-x-auto/g) ?? [];
-    expect(guards.length).toBeGreaterThanOrEqual(4);
+  it("activities table scrolls inside its grid with a minimum content width", () => {
+    expect(detailSrc).toContain('contentClassName="min-w-[1100px]"');
   });
-  it("activity titles render in bounded truncating cells", () => {
-    expect(detailSrc).toContain('className="block max-w-[200px] truncate" title={a.title}');
+  it("activity titles wrap inside a bounded cell with the full text in a title attr", () => {
+    expect(detailSrc).toContain('<WrapText className="font-medium">{a.title}</WrapText>');
   });
 });
 

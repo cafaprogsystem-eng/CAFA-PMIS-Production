@@ -584,5 +584,11 @@
     "projectTitle": "تفاصيل المشروع",
     "planTitle": "تفاصيل الخطة",
     "description": "معلومات السجل والإجراءات المصرح بها"
-  }
+  },
+  "output": "المُخرَج",
+  "unit": "الوحدة",
+  "fileName": "اسم الملف",
+  "uploadedBy": "رفعه",
+  "submittedBy": "قدّمه",
+  "period": "الفترة"
 }
