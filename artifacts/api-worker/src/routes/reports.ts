@@ -2918,3 +2918,969 @@ reportsRoutes.delete(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Backend content gates for the submit action — mirror the frontend's own
+// buildPayload/validateSubmit validation exactly so a direct API call cannot
+// submit an empty or incomplete report. Draft create/PATCH stays permissive;
+// these only run inside the transitions handler below, before any status
+// mutation, so a ROLLBACK on failure leaves zero workflow mutations.
+//
+// Robustness contract: none of these may throw on malformed stored data
+// (sections = null / an array, junk in activities JSONB, etc.) — they return
+// field errors instead, so the route answers 422, never 500.
+// ---------------------------------------------------------------------------
+
+type PmrContentError = { field: string; section?: string; reason: string };
+
+async function validateProjectReportForSubmission(
+  row: Record<string, unknown>,
+  client: QueryExecutor,
+): Promise<PmrContentError[]> {
+  const errors: PmrContentError[] = [];
+  const sections  = (row.sections  ?? {}) as Record<string, unknown>;
+  const activities = Array.isArray(row.activities)
+    ? (row.activities as Array<Record<string, unknown>>)
+    : [];
+
+  // §1 — Title (always required)
+  if (!String(row.title ?? "").trim()) {
+    errors.push({ field: "title", reason: "Report Title is required." });
+  }
+
+  // §2 — Project identity (always required for project reports)
+  if (!row.project_id) {
+    errors.push({ field: "projectId", reason: "Project is required." });
+  }
+
+  // §3 — Reporting location: state required unless location_type is 'hq'
+  if (row.location_type !== "hq" && !row.state_id) {
+    errors.push({ field: "stateId", reason: "State is required for state-scoped reports." });
+  }
+
+  // §4 — Period (kind-specific)
+  const kind          = String(row.kind ?? "monthly");
+  const period        = String(row.period ?? "");
+  const reportingYear = row.reporting_year  != null ? Number(row.reporting_year)  : null;
+  const reportingMonth= row.reporting_month != null ? Number(row.reporting_month) : null;
+  const quarter       = row.quarter         != null ? Number(row.quarter)         : null;
+
+  if (kind === "monthly") {
+    if (!reportingYear || !reportingMonth) {
+      errors.push({ field: "period", reason: "Reporting year and month are required for monthly reports." });
+    } else {
+      // Consistency check — only for modern YYYY-MM format periods.
+      const expectedPeriod = `${reportingYear}-${String(reportingMonth).padStart(2, "0")}`;
+      if (/^\d{4}-\d{2}$/.test(period) && period !== expectedPeriod) {
+        errors.push({ field: "period", reason: "Reporting period is inconsistent with reporting month/year." });
+      }
+    }
+  } else if (kind === "quarterly") {
+    if (!reportingYear || !quarter || quarter < 1 || quarter > 4) {
+      errors.push({ field: "period", reason: "Reporting year and valid quarter (1–4) are required for quarterly reports." });
+    } else {
+      const expectedPeriod = `${reportingYear}-Q${quarter}`;
+      if (/^\d{4}-Q\d$/.test(period) && period !== expectedPeriod) {
+        errors.push({ field: "period", reason: "Reporting period is inconsistent with reporting year/quarter." });
+      }
+    }
+  } else if (kind === "annual") {
+    if (!reportingYear) {
+      errors.push({ field: "period", reason: "Reporting year is required for annual reports." });
+    }
+  } else if (kind === "on_demand") {
+    if (!String(row.period_start ?? "").trim()) {
+      errors.push({ field: "periodStart", reason: "Period start is required for on-demand reports." });
+    }
+    if (!String(row.on_demand_reason ?? "").trim()) {
+      errors.push({ field: "onDemandReason", reason: "On-demand reason is required." });
+    }
+  }
+
+  // §5 — Key Achievements (required progress field in sectionsCfg.progress)
+  if (!String(sections["keyAchievements"] ?? "").trim()) {
+    errors.push({ field: "keyAchievements", section: "progress", reason: "Key Achievements is required." });
+  }
+
+  // §6 — Lessons Learned (required narrative field in sectionsCfg.narrative)
+  if (!String(sections["lessonsLearned"] ?? "").trim()) {
+    errors.push({ field: "lessonsLearned", section: "narrative", reason: "Lessons Learned is required." });
+  }
+
+  // §7 — Activities: at least one named activity required (project type only)
+  // Numeric safety: a draft PATCH does not validate activity JSONB internals, so a stored value
+  // may be a non-numeric string. Use finiteNum() so any non-finite value is treated as missing.
+  const finiteNum = (v: unknown): number | null => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "string" && !v.trim()) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  // Beneficiary field parser: distinguishes blank/missing from explicit zero.
+  const parseBenField = (v: unknown): number | null | "negative" => {
+    if (v === null || v === undefined) return null;
+    if (typeof v !== "number" && typeof v !== "string") return null;
+    if (typeof v === "string" && !v.trim()) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    if (n < 0) return "negative";
+    return Math.floor(n);
+  };
+
+  // Junk-entry safety: activities JSONB may contain null, arrays, or scalar entries
+  // after a permissive draft PATCH — every non-plain-object entry is itself a
+  // validation error (422), never silently ignored and never a 500.
+  const isPlainObject = (a: unknown): a is Record<string, unknown> =>
+    a !== null && typeof a === "object" && !Array.isArray(a);
+  activities.forEach((a, i) => {
+    if (!isPlainObject(a)) {
+      errors.push({ field: `activities[${i}]`, reason: `Activity entry ${i + 1} is malformed (expected an object).` });
+    }
+  });
+  const cleanActs = activities.filter(
+    (a): a is Record<string, unknown> => isPlainObject(a) && Boolean(String(a["name"] ?? "").trim()),
+  );
+  if (cleanActs.length === 0) {
+    errors.push({ field: "activities", reason: "At least one named activity is required." });
+  } else {
+    let hasAnyPositiveExpenditure = false;
+
+    for (let i = 0; i < cleanActs.length; i++) {
+      const a           = cleanActs[i];
+      const fieldPrefix = `activities[${i}]`;
+      const planned     = finiteNum(a["plannedBudget"]);
+      const actual      = finiteNum(a["actualExpenditure"]);
+
+      // Actual expenditure: must be a finite non-negative number (null or NaN → invalid)
+      if (actual === null || actual < 0) {
+        errors.push({
+          field: `${fieldPrefix}.actualExpenditure`,
+          reason: "Actual expenditure is required and must be a valid non-negative number.",
+        });
+      } else if (actual > 0) {
+        hasAnyPositiveExpenditure = true;
+      }
+
+      // Achievement summary: required
+      if (!String(a["achievementSummary"] ?? "").trim()) {
+        errors.push({ field: `${fieldPrefix}.achievementSummary`, reason: "Achievement summary is required." });
+      }
+
+      // Per-activity beneficiary fields: each is required (blank ≠ zero)
+      const benFields: Array<[string, unknown]> = [
+        ["beneficiariesMen",   a["beneficiariesMen"]],
+        ["beneficiariesWomen", a["beneficiariesWomen"]],
+        ["beneficiariesBoys",  a["beneficiariesBoys"]],
+        ["beneficiariesGirls", a["beneficiariesGirls"]],
+      ];
+      for (const [, bv] of benFields) {
+        const parsed = parseBenField(bv);
+        if (parsed === null) {
+          errors.push({
+            field: `${fieldPrefix}.beneficiaries`,
+            reason: "Beneficiary field is required — enter 0 if no direct reach occurred this period.",
+          });
+        } else if (parsed === "negative") {
+          errors.push({
+            field: `${fieldPrefix}.beneficiaries`,
+            reason: "Beneficiary values cannot be negative.",
+          });
+        }
+      }
+
+      // Unplanned activities require a reason
+      if (a["isUnplanned"] && !String(a["unplannedReason"] ?? "").trim()) {
+        errors.push({ field: `${fieldPrefix}.unplannedReason`, reason: "Reason is required for unplanned activities." });
+      }
+
+      // Variance reason: required when actual > planned OR actual < planned * 0.7
+      if (actual !== null && planned !== null && planned > 0) {
+        const needsVariance = actual > planned || actual < planned * 0.7;
+        if (needsVariance && !String(a["varianceReason"] ?? "").trim()) {
+          errors.push({
+            field: `${fieldPrefix}.varianceReason`,
+            reason: "Variance reason is required when expenditure deviates by more than 30%.",
+          });
+        }
+      }
+    }
+
+    // §7b — Project currency: blocks submit when the linked project has no currency
+    // configured but the report includes positive financial data.
+    if (hasAnyPositiveExpenditure && row.project_id) {
+      const curRes = await client.query<{ currency: string | null }>(
+        "SELECT currency FROM projects WHERE id = $1",
+        [row.project_id],
+      );
+      const projectCurrency = curRes.rows[0]?.currency ?? null;
+      if (!projectCurrency) {
+        errors.push({
+          field: "projectCurrency",
+          reason: "Project currency is not configured. Financial reporting cannot be submitted until the project currency is set.",
+        });
+      }
+    }
+  }
+
+  // §8 — Supporting documentation
+  const attRes = await client.query<{ cnt: number }>(
+    "SELECT COUNT(*)::int AS cnt FROM report_attachments WHERE report_id = $1",
+    [row["id"]],
+  );
+  const hasAttachments      = (attRes.rows[0]?.cnt ?? 0) > 0;
+  const docsNoSupport       = sections["docsNoSupport"] === true;
+  const docsNoSupportReason = String(sections["docsNoSupportReason"] ?? "").trim();
+  if (!hasAttachments && !(docsNoSupport && docsNoSupportReason)) {
+    errors.push({
+      field: "supportingDocs",
+      reason: "Supporting documentation is required. Upload at least one attachment or provide a reason for omission.",
+    });
+  }
+
+  return errors;
+}
+
+function validateProgramStateReportForSubmission(
+  row: Record<string, unknown>,
+): PmrContentError[] {
+  const errors: PmrContentError[] = [];
+
+  // sections may be null, a non-object, or an array — normalise to a plain object.
+  const rawSections = row.sections;
+  const sections: Record<string, unknown> =
+    rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)
+      ? (rawSections as Record<string, unknown>)
+      : {};
+
+  const asStr = (v: unknown): string =>
+    typeof v === "string" ? v : v == null ? "" : String(v);
+
+  // §1 — Title (required, non-blank after trim)
+  if (!asStr(row.title).trim()) {
+    errors.push({ field: "title", reason: "Report Title is required." });
+  }
+
+  // §2 — State identity: SPRs are always state-scoped; stored state_id must be set.
+  if (!row.state_id) {
+    errors.push({ field: "stateId", reason: "State is required." });
+  }
+
+  // §3 — Sectors covered (sections.sectors: at least one entry)
+  const sectors = Array.isArray(sections["sectors"]) ? sections["sectors"] : [];
+  if (sectors.filter((s) => asStr(s).trim()).length === 0) {
+    errors.push({ field: "sectors", reason: "At least one sector is required." });
+  }
+
+  // §4 — Localities covered (sections.localitiesCovered: at least one entry)
+  const localities = Array.isArray(sections["localitiesCovered"])
+    ? sections["localitiesCovered"]
+    : [];
+  if (localities.filter((l) => asStr(l).trim()).length === 0) {
+    errors.push({ field: "localitiesCovered", reason: "At least one locality is required." });
+  }
+
+  // §5 — Humanitarian context (sections.humanitarianContext.{4 required fields})
+  const rawHc = sections["humanitarianContext"];
+  const hc: Record<string, unknown> =
+    rawHc && typeof rawHc === "object" && !Array.isArray(rawHc)
+      ? (rawHc as Record<string, unknown>)
+      : {};
+  const hcRequired: Array<[string, string]> = [
+    ["securitySituation",   "Security Situation is required."],
+    ["populationMovements", "Population Movements is required."],
+    ["diseaseOutbreaks",    "Disease Outbreaks is required."],
+    ["accessConstraints",   "Access Constraints is required."],
+  ];
+  for (const [key, reason] of hcRequired) {
+    if (!asStr(hc[key]).trim()) {
+      errors.push({ field: `humanitarianContext.${key}`, section: "humanitarianContext", reason });
+    }
+  }
+
+  // §6 — Activities (top-level activities column; camelCase keys as sent by frontend).
+  const parseSprBen = (v: unknown): number | "invalid" => {
+    if (v === null || v === undefined) return 0;
+    if (typeof v !== "number" && typeof v !== "string") return "invalid";
+    if (typeof v === "string" && !v.trim()) return 0;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "invalid";
+    if (n < 0) return "invalid";
+    return n;
+  };
+
+  const activities = Array.isArray(row.activities)
+    ? (row.activities as unknown[])
+    : [];
+  if (activities.length === 0) {
+    errors.push({ field: "activities", reason: "At least one activity is required." });
+  } else {
+    for (let i = 0; i < activities.length; i++) {
+      const fieldPrefix = `activities[${i}]`;
+      const rawA = activities[i];
+      if (!rawA || typeof rawA !== "object" || Array.isArray(rawA)) {
+        errors.push({ field: fieldPrefix, reason: "Activity entry is malformed." });
+        continue;
+      }
+      const a = rawA as Record<string, unknown>;
+
+      if (!asStr(a["title"]).trim()) {
+        errors.push({ field: `${fieldPrefix}.title`, reason: "Activity title is required." });
+      }
+      if (!asStr(a["sector"]).trim()) {
+        errors.push({ field: `${fieldPrefix}.sector`, reason: "Activity sector is required." });
+      }
+      if (!asStr(a["activityDate"]).trim()) {
+        errors.push({ field: `${fieldPrefix}.date`, reason: "Activity date is required." });
+      }
+      if (!asStr(a["achievementSummary"]).trim()) {
+        errors.push({ field: `${fieldPrefix}.achievementSummary`, reason: "Activity achievement summary is required." });
+      }
+
+      // Beneficiary reach: total across men/women/boys/girls must be > 0
+      let benSum = 0;
+      let benInvalid = false;
+      for (const key of ["beneficiariesMen", "beneficiariesWomen", "beneficiariesBoys", "beneficiariesGirls"]) {
+        const parsed = parseSprBen(a[key]);
+        if (parsed === "invalid") { benInvalid = true; continue; }
+        benSum += parsed;
+      }
+      if (benInvalid) {
+        errors.push({
+          field: `${fieldPrefix}.beneficiaries`,
+          reason: "Beneficiary values must be valid non-negative numbers.",
+        });
+      } else if (benSum === 0) {
+        errors.push({
+          field: `${fieldPrefix}.beneficiaries`,
+          reason: "Activity must report at least one beneficiary reached.",
+        });
+      }
+    }
+  }
+
+  // §7 — Narratives (stored at top level of sections JSONB by the frontend)
+  const narrativeRequired: Array<[string, string]> = [
+    ["keyAchievements",      "Key Achievements is required."],
+    ["mainChallenges",       "Main Challenges is required."],
+    ["mitigationMeasures",   "Mitigation Measures is required."],
+    ["nextPeriodPriorities", "Next Period Priorities is required."],
+  ];
+  for (const [key, reason] of narrativeRequired) {
+    if (!asStr(sections[key]).trim()) {
+      errors.push({ field: key, section: "narrative", reason });
+    }
+  }
+
+  // §8 — On-Demand rules
+  if (String(row.kind ?? "") === "on_demand") {
+    const parseDate = (v: unknown): number | null => {
+      const s = asStr(v).trim();
+      if (!s) return null;
+      const t = Date.parse(s.length === 10 ? `${s}T00:00:00Z` : s);
+      return Number.isFinite(t) ? t : null;
+    };
+    const start = parseDate(row.period_start);
+    const end   = parseDate(row.period_end);
+    if (start === null) {
+      errors.push({ field: "periodStart", reason: "Period start is required and must be a valid date for on-demand reports." });
+    }
+    if (end === null) {
+      errors.push({ field: "periodEnd", reason: "Period end is required and must be a valid date for on-demand reports." });
+    }
+    if (start !== null && end !== null && end < start) {
+      errors.push({ field: "periodEnd", reason: "Period end must be on or after period start." });
+    }
+    const reason =
+      asStr(row.on_demand_reason).trim() || asStr(sections["onDemandReason"]).trim();
+    if (!reason) {
+      errors.push({ field: "onDemandReason", reason: "On-demand reason is required." });
+    }
+  }
+
+  return errors;
+}
+
+function validateHqSectorReportForSubmission(
+  row: Record<string, unknown>,
+): PmrContentError[] {
+  const errors: PmrContentError[] = [];
+
+  // sections may be null, a non-object, or an array — normalise to a plain object.
+  const rawSections = row.sections;
+  const sections: Record<string, unknown> =
+    rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)
+      ? (rawSections as Record<string, unknown>)
+      : {};
+
+  const asStr = (v: unknown): string =>
+    typeof v === "string" ? v : v == null ? "" : String(v);
+  const isBlank = (v: unknown): boolean => asStr(v).trim().length === 0;
+  // Strict variant for user-entered text: a boolean/array/object stored where a
+  // narrative string belongs is malformed content, not a valid value.
+  const isMissingText = (v: unknown): boolean =>
+    typeof v !== "string" || v.trim().length === 0;
+
+  // §1 — Sector (top-level column; authoritative for hq_sector)
+  if (isBlank(row.sector)) {
+    errors.push({ field: "sector", reason: "Sector is required." });
+  }
+
+  // §2 — Title (top-level column)
+  if (isBlank(row.title)) {
+    errors.push({ field: "title", reason: "Report Title is required." });
+  }
+
+  // §3 — On-Demand rules: periodStart/periodEnd valid dates with end ≥ start,
+  // plus a non-blank reason. A non-on-demand value in one location must never
+  // suppress an on-demand value in the other — fail closed and apply the
+  // stricter rules whenever either says on_demand.
+  const isOnDemand =
+    asStr(row.kind).trim() === "on_demand" ||
+    asStr(sections["frequency"]).trim() === "on_demand";
+  if (isOnDemand) {
+    // Strict calendar-date parser — Date.parse alone silently normalises
+    // impossible dates ("2026-02-30" → 2 March 2026).
+    const parseDate = (v: unknown): number | null => {
+      if (v instanceof Date) {
+        const t = v.getTime();
+        return Number.isFinite(t) ? t : null;
+      }
+      const s = asStr(v).trim();
+      const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?$/.exec(s);
+      if (!m) return null;
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      const d = Number(m[3]);
+      const t = Date.UTC(y, mo - 1, d);
+      const dt = new Date(t);
+      if (
+        dt.getUTCFullYear() !== y ||
+        dt.getUTCMonth() !== mo - 1 ||
+        dt.getUTCDate() !== d
+      ) {
+        return null; // impossible calendar date (e.g. Feb 30, month 13, day 32)
+      }
+      return t;
+    };
+    const rawStart = !isBlank(row.period_start) ? row.period_start : sections["periodStart"];
+    const rawEnd   = !isBlank(row.period_end)   ? row.period_end   : sections["periodEnd"];
+    const start = parseDate(rawStart);
+    const end   = parseDate(rawEnd);
+    if (start === null) {
+      errors.push({ field: "periodStart", reason: "Period start is required and must be a valid date for on-demand reports." });
+    }
+    if (end === null) {
+      errors.push({ field: "periodEnd", reason: "Period end is required and must be a valid date for on-demand reports." });
+    }
+    if (start !== null && end !== null && end < start) {
+      errors.push({ field: "periodEnd", reason: "Period end must be on or after period start." });
+    }
+    const reason =
+      asStr(row.on_demand_reason).trim() || asStr(sections["onDemandReason"]).trim();
+    if (!reason) {
+      errors.push({ field: "onDemandReason", reason: "On-demand reason is required." });
+    }
+  }
+
+  // §4 — Required narrative sections (stored at top level of sections JSONB)
+  const narrativeRequired: Array<[string, string]> = [
+    ["technicalAnalysis",   "Technical Analysis is required."],
+    ["keyFindings",         "Key Findings is required."],
+    ["qualityAssessment",   "Quality Assessment is required."],
+    ["technicalChallenges", "Technical Challenges is required."],
+    ["recommendations",     "Recommendations is required."],
+    ["strategicPriorities", "Strategic Priorities is required."],
+    ["lessonsLearned",      "Lessons Learned is required."],
+    ["sectorOutlook",       "Sector Outlook is required."],
+  ];
+  for (const [key, reason] of narrativeRequired) {
+    if (isMissingText(sections[key])) {
+      errors.push({ field: key, section: "narratives", reason });
+    }
+  }
+
+  // §5 — Support requests: at least one valid entry (non-blank supportType AND description).
+  const rawSupport = sections["supportRequired"];
+  const supportArr: unknown[] = Array.isArray(rawSupport) ? rawSupport : [];
+  const validSupport = supportArr.filter(
+    (r: unknown) =>
+      r !== null &&
+      typeof r === "object" &&
+      !Array.isArray(r) &&
+      !isMissingText((r as Record<string, unknown>).supportType) &&
+      !isMissingText((r as Record<string, unknown>).description),
+  );
+  if (validSupport.length === 0) {
+    errors.push({
+      field: "supportRequired",
+      reason: "At least one support request with a support type and description is required.",
+    });
+  }
+
+  return errors;
+}
+
+// ---------------------------------------------------------------------------
+// POST /reports/:reportId/transitions — Workflow actions
+// ---------------------------------------------------------------------------
+
+reportsRoutes.post(
+  "/reports/:reportId/transitions",
+  // PERM-04/WF-02: Outer gate is reports.update, not reports.view.
+  // This blocks SOM (view-only) and ED (view-only) from reaching the handler.
+  // The inner action-specific permission check is the real security gate:
+  //   submit              → reports.create  (SPO, TC, super_admin for Activity Reports)
+  //   technical_review    → reports.approve.technical  (TC only)
+  //   coordination_review → reports.approve.coordination  (SPC, PM, super_admin)
+  //   final_approve       → reports.approve.final  (PM, super_admin)
+  //   request_revision/reject → reports.approve.technical or .coordination per stage
+  // SOM (SPR-003/004 fallback): passes the outer gate via the narrow
+  // reports.program_state.create permission, but the inner permission check
+  // only grants them action=submit on their OWN program_state report.
+  requireReportsUpdateOrSomSprAuthor,
+  async (c) => {
+    const user = c.get("currentUser");
+    const { pool, close } = openDb(c);
+    const client = await pool.connect();
+    try {
+      if (!user) return c.json({ error: "no current user" }, 401);
+      const reportId = Number(c.req.param("reportId"));
+      const body = TransitionReportBody.parse(await c.req.json().catch(() => ({})));
+
+      await client.query("BEGIN");
+
+      // Lock the row for this transaction to prevent concurrent approvals
+      const cur = await client.query<{
+        status: string;
+        reportType: string | null;
+        stateId: number | null;
+        sector: string | null;
+        projectId: number | null;
+        activityId: number | null;
+        workflowPath: string | null;
+        authorId: number | null;
+      }>(
+        `SELECT status, report_type AS "reportType", state_id AS "stateId",
+                sector, project_id AS "projectId", activity_id AS "activityId",
+                workflow_path AS "workflowPath", author_id AS "authorId"
+         FROM reports WHERE id = $1 FOR UPDATE`,
+        [reportId],
+      );
+      if (cur.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "report not found" }, 404);
+      }
+
+      const {
+        status: fromStatus,
+        reportType,
+        stateId: reportStateId,
+        projectId: reportProjectId,
+        workflowPath,
+        authorId,
+      } = cur.rows[0];
+
+      // Verify the report has a canonical type
+      if (!reportType || !isCanonicalReportType(reportType)) {
+        await client.query("ROLLBACK");
+        return c.json({
+          error: "unresolved_report_type",
+          message:
+            "This report has an unresolved type and cannot be transitioned. Assign a canonical type first.",
+        }, 409);
+      }
+
+      // ── NULL workflow_path historical fallback ────────────────────────────────
+      // A small set of historical project/activity reports have workflow_path = NULL
+      // because their original author_id could not be resolved during migration backfill.
+      // getProjectActivityWorkflow(null) conservatively falls back to state_authored.
+      if ((reportType === "project" || reportType === "activity") && workflowPath === null) {
+        console.warn(
+          `[reports] transition: null workflow_path — using conservative state_authored fallback (historical record) reportId=${reportId} reportType=${reportType} status=${fromStatus} authorId=${authorId}`,
+        );
+      }
+
+      // ── Defense-in-depth: reject unexpected non-null workflow_path values ─────
+      if (
+        (reportType === "project" || reportType === "activity") &&
+        workflowPath !== null &&
+        workflowPath !== "state_authored" &&
+        workflowPath !== "technical_authored"
+      ) {
+        await client.query("ROLLBACK");
+        return c.json({
+          error: "invalid_workflow_path",
+          message: "Report has an unrecognised workflow_path value and cannot be transitioned.",
+        }, 409);
+      }
+
+      // Look up the workflow for this report type. Project and Activity reports
+      // use an author-dependent workflow; all others use a single fixed chain.
+      const workflow =
+        reportType === "project" || reportType === "activity"
+          ? getProjectActivityWorkflow(workflowPath)
+          : REPORT_WORKFLOWS[reportType as keyof typeof REPORT_WORKFLOWS];
+
+      if (!workflow) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "no workflow defined for report type", reportType }, 409);
+      }
+
+      const transition = workflow[body.action as keyof typeof workflow];
+      if (!transition) {
+        await client.query("ROLLBACK");
+        return c.json({
+          error: `action '${body.action}' is not valid for report type '${reportType}' (workflow_path: ${workflowPath ?? "none"})`,
+        }, 400);
+      }
+
+      // Validate the from-status
+      if (!transition.from.includes(fromStatus)) {
+        await client.query("ROLLBACK");
+        return c.json({
+          error: `cannot ${body.action} from status '${fromStatus}' for ${reportType} reports`,
+        }, 400);
+      }
+
+      // WF-03: Guard against transitioning INTO historical-only statuses.
+      const HISTORICAL_ONLY_TARGETS = new Set(["state_reviewed"]);
+      if (HISTORICAL_ONLY_TARGETS.has(transition.to)) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "invalid_transition_target", status: transition.to }, 400);
+      }
+
+      // Resolve the required permission (dynamic for reject/request_revision)
+      let requiredPerm = transition.perm;
+      if (body.action === "reject" || body.action === "request_revision") {
+        requiredPerm = getRevisionPerm(reportType, fromStatus, workflowPath);
+      }
+
+      // Check permission
+      const perms = permissionsFor(user);
+
+      // SPR-003/004 SOM fallback: the narrow reports.program_state.create
+      // permission satisfies ONLY the submit action on a program_state report
+      // the SOM authored themselves. Fail closed on state scope.
+      const isSomSprAuthorSubmit =
+        user.role === "state_office_manager" &&
+        body.action === "submit" &&
+        reportType === "program_state" &&
+        authorId !== null &&
+        authorId === user.id &&
+        user.stateId != null &&
+        reportStateId !== null &&
+        reportStateId === user.stateId &&
+        perms.includes("reports.program_state.create");
+
+      if (!perms.includes("*") && !perms.includes(requiredPerm) && !isSomSprAuthorSubmit) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "forbidden", requiredPermission: requiredPerm }, 403);
+      }
+
+      // ── Self-review prevention (with PM/super_admin override path) ────────
+      // The original report author (author_id) must never review or approve their
+      // own report at any workflow stage. Full Operational Access override:
+      // PM and super_admin may self-review, subject to an explicit overrideReason.
+      const REVIEWER_ACTIONS = ["technical_review", "coordination_review", "final_approve"] as const;
+      let selfReviewOverride = false;
+      if ((REVIEWER_ACTIONS as readonly string[]).includes(body.action)) {
+        if (authorId !== null && authorId === user.id) {
+          if (hasFullOperationalAccess(user)) {
+            const suppliedReason = typeof body.overrideReason === "string" ? body.overrideReason.trim() : "";
+            if (!suppliedReason) {
+              await client.query("ROLLBACK");
+              return c.json({
+                error: "override_reason_required",
+                message:
+                  "An override reason is required when Program Manager or Super Admin reviews their own report.",
+              }, 400);
+            }
+            selfReviewOverride = true;
+          } else {
+            await client.query("ROLLBACK");
+            return c.json({
+              error: "self_review_forbidden",
+              message: "The report author cannot review or approve their own report.",
+            }, 403);
+          }
+        }
+      }
+
+      // ── State scope check for state roles ────────────────────────────────
+      const isStateRole =
+        user.role === "state_program_officer" ||
+        user.role === "state_office_manager";
+      if (isStateRole) {
+        const userStateId = user.stateId ?? null;
+        if (userStateId !== null && reportStateId !== null && reportStateId !== userStateId) {
+          await client.query("ROLLBACK");
+          return c.json({ error: "state_scope_forbidden" }, 403);
+        }
+      }
+
+      // ── Sector scope check ────────────────────────────────────────────────
+      const sector = await getReportSectorForAuth(client, reportId);
+      const guard = assertSectorAllowed(user, sector ?? null);
+      if (!guard.ok) {
+        await client.query("ROLLBACK");
+        return c.json(guard.body, guard.status as 403);
+      }
+
+      // ── Require comment for revision/reject ───────────────────────────────
+      const commentText = String(body.comment ?? "").trim();
+      if (
+        (body.action === "request_revision" || body.action === "reject") &&
+        !commentText
+      ) {
+        await client.query("ROLLBACK");
+        return c.json({ error: "comment_required_for_revision_or_reject" }, 400);
+      }
+
+      // ── Content gate for modern Activity Reports on submit ───────────────
+      // FIX-08: Backend enforcement of required fields to match frontend submit validation.
+      if (body.action === "submit" && reportType === "activity") {
+        const fullRow = await client.query<{
+          title: string | null;
+          activityName: string | null;
+          sections: Record<string, unknown> | null;
+          period: string | null;
+          reportingMonth: number | null;
+          reportingYear: number | null;
+          stateId: number | null;
+          locationType: string | null;
+          beneficiariesMale: number | null;
+          beneficiariesFemale: number | null;
+          beneficiariesBoys: number | null;
+          beneficiariesGirls: number | null;
+        }>(
+          `SELECT title,
+                  activity_name        AS "activityName",
+                  sections,
+                  period,
+                  reporting_month      AS "reportingMonth",
+                  reporting_year       AS "reportingYear",
+                  state_id             AS "stateId",
+                  location_type        AS "locationType",
+                  beneficiaries_male   AS "beneficiariesMale",
+                  beneficiaries_female AS "beneficiariesFemale",
+                  beneficiaries_boys   AS "beneficiariesBoys",
+                  beneficiaries_girls  AS "beneficiariesGirls"
+           FROM reports WHERE id = $1`,
+          [reportId],
+        );
+        if (fullRow.rows.length > 0) {
+          const row = fullRow.rows[0];
+          const sections = row.sections ?? {};
+          const isModern = sections["_schemaVersion"] === "modern";
+          if (isModern) {
+            const contentErrors: string[] = [];
+
+            if (!(row.title ?? "").trim())
+              contentErrors.push("Report Title is required.");
+            if (!(row.activityName ?? "").trim())
+              contentErrors.push("Report Subject / Activity Name is required.");
+
+            const periodStr = String(row.period ?? "");
+            const isLegacyPeriod = !/^\d{4}-\d{2}$/.test(periodStr);
+            if (!isLegacyPeriod) {
+              if (!row.reportingMonth)
+                contentErrors.push("Reporting Month is required.");
+              if (!row.reportingYear)
+                contentErrors.push("Reporting Year is required.");
+            }
+
+            if (!(String(sections["implementationStatus"] ?? "")).trim())
+              contentErrors.push("Implementation Status is required.");
+            if (!(String(sections["implementationSummary"] ?? "")).trim())
+              contentErrors.push("Implementation Summary is required.");
+
+            const startDate = String(sections["actualStartDate"] ?? "").trim();
+            const endDate   = String(sections["actualEndDate"]   ?? "").trim();
+            if (startDate && endDate && endDate < startDate)
+              contentErrors.push("Actual End Date must be on or after Actual Start Date.");
+
+            if (!(String(sections["resultsAchieved"] ?? "")).trim())
+              contentErrors.push("Results Achieved is required.");
+
+            const hasBeneficiaryReach = String(sections["hasBeneficiaryReach"] ?? "").trim();
+            if (!hasBeneficiaryReach || (hasBeneficiaryReach !== "yes" && hasBeneficiaryReach !== "no")) {
+              contentErrors.push("Please indicate whether this report has direct beneficiary reach.");
+            } else if (hasBeneficiaryReach === "yes") {
+              const benCounts = [
+                ["men",   row.beneficiariesMale],
+                ["women", row.beneficiariesFemale],
+                ["boys",  row.beneficiariesBoys],
+                ["girls", row.beneficiariesGirls],
+              ] as const;
+              for (const [label, val] of benCounts) {
+                const n = Number(val ?? 0);
+                if (!Number.isInteger(n) || n < 0)
+                  contentErrors.push(`Beneficiary count for ${label} must be a non-negative whole number.`);
+              }
+            }
+
+            const hasChallenges = String(sections["hasChallenges"] ?? "").trim();
+            if (!hasChallenges || (hasChallenges !== "yes" && hasChallenges !== "no")) {
+              contentErrors.push("Please indicate whether significant challenges were encountered.");
+            } else if (hasChallenges === "yes") {
+              if (!(String(sections["challenges"] ?? "")).trim())
+                contentErrors.push("Challenges Encountered is required.");
+            }
+
+            if (!(String(sections["lessonsLearned"] ?? "")).trim())
+              contentErrors.push("Lessons Learned is required.");
+
+            if (row.locationType !== "hq" && !row.stateId)
+              contentErrors.push("State is required.");
+
+            if (contentErrors.length > 0) {
+              await client.query("ROLLBACK");
+              return c.json({ error: "report_content_incomplete", fields: contentErrors }, 422);
+            }
+          }
+        }
+      }
+
+      // ── Content gate for Project (Monthly) Reports on submit ─────────────
+      if (body.action === "submit" && reportType === "project") {
+        const pmrFullRow = await client.query<Record<string, unknown>>(
+          `SELECT id, title, project_id, state_id, location_type,
+                  kind, period, period_start, on_demand_reason,
+                  reporting_month, reporting_year, quarter,
+                  sections, activities
+           FROM reports WHERE id = $1`,
+          [reportId],
+        );
+        if (pmrFullRow.rows.length > 0) {
+          const pmrErrors = await validateProjectReportForSubmission(pmrFullRow.rows[0], client);
+          if (pmrErrors.length > 0) {
+            await client.query("ROLLBACK");
+            return c.json({ error: "report_content_incomplete", fields: pmrErrors }, 422);
+          }
+        }
+      }
+
+      // ── Content gate for State Programme Reports on submit ───────────────
+      if (body.action === "submit" && reportType === "program_state") {
+        const sprFullRow = await client.query<Record<string, unknown>>(
+          `SELECT id, title, state_id, kind, period,
+                  period_start, period_end, on_demand_reason,
+                  sections, activities
+           FROM reports WHERE id = $1`,
+          [reportId],
+        );
+        if (sprFullRow.rows.length > 0) {
+          const sprErrors = validateProgramStateReportForSubmission(sprFullRow.rows[0]);
+          if (sprErrors.length > 0) {
+            await client.query("ROLLBACK");
+            return c.json({ error: "report_content_incomplete", fields: sprErrors }, 422);
+          }
+        }
+      }
+
+      // ── Content gate for HQ Sector Reports on submit ─────────────────────
+      if (body.action === "submit" && reportType === "hq_sector") {
+        const hqFullRow = await client.query<Record<string, unknown>>(
+          `SELECT id, title, sector, kind,
+                  period_start, period_end, on_demand_reason,
+                  sections
+           FROM reports WHERE id = $1`,
+          [reportId],
+        );
+        if (hqFullRow.rows.length > 0) {
+          const hqErrors = validateHqSectorReportForSubmission(hqFullRow.rows[0]);
+          if (hqErrors.length > 0) {
+            await client.query("ROLLBACK");
+            return c.json({ error: "report_content_incomplete", fields: hqErrors }, 422);
+          }
+        }
+      }
+
+      // ── Final-approve gate: no unresolved required corrections ────────────
+      if (body.action === "final_approve") {
+        const n = await unresolvedRequiredCorrections(client, "report", reportId);
+        if (n > 0) {
+          await client.query("ROLLBACK");
+          return c.json({ error: "unresolved_required_corrections", count: n }, 409);
+        }
+      }
+
+      const toStatus = transition.to;
+
+      // ── Update report status ──────────────────────────────────────────────
+      // On re-submit (submit from draft after request_revision), reset submitted_at
+      // so the >14-day timer restarts from the new submission.
+      const resetSubmittedAt = body.action === "submit";
+      await client.query(
+        `UPDATE reports
+         SET status = $1
+             ${resetSubmittedAt ? ", submitted_at = NOW(), submitted_by_id = $3" : ""}
+             , updated_at = NOW()
+         WHERE id = $2`,
+        resetSubmittedAt ? [toStatus, reportId, user.id] : [toStatus, reportId],
+      );
+
+      // ── Record approval history ───────────────────────────────────────────
+      const approvalOverrideReason = selfReviewOverride
+        ? (typeof body.overrideReason === "string" ? body.overrideReason.trim() : null)
+        : null;
+      await client.query(
+        `INSERT INTO approvals (entity_type, entity_id, action, from_status, to_status, actor_id, comment, used_override, override_reason)
+         VALUES ('report', $1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          reportId,
+          body.action,
+          fromStatus,
+          toStatus,
+          user.id,
+          body.comment ?? null,
+          selfReviewOverride,
+          approvalOverrideReason,
+        ],
+      );
+
+      // ── Comments for revision/rejection ──────────────────────────────────
+      if (commentText && (body.action === "request_revision" || body.action === "reject")) {
+        await client.query(
+          `INSERT INTO comments (entity_type, entity_id, comment_type, author_id, body)
+           VALUES ('report', $1, $2, $3, $4)`,
+          [
+            reportId,
+            body.action === "request_revision" ? "revision_request" : "rejection_reason",
+            user.id,
+            commentText,
+          ],
+        );
+      }
+
+      // ── Audit log ─────────────────────────────────────────────────────────
+      await logAudit(client, {
+        userId: user.id,
+        action: body.action,
+        module: "reports",
+        entityId: reportId,
+        oldValue: fromStatus,
+        newValue: toStatus,
+        usedOverride: selfReviewOverride,
+        overrideReason: approvalOverrideReason,
+      });
+
+      await client.query("COMMIT");
+
+      // Notification creation (notifyEntityActorsDeduped, createNotificationDeduped,
+      // notifyNextApprover) and realtime.broadcastUpdate are dropped — deferred to
+      // the not-yet-built notification engine / Durable Objects phase, same as
+      // every prior file in this port.
+
+      const result = await client.query<Record<string, unknown>>(`${reportSelect} WHERE r.id = $1`, [reportId]);
+      const enriched = await withHistory(client, result.rows);
+      return c.json(enriched[0]);
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+      close();
+    }
+  },
+);
