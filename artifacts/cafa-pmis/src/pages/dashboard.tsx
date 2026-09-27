@@ -72,7 +72,7 @@ import {
 } from "@/components/icons";
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell, LabelList,
+  ResponsiveContainer, BarChart, Bar, Legend, Cell, LabelList,
 } from "recharts";
 import { Link, useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -549,18 +549,24 @@ function NotificationsSummaryWidget() {
    have been removed — they were Dashboard-only and are not part of approved
    CAFA Business Logic. Only factual operational counts are shown. */
 
+type OFUTone = "default" | "accent" | "danger" | "warning";
 type OFUTile = {
-  label:           string;
-  sub:             string;
-  count:           number | undefined;
-  isLoading:       boolean;
-  href?:           string;
-  Icon:            React.ElementType;
-  tileClass:       string;
-  iconClass:       string;
-  countClass:      string;
-  /** When true, fall back to neutral surface/icon/count colour when count === 0 */
+  label:     string;
+  sub:       string;
+  count:     number | undefined;
+  isLoading: boolean;
+  href?:     string;
+  Icon:      React.ElementType;
+  tone:      OFUTone;
+  /** When true, fall back to the neutral tone when count === 0 */
   neutralWhenZero?: boolean;
+};
+
+const OFU_ICON_TONE: Record<OFUTone, string> = {
+  default: "bg-[var(--default)] text-[var(--muted)]",
+  accent:  "bg-[color-mix(in_oklab,var(--accent)_12%,transparent)] text-[var(--accent)]",
+  danger:  "bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] text-[var(--danger)]",
+  warning: "bg-[color-mix(in_oklab,var(--warning)_14%,transparent)] text-[var(--warning)]",
 };
 
 export function OperationalFollowUp({
@@ -578,118 +584,68 @@ export function OperationalFollowUp({
 }) {
   const { t } = useTranslation("dashboard");
   const tiles: OFUTile[] = [
-    {
-      label: t("operationalFollowUp.draftProjects"), sub: t("drafts.savedDrafts"),
+    { label: t("operationalFollowUp.draftProjects"), sub: t("drafts.savedDrafts"),
       count: draftProjectCount, isLoading: isDraftProjectsLoading,
-      href: "/projects?status=draft", Icon: FolderKanban,
-      tileClass:  "bg-slate-50/80 border-slate-200 hover:bg-slate-100/70 dark:bg-slate-900/30 dark:border-slate-700",
-      iconClass:  "text-slate-400",
-      countClass: "text-slate-700 dark:text-slate-300",
-    },
-    {
-      label: t("operationalFollowUp.draftReports"), sub: t("drafts.savedDrafts"),
-      count: draftReportCount, isLoading: isDraftReportsLoading,
-      Icon: FileText,
-      tileClass:  "bg-blue-50/60 border-blue-200 hover:bg-blue-50/90 dark:bg-blue-950/20 dark:border-blue-800",
-      iconClass:  "text-blue-400",
-      countClass: "text-blue-700 dark:text-blue-400",
-    },
-    {
-      label: t("operationalFollowUp.lateReports"), sub: t("sections.overdueReportsDesc"),
-      count: lateReportCount, isLoading: isLateLoading,
-      Icon: Clock,
-      tileClass:  "bg-red-50/60 border-red-200 hover:bg-red-50/90 dark:bg-red-950/20 dark:border-red-800",
-      iconClass:  "text-red-400",
-      countClass: "text-red-700 dark:text-red-400",
-      neutralWhenZero: true,
-    },
-    {
-      label: t("operationalFollowUp.criticalRisks"), sub: t("riskPanel.activeCriticalRisks"),
-      count: criticalRiskCount, isLoading: isCriticalLoading,
-      Icon: AlertTriangle,
-      tileClass:  "bg-red-50/60 border-red-200 hover:bg-red-50/90 dark:bg-red-950/20 dark:border-red-800",
-      iconClass:  "text-red-400",
-      countClass: "text-red-700 dark:text-red-400",
-      neutralWhenZero: true,
-    },
-    {
-      label: t("operationalFollowUp.returnedReports"), sub: t("lateReports.returned"),
-      count: returnedReportCount, isLoading: isReturnedLoading,
-      Icon: RotateCcw,
-      tileClass:  "bg-amber-50/60 border-amber-200 hover:bg-amber-50/90 dark:bg-amber-950/20 dark:border-amber-800",
-      iconClass:  "text-amber-500",
-      countClass: "text-amber-700 dark:text-amber-500",
-      neutralWhenZero: true,
-    },
+      href: "/projects?status=draft", Icon: FolderKanban, tone: "default" },
+    { label: t("operationalFollowUp.draftReports"), sub: t("drafts.savedDrafts"),
+      count: draftReportCount, isLoading: isDraftReportsLoading, Icon: FileText, tone: "accent" },
+    { label: t("operationalFollowUp.lateReports"), sub: t("sections.overdueReportsDesc"),
+      count: lateReportCount, isLoading: isLateLoading, Icon: Clock, tone: "danger", neutralWhenZero: true },
+    { label: t("operationalFollowUp.criticalRisks"), sub: t("riskPanel.activeCriticalRisks"),
+      count: criticalRiskCount, isLoading: isCriticalLoading, Icon: AlertTriangle, tone: "danger", neutralWhenZero: true },
+    { label: t("operationalFollowUp.returnedReports"), sub: t("lateReports.returned"),
+      count: returnedReportCount, isLoading: isReturnedLoading, Icon: RotateCcw, tone: "warning", neutralWhenZero: true },
   ];
 
   return (
-    <Card className="rounded-xl border-border shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium">{t("operationalFollowUp.title")}</CardTitle>
-        <CardDescription className="text-xs">
-          {t("operationalFollowUp.description")}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0 pb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {tiles.map(({ label, sub, count, isLoading, href, Icon, tileClass, iconClass, countClass, neutralWhenZero }) => {
-            const useNeutral = neutralWhenZero && (count ?? 0) === 0;
-            const appliedTile  = useNeutral ? "bg-card border-border hover:bg-muted/30 dark:hover:bg-muted/10" : tileClass;
-            const appliedIcon  = useNeutral ? "text-muted-foreground/35" : iconClass;
-            const appliedCount = useNeutral ? "text-muted-foreground" : countClass;
-            const content = (
-              <>
-                <Icon className={`h-4 w-4 shrink-0 ${appliedIcon}`} aria-hidden="true" />
-                {count === undefined ? (
-                  <p className="text-xs text-muted-foreground italic">{t("operationalFollowUp.insufficientData")}</p>
-                ) : (
-                  <p className={`text-xl font-bold tabular-nums leading-none ${appliedCount}`}>
-                    {count.toLocaleString()}
-                  </p>
-                )}
-                <div>
-                  <p className="text-xs font-medium leading-tight text-foreground">{label}</p>
-                  <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{sub}</p>
-                </div>
-              </>
-            );
-            return isLoading ? (
-              /* Per-tile loading skeleton */
-              <div key={label} className="animate-pulse rounded-xl border border-border p-3 space-y-2" aria-hidden="true">
-                <div className="h-3.5 w-3.5 rounded bg-muted/50" />
-                <div className="h-5 w-8 rounded bg-muted/50" />
-                <div className="h-2.5 w-20 rounded bg-muted/40" />
-                <div className="h-2.5 w-28 rounded bg-muted/30" />
+    <ChartCard title={t("operationalFollowUp.title")} description={t("operationalFollowUp.description")}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+        {tiles.map(({ label, sub, count, isLoading, href, Icon, tone, neutralWhenZero }) => {
+          const applied: OFUTone = neutralWhenZero && (count ?? 0) === 0 ? "default" : tone;
+          const tileCls = "flex flex-col gap-3 rounded-2xl border border-[var(--border)] p-3";
+          const content = (
+            <>
+              <div className="flex items-center gap-2">
+                <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${OFU_ICON_TONE[applied]}`}>
+                  <Icon className="size-4" aria-hidden="true" />
+                </span>
+                <span className="text-sm font-medium leading-tight text-foreground">{label}</span>
               </div>
-            ) : (
-              href ? (
-                <Link
-                  key={label}
-                  href={href}
-                  aria-label={`${label}: ${count ?? t("operationalFollowUp.insufficientData")}. ${sub}`}
-                  className={`flex flex-col gap-1.5 rounded-xl border p-3 transition-colors ${appliedTile}`}
-                >
-                  {content}
-                </Link>
+              {count === undefined ? (
+                <p className="text-xs text-[var(--muted)]">{t("operationalFollowUp.insufficientData")}</p>
               ) : (
-                <div
-                  key={label}
-                  role="group"
-                  aria-label={`${label}: ${count ?? t("operationalFollowUp.insufficientData")}. ${sub}`}
-                  className={`flex flex-col gap-1.5 rounded-xl border p-3 ${appliedTile}`}
-                >
-                  {content}
-                </div>
-              )
+                <p className={`text-2xl font-semibold tabular-nums leading-none ${applied === "default" ? "text-foreground" : ""}`}
+                  style={applied === "default" ? undefined : { color: `var(--${applied})` }}>
+                  {count.toLocaleString()}
+                </p>
+              )}
+              <p className="text-xs leading-snug text-[var(--muted)]">{sub}</p>
+            </>
+          );
+          const aria = `${label}: ${count ?? t("operationalFollowUp.insufficientData")}. ${sub}`;
+          if (isLoading) {
+            return (
+              <div key={label} className={tileCls} aria-hidden="true">
+                <div className="flex items-center gap-2"><HSkeleton className="size-8 rounded-lg" /><HSkeleton className="h-3.5 w-20 rounded" /></div>
+                <HSkeleton className="h-6 w-10 rounded" />
+                <HSkeleton className="h-3 w-28 rounded" />
+              </div>
             );
-          })}
-        </div>
-        <p className="text-[11px] text-muted-foreground/55 mt-3 px-0.5">
-          {t("operationalFollowUp.categoriesNote")}
-        </p>
-      </CardContent>
-    </Card>
+          }
+          return href ? (
+            <Link key={label} href={href} aria-label={aria}
+              className={`${tileCls} transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]`}>
+              {content}
+            </Link>
+          ) : (
+            <div key={label} role="group" aria-label={aria} className={tileCls}>
+              {content}
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-xs text-[var(--muted)]">{t("operationalFollowUp.categoriesNote")}</p>
+    </ChartCard>
   );
 }
 
@@ -749,44 +705,35 @@ type SortableCol = "stateName" | "totalProjects" | "activeProjects" | "openRisks
   "projectCode" | "projectTitle" | "sector" | "budgetBasis" | "currency" |
   "spent" | "remainingBalance" | "utilisationRate" | "projectStatus";
 
-/* Column config — outside component so it's not recreated on each render.
-   Labels are i18n keys resolved inside StatePerformanceTable using t(). */
-const STATE_COL_KEY_DEFS: Array<{ col: SortableCol; labelKey: string; tooltipKey?: string }> = [
-  { col: "totalProjects",          labelKey: "table.totalProjects" },
-  { col: "activeProjects",         labelKey: "table.activeProjects" },
-  { col: "reportsSubmitted",       labelKey: "table.reportsSubmitted" },
-  { col: "reportsPending",         labelKey: "table.reportsPending" },
-  { col: "openRisks",              labelKey: "table.openRisks" },
-  { col: "criticalRisks",          labelKey: "table.criticalRisks" },
-  { col: "activityCompletionPct",  labelKey: "table.activityPct" },
-  { col: "reportingCompliancePct", labelKey: "table.compliancePct" },
-];
-// Legacy alias for components still using STATE_COL_DEFS
-const STATE_COL_DEFS = STATE_COL_KEY_DEFS.map(d => ({ col: d.col, label: d.labelKey, tooltip: d.tooltipKey }));
-
 function renderPct(pct: number | null | undefined, t: TFn): React.ReactNode {
-  if (pct == null) return <span className="text-xs text-muted-foreground/40" aria-label={t("aria.dataUnavailable")}>—</span>;
+  if (pct == null) return <span className="text-xs text-[var(--muted)]" aria-label={t("aria.dataUnavailable")}>—</span>;
   const barW = Math.min(100, Math.max(0, pct));
   return (
     <div className="flex items-center justify-end gap-2">
-      <span className="text-xs tabular-nums text-foreground" aria-label={t("aria.percent", { value: pct })}><bdi dir="ltr">{pct}%</bdi></span>
-      <div className="h-1.5 w-12 bg-muted/60 rounded-full overflow-hidden shrink-0" aria-hidden="true">
-        <div className="h-full bg-primary/70 rounded-full transition-all" style={{ width: `${barW}%` }} />
+      <span className="text-sm tabular-nums text-foreground" aria-label={t("aria.percent", { value: pct })}><bdi dir="ltr">{pct}%</bdi></span>
+      <div className="h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-[var(--default)]" aria-hidden="true">
+        <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${barW}%` }} />
       </div>
     </div>
   );
 }
 
+type StatePerfRow = {
+  stateId: number; stateName: string; stateNameAr?: string | null; activeProjects: number; totalProjects?: number;
+  progressPct: number; budgetUtilizationPct?: number | null; riskLevel: string;
+  openRisks?: number | null; criticalRisks?: number | null;
+  reportsSubmitted?: number | null; reportsPending?: number | null;
+  activityCompletionPct?: number | null; reportingCompliancePct?: number | null;
+};
+
+/* ── State Implementation Overview — HeroUI Pro DataGrid ────────────── *
+ * Sorting stays controlled here so null values always sort last,        *
+ * whatever the direction. The State column is pinned to the inline      *
+ * start so it stays visible while the metrics scroll.                   */
 function StatePerformanceTable({
   states, isLoading, showAll,
 }: {
-  states: Array<{
-    stateId: number; stateName: string; stateNameAr?: string | null; activeProjects: number; totalProjects?: number;
-    progressPct: number; budgetUtilizationPct?: number | null; riskLevel: string;
-    openRisks?: number | null; criticalRisks?: number | null;
-    reportsSubmitted?: number | null; reportsPending?: number | null;
-    activityCompletionPct?: number | null; reportingCompliancePct?: number | null;
-  }>;
+  states: StatePerfRow[];
   isLoading: boolean;
   showAll: boolean;
 }) {
@@ -795,10 +742,6 @@ function StatePerformanceTable({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   /* Default to covered states; hidden for state-level users who always see all their states */
   const [showCoveredOnly, setShowCoveredOnly] = useState(true);
-  // Resolved column defs with translated labels
-  const stateColDefs = STATE_COL_KEY_DEFS.map(d => ({ col: d.col, label: t(d.labelKey) }));
-
-  const colCount = STATE_COL_DEFS.length + 1; // +1 for the sticky State column
 
   const sorted = useMemo(() => {
     const base = showAll
@@ -822,182 +765,83 @@ function StatePerformanceTable({
     });
   }, [states, sortCol, sortDir, showAll, showCoveredOnly]);
 
-  const onSort = (col: SortableCol) => {
-    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortCol(col); setSortDir("asc"); }
-  };
-
-  /* renderTH removed — replaced by the module-scope SortableTableHeader component.
-     See the comment above SortableTableHeader for why inner components must not be
-     used here. */
-
+  const columns = useMemo<DataGridColumn<StatePerfRow>[]>(() => {
+    const countBadge = (n: number, color: "warning" | "danger", label?: string) => n > 0
+      ? <Chip size="sm" variant="soft" color={color} className="tabular-nums" aria-label={label}>{n}</Chip>
+      : <span className="tabular-nums text-[var(--muted)]">0</span>;
+    const num = (n: number) => <span className="tabular-nums">{n}</span>;
+    return [
+      { id: "stateName", header: t("stateTable.stateColumn"), isRowHeader: true, allowsSorting: true, pinned: "start", width: 180,
+        cell: (st) => {
+          const name = getStateLabel({ name: st.stateName, nameAr: st.stateNameAr }, i18n.language);
+          return (
+            <Link href={`/states/${st.stateId}`} aria-label={t("aria.viewState", { name })}
+              className="font-medium text-foreground transition-colors hover:text-[var(--accent)]">
+              {name}
+            </Link>
+          );
+        } },
+      { id: "totalProjects", header: t("table.totalProjects"), align: "end", allowsSorting: true, minWidth: 110,
+        cell: (st) => num(st.totalProjects ?? st.activeProjects) },
+      { id: "activeProjects", header: t("table.activeProjects"), align: "end", allowsSorting: true, minWidth: 110,
+        cell: (st) => num(st.activeProjects) },
+      { id: "reportsSubmitted", header: t("table.reportsSubmitted"), align: "end", allowsSorting: true, minWidth: 110,
+        cell: (st) => num(st.reportsSubmitted ?? 0) },
+      { id: "reportsPending", header: t("table.reportsPending"), align: "end", allowsSorting: true, minWidth: 110,
+        cell: (st) => countBadge(st.reportsPending ?? 0, "warning") },
+      { id: "openRisks", header: t("table.openRisks"), align: "end", allowsSorting: true, minWidth: 100,
+        cell: (st) => num(st.openRisks ?? 0) },
+      { id: "criticalRisks", header: t("table.criticalRisks"), align: "end", allowsSorting: true, minWidth: 100,
+        cell: (st) => countBadge(st.criticalRisks ?? 0, "danger", t("aria.criticalRiskCount", { count: st.criticalRisks ?? 0 })) },
+      { id: "activityCompletionPct", header: t("table.activityPct"), align: "end", allowsSorting: true, minWidth: 130,
+        cell: (st) => renderPct(st.activityCompletionPct, t) },
+      { id: "reportingCompliancePct", header: t("table.compliancePct"), align: "end", allowsSorting: true, minWidth: 130,
+        cell: (st) => renderPct(st.reportingCompliancePct, t) },
+    ];
+  }, [t, i18n.language]);
 
   return (
-    <div>
-      {/* Sub-bar: sort hint (left) + covered/all toggle (right) */}
-      <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border/40 bg-muted/10">
-        <p className="text-[11px] text-muted-foreground select-none">{t("stateTable.sortHint")}</p>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-[var(--muted)]">{t("stateTable.sortHint")}</p>
         {!showAll && (
-          <div
-            className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5 shrink-0"
-            role="group"
+          <Segment
+            size="sm"
             aria-label={t("aria.stateVisibility")}
+            selectedKey={showCoveredOnly ? "covered" : "all"}
+            onSelectionChange={(key) => setShowCoveredOnly(key === "covered")}
           >
-            <button
-              type="button"
-              aria-pressed={showCoveredOnly}
-              onClick={() => setShowCoveredOnly(true)}
-              className={`text-xs px-2.5 py-1 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                showCoveredOnly
-                  ? "bg-card shadow-sm font-medium text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >{t("stateTable.coveredStates")}</button>
-            <button
-              type="button"
-              aria-pressed={!showCoveredOnly}
-              onClick={() => setShowCoveredOnly(false)}
-              className={`text-xs px-2.5 py-1 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                !showCoveredOnly
-                  ? "bg-card shadow-sm font-medium text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >{t("stateTable.allStates")}</button>
-          </div>
+            <Segment.Item id="covered">{t("stateTable.coveredStates")}</Segment.Item>
+            <Segment.Item id="all">{t("stateTable.allStates")}</Segment.Item>
+          </Segment>
         )}
       </div>
-
-      {/* Scrollable table container — page-level scroll is never triggered */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[900px] border-collapse">
-          <thead>
-            <tr className="border-b border-border/80 bg-muted/30 sticky top-0 z-20">
-              {/* Sticky State column header */}
-              <th
-                scope="col"
-                aria-sort={(sortCol === "stateName" ? (sortDir === "asc" ? "ascending" : "descending") : "none") as React.AriaAttributes["aria-sort"]}
-                className="py-3 px-4 text-start text-xs font-medium text-muted-foreground sticky start-0 z-30 bg-muted/30 shadow-[1px_0_0_0_hsl(var(--cafa-border))] whitespace-nowrap"
-              >
-                <button
-                  type="button"
-                  onClick={() => onSort("stateName")}
-                  className="flex items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {t("stateTable.stateColumn")} <SortIcon col="stateName" sortCol={sortCol} sortDir={sortDir} />
-                </button>
-              </th>
-              {stateColDefs.map(c => (
-                <SortableTableHeader
-                  key={c.col}
-                  column={c.col}
-                  label={c.label}
-                  activeSortColumn={sortCol}
-                  sortDirection={sortDir}
-                  onSort={onSort}
-                />
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              /* Skeleton — matches column structure */
-              [1, 2, 3, 4, 5].map(i => (
-                <tr key={i} className="border-b animate-pulse">
-                  <td className="py-3 px-4 sticky start-0 bg-card z-10">
-                    <div className="h-3.5 w-28 rounded bg-muted/50" />
-                  </td>
-                  {stateColDefs.map(c => (
-                    <td key={c.col} className="py-3 px-3">
-                      <div className="h-3.5 w-8 rounded bg-muted/40 ms-auto" />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : sorted.length === 0 ? (
-              /* Empty state */
-              <tr>
-                <td colSpan={colCount} className="py-12 text-center">
-                  <p className="text-sm font-medium text-foreground mb-1">{t("stateTable.noData")}</p>
-                  <p className="text-xs text-muted-foreground">{t("stateTable.noAuthorisedStates")}</p>
-                  {showCoveredOnly && !showAll && (
-                    <button
-                      type="button"
-                      className="mt-3 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                      onClick={() => setShowCoveredOnly(false)}
-                    >
-                      {t("stateTable.showAllStates")}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ) : (
-              sorted.map((state, rowIdx) => {
-                const totalProj = state.totalProjects ?? state.activeProjects;
-                /* Percentage columns are already null when data is unavailable (zero-denominator) */
-                const actPct   = state.activityCompletionPct;
-                const complPct = state.reportingCompliancePct;
-                /* Count columns: COALESCE(0) in SQL — always a number; display as-is */
-                const rptSub  = state.reportsSubmitted  ?? 0;
-                const rptPend = state.reportsPending     ?? 0;
-                const openR   = state.openRisks          ?? 0;
-                const critR   = state.criticalRisks      ?? 0;
-                return (
-                  <tr
-                    key={state.stateId}
-                    className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${rowIdx % 2 === 1 ? "bg-muted/[0.03]" : ""}`}
-                  >
-                    {/* Sticky State cell */}
-                    <td className={`py-3 px-4 font-medium sticky start-0 z-10 shadow-[1px_0_0_0_hsl(var(--cafa-border))] transition-colors ${rowIdx % 2 === 1 ? "bg-muted/[0.03]" : "bg-card"}`}>
-                      <Link
-                        href={`/states/${state.stateId}`}
-                        aria-label={t("aria.viewState", { name: getStateLabel({ name: state.stateName, nameAr: state.stateNameAr }, i18n.language) })}
-                        className="text-sm hover:text-primary transition-colors"
-                      >
-                        {getStateLabel({ name: state.stateName, nameAr: state.stateNameAr }, i18n.language)}
-                      </Link>
-                    </td>
-                    {/* Total Projects */}
-                    <td className="py-3 px-3 text-end tabular-nums text-sm">{totalProj}</td>
-                    {/* Active Projects */}
-                    <td className="py-3 px-3 text-end tabular-nums text-sm">{state.activeProjects}</td>
-                    {/* Reports Submitted */}
-                    <td className="py-3 px-3 text-end tabular-nums text-sm">{rptSub}</td>
-                    {/* Reports Pending */}
-                    <td className="py-3 px-3 text-end">
-                      {rptPend > 0 ? (
-                        <span className="inline-flex items-center justify-center h-5 min-w-[20px] rounded-full bg-amber-100 text-amber-700 text-xs font-medium px-1.5 tabular-nums dark:bg-amber-950/40 dark:text-amber-400">
-                          {rptPend}
-                        </span>
-                      ) : (
-                        <span className="text-sm tabular-nums text-muted-foreground">0</span>
-                      )}
-                    </td>
-                    {/* Open Risks */}
-                    <td className="py-3 px-3 text-end tabular-nums text-sm">{openR}</td>
-                    {/* Critical Risks */}
-                    <td className="py-3 px-3 text-end">
-                      {critR > 0 ? (
-                        <span
-                          className="inline-flex items-center justify-center h-5 min-w-[20px] rounded-full bg-red-100 text-red-700 text-xs font-medium px-1.5 tabular-nums dark:bg-red-950/40 dark:text-red-400"
-                          aria-label={t("aria.criticalRiskCount", { count: critR })}
-                        >
-                          {critR}
-                        </span>
-                      ) : (
-                        <span className="text-sm tabular-nums text-muted-foreground">0</span>
-                      )}
-                    </td>
-                    {/* Activity Completion */}
-                    <td className="py-3 px-3 text-end">{renderPct(actPct, t)}</td>
-                    {/* Reporting Compliance */}
-                    <td className="py-3 px-3 text-end">{renderPct(complPct, t)}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      {isLoading ? (
+        <div className="flex flex-col gap-2" aria-hidden="true">
+          {[1, 2, 3, 4, 5].map(i => <HSkeleton key={i} className="h-10 rounded-lg" />)}
+        </div>
+      ) : (
+        <DataGrid
+          aria-label={t("projectsTab.stateImplementationOverview")}
+          data={sorted}
+          columns={columns}
+          getRowId={(st) => st.stateId}
+          contentClassName="min-w-[900px]"
+          sortDescriptor={{ column: sortCol, direction: sortDir === "asc" ? "ascending" : "descending" }}
+          onSortChange={(d) => { setSortCol(d.column as SortableCol); setSortDir(d.direction === "ascending" ? "asc" : "desc"); }}
+          renderEmptyState={() => (
+            <div className="flex flex-col items-center gap-1 py-8 text-center">
+              <p className="text-sm font-medium text-foreground">{t("stateTable.noData")}</p>
+              <p className="text-xs text-[var(--muted)]">{t("stateTable.noAuthorisedStates")}</p>
+              {showCoveredOnly && !showAll && (
+                <HButton size="sm" variant="ghost" className="mt-2" onPress={() => setShowCoveredOnly(false)}>
+                  {t("stateTable.showAllStates")}
+                </HButton>
+              )}
+            </div>
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -1694,11 +1538,14 @@ function StatusProgressRow({ label, value, total, color, fill }: {
  * Mirrors for RTL: values grow from the inline start and the category    *
  * axis sits on the start side.                                           */
 function HorizontalBars<T extends Record<string, unknown>>({
-  data, categoryKey, bars, height = 260, categoryWidth = 90, isRtl, valueFormatter = fmt, categoryFormatter, stacked = false,
+  data, categoryKey, bars, height = 260, categoryWidth = 90, isRtl, valueFormatter = fmt, categoryFormatter, stacked = false, tooltip, onBarClick,
 }: {
   data: T[];
   categoryKey: string;
-  bars: { dataKey: string; name: string; fill: string }[];
+  /** colorKey: read each bar's fill from that field of its row. */
+  bars: { dataKey: string; name: string; fill: string; colorKey?: string }[];
+  tooltip?: React.ReactElement;
+  onBarClick?: (row: T) => void;
   height?: number;
   categoryWidth?: number;
   isRtl: boolean;
@@ -1725,9 +1572,13 @@ function HorizontalBars<T extends Record<string, unknown>>({
           barSize={stacked ? 14 : bars.length > 1 ? 8 : 14}
           radius={round(!stacked || i === bars.length - 1)}
           stackId={stacked ? "stack" : undefined}
-        />
+          onClick={onBarClick ? (entry: { payload?: T }) => entry.payload && onBarClick(entry.payload) : undefined}
+          className={onBarClick ? "cursor-pointer" : undefined}
+        >
+          {b.colorKey && data.map((row, j) => <Cell key={j} fill={String(row[b.colorKey!])} />)}
+        </ProBarChart.Bar>
       ))}
-      <ProBarChart.Tooltip content={<ProBarChart.TooltipContent valueFormatter={(v) => valueFormatter(Number(v))} />} />
+      <ProBarChart.Tooltip content={tooltip ?? <ProBarChart.TooltipContent valueFormatter={(v) => valueFormatter(Number(v))} />} />
     </ProBarChart>
   );
 }
@@ -2007,6 +1858,34 @@ const TT = {
 } as const;
 
 /* ── ChartCard wrapper (consistent card + header styling) ────────────── */
+/* Projects-by-state tooltip: total, and active with the non-active remainder. */
+function StateBarsTooltip({ active, label, payload }: {
+  active?: boolean; label?: string;
+  payload?: Array<{ dataKey?: string; value?: number; color?: string; payload?: { total?: number } }>;
+}) {
+  const { t } = useTranslation("dashboard");
+  if (!active || !payload?.length) return null;
+  const total = Number(payload[0]?.payload?.total ?? 0);
+  return (
+    <ChartTooltip>
+      <ChartTooltip.Header>{label}</ChartTooltip.Header>
+      {payload.map((entry) => {
+        const v = Number(entry.value ?? 0);
+        const name = entry.dataKey === "total"
+          ? t("stateChartTooltip.totalProjects")
+          : total - v > 0 ? t("stateChartTooltip.activeWithOther", { count: fmt(total - v) }) : t("stateChartTooltip.activeProjects");
+        return (
+          <ChartTooltip.Item key={String(entry.dataKey)}>
+            <ChartTooltip.Indicator color={entry.color} />
+            <ChartTooltip.Label>{name}</ChartTooltip.Label>
+            <ChartTooltip.Value>{fmt(v)}</ChartTooltip.Value>
+          </ChartTooltip.Item>
+        );
+      })}
+    </ChartTooltip>
+  );
+}
+
 function ChartCard({
   title, description, children, colSpan, action, className,
 }: {
@@ -3923,12 +3802,12 @@ export default function Dashboard() {
       .filter(d => d.count > 0)
       .sort((a, b) => b.count - a.count)
       .map(d => ({
-        name:   toTitleCase(d.status),
+        name:   t(`projectStatus.${d.status}`, { defaultValue: toTitleCase(d.status) }),
         count:  d.count,
         status: d.status,
         color:  STATUS_COLORS[d.status] ?? "#94a3b8",
       })),
-    [summary]
+    [summary, t]
   );
 
   /* ── Loading skeleton ───────────────────────────────────────────────── */
@@ -4958,74 +4837,40 @@ export default function Dashboard() {
                     description={t("sections.projectsByStateDesc")}
                   >
                     {isStatesLoading ? (
-                      /* Loading skeleton */
-                      <div className="h-[260px] px-1 py-2 flex flex-col gap-1.5 animate-pulse" aria-hidden="true">
+                      <div className="flex h-[260px] flex-col gap-2 py-2" aria-hidden="true">
                         {[75, 58, 88, 50, 68, 42, 60].map((w, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <div className="h-2.5 w-20 rounded bg-muted/40 shrink-0" />
-                            <div className="h-2.5 rounded bg-muted/50" style={{ width: `${w}%` }} />
-                          </div>
+                          <HSkeleton key={i} className="h-3 rounded" style={{ width: `${w}%` }} />
                         ))}
+                      </div>
+                    ) : stateChartData.length === 0 ? (
+                      <div className="h-[260px] flex items-center justify-center">
+                        <ChartEmptyState message={t("chartEmpty.stateCoverage")} icon={MapPin} />
                       </div>
                     ) : (
                       <div
+                        className="flex flex-col gap-3"
                         aria-label={t("aria.projectsByState", { detail: stateChartData.map(d => t("aria.projectsByStateItem", { name: d.name, total: d.total, active: d.active })).join("; ") })}
-                        style={{ height: Math.min(420, Math.max(260, stateChartData.length * 30)) }}
                       >
-                        {stateChartData.length === 0 ? (
-                          <div className="h-[260px] flex items-center justify-center">
-                            <ChartEmptyState message={t("chartEmpty.stateCoverage")} icon={MapPin} />
-                          </div>
-                        ) : (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart
-                              data={stateChartData}
-                              layout="vertical"
-                              margin={{ top: 2, right: 16, left: 0, bottom: 28 }}
-                              barCategoryGap="20%"
-                              barGap={2}
-                            >
-                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.35} />
-                              <XAxis
-                                type="number"
-                                stroke="hsl(var(--cafa-muted-foreground))"
-                                fontSize={11} tickLine={false} axisLine={false} tickMargin={4}
-                                tickFormatter={fmtCompact}
-                                allowDecimals={false}
-                              />
-                              <YAxis
-                                dataKey="name" type="category"
-                                stroke="hsl(var(--cafa-muted-foreground))"
-                                fontSize={11} tickLine={false} axisLine={false} width={130}
-                                tickFormatter={(v: string) => v.length > 18 ? `${v.slice(0, 17)}…` : v}
-                              />
-                              <Tooltip
-                                contentStyle={TT.contentStyle}
-                                labelStyle={TT.labelStyle}
-                                itemStyle={TT.itemStyle}
-                                cursor={TT.cursor}
-                                formatter={(v: number, name: string, props: { payload?: { total?: number; active?: number } }) => {
-                                  if (name === t("projectsTab.totalProjects")) return [fmt(v), t("stateChartTooltip.totalProjects")];
-                                  const total   = props.payload?.total  ?? 0;
-                                  const other   = total - v;
-                                  return [fmt(v), other > 0 ? t("stateChartTooltip.activeWithOther", { count: fmt(other) }) : t("stateChartTooltip.activeProjects")];
-                                }}
-                              />
-                              <Legend
-                                verticalAlign="bottom"
-                                height={24}
-                                iconType="square"
-                                iconSize={9}
-                                wrapperStyle={{ fontSize: 11, color: "hsl(var(--cafa-muted-foreground))", paddingTop: 4 }}
-                              />
-                              <Bar dataKey="total"  name={t("projectsTab.totalProjects")}  fill={CC.totalProj}   radius={[0, 3, 3, 0]} maxBarSize={10} />
-                              <Bar dataKey="active" name={t("projectsTab.activeProjects")} fill={CC.achievement} radius={[0, 3, 3, 0]} maxBarSize={10} />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        )}
+                        <ChartLegend items={[
+                          { label: t("projectsTab.totalProjects"),  color: "var(--chart-1)" },
+                          { label: t("projectsTab.activeProjects"), color: "var(--chart-3)" },
+                        ]} />
+                        <HorizontalBars
+                          data={stateChartData}
+                          categoryKey="name"
+                          categoryWidth={130}
+                          height={Math.min(420, Math.max(240, stateChartData.length * 30))}
+                          isRtl={isRtl}
+                          categoryFormatter={(v: string) => v.length > 18 ? `${v.slice(0, 17)}…` : v}
+                          bars={[
+                            { dataKey: "total",  name: t("projectsTab.totalProjects"),  fill: "var(--chart-1)" },
+                            { dataKey: "active", name: t("projectsTab.activeProjects"), fill: "var(--chart-3)" },
+                          ]}
+                          tooltip={<StateBarsTooltip />}
+                        />
                       </div>
                     )}
-                    <p className="text-[11px] text-muted-foreground/60 px-1 pt-2 pb-1">
+                    <p className="pt-2 text-xs text-[var(--muted)]">
                       {t("stateChartTooltip.multiStateNote")}
                     </p>
                   </ChartCard>
@@ -5038,13 +4883,9 @@ export default function Dashboard() {
                     description={t("sections.reportsStatusDesc")}
                   >
                     {isSummaryLoading ? (
-                      /* Loading skeleton — bar-row style */
-                      <div className="h-[260px] px-1 py-2 flex flex-col gap-2 animate-pulse" aria-hidden="true">
+                      <div className="flex h-[260px] flex-col gap-2 py-2" aria-hidden="true">
                         {[70, 52, 88, 40, 60, 35, 48].map((w, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <div className="h-2.5 w-28 rounded bg-muted/40 shrink-0" />
-                            <div className="h-2.5 rounded bg-muted/50" style={{ width: `${w}%` }} />
-                          </div>
+                          <HSkeleton key={i} className="h-3 rounded" style={{ width: `${w}%` }} />
                         ))}
                       </div>
                     ) : statusChartData.length === 0 ? (
@@ -5052,116 +4893,59 @@ export default function Dashboard() {
                         <ChartEmptyState message={t("chartEmpty.projects")} icon={FolderKanban} />
                       </div>
                     ) : statusChartData.length <= 5 ? (
-                      /* ── Donut chart — 5 or fewer distinct statuses ─────── */
+                      /* ── Pro "Donut With Content" — 5 or fewer statuses ─── */
                       <div
-                        className="relative h-[300px]"
+                        className="flex flex-col items-center gap-4"
                         aria-label={t("aria.projectStatusDistribution", { detail: statusChartData.map(d => `${d.name} ${d.count}`).join(", ") })}
                       >
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                            <Pie
-                              data={statusChartData}
-                              cx="50%" cy="43%"
-                              innerRadius={54} outerRadius={80}
-                              paddingAngle={3}
-                              dataKey="count"
+                        <div className="relative">
+                          <ProPieChart height={200} width={200}>
+                            <ProPieChart.Pie
+                              cornerRadius={12} cx="50%" cy="50%"
+                              data={statusChartData} dataKey="count" nameKey="name"
+                              innerRadius="68%" paddingAngle={-20} strokeWidth={0}
                               onClick={(entry: Record<string, unknown>) => {
                                 if (typeof entry.status === "string")
                                   navigate(`/projects?status=${entry.status}`);
                               }}
                               className="cursor-pointer"
                             >
-                              {statusChartData.map((d, i) => (
-                                <Cell key={i} fill={d.color} stroke="hsl(var(--cafa-card))" strokeWidth={2} />
+                              {statusChartData.map((d) => (
+                                <ProPieChart.Cell key={d.status} fill={d.color} />
                               ))}
-                            </Pie>
-                            <Tooltip
-                              contentStyle={TT.contentStyle}
-                              labelStyle={TT.labelStyle}
-                              itemStyle={TT.itemStyle}
-                              formatter={(v: number, name: string) => [t("chartSeries.projectsCount", { count: fmt(v) }), name]}
-                            />
-                            <Legend
-                              verticalAlign="bottom"
-                              height={52}
-                              iconType="square"
-                              iconSize={9}
-                              wrapperStyle={{ fontSize: 11, color: "hsl(var(--cafa-muted-foreground))", lineHeight: "22px" }}
-                              formatter={(value, entry) => {
-                                const count = (entry as unknown as { payload?: { count?: number } }).payload?.count ?? 0;
-                                return `${value}: ${fmt(count)}`;
-                              }}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        {/* Centre label — total project count */}
-                        <div
-                          className="absolute pointer-events-none flex flex-col items-center"
-                          style={{ top: "43%", left: "50%", transform: "translate(-50%, -50%)" }}
-                        >
-                          <span className="text-[20px] font-bold tabular-nums leading-none text-foreground">
-                            {fmt(statusChartData.reduce((s, d) => s + d.count, 0))}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground mt-1">{t("overviewTab.projects")}</span>
+                            </ProPieChart.Pie>
+                            <ProPieChart.Tooltip content={<ShareTooltip total={statusChartData.reduce((sum, d) => sum + d.count, 0)} />} />
+                          </ProPieChart>
+                          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
+                            <span className="text-3xl font-bold tabular-nums text-foreground">
+                              {fmt(statusChartData.reduce((sum, d) => sum + d.count, 0))}
+                            </span>
+                            <span className="text-sm text-[var(--muted)]">{t("overviewTab.projects")}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {statusChartData.map((d) => (
+                            <div key={d.status} className="flex items-center gap-3">
+                              <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: d.color }} aria-hidden="true" />
+                              <span className="min-w-24 text-sm text-foreground">{d.name}</span>
+                              <span className="text-sm font-semibold tabular-nums text-foreground">{fmt(d.count)}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ) : (
-                      /* ── Horizontal bar chart — more than 5 distinct statuses */
-                      <div
-                        style={{ height: Math.min(520, Math.max(260, statusChartData.length * 32)) }}
-                        aria-label={t("aria.projectStatusDistribution", { detail: statusChartData.map(d => `${d.name} ${d.count}`).join(", ") })}
-                      >
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={statusChartData}
-                            layout="vertical"
-                            margin={{ top: 2, right: 44, left: 0, bottom: 4 }}
-                            barCategoryGap="26%"
-                          >
-                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.35} />
-                            <XAxis
-                              type="number"
-                              stroke="hsl(var(--cafa-muted-foreground))"
-                              fontSize={11} tickLine={false} axisLine={false} tickMargin={4}
-                              tickFormatter={fmtCompact}
-                              allowDecimals={false}
-                            />
-                            <YAxis
-                              dataKey="name" type="category"
-                              stroke="hsl(var(--cafa-muted-foreground))"
-                              fontSize={11} tickLine={false} axisLine={false} width={150}
-                              tickFormatter={(v: string) => v.length > 22 ? `${v.slice(0, 21)}…` : v}
-                            />
-                            <Tooltip
-                              contentStyle={TT.contentStyle}
-                              labelStyle={TT.labelStyle}
-                              itemStyle={TT.itemStyle}
-                              cursor={TT.cursor}
-                              formatter={(v: number) => [t("chartSeries.projectsCount", { count: fmt(v) }), t("chartSeries.statusCount")]}
-                            />
-                            <Bar
-                              dataKey="count"
-                              name={t("chartSeries.projects")}
-                              radius={[0, 3, 3, 0]}
-                              maxBarSize={14}
-                              onClick={(entry: Record<string, unknown>) => {
-                                if (typeof entry.status === "string")
-                                  navigate(`/projects?status=${entry.status}`);
-                              }}
-                              className="cursor-pointer"
-                            >
-                              {statusChartData.map((d, i) => (
-                                <Cell key={i} fill={d.color} />
-                              ))}
-                              <LabelList
-                                dataKey="count"
-                                position="right"
-                                formatter={(v: number) => fmt(v)}
-                                style={{ fontSize: 11, fill: "hsl(var(--cafa-muted-foreground))", fontVariantNumeric: "tabular-nums" }}
-                              />
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
+                      /* ── Horizontal bars — more than 5 distinct statuses ── */
+                      <div aria-label={t("aria.projectStatusDistribution", { detail: statusChartData.map(d => `${d.name} ${d.count}`).join(", ") })}>
+                        <HorizontalBars
+                          data={statusChartData}
+                          categoryKey="name"
+                          categoryWidth={150}
+                          height={Math.min(520, Math.max(260, statusChartData.length * 32))}
+                          isRtl={isRtl}
+                          categoryFormatter={(v: string) => v.length > 22 ? `${v.slice(0, 21)}…` : v}
+                          bars={[{ dataKey: "count", name: t("chartSeries.projects"), fill: "var(--chart-3)", colorKey: "color" }]}
+                          onBarClick={(row) => navigate(`/projects?status=${row.status}`)}
+                        />
                       </div>
                     )}
                   </ChartCard>
@@ -5184,28 +4968,19 @@ export default function Dashboard() {
               )}
 
               {/* State Performance Table */}
-              <Card className="rounded-xl border-border shadow-sm">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-[15px] font-semibold leading-snug">
-                        {isState ? t("projectsTab.stateImplementation") : t("projectsTab.stateImplementationOverview")}
-                      </CardTitle>
-                      <CardDescription className="text-xs mt-0.5">
-                        {t("projectsTab.stateImplementationDesc")}
-                      </CardDescription>
-                    </div>
-                    <Link href="/states" className="text-xs font-medium text-primary hover:underline flex items-center gap-1 shrink-0 mt-0.5">
-                      {t("projectsTab.allStates")} <ArrowRight className="h-3 w-3 rtl:rotate-180" />
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <StateTableErrorBoundary>
-                    <StatePerformanceTable states={states ?? []} isLoading={isStatesLoading} showAll={isState} />
-                  </StateTableErrorBoundary>
-                </CardContent>
-              </Card>
+              <ChartCard
+                title={isState ? t("projectsTab.stateImplementation") : t("projectsTab.stateImplementationOverview")}
+                description={t("projectsTab.stateImplementationDesc")}
+                action={
+                  <HLink href="/states" className="inline-flex shrink-0 items-center gap-1 text-sm no-underline">
+                    {t("projectsTab.allStates")} <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden="true" />
+                  </HLink>
+                }
+              >
+                <StateTableErrorBoundary>
+                  <StatePerformanceTable states={states ?? []} isLoading={isStatesLoading} showAll={isState} />
+                </StateTableErrorBoundary>
+              </ChartCard>
             </div>
           )}
 

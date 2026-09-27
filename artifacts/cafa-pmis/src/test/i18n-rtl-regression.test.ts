@@ -599,8 +599,10 @@ describe("Business-module RTL production guardrails", () => {
     const manual = source("pages/manual.tsx");
     const planForm = source("components/project-registration-form.tsx");
 
-    expect(dashboard).toContain("sticky start-0");
-    expect(dashboard).toContain("text-start text-xs");
+    // State table: Pro DataGrid pins its first column to the logical inline start.
+    expect(dashboard).toContain('pinned: "start"');
+    // DataGrid columns align with logical start/end values.
+    expect(dashboard).toContain('align: "end"');
     expect(reports).toContain("ps-6");
     expect(reports).toContain("text-start");
     expect(manual).toContain("absolute start-3");

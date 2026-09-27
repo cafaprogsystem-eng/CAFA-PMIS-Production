@@ -649,7 +649,17 @@
   "projectStatus": {
     "active": "نشط",
     "completed": "مكتمل",
-    "other": "أخرى"
+    "other": "أخرى",
+    "draft": "مسودة",
+    "submitted": "مُقدَّم",
+    "coordination_approved": "معتمد تنسيقياً",
+    "technically_approved": "معتمد فنياً",
+    "approved": "معتمد",
+    "planning": "قيد التخطيط",
+    "on_hold": "متوقف مؤقتاً",
+    "returned": "مُعاد",
+    "rejected": "مرفوض",
+    "cancelled": "ملغى"
   },
   "chartEmpty": {
     "stateCoverage": "لا توجد بيانات تغطية الولايات متاحة",

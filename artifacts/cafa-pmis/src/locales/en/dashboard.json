@@ -649,7 +649,17 @@
   "projectStatus": {
     "active": "Active",
     "completed": "Completed",
-    "other": "Other"
+    "other": "Other",
+    "draft": "Draft",
+    "submitted": "Submitted",
+    "coordination_approved": "Coordination Approved",
+    "technically_approved": "Technically Approved",
+    "approved": "Approved",
+    "planning": "Planning",
+    "on_hold": "On Hold",
+    "returned": "Returned",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled"
   },
   "chartEmpty": {
     "stateCoverage": "No state coverage data available",
