@@ -1,8 +1,22 @@
 import * as React from "react";
 import { useLocation } from "wouter";
 import { RecordDetailModal } from "@/components/record-detail-modal";
-import ProjectDetailPage from "@/pages/project-detail";
-import PlanDetailPage from "@/pages/plan-detail";
+import { Spinner } from "@heroui/react";
+import { useTranslation } from "react-i18next";
+
+// The detail pages (and their edit forms) are large; load them only when a
+// record is opened so they stay out of the app's start-up bundle.
+const ProjectDetailPage = React.lazy(() => import("@/pages/project-detail"));
+const PlanDetailPage = React.lazy(() => import("@/pages/plan-detail"));
+
+function RecordDetailLoading() {
+  const { t } = useTranslation("common");
+  return (
+    <div className="flex min-h-40 items-center justify-center" role="status">
+      <Spinner size="md" aria-label={t("loading")} />
+    </div>
+  );
+}
 
 export type RecordDetailKind = "project" | "plan";
 type RecordDetailHeader = { title: string; description?: string };
@@ -118,6 +132,7 @@ export function RecordDetailProvider({ children }: { children: React.ReactNode }
         bodyClassName="pb-8"
       >
         <div data-record-detail-modal>
+          <React.Suspense fallback={<RecordDetailLoading />}>
           {request?.kind === "project" ? (
             <ProjectDetailPage
               params={{ projectId: String(request.id) }}
@@ -133,6 +148,7 @@ export function RecordDetailProvider({ children }: { children: React.ReactNode }
               onRecordLoaded={setHeader}
             />
           ) : null}
+          </React.Suspense>
         </div>
       </RecordDetailModal>
     </RecordDetailContext.Provider>

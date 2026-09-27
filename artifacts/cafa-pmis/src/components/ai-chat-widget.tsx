@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -12,7 +12,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import ReactMarkdown from "react-markdown";
+// react-markdown and its parser are large and only needed once the assistant
+// answers, so they load on demand instead of with the app shell.
+const ReactMarkdown = lazy(() => import("react-markdown"));
 
 type Msg = { id: string; role: "user" | "assistant"; content: string; streaming?: boolean };
 
@@ -569,7 +571,7 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
                           {msg.role === "assistant" ? (
                             <div className="prose prose-sm prose-gray max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:mt-1 [&>ul]:mb-2 [&>ol]:mt-1 [&>ol]:mb-2 [&>ul>li]:text-sm [&>ol>li]:text-sm">
                               {msg.content ? (
-                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                <Suspense fallback={<p className="whitespace-pre-wrap">{msg.content}</p>}><ReactMarkdown>{msg.content}</ReactMarkdown></Suspense>
                               ) : (
                                 <span className="flex gap-1 items-center text-muted-foreground" aria-label={t("widget.generatingResponse")}>
                                   <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce motion-reduce:animate-none [animation-delay:0ms]" />

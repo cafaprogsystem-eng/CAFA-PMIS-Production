@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -166,7 +166,7 @@ function renderWorkspace() {
 }
 
 describe("Plans workspace interaction contract", () => {
-  it("uses one paginated record collection in every presentation and opens records through the shared coordinator", () => {
+  it("uses one paginated record collection in every presentation and opens records through the shared coordinator", async () => {
     apiState.plans = [
       plan(1, "draft", "Draft Plan"),
       ...Array.from({ length: 20 }, (_, index) => plan(index + 2, "completed", `Completed ${index + 2}`)),
@@ -176,7 +176,8 @@ describe("Plans workspace interaction contract", () => {
     const tableTitle = screen.getByRole("link", { name: "Draft Plan" });
     expect(tableTitle).toHaveAttribute("href", "/plans/1");
     fireEvent.click(tableTitle);
-    expect(screen.getByRole("dialog", { name: "Plan details" })).toHaveTextContent("Shared Plan Detail 1");
+    // The detail page is lazy-loaded inside the shared coordinator.
+    expect(await within(screen.getByRole("dialog", { name: "Plan details" })).findByText("Shared Plan Detail 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close record details" }));
     expect(screen.queryByText("Completed 21")).not.toBeInTheDocument();
 
@@ -184,7 +185,8 @@ describe("Plans workspace interaction contract", () => {
       fireEvent.click(screen.getByRole("radio", { name: mode }));
       const view = screen.getByRole("button", { name: "View Draft Plan" });
       fireEvent.click(view);
-      expect(screen.getByRole("dialog", { name: "Plan details" })).toHaveTextContent("Shared Plan Detail 1");
+      // The detail page is lazy-loaded inside the shared coordinator.
+    expect(await within(screen.getByRole("dialog", { name: "Plan details" })).findByText("Shared Plan Detail 1")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Close record details" }));
       expect(screen.queryByText("Completed 21")).not.toBeInTheDocument();
     }
@@ -221,7 +223,7 @@ describe("Plans workspace interaction contract", () => {
     }
   });
 
-  it("gates draft editing on plans.update while retaining read-only viewing", () => {
+  it("gates draft editing on plans.update while retaining read-only viewing", async () => {
     apiState.permissions = [];
     apiState.plans = [plan(1, "draft", "Draft Plan")];
     renderWorkspace();
@@ -230,7 +232,8 @@ describe("Plans workspace interaction contract", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Card" }));
     const view = screen.getByRole("button", { name: "View Draft Plan" });
     fireEvent.click(view);
-    expect(screen.getByRole("dialog", { name: "Plan details" })).toHaveTextContent("Shared Plan Detail 1");
+    // The detail page is lazy-loaded inside the shared coordinator.
+    expect(await within(screen.getByRole("dialog", { name: "Plan details" })).findByText("Shared Plan Detail 1")).toBeInTheDocument();
   });
 
   it("synchronises KPI aggregate filters with the canonical status state and lets users toggle them off", async () => {
