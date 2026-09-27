@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { CreateReportBody, TransitionReportBody } from "@workspace/api-zod";
 import type { Bindings, QueryExecutor } from "../lib/db";
 import { openDb } from "../lib/db";
@@ -340,6 +340,21 @@ export const reportsRoutes = new Hono<{ Bindings: Bindings; Variables: Variables
 
 reportsRoutes.use("/reports", attachCurrentUser, requireAuth);
 reportsRoutes.use("/reports/*", attachCurrentUser, requireAuth);
+
+/**
+ * Outer gate: reports.create OR the narrow SOM fallback permission
+ * reports.program_state.create (SPR-003/004). The type-specific author gates
+ * inside the handler decide who may create each report type — the narrow
+ * permission grants nothing beyond reaching the program_state gate (all other
+ * type gates exclude SOM explicitly).
+ */
+const requireReportsCreateOrProgramStateCreate: MiddlewareHandler<{ Bindings: Bindings; Variables: Variables }> = async (c, next) => {
+  const user = c.get("currentUser");
+  if (user && hasPerm(permissionsFor(user), "reports.program_state.create")) {
+    return next();
+  }
+  return requirePerm("reports.create")(c, next);
+};
 
 // ---------------------------------------------------------------------------
 // GET /reports — List reports
@@ -1449,6 +1464,1038 @@ reportsRoutes.get("/reports/:reportId/aggregates", requirePerm("reports.view"), 
       })),
       risks: riskRow.rows,
     });
+  } finally {
+    close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /reports — Create a report
+// ---------------------------------------------------------------------------
+
+reportsRoutes.post("/reports", requireReportsCreateOrProgramStateCreate, async (c) => {
+  const user = c.get("currentUser");
+  const { db, close } = openDb(c);
+  try {
+    if (!user) return c.json({ error: "no current user" }, 401);
+
+    const rawBody = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    // Extract activityName from the raw body BEFORE Zod parse strips unknown fields.
+    // The Zod schema does not include activityName (it is extra metadata for activity
+    // reports); reading it here ensures the required-field check and INSERT both see it.
+    const rawActivityName = typeof rawBody.activityName === "string"
+      ? (rawBody.activityName as string).trim()
+      : null;
+
+    const rawLocationType = rawBody.locationType === "hq"
+      ? "hq"
+      : rawBody.locationType === "state"
+        ? "state"
+        : null;
+
+    // Activity Reports: kind is not user-required — the UI hides the frequency selector.
+    // Apply the compatibility default BEFORE Zod parsing so the required-field check in the
+    // generated schema is satisfied. The value is an internal infrastructure default and is
+    // never shown to users as a user-selected frequency.
+    if (rawBody.reportType === "activity" && !rawBody.kind) {
+      rawBody.kind = "monthly";
+    }
+
+    const body = CreateReportBody.parse(rawBody);
+
+    // ── Validate top-level beneficiary counts are non-negative integers ────────
+    {
+      const benFields = ["beneficiariesMale", "beneficiariesFemale", "beneficiariesBoys", "beneficiariesGirls"] as const;
+      for (const f of benFields) {
+        const v = body[f];
+        if (v !== undefined && v !== null && (!Number.isInteger(v) || v < 0)) {
+          return c.json({ error: "validation_error", message: `${f} must be a non-negative whole number` }, 400);
+        }
+      }
+    }
+    // ── Validate per-activity fields ──────────────────────────────────────────
+    if (body.activities) {
+      for (const act of body.activities) {
+        const pct = act["percent"] !== undefined ? Number(act["percent"]) : undefined;
+        if (pct !== undefined && (!Number.isFinite(pct) || !Number.isInteger(pct) || pct < 0 || pct > 100)) {
+          return c.json({ error: "validation_error", message: "Activity implementation % must be a whole number between 0 and 100" }, 400);
+        }
+        for (const bf of ["beneficiariesMen", "beneficiariesWomen", "beneficiariesBoys", "beneficiariesGirls"]) {
+          const bv = act[bf];
+          if (bv !== undefined && bv !== null) {
+            const num = Number(bv);
+            if (!Number.isFinite(num) || !Number.isInteger(num) || num < 0) {
+              return c.json({ error: "validation_error", message: `Activity ${bf} must be a non-negative whole number` }, 400);
+            }
+          }
+        }
+      }
+    }
+
+    // ── Validate canonical Report Type ────────────────────────────────────────
+    if (!body.reportType || !isCanonicalReportType(body.reportType)) {
+      return c.json({
+        error: "invalid_report_type",
+        message: `reportType must be one of: ${CANONICAL_REPORT_TYPES.join(", ")}`,
+      }, 400);
+    }
+    const reportType = body.reportType;
+
+    // ── PERM-01: Activity Report author role enforcement ──────────────────────
+    // Activity Reports may only be authored by State Programme Officers,
+    // Technical Coordinators, super_admin, and (Full Operational Access) PM.
+    // SPC is NOT an Activity Report author per the approved business model.
+    if (reportType === "activity") {
+      const ACTIVITY_AUTHOR_ROLES = [
+        "state_program_officer",
+        "technical_coordinator",
+        "super_admin",
+        "program_manager",
+      ];
+      const isSuperAdminCheck = permissionsFor(user).includes("*");
+      if (!isSuperAdminCheck && !ACTIVITY_AUTHOR_ROLES.includes(user.role)) {
+        return c.json({ error: "activity_report_author_role_required" }, 403);
+      }
+    }
+
+    // ── PERM-02: Project Monthly Report author role enforcement ──────────────
+    // PMRs may only be authored by State Programme Officers, Technical
+    // Coordinators, super_admin, and (Full Operational Access) PM.
+    // SOM, SPC, and ED are NOT PMR authors per the approved business model.
+    if (reportType === "project") {
+      const PMR_AUTHOR_ROLES = [
+        "state_program_officer",
+        "technical_coordinator",
+        "super_admin",
+        "program_manager",
+      ];
+      const isSuperAdminCheck = permissionsFor(user).includes("*");
+      if (!isSuperAdminCheck && !PMR_AUTHOR_ROLES.includes(user.role)) {
+        return c.json({ error: "project_report_author_role_required" }, 403);
+      }
+    }
+
+    // ── PERM-03 / HQSR-001: HQ Sector Report author role enforcement ─────────
+    // HQ Sector Reports may only be authored by:
+    //   - Technical Coordinators, for their assigned sector(s) only (exact match)
+    //   - super_admin (emergency authoring)
+    //   - Senior Program Coordinator as a bounded fallback ONLY when no active
+    //     TC covers the requested sector (server-verified vacancy check).
+    //     (HQSR-BD-1 / HQSR-BD-6): SPC fallback is ENABLED — SPC-authored HQ
+    //     Sector Reports are coordination-reviewed by PM (who holds
+    //     reports.approve.coordination); SPC self-review remains blocked by the
+    //     universal self-review guard in the transitions handler.
+    //   - Program Manager: Full Operational Access override (Task #373).
+    //     Explicit canonical sector required; sector validated server-side.
+    // SPO, SOM, ED, and Viewer are explicitly NOT HQ Sector authors.
+    if (reportType === "hq_sector") {
+      const isSuperAdminCheck = permissionsFor(user).includes("*");
+      // Every HQ Sector Report — regardless of author role, including the
+      // super_admin emergency path — requires a non-blank canonical sector.
+      const requestedSector = typeof body.sector === "string" ? body.sector.trim() : "";
+      if (!requestedSector) {
+        return c.json({ error: "sector is required for hq_sector reports" }, 400);
+      }
+      if (!VALID_SECTOR_SET.has(requestedSector)) {
+        return c.json({ error: "invalid_sector" }, 400);
+      }
+      body.sector = requestedSector; // persist the normalised (trimmed) canonical value
+      if (!isSuperAdminCheck && user.role !== "super_admin") {
+        if (user.role === "technical_coordinator") {
+          const assignedSectors = tcSectorRestriction(user) ?? [];
+          // Exact-segment matching only; a TC with no assigned sectors fails closed.
+          if (assignedSectors.length === 0 || !assignedSectors.includes(requestedSector)) {
+            return c.json({
+              error: "sector_scope_forbidden",
+              message: "The requested sector is outside your assigned Main Sectors.",
+            }, 403);
+          }
+        } else if (user.role === "senior_program_coordinator") {
+          // Server-side vacancy check — never trust frontend claims of TC absence.
+          const tcAvailable = await hasActiveTcForSector(db, requestedSector);
+          if (tcAvailable) {
+            return c.json({
+              error: "hq_sector_tc_available",
+              message:
+                "An active Technical Coordinator is assigned to this sector; they are the designated HQ Sector Report author.",
+            }, 403);
+          }
+          // SPC fallback (HQSR-BD-1 / HQSR-BD-6): vacancy confirmed — allow creation.
+          // Falls through to normal report creation.
+        } else if (user.role === "program_manager") {
+          // Full Operational Access override (Task #373). Falls through.
+        } else {
+          return c.json({ error: "hq_sector_author_role_required" }, 403);
+        }
+      }
+      // ── HQSR-004: Location integrity ─────────────────────────────────────
+      // Canonically an HQ Sector Report has NO State or Project linkage:
+      // state_id and project_id must both be NULL. Defence in depth: the
+      // INSERT below also forces NULL, and a DB CHECK constraint backs this.
+      if (body.stateId != null || body.projectId != null) {
+        return c.json({
+          error: "hq_sector_location_invalid",
+          message:
+            "HQ Sector Reports must not carry a State or Project linkage (state_id and project_id must be null).",
+          fields: [
+            ...(body.stateId != null ? ["stateId"] : []),
+            ...(body.projectId != null ? ["projectId"] : []),
+          ],
+        }, 422);
+      }
+    }
+
+    // ── SPR-003/004: State Programme Report author role enforcement ──────────
+    // Approved governance (SPR-BD-2):
+    //   - SPO: primary author — state profile-clamped (SPR-002 clamp below).
+    //   - SOM: bounded fallback ONLY when no active SPO covers their own state
+    //     (server-verified vacancy check — never trust frontend claims).
+    //   - super_admin: emergency authoring — must supply an explicit stateId
+    //     that exists in the canonical states table (NOT profile-clamped).
+    //   - TC, SPC, PM, ED, Viewer: NOT authors. Generic reports.create alone is
+    //     insufficient for program_state creation.
+    if (reportType === "program_state") {
+      const isSuperAdminCheck = permissionsFor(user).includes("*");
+      if (user.role === "state_program_officer") {
+        // Primary author — pass through. Null-state fail-closed (state_scope_required)
+        // and the profile stateId clamp are enforced below (SPR-002).
+      } else if (user.role === "state_office_manager") {
+        const somStateId = user.stateId ?? null;
+        if (somStateId == null) {
+          return c.json({
+            error: "state_scope_required",
+            message: "Your account has no assigned State; State Programme Reports cannot be created.",
+          }, 403);
+        }
+        const spoAvailable = await hasActiveSpoForState(db, somStateId);
+        if (spoAvailable) {
+          return c.json({
+            error: "program_state_spo_available",
+            message:
+              "A State Programme Officer is assigned to your state. State Programme Report authoring is reserved for the SPO.",
+          }, 403);
+        }
+        // Vacancy confirmed — SOM may proceed; the profile stateId clamp below applies.
+      } else if (user.role === "super_admin" || isSuperAdminCheck) {
+        // Emergency path: explicit canonical state is mandatory.
+        if (body.stateId == null) {
+          return c.json({
+            error: "state_required_for_super_admin_spr",
+            message: "An explicit stateId is required when a super administrator creates a State Programme Report.",
+          }, 400);
+        }
+        const stateExists = await db.query(`SELECT 1 FROM states WHERE id = $1 LIMIT 1`, [body.stateId]);
+        if (stateExists.rows.length === 0) {
+          return c.json({ error: "invalid_state_id" }, 400);
+        }
+        // super_admin keeps body.stateId (not a state role — no clamp below).
+      } else if (user.role === "program_manager") {
+        // Full Operational Access override (Task #373). PM has no profile state,
+        // so an explicit canonical stateId is mandatory (same as super_admin).
+        if (body.stateId == null) {
+          return c.json({
+            error: "state_required_for_program_manager_spr",
+            message:
+              "An explicit stateId is required when a Program Manager creates a State Programme Report.",
+          }, 400);
+        }
+        const pmStateExists = await db.query(`SELECT 1 FROM states WHERE id = $1 LIMIT 1`, [body.stateId]);
+        if (pmStateExists.rows.length === 0) {
+          return c.json({ error: "invalid_state_id" }, 400);
+        }
+        // PM keeps body.stateId (not a state role — no clamp below).
+      } else {
+        return c.json({ error: "program_state_report_author_role_required" }, 403);
+      }
+    }
+
+    // ── Validate canonical Reporting Frequency (kind) ─────────────────────────
+    if (reportType === "activity") {
+      // kind is not user-required for Activity Reports. Apply an internal
+      // compatibility default ("monthly") when absent; validate the value
+      // when present so the stored value remains canonical.
+      if (!body.kind) {
+        body.kind = "monthly";
+      } else if (!isCanonicalFrequency(body.kind)) {
+        return c.json({
+          error: "invalid_frequency",
+          message: `kind must be one of: ${CANONICAL_FREQUENCIES.join(", ")}`,
+        }, 400);
+      }
+    } else {
+      if (!body.kind || !isCanonicalFrequency(body.kind)) {
+        return c.json({
+          error: "invalid_frequency",
+          message: `kind (reporting frequency) must be one of: ${CANONICAL_FREQUENCIES.join(", ")}`,
+        }, 400);
+      }
+    }
+
+    // ── Validate period fields per frequency ─────────────────────────────────
+    if (reportType === "activity") {
+      if (body.kind !== "on_demand" && (!body.reportingYear || !body.reportingMonth)) {
+        return c.json({ error: "activity_requires_year_and_month" }, 400);
+      }
+    } else {
+      if (body.kind === "monthly") {
+        if (!body.reportingYear || !body.reportingMonth) {
+          return c.json({ error: "monthly_requires_year_and_month" }, 400);
+        }
+      } else if (body.kind === "quarterly") {
+        if (!body.reportingYear || !body.quarter) {
+          return c.json({ error: "quarterly_requires_year_and_quarter" }, 400);
+        }
+      } else if (body.kind === "annual") {
+        if (!body.reportingYear) {
+          return c.json({ error: "annual_requires_year" }, 400);
+        }
+      }
+    }
+
+    // ── Validate type-specific required fields ────────────────────────────────
+    if (reportType === "project" && body.projectId == null) {
+      return c.json({ error: "project_report_requires_project_id" }, 400);
+    }
+    if (
+      (reportType === "project" || reportType === "program_state") &&
+      body.stateId == null &&
+      // HQ project reports: stateId is legitimately null — exempt from state requirement
+      !(reportType === "project" && rawLocationType === "hq") &&
+      user.role !== "state_program_officer" &&
+      user.role !== "state_office_manager"
+    ) {
+      return c.json({ error: `stateId is required for ${reportType} reports` }, 400);
+    }
+    // Fail closed: a state-scoped role (SPO/SOM) with no assigned state must not
+    // create a State Programme Report.
+    if (
+      reportType === "program_state" &&
+      (user.role === "state_program_officer" || user.role === "state_office_manager") &&
+      user.stateId == null
+    ) {
+      return c.json({
+        error: "state_scope_required",
+        message: "Your account has no assigned State; State Programme Reports cannot be created.",
+      }, 403);
+    }
+    if (reportType === "hq_sector" && !body.sector) {
+      return c.json({ error: "sector is required for hq_sector reports" }, 400);
+    }
+    // Activity reports require a non-blank activityName in all link modes.
+    if (reportType === "activity" && !rawActivityName) {
+      return c.json({
+        error: "activityName_required",
+        message: "activityName is required for activity reports and must not be blank.",
+      }, 400);
+    }
+
+    // ── Activity Report validation — source-aware (project-linked vs. standalone) ──
+    const activityId = Number((body as Record<string, unknown>).activityId) || null;
+    const tcSectors = tcSectorRestriction(user);
+    let projectPrimarySector: string | null = null;
+    // Migration 070 (REPORTS-CURRENCY): resolved the same way as projectPrimarySector —
+    // project-linked reports use the project's currency; standalone activities use their
+    // own. Only Project and Activity Reports have an unambiguous single source; other
+    // report types have no natural currency source and are left null.
+    let effectiveCurrency: string | null = null;
+    // Holds the resolved stateId for activity reports (used in effectiveStateId below).
+    let activityResolvedStateId: number | null | undefined = undefined;
+    // Holds the resolved projectId for activity reports (null for standalone).
+    let activityResolvedProjectId: number | null | undefined = undefined;
+
+    if (reportType === "activity" && activityId) {
+      // Look up the activity — must exist regardless of project linkage.
+      const actLookup = await db.query<{
+        id: number;
+        projectId: number | null;
+        sector: string | null;
+        stateId: number | null;
+        currency: string | null;
+      }>(
+        `SELECT id, project_id AS "projectId", sector, state_id AS "stateId", currency FROM activities WHERE id = $1`,
+        [activityId],
+      );
+      if (actLookup.rows.length === 0) {
+        return c.json({ error: "activity_not_found", message: "The selected Activity does not exist." }, 400);
+      }
+      const activity = actLookup.rows[0];
+
+      if (activity.projectId !== null) {
+        // ── PROJECT-LINKED path ────────────────────────────────────────────────
+        if (body.projectId != null && Number(body.projectId) !== activity.projectId) {
+          return c.json({
+            error: "activity_project_mismatch",
+            message: "The selected Activity does not belong to the selected Project.",
+          }, 400);
+        }
+        activityResolvedProjectId = activity.projectId;
+
+        // (1) Project must exist
+        const actProjRow = await db.query<{ id: number; sector: string | null; currency: string | null }>(
+          `SELECT id, sector, currency FROM projects WHERE id = $1`,
+          [activity.projectId],
+        );
+        if (actProjRow.rows.length === 0) {
+          return c.json({ error: "project_not_found", message: "Activity's project does not exist." }, 400);
+        }
+        projectPrimarySector = actProjRow.rows[0].sector ?? null;
+        effectiveCurrency = actProjRow.rows[0].currency ?? null;
+
+        // (2) TC sector check via Project Primary Sector — fail-closed.
+        if (tcSectors) {
+          if (!projectPrimarySector) {
+            return c.json({
+              error: "tc_sector_validation_failed",
+              message: "Project has no primary sector. Cannot validate Technical Coordinator scope.",
+            }, 403);
+          }
+          if (!tcSectors.includes(projectPrimarySector)) {
+            return c.json({
+              error: "sector_scope_forbidden",
+              message: "Project primary sector is outside your assigned Main Sectors.",
+            }, 403);
+          }
+        }
+
+        // (3) Determine the effective stateId (SPO: clamped to assigned state)
+        const isStateRoleAct =
+          user.role === "state_program_officer" ||
+          user.role === "state_office_manager";
+        const stateIdForAct: number | null = isStateRoleAct
+          ? (user.stateId ?? null)
+          : (body.stateId != null ? Number(body.stateId) : null);
+
+        if (!stateIdForAct) {
+          return c.json({ error: "stateId is required for activity reports" }, 400);
+        }
+
+        // (4) Project→State link — selected state must be linked to the project
+        const actStateLink = await db.query<{ project_id: number }>(
+          `SELECT project_id FROM project_states WHERE project_id = $1 AND state_id = $2`,
+          [activity.projectId, stateIdForAct],
+        );
+        if (actStateLink.rows.length === 0) {
+          if (user.role === "state_program_officer") {
+            return c.json({
+              error: "project_state_mismatch",
+              message: "Selected project is not linked to your assigned state.",
+            }, 403);
+          }
+          return c.json({
+            error: "state_not_linked_to_project",
+            message: "Selected state is not linked to the selected project.",
+          }, 400);
+        }
+
+        // (5) Activity→State: if the Activity has an authoritative state_id, report state must match.
+        if (activity.stateId !== null && activity.stateId !== stateIdForAct) {
+          return c.json({
+            error: "activity_state_mismatch",
+            message: "The selected Activity is assigned to a different State than the selected Report State.",
+          }, 400);
+        }
+
+        activityResolvedStateId = stateIdForAct;
+
+      } else {
+        // ── STANDALONE path ────────────────────────────────────────────────────
+        if (body.projectId != null) {
+          return c.json({
+            error: "standalone_activity_cannot_have_project_id",
+            message: "This is a standalone activity (no parent project). Do not supply a projectId.",
+          }, 400);
+        }
+        activityResolvedProjectId = null;
+        effectiveCurrency = activity.currency ?? null;
+
+        // TC sector check via activity.sector — fail-closed.
+        const activitySector = activity.sector ?? null;
+        if (tcSectors) {
+          if (!activitySector) {
+            return c.json({
+              error: "tc_sector_validation_failed",
+              message: "Standalone activity has no sector. Cannot validate Technical Coordinator scope.",
+            }, 403);
+          }
+          if (!tcSectors.includes(activitySector)) {
+            return c.json({
+              error: "sector_scope_forbidden",
+              message: "Activity sector is outside your assigned Main Sectors.",
+            }, 403);
+          }
+        }
+
+        // State scope: SPO and SOM must not create reports for activities assigned to a different state.
+        const isStateRoleStandalone =
+          user.role === "state_program_officer" ||
+          user.role === "state_office_manager";
+        if (isStateRoleStandalone) {
+          const stateRoleStateId = user.stateId ?? null;
+          if (stateRoleStateId !== null && activity.stateId !== null && activity.stateId !== stateRoleStateId) {
+            return c.json({
+              error: "activity_state_scope_forbidden",
+              message: "This standalone activity is assigned to a different state than your assigned state.",
+            }, 403);
+          }
+        }
+
+        // effectiveSector for standalone = activity.sector
+        projectPrimarySector = activitySector;
+
+        // Resolve effective stateId for standalone — state integrity rules:
+        if (activity.stateId !== null) {
+          if (body.stateId != null && Number(body.stateId) !== activity.stateId) {
+            return c.json({
+              error: "standalone_state_mismatch",
+              message: "The supplied stateId does not match the standalone activity's assigned state.",
+            }, 400);
+          }
+          activityResolvedStateId = activity.stateId;
+        } else {
+          activityResolvedStateId = isStateRoleStandalone
+            ? (user.stateId ?? null)
+            : (body.stateId != null ? Number(body.stateId) : null);
+        }
+      }
+    }
+
+    // ── Activity Report: Project-linked mode (activityId=null, projectId supplied) ──
+    if (reportType === "activity" && !activityId && body.projectId != null && Number(body.projectId) > 0) {
+      const actProjRow = await db.query<{ id: number; sector: string | null; currency: string | null }>(
+        `SELECT id, sector, currency FROM projects WHERE id = $1`,
+        [Number(body.projectId)],
+      );
+      if (actProjRow.rows.length === 0) {
+        return c.json({ error: "project_not_found", message: "Selected project does not exist." }, 400);
+      }
+      projectPrimarySector = actProjRow.rows[0].sector ?? null;
+      effectiveCurrency = actProjRow.rows[0].currency ?? null;
+
+      if (tcSectors) {
+        if (!projectPrimarySector) {
+          return c.json({ error: "tc_sector_validation_failed", message: "Project has no primary sector. Cannot validate Technical Coordinator scope." }, 403);
+        }
+        if (!tcSectors.includes(projectPrimarySector)) {
+          return c.json({ error: "sector_scope_forbidden", message: "Project primary sector is outside your assigned Main Sectors." }, 403);
+        }
+      }
+
+      const isStateRoleActProj =
+        user.role === "state_program_officer" ||
+        user.role === "state_office_manager";
+      const stateIdForActProj = isStateRoleActProj
+        ? (user.stateId ?? null)
+        : (body.stateId != null ? Number(body.stateId) : null);
+
+      if (stateIdForActProj) {
+        const projStateLink = await db.query<{ project_id: number }>(
+          `SELECT project_id FROM project_states WHERE project_id = $1 AND state_id = $2`,
+          [Number(body.projectId), stateIdForActProj],
+        );
+        if (projStateLink.rows.length === 0) {
+          if (user.role === "state_program_officer") {
+            return c.json({ error: "project_state_mismatch", message: "Selected project is not linked to your assigned state." }, 403);
+          }
+          return c.json({ error: "state_not_linked_to_project", message: "Selected state is not linked to the selected project." }, 400);
+        }
+      }
+
+      activityResolvedProjectId = Number(body.projectId);
+      activityResolvedStateId = stateIdForActProj;
+    }
+
+    // Guard: locationType=hq is only valid for activity and project reports.
+    if (rawLocationType === "hq" && reportType !== "activity" && reportType !== "project") {
+      return c.json({ error: "invalid_location_combination", message: "locationType=hq is only valid for activity and project reports." }, 400);
+    }
+    // Guard: locationType=hq cannot be combined with an explicit stateId.
+    if (rawLocationType === "hq" && body.stateId != null) {
+      return c.json({ error: "invalid_location_combination", message: "locationType=hq cannot be combined with a stateId." }, 400);
+    }
+
+    // ── Activity Report: HQ Standalone mode ──
+    if (reportType === "activity" && !activityId && (body.projectId == null || Number(body.projectId) === 0) && rawLocationType === "hq") {
+      if (user.role === "state_program_officer" || user.role === "state_office_manager") {
+        return c.json({ error: "hq_forbidden", message: "State-scoped users cannot create HQ activity reports." }, 403);
+      }
+      activityResolvedStateId = null;
+      activityResolvedProjectId = null;
+
+      const standaloneBodySector = (body.sector ?? null) as string | null;
+      if (tcSectors) {
+        if (!standaloneBodySector) {
+          return c.json({ error: "sector_required", message: "Sector is required for standalone activity reports." }, 400);
+        }
+        if (!VALID_SECTOR_SET.has(standaloneBodySector)) return c.json({ error: "invalid_sector" }, 400);
+        if (!tcSectors.includes(standaloneBodySector)) {
+          return c.json({ error: "sector_scope_forbidden", message: "The requested sector is outside your assigned Main Sectors." }, 403);
+        }
+        projectPrimarySector = standaloneBodySector;
+      } else {
+        const userSectorAssigned = user.sector ?? null;
+        if (userSectorAssigned) {
+          if (!standaloneBodySector) {
+            return c.json({ error: "sector_required", message: "Sector is required for standalone activity reports." }, 400);
+          }
+          if (standaloneBodySector !== userSectorAssigned) {
+            return c.json({ error: "sector_scope_forbidden", message: "The requested sector does not match your assigned sector." }, 403);
+          }
+          projectPrimarySector = standaloneBodySector;
+        } else {
+          projectPrimarySector = standaloneBodySector;
+        }
+      }
+    }
+
+    // ── Activity Report: Non-HQ Standalone mode ──
+    if (reportType === "activity" && !activityId && (body.projectId == null || Number(body.projectId) === 0) && rawLocationType !== "hq") {
+      const isStateRoleSA =
+        user.role === "state_program_officer" ||
+        user.role === "state_office_manager";
+      activityResolvedStateId = isStateRoleSA
+        ? (user.stateId ?? null)
+        : (body.stateId != null ? Number(body.stateId) : null);
+      activityResolvedProjectId = null;
+
+      const standaloneBodySector = (body.sector ?? null) as string | null;
+
+      if (tcSectors) {
+        if (!standaloneBodySector) {
+          return c.json({
+            error: "sector_required",
+            message: "Sector is required for standalone activity reports.",
+          }, 400);
+        }
+        if (!VALID_SECTOR_SET.has(standaloneBodySector)) {
+          return c.json({ error: "invalid_sector" }, 400);
+        }
+        if (!tcSectors.includes(standaloneBodySector)) {
+          return c.json({
+            error: "sector_scope_forbidden",
+            message: "The requested sector is outside your assigned Main Sectors.",
+          }, 403);
+        }
+        projectPrimarySector = standaloneBodySector;
+      } else {
+        const userSectorAssigned = user.sector ?? null;
+        if (userSectorAssigned) {
+          if (!standaloneBodySector) {
+            return c.json({
+              error: "sector_required",
+              message: "Sector is required for standalone activity reports.",
+            }, 400);
+          }
+          if (standaloneBodySector !== userSectorAssigned) {
+            return c.json({
+              error: "sector_scope_forbidden",
+              message: "The requested sector does not match your assigned sector.",
+            }, 403);
+          }
+          projectPrimarySector = standaloneBodySector;
+        } else {
+          projectPrimarySector = standaloneBodySector;
+        }
+      }
+    }
+
+    if (reportType === "project" && body.projectId != null) {
+      // Load the linked project and read its authoritative primary sector and management level.
+      // Exclude soft-deleted projects (deleted_at IS NOT NULL).
+      const projectRow = await db.query<{
+        id: number; sector: string | null; managementLevel: string | null; hasHqOperations: boolean;
+        reportingStartDate: string; reportingEndDate: string; currency: string | null;
+      }>(
+        `SELECT id, sector, management_level AS "managementLevel",
+                has_hq_operations AS "hasHqOperations",
+                reporting_start_date::text AS "reportingStartDate",
+                reporting_end_date::text AS "reportingEndDate",
+                currency
+           FROM projects WHERE id = $1 AND deleted_at IS NULL`,
+        [body.projectId],
+      );
+      if (projectRow.rows.length === 0) {
+        return c.json({ error: "project_not_found", message: "Selected project does not exist or is no longer available." }, 400);
+      }
+      projectPrimarySector = projectRow.rows[0].sector ?? null;
+      effectiveCurrency = projectRow.rows[0].currency ?? null;
+
+      // ── HQ legitimacy check for project reports ──────────────────────────────
+      if (rawLocationType === "hq") {
+        if (
+          user.role === "state_program_officer" ||
+          user.role === "state_office_manager"
+        ) {
+          return c.json({
+            error: "hq_forbidden",
+            message: "State-scoped users cannot create HQ project reports.",
+          }, 403);
+        }
+        // Deny unless the project explicitly declares HQ operational presence.
+        if (!projectRow.rows[0].hasHqOperations) {
+          return c.json({
+            error: "hq_not_permitted_for_project",
+            message: "This project does not have HQ as an Operational Location.",
+          }, 400);
+        }
+        if (body.stateId != null) {
+          return c.json({
+            error: "invalid_location_combination",
+            message: "locationType=hq cannot be combined with a stateId for project reports.",
+          }, 400);
+        }
+      }
+
+      // TC sector security: validate against Project Primary Sector regardless of body.sector.
+      if (tcSectors) {
+        if (!projectPrimarySector) {
+          return c.json({
+            error: "tc_sector_validation_failed",
+            message: "Project has no primary sector. Cannot validate Technical Coordinator scope.",
+          }, 403);
+        }
+        if (!tcSectors.includes(projectPrimarySector)) {
+          return c.json({
+            error: "sector_scope_forbidden",
+            message: "Project primary sector is outside your assigned Main Sectors.",
+          }, 403);
+        }
+      }
+
+      // ── State / Project relationship validation ──────────────────────────────
+      const isStateRole =
+        user.role === "state_program_officer" ||
+        user.role === "state_office_manager";
+      const stateIdForValidation = isStateRole
+        ? (user.stateId ?? null)
+        : body.stateId ?? null;
+
+      if (stateIdForValidation) {
+        const projectStateLink = await db.query<{ project_id: number }>(
+          `SELECT project_id FROM project_states WHERE project_id = $1 AND state_id = $2`,
+          [body.projectId, stateIdForValidation],
+        );
+        if (projectStateLink.rows.length === 0) {
+          if (user.role === "state_program_officer") {
+            return c.json({
+              error: "project_state_mismatch",
+              message: "Selected project is not linked to your assigned state.",
+            }, 403);
+          }
+          return c.json({
+            error: "state_not_linked_to_project",
+            message: "Selected state is not linked to the selected project.",
+          }, 400);
+        }
+      }
+      const coverage = projectRow.rows[0];
+      if (
+        body.kind === "monthly" &&
+        body.reportingYear &&
+        body.reportingMonth &&
+        coverage.reportingStartDate &&
+        coverage.reportingEndDate &&
+        !projectCoverageOverlapsMonth(
+          coverage.reportingStartDate,
+          coverage.reportingEndDate,
+          { year: body.reportingYear, month: body.reportingMonth },
+        )
+      ) {
+        return c.json({
+          error: "project_reporting_coverage_outside_period",
+          message: "Monthly Project Reports must overlap the project's reporting coverage.",
+        }, 422);
+      }
+    }
+
+    // ── Legacy sector validation for non-project, non-activity types ──────────
+    if (reportType !== "project" && reportType !== "activity" && tcSectors && body.sector && !VALID_SECTOR_SET.has(body.sector)) {
+      return c.json({ error: "invalid_sector" }, 400);
+    }
+    if (reportType !== "project" && reportType !== "activity" && tcSectors && body.sector && !tcSectors.includes(body.sector)) {
+      return c.json({ error: "sector_scope_forbidden" }, 403);
+    }
+
+    // ── State scoping for state roles ─────────────────────────────────────────
+    const isStateRole =
+      user.role === "state_program_officer" ||
+      user.role === "state_office_manager";
+    // HQSR-004: hq_sector reports NEVER carry a state linkage — force NULL.
+    const effectiveStateId = reportType === "hq_sector"
+      ? null
+      : (reportType === "activity" && activityResolvedStateId !== undefined)
+        ? activityResolvedStateId
+        : (isStateRole ? (user.stateId ?? null) : body.stateId ?? null);
+    if (effectiveStateId != null) {
+      const activeState = await assertActiveState(db, Number(effectiveStateId));
+      if (!activeState.ok) {
+        return c.json({
+          error: activeState.error,
+          message: "New reports can only be created for an active State.",
+        }, 422);
+      }
+    }
+
+    // For Project and Activity Reports: use the project's (or activity's) authoritative sector.
+    const effectiveSector = (reportType === "project" || reportType === "activity")
+      ? (projectPrimarySector ?? body.sector ?? null)
+      : (body.sector ?? null);
+
+    // Compute the immutable workflow path from the author's role at creation time.
+    const newWorkflowPath = (reportType === "project" || reportType === "activity")
+      ? (user.role === "state_program_officer" ? "state_authored" : "technical_authored")
+      : (reportType === "hq_sector" && user.role === "senior_program_coordinator"
+          ? "spc_fallback"
+          : null);
+
+    // ── HQ Project Report: transactional duplicate guard ─────────────────────
+    if (reportType === "project" && rawLocationType === "hq") {
+      type DupRow = { id: number };
+      let dupCheck: DupRow[];
+      if (body.kind === "monthly") {
+        ({ rows: dupCheck } = await db.query<DupRow>(
+          `SELECT id FROM reports
+            WHERE report_type = 'project'
+              AND location_type = 'hq'
+              AND state_id IS NULL
+              AND project_id = $1
+              AND kind = 'monthly'
+              AND reporting_year = $2
+              AND reporting_month = $3
+              AND status NOT IN ('rejected','archived')
+              AND migration_is_duplicate = FALSE
+            LIMIT 1`,
+          [body.projectId, body.reportingYear, body.reportingMonth],
+        ));
+      } else if (body.kind === "quarterly") {
+        ({ rows: dupCheck } = await db.query<DupRow>(
+          `SELECT id FROM reports
+            WHERE report_type = 'project'
+              AND location_type = 'hq'
+              AND state_id IS NULL
+              AND project_id = $1
+              AND kind = 'quarterly'
+              AND reporting_year = $2
+              AND quarter = $3
+              AND status NOT IN ('rejected','archived')
+              AND migration_is_duplicate = FALSE
+            LIMIT 1`,
+          [body.projectId, body.reportingYear, body.quarter],
+        ));
+      } else {
+        ({ rows: dupCheck } = await db.query<DupRow>(
+          `SELECT id FROM reports
+            WHERE report_type = 'project'
+              AND location_type = 'hq'
+              AND state_id IS NULL
+              AND project_id = $1
+              AND kind = 'annual'
+              AND reporting_year = $2
+              AND status NOT IN ('rejected','archived')
+              AND migration_is_duplicate = FALSE
+            LIMIT 1`,
+          [body.projectId, body.reportingYear],
+        ));
+      }
+      if (dupCheck.length > 0) {
+        return c.json({
+          error: "duplicate_report_period",
+          message: "An HQ project report already exists for this project and period combination.",
+        }, 409);
+      }
+    }
+
+    // ── State Programme Report: transactional duplicate guard ────────────────
+    if (reportType === "program_state" && effectiveStateId != null && body.reportingYear != null) {
+      let sprDupSql: string | null = null;
+      let sprDupParams: unknown[] = [];
+      if (body.kind === "monthly" && body.reportingMonth != null) {
+        sprDupSql = `SELECT id FROM reports
+                     WHERE report_type = 'program_state' AND state_id = $1 AND kind = 'monthly'
+                       AND reporting_year = $2 AND reporting_month = $3
+                       AND status NOT IN ('rejected','archived')
+                       AND migration_is_duplicate = FALSE
+                     LIMIT 1`;
+        sprDupParams = [effectiveStateId, body.reportingYear, body.reportingMonth];
+      } else if (body.kind === "quarterly" && body.quarter != null) {
+        sprDupSql = `SELECT id FROM reports
+                     WHERE report_type = 'program_state' AND state_id = $1 AND kind = 'quarterly'
+                       AND reporting_year = $2 AND quarter = $3
+                       AND status NOT IN ('rejected','archived')
+                       AND migration_is_duplicate = FALSE
+                     LIMIT 1`;
+        sprDupParams = [effectiveStateId, body.reportingYear, body.quarter];
+      } else if (body.kind === "annual") {
+        sprDupSql = `SELECT id FROM reports
+                     WHERE report_type = 'program_state' AND state_id = $1 AND kind = 'annual'
+                       AND reporting_year = $2
+                       AND status NOT IN ('rejected','archived')
+                       AND migration_is_duplicate = FALSE
+                     LIMIT 1`;
+        sprDupParams = [effectiveStateId, body.reportingYear];
+      }
+      if (sprDupSql) {
+        const { rows: sprDup } = await db.query<{ id: number }>(sprDupSql, sprDupParams);
+        if (sprDup.length > 0) {
+          return c.json({
+            error: "duplicate_report_period",
+            message: "A State Programme Report already exists for this State and reporting period.",
+          }, 409);
+        }
+      }
+    }
+
+    // ── HQ Sector Report: transactional duplicate guard ──────────────────────
+    if (reportType === "hq_sector" && effectiveSector && body.reportingYear != null) {
+      let hqsrDupSql: string | null = null;
+      let hqsrDupParams: unknown[] = [];
+      if (body.kind === "monthly" && body.reportingMonth != null) {
+        hqsrDupSql = `SELECT id FROM reports
+                       WHERE report_type = 'hq_sector'
+                         AND sector = $1
+                         AND kind = 'monthly'
+                         AND reporting_year = $2
+                         AND reporting_month = $3
+                         AND status NOT IN ('rejected','archived')
+                         AND migration_is_duplicate = FALSE
+                       LIMIT 1`;
+        hqsrDupParams = [effectiveSector, body.reportingYear, body.reportingMonth];
+      } else if (body.kind === "quarterly" && body.quarter != null) {
+        hqsrDupSql = `SELECT id FROM reports
+                       WHERE report_type = 'hq_sector'
+                         AND sector = $1
+                         AND kind = 'quarterly'
+                         AND reporting_year = $2
+                         AND quarter = $3
+                         AND status NOT IN ('rejected','archived')
+                         AND migration_is_duplicate = FALSE
+                       LIMIT 1`;
+        hqsrDupParams = [effectiveSector, body.reportingYear, body.quarter];
+      } else if (body.kind === "annual") {
+        hqsrDupSql = `SELECT id FROM reports
+                       WHERE report_type = 'hq_sector'
+                         AND sector = $1
+                         AND kind = 'annual'
+                         AND reporting_year = $2
+                         AND status NOT IN ('rejected','archived')
+                         AND migration_is_duplicate = FALSE
+                       LIMIT 1`;
+        hqsrDupParams = [effectiveSector, body.reportingYear];
+      }
+      if (hqsrDupSql) {
+        const { rows: hqsrDup } = await db.query<{ id: number }>(hqsrDupSql, hqsrDupParams);
+        if (hqsrDup.length > 0) {
+          return c.json({
+            error: "duplicate_report_period",
+            message:
+              "An HQ Sector Report already exists for this Sector and reporting period.",
+          }, 409);
+        }
+      }
+    }
+
+    let newId: number;
+    try {
+      const { rows } = await db.query<{ id: number }>(
+        `INSERT INTO reports (
+           title, kind, report_type, activity_id,
+           reporting_month, reporting_year, period_start, period_end,
+           sector, submitted_to, project_id, state_id, period,
+           narrative, executive_summary, challenges, recommendations,
+           sections, beneficiaries_male, beneficiaries_female,
+           beneficiaries_boys, beneficiaries_girls,
+           planned_budget, actual_expenditure, activities, quarter,
+           on_demand_reason, indicator_progress, activity_name, location_type,
+           status, submitted_by_id, author_id, workflow_path, submitted_at, currency
+         ) VALUES (
+           $1, $2, $3, $4,
+           $5, $6, $7, $8,
+           $9, $10, $11, $12, $13,
+           $14, $15, $16, $17,
+           $18, $19, $20,
+           $21, $22,
+           $23, $24, $25, $26,
+           $27, $28, $31, $32,
+           'draft', $29, $29, $30, NOW(), $33
+         )
+         RETURNING id`,
+        [
+          body.title,
+          body.kind,
+          reportType,
+          activityId,
+          body.reportingMonth ?? null,
+          body.reportingYear ?? null,
+          body.periodStart ?? null,
+          body.periodEnd ?? null,
+          effectiveSector,      // $9 — authoritative sector snapshot
+          body.submittedTo ?? null,
+          // For activity reports: use the resolved projectId (null for standalone).
+          // For hq_sector: force NULL (HQSR-004 location integrity, defence in depth).
+          // For other types: use body.projectId.
+          reportType === "hq_sector"
+            ? null
+            : reportType === "activity"
+              ? (activityResolvedProjectId !== undefined ? activityResolvedProjectId : body.projectId ?? null)
+              : (body.projectId ?? null),
+          effectiveStateId,
+          body.period,
+          body.narrative ?? null,
+          body.executiveSummary ?? null,
+          body.challenges ?? null,
+          body.recommendations ?? null,
+          // FIX-08: All new Activity Reports are stamped as modern at creation time.
+          // jsonb columns must be passed as JSON.stringify() strings — pg does not
+          // auto-serialize JS objects/arrays for jsonb.
+          (() => {
+            const sectionsVal = reportType === "activity"
+              ? {
+                  ...((body.sections as Record<string, unknown>) ?? {}),
+                  _schemaVersion: "modern",
+                }
+              : (body.sections ?? null);
+            return sectionsVal != null ? JSON.stringify(sectionsVal) : null;
+          })(),
+          body.beneficiariesMale ?? null,
+          body.beneficiariesFemale ?? null,
+          body.beneficiariesBoys ?? null,
+          body.beneficiariesGirls ?? null,
+          body.plannedBudget ?? null,
+          body.actualExpenditure ?? null,
+          body.activities != null ? JSON.stringify(body.activities) : null,
+          body.quarter ?? null,
+          body.onDemandReason ?? null,
+          body.indicatorProgress != null ? JSON.stringify(body.indicatorProgress) : null,
+          user.id,              // $29 → submitted_by_id and author_id
+          newWorkflowPath,      // $30 → workflow_path
+          rawActivityName,      // $31 → activity_name
+          rawLocationType,      // $32 → location_type ("hq" | "state" | null)
+          effectiveCurrency,    // $33 → currency (Migration 070)
+        ],
+      );
+      newId = rows[0].id;
+    } catch (err) {
+      // Structured 409 for unique constraint violations (duplicate recurring period)
+      if ((err as { code?: string }).code === "23505") {
+        return c.json({
+          error: "duplicate_report_period",
+          message:
+            "A report already exists for this project / state / period combination. Only on-demand reports allow multiple entries per period.",
+        }, 409);
+      }
+      throw err;
+    }
+
+    await logAudit(db, {
+      userId: user.id,
+      action: "create",
+      module: "reports",
+      entityId: newId,
+      newValue: reportType,
+    });
+    const result = await db.query<Record<string, unknown>>(`${reportSelect} WHERE r.id = $1`, [newId]);
+    const enriched = await withHistory(db, result.rows);
+    return c.json(enriched[0], 201);
   } finally {
     close();
   }
