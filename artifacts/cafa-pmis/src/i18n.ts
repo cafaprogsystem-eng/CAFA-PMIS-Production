@@ -39,6 +39,29 @@ import arSettings      from "@/locales/ar/settings.json";
 import arLanding       from "@/locales/ar/landing.json";
 import arErrors        from "@/locales/ar/errors.json";
 
+// ── Arabic plural completeness ───────────────────────────────────────────
+// Arabic has six plural forms (zero, one, two, few = 3–10, many = 11–99,
+// other). A key that only defines _one/_other would, for a count like 2 or 5,
+// miss its Arabic form and fall back to the English sentence inside the
+// Arabic UI. Any missing form is filled from the key's _other text, so the
+// fallback stays Arabic; keys that need exact grammar define all six.
+const ARABIC_PLURAL_FORMS = ["zero", "one", "two", "few", "many"] as const;
+
+export function completeArabicPlurals<T>(resource: T): T {
+  if (!resource || typeof resource !== "object" || Array.isArray(resource)) return resource;
+  const source = resource as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(source)) out[key] = completeArabicPlurals(value);
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value !== "string" || !key.endsWith("_other")) continue;
+    const base = key.slice(0, -"_other".length);
+    for (const form of ARABIC_PLURAL_FORMS) {
+      if (!(`${base}_${form}` in out)) out[`${base}_${form}`] = value;
+    }
+  }
+  return out as T;
+}
+
 // ── Initial language: read from localStorage before React renders ─────────
 function getInitialLang(): string {
   try {
@@ -106,23 +129,23 @@ i18n
         errors:        enErrors,
       },
       ar: {
-        common:        arCommon,
-        auth:          arAuth,
-        nav:           arNav,
-        dashboard:     arDashboard,
-        projects:      arProjects,
-        planning:      arPlanning,
-        budget:        arBudget,
-        reports:       arReports,
-        risks:         arRisks,
-        users:         arUsers,
-        notifications: arNotifications,
-        messages:      arMessages,
-        ai:            arAi,
-        knowledge:     arKnowledge,
-        settings:      arSettings,
-        landing:       arLanding,
-        errors:        arErrors,
+        common:        completeArabicPlurals(arCommon),
+        auth:          completeArabicPlurals(arAuth),
+        nav:           completeArabicPlurals(arNav),
+        dashboard:     completeArabicPlurals(arDashboard),
+        projects:      completeArabicPlurals(arProjects),
+        planning:      completeArabicPlurals(arPlanning),
+        budget:        completeArabicPlurals(arBudget),
+        reports:       completeArabicPlurals(arReports),
+        risks:         completeArabicPlurals(arRisks),
+        users:         completeArabicPlurals(arUsers),
+        notifications: completeArabicPlurals(arNotifications),
+        messages:      completeArabicPlurals(arMessages),
+        ai:            completeArabicPlurals(arAi),
+        knowledge:     completeArabicPlurals(arKnowledge),
+        settings:      completeArabicPlurals(arSettings),
+        landing:       completeArabicPlurals(arLanding),
+        errors:        completeArabicPlurals(arErrors),
       },
     },
     interpolation: { escapeValue: false },

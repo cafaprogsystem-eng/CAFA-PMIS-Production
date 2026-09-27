@@ -265,7 +265,13 @@ for (const ns of NAMESPACES) {
       const missing = enKeyList.filter((k) => !arKeys.has(k)).sort();
       const baseline = GAP_BASELINE[ns];
 
-      const extra = [...arKeys].filter((key) => !Object.hasOwn(enFlat, key)).sort();
+      // Arabic needs plural forms English lacks (zero, two, few, many); they are
+      // legitimate only for a key whose _other form exists in English.
+      const isArabicPluralForm = (key: string) => {
+        const match = key.match(/^(.*)_(zero|two|few|many)$/);
+        return !!match && Object.hasOwn(enFlat, `${match[1]}_other`);
+      };
+      const extra = [...arKeys].filter((key) => !Object.hasOwn(enFlat, key) && !isArabicPluralForm(key)).sort();
       const empty = Object.entries(arFlat)
         .filter(([, v]) => typeof v === "string" && v.trim() === "")
         .map(([k]) => k);
