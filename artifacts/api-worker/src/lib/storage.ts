@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
-import { DOMParser } from "@xmldom/xmldom";
+import { DOMParser, Node as XmlDomNode } from "@xmldom/xmldom";
 import {
   S3Client,
   GetObjectCommand,
@@ -29,6 +29,14 @@ import type { Bindings } from "./db";
 if (typeof (globalThis as { DOMParser?: unknown }).DOMParser === "undefined") {
   (globalThis as { DOMParser?: unknown }).DOMParser = DOMParser;
 }
+// Some XML response shapes (confirmed: CopyObjectCommand's success body, used
+// by finalizeObjectEntityUpload) walk the parsed DOM generically and reference
+// the global `Node` constructor (e.g. its ELEMENT_NODE/TEXT_NODE constants) —
+// a second browser DOM global Workers doesn't provide, needing the same
+// polyfill treatment as DOMParser above.
+if (typeof (globalThis as { Node?: unknown }).Node === "undefined") {
+  (globalThis as { Node?: unknown }).Node = XmlDomNode;
+}
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -41,6 +49,35 @@ export class ObjectNotFoundError extends Error {
 export interface ObjectEntityMetadata {
   size: number;
   contentType?: string;
+}
+
+/**
+ * Ported from artifacts/api-server/src/lib/objectStorage.ts's
+ * isStorageConfigured — the "s3" provider branch only (this file has no gcs
+ * or replit equivalent to report on). Workers always runs against the R2
+ * binding's secrets, so there is no provider-selection question here, just
+ * whether the required R2 secrets were actually set on this Worker.
+ */
+export interface StorageStatus {
+  configured: boolean;
+  provider: "r2";
+  reason?: string;
+}
+
+export function isStorageConfigured(env: Bindings): StorageStatus {
+  const missing: string[] = [];
+  if (!env.R2_BUCKET?.trim()) missing.push("R2_BUCKET");
+  if (!env.R2_ENDPOINT_URL?.trim()) missing.push("R2_ENDPOINT_URL");
+  if (!env.R2_ACCESS_KEY_ID?.trim()) missing.push("R2_ACCESS_KEY_ID");
+  if (!env.R2_SECRET_ACCESS_KEY?.trim()) missing.push("R2_SECRET_ACCESS_KEY");
+  if (missing.length > 0) {
+    return {
+      configured: false,
+      provider: "r2",
+      reason: `Missing required environment variables: ${missing.join(", ")}`,
+    };
+  }
+  return { configured: true, provider: "r2" };
 }
 
 const PRIVATE_PREFIX = "objects";
@@ -70,6 +107,20 @@ export async function getObjectEntityUploadURL(
     new PutObjectCommand({ Bucket: env.R2_BUCKET, Key: key, ContentType: contentType }),
     { expiresIn: 900 },
   );
+}
+
+/** Confirms a `public/<filePath>` key actually exists in the bucket. */
+export async function searchPublicObject(
+  env: Bindings,
+  filePath: string,
+): Promise<{ bucket: string; key: string } | null> {
+  const key = `${PUBLIC_PREFIX}/${filePath}`;
+  try {
+    await s3Client(env).send(new HeadObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
+    return { bucket: env.R2_BUCKET, key };
+  } catch {
+    return null;
+  }
 }
 
 /** Confirms a canonical `/objects/...` path actually exists in the bucket. */

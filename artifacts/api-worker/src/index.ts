@@ -26,6 +26,8 @@ import { risksRoutes } from "./routes/risks";
 import { plansRoutes } from "./routes/plans";
 import { reportsRoutes } from "./routes/reports";
 import { commentsRoutes } from "./routes/comments";
+import { filesRoutes } from "./routes/files";
+import { storageRoutes } from "./routes/storage";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -330,6 +332,8 @@ app.route("/", risksRoutes);
 app.route("/", plansRoutes);
 app.route("/", reportsRoutes);
 app.route("/", commentsRoutes);
+app.route("/", filesRoutes);
+app.route("/", storageRoutes);
 
 /**
  * Ported from artifacts/api-server/src/lib/error-handler.ts's
