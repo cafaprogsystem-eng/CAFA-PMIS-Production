@@ -46,14 +46,15 @@ describe("BUD-VIS — Budget visual refinement phase 1", () => {
   });
 
   it("BUD-VIS-06: keeps Project-Level Budget and State Allocation visibly distinct", () => {
-    expect(dashboardSource).toContain('label={t("budgetWorkspace.budgetBasis")}');
-    expect(dashboardSource).toContain('value="Project-Level Budget"');
-    expect(dashboardSource).toContain('value="State Allocation"');
+    // Budget basis is its own DataGrid column and a separate filter option each.
+    expect(dashboardSource).toContain('header: t("budgetWorkspace.budgetBasis")');
+    expect(dashboardSource).toContain('value: "Project-Level Budget"');
+    expect(dashboardSource).toContain('value: "State Allocation"');
     expect(dashboardSource).toContain('t("budgetWorkspace.projectBasisContext")');
   });
 
   it("BUD-VIS-07: bounds identities and aligns scan-friendly numeric columns", () => {
-    expect(dashboardSource).toContain('className="min-w-[900px]"');
+    expect(dashboardSource).toContain('contentClassName="min-w-[900px]"');
     expect(dashboardSource).toContain('max-w-[16rem]');
     expect(dashboardSource).toContain('tabular-nums');
     expect(dashboardSource).toContain('max-w-[16rem]');
@@ -70,8 +71,11 @@ describe("BUD-VIS — Budget visual refinement phase 1", () => {
   });
 
   it("BUD-VIS-09: protects wide budget tables with local overflow", () => {
-    expect(dashboardSource).toContain('overflow-hidden overflow-x-auto" role="region" aria-label={t("budgetWorkspace.donorTable")}');
+    // Pro DataGrid scrolls horizontally inside its own container; the tables
+    // set a minimum content width so columns never squeeze.
+    expect(dashboardSource).toContain('aria-label={t("budgetWorkspace.donorTable")}');
     expect(dashboardSource).toContain('aria-label={t("budgetWorkspace.projectTable")}');
+    expect(dashboardSource).toContain('contentClassName="min-w-[1380px]"');
   });
 
   it("BUD-VIS-10: distinguishes loading, error, filtered-empty, and genuine-empty states", () => {

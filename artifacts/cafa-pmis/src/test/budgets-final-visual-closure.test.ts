@@ -36,8 +36,8 @@ describe("BUD-FINAL-VIS — Budgets final visual closure", () => {
   });
 
   it("BUD-FINAL-VIS-03: keeps Project-Level Budget and State Allocation explicit without an equal-share presentation", () => {
-    expect(dashboardSource).toContain('value="Project-Level Budget"');
-    expect(dashboardSource).toContain('value="State Allocation"');
+    expect(dashboardSource).toContain('value: "Project-Level Budget"');
+    expect(dashboardSource).toContain('value: "State Allocation"');
     expect(detailSource).not.toMatch(/budgetTotal\s*\/\s*stateAllocations\.length|equal share|per-state budget/i);
   });
 

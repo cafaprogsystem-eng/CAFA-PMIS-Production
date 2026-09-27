@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, Component } from "react";
+import { Fragment, useState, useMemo, useEffect, Component } from "react";
 import { useTranslation } from "react-i18next";
 import { getStateLabel } from "@/components/state-label";
 function LocalizedStateNames({
@@ -49,8 +49,12 @@ import {
   useHierarchicalPerformance,
 } from "@/hooks/use-hierarchical-performance";
 import { useLocationContext } from "@/contexts/location-context";
-import { Button as HButton, Card as UICard, Chip, Label as HLabel, Link as HLink, ProgressBar, Skeleton as HSkeleton, Tabs } from "@heroui/react";
+import { Alert, Button as HButton, Card as UICard, Chip, Label as HLabel, Link as HLink, ProgressBar, SearchField, Separator as HSeparator, Skeleton as HSkeleton, Tabs, ToggleButton } from "@heroui/react";
 import { KPI } from "@heroui-pro/react/kpi";
+import { Sheet } from "@heroui-pro/react/sheet";
+import { KPIGroup } from "@heroui-pro/react/kpi-group";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { SelectField } from "@/components/select-field";
 import { BarChart as ProBarChart } from "@heroui-pro/react/bar-chart";
 import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import { Segment } from "@heroui-pro/react/segment";
@@ -61,14 +65,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   FolderKanban, Users, DollarSign, AlertTriangle, ArrowRight,
   Activity, CheckCircle2, FileText, Clock, Target,
   BarChart3, MapPin, Layers, Bell,
-  Filter, X, ChevronUp, ChevronDown, ChevronRight, MessageSquare,
+  Filter, X, ChevronDown, ChevronRight, MessageSquare,
   TrendingUp as TrendingUpIcon, Info, RotateCcw,
-  Search, Building2,
+  Building2, Wallet, PiggyBank,
 } from "@/components/icons";
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -187,9 +190,9 @@ const NOTIF_MODULE_ENTITY_TYPES: Record<string, string> = {
 function SectionHeader({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 mb-6">
-      <div>
-        <h2 className="text-sm font-medium text-foreground tracking-tight">{title}</h2>
-        {description && <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{description}</p>}
+      <div className="flex flex-col gap-0.5">
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        {description && <p className="text-sm text-[var(--muted)] leading-relaxed">{description}</p>}
       </div>
       {action}
     </div>
@@ -213,12 +216,6 @@ function ChartEmptyState({ message, icon: Icon = BarChart3 }: { message?: string
 
 /* PerformanceBadge removed — state scoring model (Excellent ≥80 / Good ≥60 / Needs Follow-Up ≥40 / Critical <40)
    is Dashboard-only and not part of approved CAFA Business Logic. */
-
-/* ── Sort icon helper ────────────────────────────────────────────────── */
-function SortIcon({ col, sortCol, sortDir }: { col: string; sortCol: string; sortDir: "asc" | "desc" }) {
-  if (sortCol !== col) return <ChevronUp className="h-3 w-3 opacity-20" />;
-  return sortDir === "asc" ? <ChevronUp className="h-3 w-3 text-primary" /> : <ChevronDown className="h-3 w-3 text-primary" />;
-}
 
 /* ── Filter bar ──────────────────────────────────────────────────────── */
 interface DashFilters { sector?: string; donor?: string; dateFrom?: string; dateTo?: string }
@@ -646,52 +643,6 @@ export function OperationalFollowUp({
       </div>
       <p className="mt-3 text-xs text-[var(--muted)]">{t("operationalFollowUp.categoriesNote")}</p>
     </ChartCard>
-  );
-}
-
-/* ── Stable sortable table header ───────────────────────────────────── */
-/*                                                                          *
- * This component MUST remain at module scope.                              *
- *                                                                          *
- * Defining it inside StatePerformanceTable (or any parent) assigns a new  *
- * function identity on every render. React treats each new identity as a  *
- * completely different component type and unmounts + remounts the entire  *
- * thead subtree on every cycle, corrupting hook reconciliation across the *
- * whole tree and causing the "change in hook order" crash.                *
- *                                                                          *
- * At module scope the identity is stable for the lifetime of the module. */
-function SortableTableHeader({
-  column, label, tooltip, activeSortColumn, sortDirection, onSort, className,
-}: {
-  column: SortableCol;
-  label: string;
-  tooltip?: string;
-  activeSortColumn: SortableCol;
-  sortDirection: "asc" | "desc";
-  onSort: (col: SortableCol) => void;
-  className?: string;
-}) {
-  const isActive = activeSortColumn === column;
-  const ariaSort = isActive
-    ? (sortDirection === "asc" ? "ascending" : "descending")
-    : "none";
-  return (
-    <th
-      scope="col"
-      aria-sort={ariaSort as React.AriaAttributes["aria-sort"]}
-      title={tooltip}
-      className={`py-3 px-3 text-end text-xs font-medium text-muted-foreground whitespace-nowrap${className ? ` ${className}` : ""}`}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(column)}
-        className={`flex w-full items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className?.includes("text-start") ? "justify-start text-start" : "justify-end text-end"}`}
-      >
-        {label}
-        {tooltip && <Info className="h-3 w-3 opacity-40 shrink-0" aria-hidden="true" />}
-        <SortIcon col={column} sortCol={activeSortColumn} sortDir={sortDirection} />
-      </button>
-    </th>
   );
 }
 
@@ -1635,7 +1586,7 @@ function OvKpiCard({
 }) {
   const { t } = useTranslation("common");
   return (
-    <KPI className="h-full">
+    <KPI className="h-full justify-start">
       <KPI.Header>
         <KPI.Icon status={kpiStatus(iconColor, alert)}><Icon aria-hidden="true" /></KPI.Icon>
         <KPI.Title>{label}</KPI.Title>
@@ -1883,6 +1834,32 @@ function StateBarsTooltip({ active, label, payload }: {
         );
       })}
     </ChartTooltip>
+  );
+}
+
+/* Budget & Donors summary — Pro KPI "With Footer", value is pre-formatted money. */
+function BudgetKpi({ icon: Icon, status, title, value, note, progress }: {
+  icon: React.ElementType;
+  status?: "success" | "warning" | "danger";
+  title: string;
+  value: string;
+  note: string;
+  progress?: number | null;
+}) {
+  return (
+    <KPI className="h-full justify-start">
+      <KPI.Header>
+        <KPI.Icon status={status}><Icon aria-hidden="true" /></KPI.Icon>
+        <KPI.Title>{title}</KPI.Title>
+      </KPI.Header>
+      <KPI.Content>
+        <dd className="kpi__value tabular-nums">{value}</dd>
+      </KPI.Content>
+      {progress != null && <KPI.Progress value={Math.min(100, Math.max(0, progress))} status={status} />}
+      <KPI.Footer className="mt-auto">
+        <span className="text-sm text-[var(--muted)]">{note}</span>
+      </KPI.Footer>
+    </KPI>
   );
 }
 
@@ -2489,7 +2466,7 @@ function ProjectBudgetCondensedDetails({
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("budgetWorkspace.projectDetailBudgetBasis")}</p>
-          <p className="mt-0.5 text-foreground">{row.budgetBasis}</p>
+          <p className="mt-0.5 text-foreground">{row.budgetBasis === "State Allocation" ? t("budgetWorkspace.stateAllocation") : row.budgetBasis === "Project-Level Budget" ? t("budgetWorkspace.projectBudgetBasis") : row.budgetBasis}</p>
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("budgetWorkspace.projectDetailCurrency")}</p>
@@ -2499,7 +2476,7 @@ function ProjectBudgetCondensedDetails({
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("budgetWorkspace.projectDetailStatus")}</p>
-          <p className="mt-0.5 text-foreground">{formatStatusLabel(row.projectStatus ?? "")}</p>
+          <p className="mt-0.5 text-foreground">{row.projectStatus ? t(`projectStatus.${row.projectStatus}`, { defaultValue: formatStatusLabel(row.projectStatus) }) : "—"}</p>
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("budgetWorkspace.projectDetailStates")}</p>
@@ -2517,8 +2494,9 @@ function ProjectBudgetCondensedDetails({
         )}
         {stateExpenditureUnavailable && row.projectLevelSpent != null && (
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("budgetWorkspace.projectDetailProjectLevel")}</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t("budgetWorkspace.projectLevelExpenditureLabel")}</p>
             <p className="mt-0.5 tabular-nums text-muted-foreground"><bdi dir="ltr">{fmtMoney(row.projectLevelSpent, row.currency)}</bdi></p>
+            <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{t("budgetWorkspace.projectLevelExpenditureNote")}</p>
           </div>
         )}
         {row.lastFinancialUpdate && (
@@ -2531,7 +2509,7 @@ function ProjectBudgetCondensedDetails({
       <BudgetDataAvailability row={row} />
       {stateExpenditureUnavailable && (
         <p className="text-[10px] italic leading-snug text-amber-700 dark:text-amber-400">
-          {t("budgetWorkspace.projectDetailStateExpUnavailable")}
+          {t("budgetWorkspace.stateExpenditureUnavailableNote")}
         </p>
       )}
       {!stateExpenditureUnavailable && row.remainingBalance != null && row.remainingBalance < 0 && (
@@ -2687,17 +2665,17 @@ type DonorRow = DonorPortfolioEntry & {
 
 function DonorStatusBadge({ status }: { status: string }) {
   const { t } = useTranslation("dashboard");
-  const cfgMap: Record<string, { label: string; cls: string }> = {
-    linked:        { label: t("budgetWorkspace.linked"),   cls: "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400" },
-    unlinked:      { label: t("budgetWorkspace.unlinked"), cls: "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400" },
-    name_mismatch: { label: t("budgetWorkspace.dataIssues"), cls: "bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950/30 dark:border-orange-800 dark:text-orange-400" },
-    missing:       { label: t("budgetWorkspace.missingCurrency"), cls: "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400" },
+  const cfgMap: Record<string, { label: string; color: "success" | "warning" | "danger" }> = {
+    linked:        { label: t("budgetWorkspace.linked"),          color: "success" },
+    unlinked:      { label: t("budgetWorkspace.unlinked"),        color: "warning" },
+    name_mismatch: { label: t("budgetWorkspace.dataIssues"),      color: "warning" },
+    missing:       { label: t("budgetWorkspace.missingCurrency"), color: "danger"  },
   };
-  const cfg = cfgMap[status] ?? { label: status, cls: "bg-muted border-border text-muted-foreground" };
+  const cfg = cfgMap[status];
   return (
-    <span aria-label={t("aria.donorDataStatus", { status: cfg.label })} className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${cfg.cls}`}>
-      {cfg.label}
-    </span>
+    <Chip size="sm" variant="soft" color={cfg?.color ?? "default"} aria-label={t("aria.donorDataStatus", { status: cfg?.label ?? status })}>
+      {cfg?.label ?? status}
+    </Chip>
   );
 }
 
@@ -2708,7 +2686,7 @@ function DonorAllocationBar({ share, label }: { share: number | null; label: str
     <div className="flex items-center gap-2 min-w-[90px]">
       <span className="tabular-nums text-xs font-medium shrink-0 w-10 text-end"><bdi dir="ltr">{pct(share)}</bdi></span>
       <div
-        className="flex-1 h-1.5 rounded-full bg-muted/50 overflow-hidden"
+        className="flex-1 h-1.5 rounded-full bg-[var(--default)] overflow-hidden"
         role="progressbar"
         aria-valuenow={Math.round(share * 10) / 10}
         aria-valuemin={0}
@@ -2716,7 +2694,7 @@ function DonorAllocationBar({ share, label }: { share: number | null; label: str
         aria-label={label}
       >
         <div
-          className="h-full rounded-full bg-primary/60 transition-[width] duration-300"
+          className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-300"
           style={{ width: `${barPct}%` }}
         />
       </div>
@@ -2928,7 +2906,107 @@ export interface DonorPortfolioTableProps {
   onActiveCurrencyChange?: (currency: string) => void;
 }
 
-const DONOR_TABLE_COLS = 7 as const;
+
+/* ── Donor Portfolio — HeroUI Pro DataGrid ───────────────────────────── *
+ * Funded projects are child rows (Pro "Expandable Rows"), so the donor   *
+ * column carries the expand chevron. Sorting stays controlled: numeric   *
+ * columns keep nulls last whatever the direction.                        */
+type DonorGridRow =
+  | { id: string; kind: "donor"; row: DonorRow; children: DonorGridRow[] }
+  | { id: string; kind: "project"; project: { id: number; code: string; title: string } }
+  | { id: string; kind: "note"; freeText: string };
+
+function DonorPortfolioGrid({
+  rows, effectiveCurrency, sortKey, sortDir, onSort, expandedKey, onExpandedChange, emptyMessage,
+}: {
+  rows: DonorRow[];
+  effectiveCurrency: string | null;
+  sortKey: DonorSortKey;
+  sortDir: "asc" | "desc";
+  onSort: (key: DonorSortKey, dir: "asc" | "desc") => void;
+  expandedKey: string | null;
+  onExpandedChange: (key: string | null) => void;
+  emptyMessage: string;
+}) {
+  const { t } = useTranslation("dashboard");
+  const gridRows = useMemo<DonorGridRow[]>(() => rows.map(row => {
+    const children: DonorGridRow[] = (row.projectList ?? []).map(p => ({ id: `${row.donorKey}:p${p.id}`, kind: "project" as const, project: p }));
+    if (row.freeTextDonorName && row.dataStatus === "name_mismatch") {
+      children.push({ id: `${row.donorKey}:note`, kind: "note", freeText: row.freeTextDonorName });
+    }
+    return { id: row.donorKey, kind: "donor", row, children };
+  }), [rows]);
+
+  const columns = useMemo<DonorGridRow extends never ? never : DataGridColumn<DonorGridRow>[]>(() => [
+    { id: "donorName", header: t("budgetWorkspace.donor"), isRowHeader: true, allowsSorting: true, minWidth: 260,
+      cell: (g) => {
+        if (g.kind === "project") {
+          return (
+            <Link href={`/projects/${g.project.id}`} className="flex min-w-0 items-center gap-2 text-sm hover:text-[var(--accent)]">
+              <span className="font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{g.project.code}</bdi></span>
+              <span className="truncate text-foreground">{g.project.title}</span>
+            </Link>
+          );
+        }
+        if (g.kind === "note") {
+          return (
+            <p className="text-xs text-[var(--muted)]">
+              {t("budgetWorkspace.freeTextDonorValue")}{" "}
+              <span className="rounded bg-[var(--default)] px-1 font-mono">{g.freeText}</span>{" "}
+              {t("budgetWorkspace.freeTextDonorMismatch")}
+            </p>
+          );
+        }
+        const name = g.row.donorName ?? g.row.donor ?? t("budgetWorkspace.unknownDonor");
+        return (
+          <div className="flex min-w-0 max-w-[16rem] flex-col gap-0.5" title={name}>
+            <span className="line-clamp-2 break-words text-sm font-medium leading-tight text-foreground">{name}</span>
+            {(g.row.dataStatus ?? "unlinked") === "unlinked" && (
+              <span className="text-xs font-medium text-[var(--warning)]">{t("budgetWorkspace.unlinkedDonorRecord")}</span>
+            )}
+          </div>
+        );
+      } },
+    { id: "dataStatus", header: t("budgetWorkspace.dataStatus"), allowsSorting: true, width: 130,
+      cell: (g) => g.kind === "donor" ? <DonorStatusBadge status={g.row.dataStatus ?? "unlinked"} /> : null },
+    { id: "projectCount", header: t("budgetWorkspace.fundedProjects"), allowsSorting: true, align: "end", width: 130,
+      cell: (g) => g.kind === "donor"
+        ? <span className="text-sm tabular-nums text-[var(--muted)]">{t("budgetWorkspace.projectCount", { count: g.row.projectCount ?? g.row.projects ?? 0 })}</span>
+        : null },
+    { id: "currency", header: t("budgetWorkspace.currency"), align: "end", width: 100,
+      cell: (g) => g.kind !== "donor" ? null : g.row.currencyMixed
+        ? <Chip size="sm" variant="soft" color="warning">{t("budgetWorkspace.multiple")}</Chip>
+        : <span className="text-sm tabular-nums text-[var(--muted)]">{g.row.currency ?? "—"}</span> },
+    { id: "allocatedBudget", header: t("budgetWorkspace.allocatedBudget"), allowsSorting: true, align: "end", minWidth: 170,
+      cell: (g) => g.kind !== "donor" ? null : effectiveCurrency
+        ? <span className="text-sm font-medium tabular-nums"><bdi dir="ltr">{g.row.budgetInCurrency != null ? fmtMoney(g.row.budgetInCurrency, effectiveCurrency) : "—"}</bdi></span>
+        : <DonorCurrencyAmounts row={g.row} /> },
+    { id: "portfolioShare", header: t("budgetWorkspace.portfolioShare"), allowsSorting: true, width: 170,
+      cell: (g) => g.kind === "donor"
+        ? <DonorAllocationBar share={g.row.portfolioShare} label={t("budgetWorkspace.portfolioShareOf", { donor: g.row.donorName ?? g.row.donor ?? "" })} />
+        : null },
+  ], [t, effectiveCurrency]);
+
+  return (
+    <DataGrid
+      aria-label={t("budgetWorkspace.donorTable")}
+      data={gridRows}
+      columns={columns}
+      getRowId={(g) => g.id}
+      getChildren={(g) => (g.kind === "donor" && g.children.length > 0 ? g.children : undefined)}
+      treeColumn="donorName"
+      expandedKeys={expandedKey ? [expandedKey] : []}
+      onExpandedChange={(keys) => {
+        const next = [...keys].map(String).find(k => k !== expandedKey);
+        onExpandedChange(next ?? (keys.size === 0 ? null : expandedKey));
+      }}
+      contentClassName="min-w-[900px]"
+      sortDescriptor={{ column: sortKey, direction: sortDir === "asc" ? "ascending" : "descending" }}
+      onSortChange={(d) => onSort(d.column as DonorSortKey, d.direction === "ascending" ? "asc" : "desc")}
+      renderEmptyState={() => <p className="py-8 text-center text-sm text-[var(--muted)]">{emptyMessage}</p>}
+    />
+  );
+}
 
 export function DonorPortfolioTable({
   data, isLoading, isError, onRetry, activeCurrency, onActiveCurrencyChange,
@@ -3074,11 +3152,6 @@ export function DonorPortfolioTable({
     [data],
   );
 
-  const handleSort = (key: DonorSortKey) => {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("desc"); }
-    setDonorPage(1);
-  };
 
   // ── Pagination ────────────────────────────────────────────────────────
   const donorTotal = visibleRows.length;
@@ -3127,110 +3200,88 @@ export function DonorPortfolioTable({
     <div className="space-y-4">
       {/* Currency selector — shown only when portfolio spans multiple currencies */}
       {allCurrencies.length > 1 && (
-        <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label={t("budgetWorkspace.selectDisplayCurrency")}>
-          <span className="text-[11px] text-muted-foreground select-none">{t("budgetWorkspace.displayCurrency")}</span>
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t("budgetWorkspace.selectDisplayCurrency")}>
+          <span className="text-xs text-[var(--muted)] select-none">{t("budgetWorkspace.displayCurrency")}</span>
           {(activeCurrency !== undefined ? ["all", ...allCurrencies] : allCurrencies).map(c => {
             const isSelected = c === "all" ? activeCurrency === "all" : effectiveCurrency === c;
             return (
-              <button
-                key={c} type="button"
-                onClick={() => {
+              <ToggleButton
+                key={c}
+                size="sm"
+                isSelected={isSelected}
+                onChange={() => {
                   if (onActiveCurrencyChange) onActiveCurrencyChange(c);
                   else setSelCurrency(c);
                 }}
-                aria-pressed={isSelected}
-                className={`px-2.5 py-0.5 rounded-full border text-xs font-medium transition-colors ${
-                  isSelected
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                }`}
-              >{c === "all" ? t("budgetWorkspace.allCurrencies") : c}</button>
+              >{c === "all" ? t("budgetWorkspace.allCurrencies") : c}</ToggleButton>
             );
           })}
-          <span className="w-full text-[10px] text-muted-foreground">{t("budgetWorkspace.selectedCurrencyNote")}</span>
+          <span className="w-full text-xs text-[var(--muted)]">{t("budgetWorkspace.selectedCurrencyNote")}</span>
         </div>
       )}
 
       {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" aria-label={t("budgetWorkspace.donorSummary")}>
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={t("budgetWorkspace.donorSummary")}>
         {[
           { label: t("budgetWorkspace.donorsRepresented"), value: summaryStats.donors,     warn: false },
           { label: t("budgetWorkspace.fundedProjects"),    value: summaryStats.projects,   warn: false },
           { label: t("budgetWorkspace.currenciesInUse"),  value: summaryStats.currencies, warn: false },
           { label: t("budgetWorkspace.donorDataIssues"),  value: summaryStats.issues,     warn: summaryStats.issues > 0 },
         ].map(stat => (
-          <div
-            key={stat.label}
-            className={`rounded-lg border px-3 py-2.5 ${stat.warn ? "border-amber-200/70 dark:border-amber-800/40 bg-amber-50/30 dark:bg-amber-950/10" : "border-border/50 bg-muted/20"}`}
-          >
-            <p className={`text-[19px] font-semibold tabular-nums leading-none ${stat.warn ? "text-amber-700 dark:text-amber-400" : "text-foreground"}`}>
+          <div key={stat.label} className="flex flex-col-reverse gap-1 rounded-xl bg-[var(--default)] px-3 py-2.5">
+            <dt className="text-xs text-[var(--muted)]">{stat.label}</dt>
+            <dd className="text-xl font-semibold tabular-nums leading-none" style={{ color: stat.warn ? "var(--warning)" : "var(--foreground)" }}>
               {stat.value}
-            </p>
-            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 leading-snug">{stat.label}</p>
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
 
       {/* Data quality notice */}
       {issueRows.length > 0 && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200/70 dark:border-amber-800/40 bg-amber-50/30 dark:bg-amber-950/10 px-3 py-2.5">
-          <div className="flex items-start gap-2">
-            <Info className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" aria-hidden="true" />
-            <p className="text-xs text-amber-800 dark:text-amber-300">
+        <Alert status="warning">
+          <Alert.Indicator><Info className="size-4" aria-hidden="true" /></Alert.Indicator>
+          <Alert.Content>
+            <Alert.Description>
               {t("budgetWorkspace.donorIssueNotice")}{" "}
               <span className="font-medium">{t("budgetWorkspace.projectsAffected", { count: summaryStats.issues })}</span>
-            </p>
-          </div>
-          <Button
-            variant="ghost" size="sm"
-            className="text-xs h-auto py-0.5 px-2 shrink-0 text-amber-700 dark:text-amber-400 hover:bg-amber-100/50 dark:hover:bg-amber-900/20"
-            onClick={() => setShowIssues(true)}
-          >
+            </Alert.Description>
+          </Alert.Content>
+          <HButton size="sm" variant="ghost" className="shrink-0" onPress={() => setShowIssues(true)}>
             {t("budgetWorkspace.reviewDetails")}
-          </Button>
-        </div>
+          </HButton>
+        </Alert>
       )}
 
       {/* Projects-style registry toolbar: controls at the logical start, presentation at the end. */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5" role="group" aria-label={t("budgetWorkspace.donorToolbar")}>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5" role="group" aria-label={t("budgetWorkspace.donorToolbar")}>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <div className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground select-none">
-            <Filter className="h-4 w-4" aria-hidden="true" />
+          <div className="flex shrink-0 items-center gap-1.5 text-sm font-medium text-[var(--muted)] select-none">
+            <Filter className="size-4" aria-hidden="true" />
             {t("common:filter")}
           </div>
-          <Separator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
-          <div className="relative min-w-[14rem] flex-1">
-          <Search className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" aria-hidden="true" />
-          <Input
-            type="search"
-            placeholder={t("budgetWorkspace.searchDonors")}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="h-10 ps-8 text-sm border-border/60"
-            aria-label={t("budgetWorkspace.searchDonors")}
-          />
+          <HSeparator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
+          <SearchField value={search} onChange={setSearch} aria-label={t("budgetWorkspace.searchDonors")} className="min-w-[14rem] flex-1">
+            <SearchField.Group className="w-full">
+              <SearchField.SearchIcon />
+              <SearchField.Input placeholder={t("budgetWorkspace.searchDonors")} className="h-10" />
+              <SearchField.ClearButton />
+            </SearchField.Group>
+          </SearchField>
+          <Segment
+            size="sm"
+            aria-label={t("budgetWorkspace.filterDataStatus")}
+            selectedKey={statusFilter}
+            onSelectionChange={(key) => setStatusFilter(key as DonorStatusFilterVal)}
+            className="shrink-0"
+          >
+            <Segment.Item id="all">{t("budgetWorkspace.allRecords")}</Segment.Item>
+            <Segment.Item id="linked">{t("budgetWorkspace.linked")}</Segment.Item>
+            <Segment.Item id="unlinked">{t("budgetWorkspace.unlinked")}</Segment.Item>
+            <Segment.Item id="issues">{t("budgetWorkspace.dataIssues")}</Segment.Item>
+          </Segment>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-1" role="group" aria-label={t("budgetWorkspace.filterDataStatus")}>
-          {(["all", "linked", "unlinked", "issues"] as const).map(f => {
-            const labels: Record<typeof f, string> = {
-              all: t("budgetWorkspace.allRecords"), linked: t("budgetWorkspace.linked"), unlinked: t("budgetWorkspace.unlinked"), issues: t("budgetWorkspace.dataIssues"),
-            };
-            return (
-              <button
-                key={f} type="button"
-                onClick={() => setStatusFilter(f)}
-                aria-pressed={statusFilter === f}
-                className={`h-10 rounded-md border px-2.5 text-sm font-medium transition-colors ${
-                  statusFilter === f
-                    ? "bg-primary/10 border-primary/30 text-primary"
-                    : "bg-card border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >{labels[f]}</button>
-            );
-          })}
-        </div>
-        </div>
-        <Separator orientation="vertical" className="hidden h-6 shrink-0 md:block" />
+        <HSeparator orientation="vertical" className="hidden h-6 shrink-0 md:block" />
         <div className="shrink-0" aria-label={t("budgetWorkspace.donorView")}>
           <ViewModeSwitcher
             available={[...RECORD_REGISTRY_VIEWS]}
@@ -3243,156 +3294,16 @@ export function DonorPortfolioTable({
       {/* Analytical table remains the baseline; card and compact modes consume the
           same filtered, sorted and paginated donor rows. */}
       {viewMode === "table" ? (
-      <div className="rounded-xl border border-border/60 overflow-hidden overflow-x-auto" role="region" aria-label={t("budgetWorkspace.donorTable")}>
-        <Table className="min-w-[900px]">
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <SortableTableHeader column="donorName"       label={t("budgetWorkspace.donor")} activeSortColumn={sortKey} sortDirection={sortDir} onSort={() => handleSort("donorName")} className="w-[200px] text-start" />
-              <SortableTableHeader column="dataStatus"      label={t("budgetWorkspace.dataStatus")} activeSortColumn={sortKey} sortDirection={sortDir} onSort={() => handleSort("dataStatus")} className="w-[120px]" />
-              <SortableTableHeader column="projectCount"    label={t("budgetWorkspace.fundedProjects")} activeSortColumn={sortKey} sortDirection={sortDir} onSort={() => handleSort("projectCount")} className="w-[130px]" />
-              <th scope="col" className="w-[80px] py-2 px-3 text-end text-xs font-medium text-muted-foreground whitespace-nowrap">{t("budgetWorkspace.currency")}</th>
-              <SortableTableHeader column="allocatedBudget" label={t("budgetWorkspace.allocatedBudget")} activeSortColumn={sortKey} sortDirection={sortDir} onSort={() => handleSort("allocatedBudget")} className="w-[150px]" />
-              <SortableTableHeader column="portfolioShare"  label={t("budgetWorkspace.portfolioShare")} activeSortColumn={sortKey} sortDirection={sortDir} onSort={() => handleSort("portfolioShare")} className="w-[160px]" />
-              <th scope="col" className="w-[80px] py-2 px-3 text-end text-xs font-medium text-muted-foreground whitespace-nowrap">{t("budgetWorkspace.action")}</th>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {pagedRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={DONOR_TABLE_COLS} className="text-center py-10 text-sm text-muted-foreground">
-                  {donorTotal === 0 ? t("budgetWorkspace.noDonorsFiltered") : t("budgetWorkspace.noDonorsPage")}
-                </TableCell>
-              </TableRow>
-            ) : pagedRows.flatMap(row => {
-              const ds        = row.dataStatus ?? "unlinked";
-              const pCount    = row.projectCount ?? row.projects ?? 0;
-              const pList     = row.projectList ?? [];
-              const isExp     = expandedDonor === row.donorKey;
-              const budgetDisp = row.budgetInCurrency != null ? fmtMoney(row.budgetInCurrency, effectiveCurrency) : "—";
-              const dispName  = row.donorName ?? row.donor ?? t("budgetWorkspace.unknownDonor");
-
-              const mainRow = (
-                <TableRow
-                  key={row.donorKey}
-                  className={`transition-colors ${isExp ? "bg-muted/20" : "hover:bg-muted/10"}`}
-                >
-                  {/* Donor */}
-                  <TableCell className="py-2 align-middle">
-                    <UITooltipProvider>
-                      <UITooltip>
-                        <UITooltipTrigger asChild>
-                          <div className="flex max-w-[16rem] flex-col gap-0.5 text-start" aria-label={dispName} title={dispName}>
-                            <span className="break-words text-sm font-medium text-foreground leading-tight line-clamp-2">
-                              {dispName}
-                            </span>
-                            {ds === "unlinked" && (
-                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                                {t("budgetWorkspace.unlinkedDonorRecord")}
-                              </span>
-                            )}
-                          </div>
-                        </UITooltipTrigger>
-                        {dispName.length > 26 && (
-                          <UITooltipContent side="top" className="max-w-[240px] text-xs break-words">
-                            {dispName}
-                          </UITooltipContent>
-                        )}
-                      </UITooltip>
-                    </UITooltipProvider>
-                  </TableCell>
-                  {/* Data Status */}
-                  <TableCell className="py-2 align-middle">
-                    <DonorStatusBadge status={ds} />
-                  </TableCell>
-                  {/* Funded Projects */}
-                  <TableCell className="py-2 align-middle">
-                    {pList.length > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setExpandedDonor(isExp ? null : row.donorKey)}
-                        aria-expanded={isExp}
-                        aria-controls={`donor-detail-${row.donorKey}`}
-                        className="flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        {t("budgetWorkspace.projectCount", { count: pCount })}
-                        <ChevronRight className={`h-3 w-3 transition-transform duration-150 ${isExp ? "rotate-90" : ""}`} />
-                      </button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">{t("budgetWorkspace.projectCount", { count: pCount })}</span>
-                    )}
-                  </TableCell>
-                  {/* Currency */}
-                  <TableCell className="py-2 align-middle text-xs tabular-nums text-muted-foreground">
-                    {row.currencyMixed
-                      ? <span className="text-amber-600 dark:text-amber-400 text-[10px] font-medium">{t("budgetWorkspace.multiple")}</span>
-                      : (row.currency ?? "—")}
-                  </TableCell>
-                  {/* Allocated Budget */}
-                  <TableCell className="py-2 align-middle">
-                    {effectiveCurrency
-                      ? <span className="text-sm font-medium tabular-nums">{budgetDisp}</span>
-                      : <DonorCurrencyAmounts row={row} />
-                    }
-                  </TableCell>
-                  {/* Portfolio Share */}
-                  <TableCell className="py-2 align-middle">
-                    <DonorAllocationBar share={row.portfolioShare} label={`${dispName} portfolio share`} />
-                  </TableCell>
-                  {/* Action — expand/collapse funded project list.
-                      Note: /projects?donor_id=… is NOT supported by the Projects
-                      page (it only reads status/sector/stateId params) so that
-                      link has been removed to avoid a misleading no-op action. */}
-                  <TableCell className="py-2 align-middle text-end">
-                    {pList.length > 0 ? (
-                      <Button
-                        variant="ghost" size="sm"
-                        className="h-6 px-2 text-xs gap-1"
-                        onClick={() => setExpandedDonor(isExp ? null : row.donorKey)}
-                      >
-                          {t("budgetWorkspace.details")}
-                        <ChevronRight className={`h-3 w-3 transition-transform duration-150 ${isExp ? "rotate-90" : ""}`} />
-                      </Button>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              );
-
-              if (!isExp) return [mainRow];
-
-              const detailRow = (
-                <TableRow key={`${row.donorKey}-detail`} className="bg-muted/10">
-                  <TableCell colSpan={DONOR_TABLE_COLS} id={`donor-detail-${row.donorKey}`} className="px-4 pb-3 pt-1">
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        Projects ({pList.length})
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {pList.map(p => (
-                          <Link key={p.id} href={`/projects/${p.id}`}>
-                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-card border border-border/50 text-xs hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer">
-                              <span className="font-mono font-medium text-[10px] text-muted-foreground">{p.code}</span>
-                              <span className="text-foreground max-w-[200px] truncate">{p.title}</span>
-                            </span>
-                          </Link>
-                        ))}
-                      </div>
-                      {row.freeTextDonorName && ds === "name_mismatch" && (
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          <span className="font-medium">Free-text Donor value: </span>
-                          <span className="font-mono bg-muted/50 px-1 rounded">{row.freeTextDonorName}</span>
-                          {" — differs from canonical Donor name; please verify source data."}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-
-              return [mainRow, detailRow];
-            })}
-          </TableBody>
-        </Table>
-      </div>
+        <DonorPortfolioGrid
+          rows={pagedRows}
+          effectiveCurrency={effectiveCurrency}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={(key, dir) => { setSortKey(key); setSortDir(dir); setDonorPage(1); }}
+          expandedKey={expandedDonor}
+          onExpandedChange={setExpandedDonor}
+          emptyMessage={donorTotal === 0 ? t("budgetWorkspace.noDonorsFiltered") : t("budgetWorkspace.noDonorsPage")}
+        />
       ) : viewMode === "card" ? (
         pagedRows.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/60 py-10 text-center text-sm text-muted-foreground">
@@ -3446,7 +3357,7 @@ export function DonorPortfolioTable({
               className="h-7 rounded border border-border bg-card text-xs px-1.5 text-muted-foreground focus-visible:outline-none focus-visible:ring-1"
               aria-label={t("aria.donorsPerPage")}
             >
-              {[5, 10, 20].map(s => <option key={s} value={s}>{s} per page</option>)}
+              {[5, 10, 20].map(s => <option key={s} value={s}>{t("budgetWorkspace.perPage", { count: s })}</option>)}
             </select>
             <Pagination className="w-auto mx-0">
               <PaginationContent>
@@ -3609,6 +3520,7 @@ function ProjectPerformanceGrid({ projects }: { projects: HierarchicalProject[] 
 
 export default function Dashboard() {
   const { t, i18n } = useTranslation("dashboard");
+  const isMobile = useIsMobile();
   const isRtl = i18n.language?.startsWith("ar") ?? false;
   const { data: me } = useGetMe();
   const role = me?.user.role ?? "state_program_officer";
@@ -5020,115 +4932,114 @@ export default function Dashboard() {
                         : t("budgetTab.sectionHeadingOrg")
                     }
                     action={
-                      <Button
-                        variant="outline"
+                      <HButton
+                        variant="secondary"
                         size="sm"
-                        onClick={() => setBenOpen(true)}
-                        className="text-xs gap-2 shrink-0"
+                        onPress={() => setBenOpen(true)}
+                        className="shrink-0"
                       >
-                        <Users className="h-3.5 w-3.5" />
+                        <Users className="size-4" aria-hidden="true" />
                         <span className="hidden sm:inline">{t("budgetTab.viewBeneficiaryBreakdown")}</span>
                         <span className="sm:hidden">{t("budgetTab.breakdown")}</span>
-                      </Button>
+                      </HButton>
                     }
                   />
 
                   {/* Budget summary cards */}
                   {summary?.currencyMixed ? (
-                    /* Multi-currency — show per-currency grouped totals instead of a
-                       meaningless cross-currency aggregate. Each row: Allocated, Spent,
-                       Remaining, Utilisation Rate. */
-                    <div className="rounded-xl border border-amber-200/70 dark:border-amber-700/40 bg-amber-50/40 dark:bg-amber-950/15 p-5 space-y-4">
-                      <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                        <DollarSign className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                        {t("budgetTab.multipleCurrencies")}
-                      </div>
-                      <div className="space-y-2">
-                        {(summary.budgetByCurrency ?? []).map(bc => (
-                          <div key={bc.currency} className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                            <div className="rounded-lg border border-border/50 bg-card px-3 py-2">
-                              <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider">{t("budgetTab.allocatedLabel", { currency: bc.currency })}</p>
-                              <p className="mt-1 text-base font-semibold tabular-nums text-foreground">{fmtMoney(bc.totalBudget, bc.currency)}</p>
-                            </div>
-                            <div className="rounded-lg border border-amber-200/50 dark:border-amber-800/30 bg-amber-50/20 dark:bg-amber-950/10 px-3 py-2">
-                              <p className="text-[10px] font-medium text-amber-700/60 dark:text-amber-400/60 uppercase tracking-wider">{t("budgetTab.spentLabel", { currency: bc.currency })}</p>
-                              <p className="mt-1 text-base font-semibold tabular-nums text-amber-700 dark:text-amber-400">{fmtMoney(bc.totalSpent, bc.currency)}</p>
-                            </div>
-                            <div className={`rounded-lg border px-3 py-2 ${(bc.budgetRemaining ?? 0) < 0 ? "border-orange-200/70 dark:border-orange-800/40 bg-orange-50/30 dark:bg-orange-950/10" : "border-emerald-200/70 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-950/10"}`}>
-                              <p className={`text-[10px] font-medium uppercase tracking-wider ${(bc.budgetRemaining ?? 0) < 0 ? "text-orange-700/60 dark:text-orange-400/60" : "text-emerald-700/60 dark:text-emerald-400/60"}`}>{t("budgetTab.remainingLabel", { currency: bc.currency })}</p>
-                              <p className={`mt-1 text-base font-semibold tabular-nums ${(bc.budgetRemaining ?? 0) < 0 ? "text-orange-700 dark:text-orange-400" : "text-emerald-700 dark:text-emerald-400"}`}>{fmtMoney(bc.budgetRemaining, bc.currency)}</p>
-                            </div>
-                            <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-                              <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider">{t("budgetTab.utilisationRate")}</p>
-                              <p className="mt-1 text-base font-semibold tabular-nums text-foreground">{pct(bc.utilisationRate)}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    /* Multi-currency — per-currency totals instead of a meaningless
+                       cross-currency aggregate: Allocated, Spent, Remaining, Utilisation. */
+                    <UICard>
+                      <UICard.Header className="flex-row items-center gap-2">
+                        <Chip size="sm" variant="soft" color="warning">
+                          <DollarSign className="size-3.5" aria-hidden="true" />
+                          {t("budgetTab.multipleCurrencies")}
+                        </Chip>
+                      </UICard.Header>
+                      <UICard.Content className="flex flex-col gap-3">
+                        {(summary.budgetByCurrency ?? []).map(bc => {
+                          const negative = (bc.budgetRemaining ?? 0) < 0;
+                          return (
+                            <dl key={bc.currency} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                              {[
+                                { label: t("budgetTab.allocatedLabel", { currency: bc.currency }), value: fmtMoney(bc.totalBudget, bc.currency) },
+                                { label: t("budgetTab.spentLabel", { currency: bc.currency }), value: fmtMoney(bc.totalSpent, bc.currency), tone: "warning" },
+                                { label: t("budgetTab.remainingLabel", { currency: bc.currency }), value: fmtMoney(bc.budgetRemaining, bc.currency), tone: negative ? "danger" : "success" },
+                                { label: t("budgetTab.utilisationRate"), value: pct(bc.utilisationRate) },
+                              ].map(cell => (
+                                <div key={cell.label} className="flex flex-col gap-1 rounded-xl bg-[var(--default)] px-3 py-2.5">
+                                  <dt className="text-xs text-[var(--muted)]">{cell.label}</dt>
+                                  <dd className="text-base font-semibold tabular-nums text-foreground"
+                                    style={cell.tone ? { color: `var(--${cell.tone})` } : undefined}>{cell.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          );
+                        })}
+                      </UICard.Content>
+                    </UICard>
                   ) : (
-                    /* Single-currency or loading state — four-card layout:
-                       Allocated → Spent → Remaining → Utilisation Rate */
+                    /* Single currency: Allocated → Spent → Remaining → Utilisation.
+                       State / TC users see project-level amounts, not an approved State
+                       or Sector allocation, so the note must not imply one. */
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      {/* 1. Allocated Budget — label and note vary by scope.
-                          State / TC users see project-level amounts, not an approved
-                          State or Sector allocation, so the description must not
-                          imply an exclusive State or Sector-level budget. */}
-                      <div className="rounded-xl border border-border/60 bg-card p-6 shadow-[0_1px_3px_0_rgb(0,0,0,0.04)] flex flex-col">
-                        <p className="text-xs font-medium text-muted-foreground/60 leading-none uppercase tracking-widest">
-                          {role === "state_program_officer" ? t("budgetTab.projectLevelBudget") : t("budgetTab.allocatedBudget")}
-                        </p>
-                        <p className="mt-4 text-[22px] font-medium tabular-nums text-foreground leading-none">{fmtMoney(summary?.totalBudget, summary?.currency)}</p>
-                        <p className="mt-auto pt-3 text-xs text-muted-foreground">
-                          {role === "state_program_officer"
-                            ? t("budgetTab.projectLevelBudgetDesc")
-                            : isTc
-                            ? t("budgetTab.projectLevelSectorDesc")
-                            : t("budgetTab.totalApprovedBudget")}
-                        </p>
-                      </div>
-                      {/* 2. Spent */}
-                      <div className="rounded-xl border border-amber-200/60 dark:border-amber-800/40 bg-amber-50/30 dark:bg-amber-950/10 p-6 shadow-[0_1px_3px_0_rgb(0,0,0,0.04)] flex flex-col">
-                        <p className="text-xs font-medium text-amber-700/60 dark:text-amber-400/60 leading-none uppercase tracking-widest">{t("budgetTab.spent")}</p>
-                        <p className="mt-4 text-[22px] font-medium tabular-nums text-amber-700 dark:text-amber-400 leading-none">{fmtMoney(summary?.totalSpent, summary?.currency)}</p>
-                        <p className="mt-auto pt-3 text-xs text-muted-foreground">{t("budgetTab.recordedExpenditure")}</p>
-                      </div>
-                      {/* 3. Remaining Balance — warning treatment for genuine negative balance */}
-                      {(() => {
-                        const rem = summary?.budgetRemaining;
-                        const isNegative = rem != null && rem < 0;
-                        return (
-                          <div className={`rounded-xl border p-6 shadow-[0_1px_3px_0_rgb(0,0,0,0.04)] flex flex-col ${isNegative ? "border-orange-200/80 dark:border-orange-800/50 bg-orange-50/40 dark:bg-orange-950/15" : "border-emerald-200/80 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-950/15"}`}>
-                            <p className={`text-xs font-medium leading-none uppercase tracking-widest ${isNegative ? "text-orange-700/60 dark:text-orange-400/60" : "text-emerald-700/60 dark:text-emerald-400/60"}`}>{t("budgetTab.remainingBalance")}</p>
-                            <p className={`mt-4 text-[22px] font-medium tabular-nums leading-none ${isNegative ? "text-orange-700 dark:text-orange-400" : "text-emerald-700 dark:text-emerald-400"}`}>{fmtMoney(rem, summary?.currency)}</p>
-                            <p className="mt-auto pt-3 text-xs text-muted-foreground">{t("budgetTab.allocatedLessExpenditure")}</p>
-                          </div>
-                        );
-                      })()}
-                      {/* 4. Utilisation Rate */}
-                      <div className="rounded-xl border border-border/60 bg-card p-6 shadow-[0_1px_3px_0_rgb(0,0,0,0.04)] flex flex-col">
-                        <p className="text-xs font-medium text-muted-foreground/60 leading-none uppercase tracking-widest">{t("budgetTab.utilisationRate")}</p>
-                        <p className="mt-4 text-[22px] font-medium tabular-nums text-foreground leading-none">{pct(summary?.burnRatePct)}</p>
-                        <p className="mt-auto pt-3 text-xs text-muted-foreground">{t("budgetTab.spentAsPercentage")}</p>
-                      </div>
+                      <BudgetKpi
+                        icon={Wallet}
+                        title={role === "state_program_officer" ? t("budgetTab.projectLevelBudget") : t("budgetTab.allocatedBudget")}
+                        value={fmtMoney(summary?.totalBudget, summary?.currency)}
+                        note={role === "state_program_officer"
+                          ? t("budgetTab.projectLevelBudgetDesc")
+                          : isTc
+                          ? t("budgetTab.projectLevelSectorDesc")
+                          : t("budgetTab.totalApprovedBudget")}
+                      />
+                      <BudgetKpi
+                        icon={DollarSign}
+                        status="warning"
+                        title={t("budgetTab.spent")}
+                        value={fmtMoney(summary?.totalSpent, summary?.currency)}
+                        note={t("budgetTab.recordedExpenditure")}
+                      />
+                      <BudgetKpi
+                        icon={PiggyBank}
+                        status={summary?.budgetRemaining != null && summary.budgetRemaining < 0 ? "danger" : "success"}
+                        title={t("budgetTab.remainingBalance")}
+                        value={fmtMoney(summary?.budgetRemaining, summary?.currency)}
+                        note={t("budgetTab.allocatedLessExpenditure")}
+                      />
+                      <BudgetKpi
+                        icon={TrendingUpIcon}
+                        title={t("budgetTab.utilisationRate")}
+                        value={pct(summary?.burnRatePct)}
+                        note={t("budgetTab.spentAsPercentage")}
+                        progress={summary?.burnRatePct}
+                      />
                     </div>
                   )}
 
-                  {/* Beneficiary summary — labels: Men, Women, Boys, Girls, Total Beneficiaries */}
-                  <div className="grid gap-3 grid-cols-3 sm:grid-cols-5">
+                  {/* Beneficiary summary — Men, Women, Boys, Girls, Total */}
+                  <KPIGroup orientation={isMobile ? "vertical" : "horizontal"}>
                     {[
-                      { label: t("beneficiaries.men"),   value: fmt(benBreakdown?.summary?.male   ?? 0), highlight: false },
-                      { label: t("beneficiaries.women"), value: fmt(benBreakdown?.summary?.female ?? 0), highlight: false },
-                      { label: t("beneficiaries.boys"),  value: fmt(benBreakdown?.summary?.boys   ?? 0), highlight: false },
-                      { label: t("beneficiaries.girls"), value: fmt(benBreakdown?.summary?.girls  ?? 0), highlight: false },
-                      { label: t("beneficiaries.total"), value: fmt(benBreakdown?.summary?.total  ?? 0), highlight: true  },
-                    ].map(s => (
-                      <div key={s.label} className={`rounded-xl border p-4 flex flex-col items-center justify-center gap-1.5 ${s.highlight ? "border-primary/20 bg-primary/[0.03]" : "border-border/60 bg-muted/20"}`}>
-                        <p className={`text-[18px] font-semibold tabular-nums leading-none ${s.highlight ? "text-primary" : "text-foreground"}`}>{s.value}</p>
-                        <p className="text-xs text-muted-foreground font-medium leading-none text-center">{s.label}</p>
-                      </div>
+                      { label: t("beneficiaries.men"),   value: benBreakdown?.summary?.male   ?? 0 },
+                      { label: t("beneficiaries.women"), value: benBreakdown?.summary?.female ?? 0 },
+                      { label: t("beneficiaries.boys"),  value: benBreakdown?.summary?.boys   ?? 0 },
+                      { label: t("beneficiaries.girls"), value: benBreakdown?.summary?.girls  ?? 0 },
+                      { label: t("beneficiaries.total"), value: benBreakdown?.summary?.total  ?? 0, total: true },
+                    ].map((b, index) => (
+                      <Fragment key={b.label}>
+                        {index > 0 && <KPIGroup.Separator />}
+                        <KPI>
+                          <KPI.Header>
+                            {b.total && <KPI.Icon status="success"><Users aria-hidden="true" /></KPI.Icon>}
+                            <KPI.Title>{b.label}</KPI.Title>
+                          </KPI.Header>
+                          <KPI.Content>
+                            <KPI.Value value={b.value} maximumFractionDigits={0} />
+                          </KPI.Content>
+                        </KPI>
+                      </Fragment>
                     ))}
-                  </div>
+                  </KPIGroup>
 
                   {/* Donor Portfolio — approved for all Budget & Donors roles.
                       Data is already scoped server-side to each user's authorised
@@ -5342,36 +5253,12 @@ export default function Dashboard() {
 }
 
 
-function BpSortableHeader({
-  column, label, activeSortColumn, sortDir, onSort, className,
-}: {
-  column: BpSortKey;
-  label: string;
-  activeSortColumn: BpSortKey;
-  sortDir: "asc" | "desc";
-  onSort: (c: BpSortKey) => void;
-  className?: string;
-}) {
-  const isActive = activeSortColumn === column;
-  return (
-    <th
-      scope="col"
-      aria-sort={(isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none") as React.AriaAttributes["aria-sort"]}
-      className={`py-2.5 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap${className ? ` ${className}` : ""}`}
-    >
-      <button type="button" onClick={() => onSort(column)} className="flex items-center gap-1 rounded text-start hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        {label}
-        {isActive
-          ? (sortDir === "asc" ? <ChevronUp className="h-3 w-3 text-primary" /> : <ChevronDown className="h-3 w-3 text-primary" />)
-          : <ChevronUp className="h-3 w-3 opacity-20" />}
-      </button>
-    </th>
-  );
-}
+const PROJECT_STATUS_CHIP: Record<string, "default" | "accent" | "success" | "warning" | "danger"> = {
+  active: "accent", approved: "success", completed: "success", technically_approved: "success",
+  coordination_approved: "success", on_hold: "warning", returned: "warning", submitted: "default",
+  rejected: "danger", cancelled: "danger",
+};
 
-/* Module-scope component — must NOT be defined inside the parent component.
-   See the comment above SortableTableHeader for why inner components break
-   hook reconciliation. */
 export function ProjectBudgetPerformanceTable({
   data, isLoading, isError, onRetry, role, spoStateId: _spoStateId,
 }: ProjectBudgetPerformanceTableProps) {
@@ -5482,13 +5369,89 @@ export function ProjectBudgetPerformanceTable({
   const safePage   = Math.min(currentPage, totalPages);
   const pageRows   = sortedRows.slice((safePage - 1) * BP_PAGE_SIZE, safePage * BP_PAGE_SIZE);
 
-  const handleSort = (key: BpSortKey) => {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
-    setCurrentPage(1);
-  };
 
   const handleFilterChange = () => setCurrentPage(1);
+  const statusText = (status: string) => t(`projectStatus.${status}`, { defaultValue: formatStatusLabel(status) });
+  const sheetRow = viewMode === "table" && expandedId != null ? (data ?? []).find(r => r.projectId === expandedId) ?? null : null;
+
+  const bpColumns: DataGridColumn<ProjectBudgetPerformanceEntry>[] = [
+    { id: "projectCode", header: t("budgetWorkspace.projectCode"), allowsSorting: true, width: 130,
+      cell: (row) => (
+        <Link href={`/projects/${row.projectId}`} className="whitespace-nowrap font-mono text-xs text-[var(--accent)] hover:underline">
+          <bdi dir="ltr">{row.projectCode}</bdi>
+        </Link>
+      ) },
+    { id: "projectTitle", header: t("budgetWorkspace.projectTitle"), isRowHeader: true, allowsSorting: true, width: 240,
+      cell: (row) => (
+        <Link href={`/projects/${row.projectId}`} title={row.projectTitle}
+          aria-label={t("budgetWorkspace.viewProject", { project: row.projectTitle })}
+          className="line-clamp-2 text-sm leading-tight text-foreground hover:text-[var(--accent)]">
+          {row.projectTitle}
+        </Link>
+      ) },
+    { id: "donorName", header: t("budgetWorkspace.donor"), allowsSorting: true, width: 120,
+      cell: (row) => <span className="block max-w-[160px] truncate text-sm text-[var(--muted)]">{row.donorName ?? "—"}</span> },
+    { id: "budgetBasis", header: t("budgetWorkspace.budgetBasis"), allowsSorting: true, width: 170,
+      cell: (row) => {
+        const note = row.budgetBasis === "Project-Level Budget"
+          ? isTc ? t("budgetWorkspace.projectLevelBudgetTcTooltip") : isSpo ? t("budgetWorkspace.projectLevelBudgetSpoTooltip") : undefined
+          : undefined;
+        return (
+          <span className="inline-flex items-center gap-1 whitespace-nowrap text-sm text-[var(--muted)]" title={note}>
+            {formatBudgetBasisLabel(row.budgetBasis)}
+            {note && <Info className="size-3 shrink-0 opacity-50" aria-hidden="true" />}
+          </span>
+        );
+      } },
+    { id: "allocatedBudget", header: t("budgetWorkspace.allocatedBudget"), allowsSorting: true, align: "end", width: 140,
+      cell: (row) => row.hasMissingCurrency
+        ? <span className="text-[var(--muted)]" aria-label={t("budgetWorkspace.missingCurrencyAria")}>—</span>
+        : <span className="whitespace-nowrap text-sm font-medium tabular-nums"><bdi dir="ltr">{fmtMoney(row.allocatedBudget, row.currency)}</bdi></span> },
+    { id: "spent", header: t("budgetWorkspace.spent"), allowsSorting: true, align: "end", width: 130,
+      cell: (row) => row.missingStateExpenditure
+        ? <span className="text-[var(--muted)]" aria-label={t("budgetWorkspace.stateExpenditureUnavailable")}>—</span>
+        : <span className="whitespace-nowrap text-sm tabular-nums"><bdi dir="ltr">{fmtMoney(row.spent, row.currency)}</bdi></span> },
+    { id: "remainingBalance", header: t("budgetWorkspace.remainingBalance"), allowsSorting: true, align: "end", width: 140,
+      cell: (row) => row.missingStateExpenditure
+        ? <span className="text-[var(--muted)]" aria-label={t("budgetWorkspace.stateExpenditureUnavailable")}>—</span>
+        : <span className="whitespace-nowrap text-sm tabular-nums"
+            style={row.remainingBalance != null && row.remainingBalance < 0 ? { color: "var(--danger)", fontWeight: 500 } : undefined}>
+            <bdi dir="ltr">{fmtMoney(row.remainingBalance, row.currency)}</bdi>
+          </span> },
+    { id: "utilisationRate", header: t("budgetWorkspace.utilisationRate"), allowsSorting: true, align: "end", width: 130,
+      cell: (row) => row.missingStateExpenditure
+        ? <span className="text-[var(--muted)]" aria-label={t("budgetWorkspace.stateExpenditureUnavailable")}>—</span>
+        : (
+          <div className="flex items-center justify-end gap-2">
+            <span className="text-sm tabular-nums"><bdi dir="ltr">{pct(row.utilisationRate)}</bdi></span>
+            {row.utilisationRate != null && (
+              <div className="h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-[var(--default)]" role="progressbar"
+                aria-valuenow={Math.round(Math.min(100, row.utilisationRate))} aria-valuemin={0} aria-valuemax={100}
+                aria-label={t("budgetWorkspace.utilisationValue", { value: pct(row.utilisationRate) })}>
+                <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.min(100, Math.max(0, row.utilisationRate))}%` }} />
+              </div>
+            )}
+          </div>
+        ) },
+    { id: "projectStatus", header: t("budgetWorkspace.projectStatus"), allowsSorting: true, width: 130,
+      cell: (row) => row.projectStatus
+        ? <Chip size="sm" variant="soft" color={PROJECT_STATUS_CHIP[row.projectStatus] ?? "default"}>{statusText(row.projectStatus)}</Chip>
+        : <span className="text-[var(--muted)]">—</span> },
+    { id: "actions", header: <span className="sr-only">{t("budgetWorkspace.action")}</span>, align: "end", width: 150,
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-1">
+          <HButton size="sm" variant="ghost" onPress={() => setExpandedId(row.projectId)}
+            aria-label={t("budgetWorkspace.expandDetails", { project: row.projectCode })}>
+            {t("budgetWorkspace.details")}
+          </HButton>
+          <HLink href={`/projects/${row.projectId}`} className="inline-flex items-center gap-0.5 whitespace-nowrap text-sm no-underline"
+            aria-label={t("budgetWorkspace.viewProject", { project: row.projectCode })}>
+            {t("budgetWorkspace.view")}
+            <ChevronRight className="h-3 w-3 rtl:rotate-180" aria-hidden="true" />
+          </HLink>
+        </div>
+      ) },
+  ];
 
   // ── Loading / error / empty states ──────────────────────────────────
   if (isLoading) return <ProjectBudgetPerformanceSkeleton mode={viewMode as RecordRegistryView} />;
@@ -5520,93 +5483,80 @@ export function ProjectBudgetPerformanceTable({
   return (
     <div className="space-y-4">
       {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2" aria-label={t("budgetWorkspace.projectSummary")}>
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label={t("budgetWorkspace.projectSummary")}>
         {[
-          { label: t("budgetWorkspace.projectsWithBudget"), value: summaryStats.withBudget },
-          { label: t("budgetWorkspace.projectsWithoutBudget"), value: summaryStats.withoutBudget },
-          { label: t("budgetWorkspace.projectsWithExpenditure"), value: summaryStats.withExpenditure },
+          { label: t("budgetWorkspace.projectsWithBudget"), value: summaryStats.withBudget, warn: false },
+          { label: t("budgetWorkspace.projectsWithoutBudget"), value: summaryStats.withoutBudget, warn: false },
+          { label: t("budgetWorkspace.projectsWithExpenditure"), value: summaryStats.withExpenditure, warn: false },
           { label: t("budgetWorkspace.projectsWithNegativeBalance"), value: summaryStats.negativeBalance, warn: summaryStats.negativeBalance > 0 },
-          { label: t("budgetWorkspace.currenciesInUse"), value: summaryStats.currencies },
-        ].map(s => (
-          <div
-            key={s.label}
-            className={`rounded-lg border px-3 py-2.5 ${("warn" in s && s.warn) ? "border-amber-200/70 dark:border-amber-800/40 bg-amber-50/30 dark:bg-amber-950/10" : "border-border/50 bg-muted/20"}`}
-          >
-            <p className={`text-[18px] font-semibold tabular-nums leading-none ${("warn" in s && s.warn) ? "text-amber-700 dark:text-amber-400" : "text-foreground"}`}>
-              {s.value}
-            </p>
-            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 leading-snug">{s.label}</p>
+          { label: t("budgetWorkspace.currenciesInUse"), value: summaryStats.currencies, warn: false },
+        ].map(stat => (
+          <div key={stat.label} className="flex flex-col-reverse gap-1 rounded-xl bg-[var(--default)] px-3 py-2.5">
+            <dt className="text-xs text-[var(--muted)]">{stat.label}</dt>
+            <dd className="text-xl font-semibold tabular-nums leading-none" style={{ color: stat.warn ? "var(--warning)" : "var(--foreground)" }}>
+              {stat.value}
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
 
       {/* Projects-style registry toolbar: controls at the logical start, presentation at the end. */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5" role="group" aria-label={t("budgetWorkspace.projectToolbar")}>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5" role="group" aria-label={t("budgetWorkspace.projectToolbar")}>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <div className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground select-none">
-            <Filter className="h-4 w-4" aria-hidden="true" />
+          <div className="flex shrink-0 items-center gap-1.5 text-sm font-medium text-[var(--muted)] select-none">
+            <Filter className="size-4" aria-hidden="true" />
             {t("common:filter")}
           </div>
-          <Separator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
-          <div className="relative min-w-[14rem] flex-1">
-          <Search className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" aria-hidden="true" />
-          <Input
-            type="search"
-            placeholder={t("budgetWorkspace.searchProjects")}
-            value={search}
-            onChange={e => { setSearch(e.target.value); handleFilterChange(); }}
-            className="h-10 ps-8 text-sm border-border/60"
-            aria-label={t("budgetWorkspace.searchProjects")}
+          <HSeparator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
+          <SearchField value={search} onChange={(v) => { setSearch(v); handleFilterChange(); }} aria-label={t("budgetWorkspace.searchProjects")} className="min-w-[14rem] flex-1">
+            <SearchField.Group className="w-full">
+              <SearchField.SearchIcon />
+              <SearchField.Input placeholder={t("budgetWorkspace.searchProjects")} className="h-10" />
+              <SearchField.ClearButton />
+            </SearchField.Group>
+          </SearchField>
+          <SelectField
+            aria-label={t("budgetWorkspace.filterProjectStatus")}
+            value={statusFilter}
+            onChange={v => { setStatusFilter(v); handleFilterChange(); }}
+            triggerClassName="h-10 min-w-[8.75rem]"
+            options={[{ value: "all", label: t("budgetWorkspace.allStatuses") }, ...allStatuses.map(st => ({ value: st, label: statusText(st) }))]}
+          />
+          {allCurrencies.length > 1 && (
+            <SelectField
+              aria-label={t("budgetWorkspace.filterCurrency")}
+              value={currencyFilter}
+              onChange={v => { setCurrencyFilter(v); handleFilterChange(); }}
+              triggerClassName="h-10 min-w-[7.5rem]"
+              options={[{ value: "all", label: t("budgetWorkspace.allCurrencies") }, ...allCurrencies.map(c => ({ value: c, label: c }))]}
+            />
+          )}
+          <SelectField
+            aria-label={t("budgetWorkspace.filterBudgetBasis")}
+            value={basisFilter}
+            onChange={v => { setBasisFilter(v as BpBasisFilter); handleFilterChange(); }}
+            triggerClassName="h-10 min-w-[10rem]"
+            options={[
+              { value: "all", label: t("budgetWorkspace.allBudgetBases") },
+              { value: "Project-Level Budget", label: t("budgetWorkspace.projectBudgetBasis") },
+              { value: "State Allocation", label: t("budgetWorkspace.stateAllocation") },
+            ]}
+          />
+          <SelectField
+            aria-label={t("budgetWorkspace.filterDataAvailability")}
+            value={dataAvailFilter}
+            onChange={v => { setDataAvailFilter(v as BpDataAvailFilter); handleFilterChange(); }}
+            triggerClassName="h-10 min-w-[10rem]"
+            options={[
+              { value: "all", label: t("budgetWorkspace.allData") },
+              { value: "with_budget", label: t("budgetWorkspace.withBudget") },
+              { value: "without_budget", label: t("budgetWorkspace.withoutBudget") },
+              { value: "missing_currency", label: t("budgetWorkspace.missingCurrency") },
+              { value: "missing_state_expenditure", label: t("budgetWorkspace.missingStateExpenditure") },
+            ]}
           />
         </div>
-        {/* Status filter */}
-        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); handleFilterChange(); }}>
-          <SelectTrigger className="h-10 w-auto min-w-[8.75rem] text-sm border-border/60" aria-label={t("budgetWorkspace.filterProjectStatus")}>
-            <SelectValue placeholder={t("budgetWorkspace.allStatuses")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("budgetWorkspace.allStatuses")}</SelectItem>
-            {allStatuses.map(s => <SelectItem key={s} value={s}>{formatStatusLabel(s)}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {/* Currency filter */}
-        {allCurrencies.length > 1 && (
-            <Select value={currencyFilter} onValueChange={v => { setCurrencyFilter(v); handleFilterChange(); }}>
-              <SelectTrigger className="h-10 w-auto min-w-[7.5rem] text-sm border-border/60" aria-label={t("budgetWorkspace.filterCurrency")}>
-              <SelectValue placeholder={t("budgetWorkspace.allCurrencies")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("budgetWorkspace.allCurrencies")}</SelectItem>
-              {allCurrencies.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-        {/* Budget Basis filter */}
-        <Select value={basisFilter} onValueChange={v => { setBasisFilter(v as BpBasisFilter); handleFilterChange(); }}>
-          <SelectTrigger className="h-10 w-auto min-w-[10rem] text-sm border-border/60" aria-label={t("budgetWorkspace.filterBudgetBasis")}>
-            <SelectValue placeholder={t("budgetWorkspace.allBudgetBases")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("budgetWorkspace.allBudgetBases")}</SelectItem>
-            <SelectItem value="Project-Level Budget">{t("budgetWorkspace.projectBudgetBasis")}</SelectItem>
-            <SelectItem value="State Allocation">{t("budgetWorkspace.stateAllocation")}</SelectItem>
-          </SelectContent>
-        </Select>
-        {/* Data Availability filter */}
-        <Select value={dataAvailFilter} onValueChange={v => { setDataAvailFilter(v as BpDataAvailFilter); handleFilterChange(); }}>
-          <SelectTrigger className="h-10 w-auto min-w-[10rem] text-sm border-border/60" aria-label={t("budgetWorkspace.filterDataAvailability")}>
-            <SelectValue placeholder={t("budgetWorkspace.allData")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("budgetWorkspace.allData")}</SelectItem>
-            <SelectItem value="with_budget">{t("budgetWorkspace.withBudget")}</SelectItem>
-            <SelectItem value="without_budget">{t("budgetWorkspace.withoutBudget")}</SelectItem>
-            <SelectItem value="missing_currency">{t("budgetWorkspace.missingCurrency")}</SelectItem>
-            <SelectItem value="missing_state_expenditure">{t("budgetWorkspace.missingStateExpenditure")}</SelectItem>
-          </SelectContent>
-        </Select>
-        </div>
-        <Separator orientation="vertical" className="hidden h-6 shrink-0 md:block" />
+        <HSeparator orientation="vertical" className="hidden h-6 shrink-0 md:block" />
         <div className="shrink-0" aria-label={t("budgetWorkspace.projectView")}>
           <ViewModeSwitcher
             available={[...RECORD_REGISTRY_VIEWS]}
@@ -5617,7 +5567,7 @@ export function ProjectBudgetPerformanceTable({
       </div>
 
       {(isTc || isSpo) && (
-        <p className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+        <p className="rounded-xl bg-[var(--default)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("budgetWorkspace.projectBasisContext")}
         </p>
       )}
@@ -5625,292 +5575,55 @@ export function ProjectBudgetPerformanceTable({
       {/* The table retains the full analytical baseline. Card and compact modes
           reuse its authorised, filtered, sorted and paginated page rows. */}
       {viewMode === "table" ? (
-      <div className="rounded-xl border border-border/60 overflow-hidden overflow-x-auto" role="region" aria-label={t("budgetWorkspace.projectTable")}>
-        <Table className="min-w-[1060px]">
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <BpSortableHeader column="projectCode" label={t("budgetWorkspace.projectCode")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} className="text-start" />
-              <BpSortableHeader column="projectTitle" label={t("budgetWorkspace.projectTitle")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} className="text-start" />
-              <BpSortableHeader column="donorName" label={t("budgetWorkspace.donor")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} className="text-start" />
-              <BpSortableHeader column="budgetBasis" label={t("budgetWorkspace.budgetBasis")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} className="text-start" />
-              <BpSortableHeader column="allocatedBudget" label={t("budgetWorkspace.allocatedBudget")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <BpSortableHeader column="spent" label={t("budgetWorkspace.spent")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <BpSortableHeader column="remainingBalance" label={t("budgetWorkspace.remainingBalance")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <BpSortableHeader column="utilisationRate" label={t("budgetWorkspace.utilisationRate")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <BpSortableHeader column="projectStatus" label={t("budgetWorkspace.projectStatus")} activeSortColumn={sortKey} sortDir={sortDir} onSort={handleSort} className="text-start" />
-              <th scope="col" className="py-2.5 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap text-end">{t("budgetWorkspace.action")}</th>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {pageRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={BP_TABLE_COLS} className="text-center py-10 text-sm text-muted-foreground">
-                  {filteredRows.length === 0 && (data?.length ?? 0) > 0
-                    ? t("budgetWorkspace.noProjectsFiltered")
-                    : t("budgetWorkspace.noProjectsAvailable")}
-                </TableCell>
-              </TableRow>
-            ) : pageRows.flatMap(row => {
-              const isExp  = expandedId === row.projectId;
-              const remNeg = row.remainingBalance != null && row.remainingBalance < 0;
-              const { variant: statusVariant, className: statusCls } = statusBadgeVariant(row.projectStatus ?? "");
-
-              const mainRow = (
-                <TableRow
-                  key={row.projectId}
-                  className={`transition-colors ${isExp ? "bg-muted/20" : "hover:bg-muted/10"}`}
-                >
-                  {/* Project Code */}
-                  <TableCell className="py-2.5 px-3 align-middle">
-                    <Link href={`/projects/${row.projectId}`}>
-                      <span className="font-mono text-xs text-primary hover:underline cursor-pointer whitespace-nowrap"><bdi dir="ltr">{row.projectCode}</bdi></span>
-                    </Link>
-                  </TableCell>
-                  {/* Project Title — max 2 lines; full title in tooltip */}
-                  <TableCell className="py-2.5 px-3 align-middle max-w-[220px]">
-                    <UITooltipProvider>
-                      <UITooltip>
-                          <UITooltipTrigger asChild>
-                            <Link
-                              href={`/projects/${row.projectId}`}
-                              className="text-xs text-foreground line-clamp-2 leading-tight block hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                              aria-label={t("budgetWorkspace.viewProject", { project: row.projectTitle })}
-                            >
-                              {row.projectTitle}
-                            </Link>
-                          </UITooltipTrigger>
-                        <UITooltipContent side="top" className="max-w-[320px] text-xs">
-                          {row.projectTitle}
-                        </UITooltipContent>
-                      </UITooltip>
-                    </UITooltipProvider>
-                  </TableCell>
-                  {/* Donor */}
-                  <TableCell className="py-2.5 px-3 align-middle max-w-[140px]">
-                    <span className="text-xs text-muted-foreground truncate block">{row.donorName ?? "—"}</span>
-                  </TableCell>
-                  {/* Budget Basis — full approved labels, no performance colours */}
-                  <TableCell className="py-2.5 px-3 align-middle">
-                    <UITooltipProvider>
-                      <UITooltip>
-                        <UITooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-                            {formatBudgetBasisLabel(row.budgetBasis)}
-                            {((isTc || isSpo) && row.budgetBasis === "Project-Level Budget") && (
-                              <Info className="h-3 w-3 opacity-40 shrink-0" aria-hidden="true" />
-                            )}
-                          </span>
-                        </UITooltipTrigger>
-                        {isTc && row.budgetBasis === "Project-Level Budget" && (
-                          <UITooltipContent side="top" className="max-w-[240px] text-xs">
-                            {t("budgetWorkspace.projectLevelBudgetTcTooltip")}
-                          </UITooltipContent>
-                        )}
-                        {isSpo && row.budgetBasis === "Project-Level Budget" && (
-                          <UITooltipContent side="top" className="max-w-[280px] text-xs">
-                            {t("budgetWorkspace.projectLevelBudgetSpoTooltip")}
-                          </UITooltipContent>
-                        )}
-                      </UITooltip>
-                    </UITooltipProvider>
-                  </TableCell>
-                  {/* Allocated Budget — ISO code + amount inline */}
-                  <TableCell className="py-2.5 px-3 align-middle text-end">
-                    <span className="text-xs font-medium tabular-nums whitespace-nowrap">
-                      {row.hasMissingCurrency
-                        ? <span className="text-muted-foreground" aria-label={t("budgetWorkspace.missingCurrencyAria")}>—</span>
-                        : <bdi dir="ltr">{fmtMoney(row.allocatedBudget, row.currency)}</bdi>
-                      }
-                    </span>
-                  </TableCell>
-                  {/* Spent — neutral primary text; "—" for State Allocation (no reliable state-level source) */}
-                  <TableCell className="py-2.5 px-3 align-middle text-end">
-                    {row.missingStateExpenditure
-                      ? <span className="text-xs text-muted-foreground" aria-label={t("budgetWorkspace.stateExpenditureUnavailable")}>—</span>
-                      : <span className="text-xs tabular-nums text-foreground whitespace-nowrap"><bdi dir="ltr">{fmtMoney(row.spent, row.currency)}</bdi></span>
-                    }
-                  </TableCell>
-                  {/* Remaining Balance — neutral positive; factual warning only for negative */}
-                  <TableCell className="py-2.5 px-3 align-middle text-end">
-                    {row.missingStateExpenditure
-                      ? <span className="text-xs text-muted-foreground" aria-label={t("budgetWorkspace.stateExpenditureUnavailable")}>—</span>
-                      : <span className={`text-xs tabular-nums whitespace-nowrap ${remNeg ? "text-destructive dark:text-red-400 font-medium" : "text-foreground"}`}>
-                          <bdi dir="ltr">{fmtMoney(row.remainingBalance, row.currency)}</bdi>
-                        </span>
-                    }
-                  </TableCell>
-                  {/* Utilisation Rate — neutral analytical bar, no colour thresholds */}
-                  <TableCell className="py-2.5 px-3 align-middle">
-                    {row.missingStateExpenditure
-                      ? <div className="text-end"><span className="text-xs text-muted-foreground" aria-label={t("budgetWorkspace.stateExpenditureUnavailable")}>—</span></div>
-                      : <div className="flex items-center gap-2 justify-end">
-                          <span className="text-xs tabular-nums text-foreground"><bdi dir="ltr">{pct(row.utilisationRate)}</bdi></span>
-                          {row.utilisationRate != null && (
-                            <div
-                              className="h-1.5 w-12 bg-muted/50 rounded-full overflow-hidden shrink-0"
-                              role="progressbar"
-                              aria-valuenow={Math.round(Math.min(100, row.utilisationRate))}
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                              aria-label={t("budgetWorkspace.utilisationValue", { value: pct(row.utilisationRate) })}
-                            >
-                              <div
-                                className="h-full rounded-full bg-primary/60 transition-[width] duration-300"
-                                style={{ width: `${Math.min(100, Math.max(0, row.utilisationRate))}%` }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                    }
-                  </TableCell>
-                  {/* Project Status — use approved badge architecture */}
-                  <TableCell className="py-2.5 px-3 align-middle">
-                    {row.projectStatus
-                      ? <Badge variant={statusVariant} className={`text-[10px] px-1.5 py-0.5 ${statusCls ?? ""}`}>
-                          {formatStatusLabel(row.projectStatus)}
-                        </Badge>
-                      : <span className="text-xs text-muted-foreground">—</span>
-                    }
-                  </TableCell>
-                  {/* Action — expand toggle + View Project link (independent siblings, no nesting) */}
-                  <TableCell className="py-2.5 px-3 align-middle">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <UITooltipProvider>
-                        <UITooltip>
-                          <UITooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
-                              onClick={() => setExpandedId(isExp ? null : row.projectId)}
-                              aria-expanded={isExp}
-                              aria-controls={`bp-detail-${row.projectId}`}
-                              aria-label={isExp
-                                ? t("budgetWorkspace.collapseDetails", { project: row.projectCode })
-                                : t("budgetWorkspace.expandDetails", { project: row.projectCode })}
-                            >
-                              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${isExp ? "" : "-rotate-90"}`} />
-                            </button>
-                          </UITooltipTrigger>
-                          <UITooltipContent side="top" className="text-xs">
-                            {isExp ? t("budgetWorkspace.hideDetails") : t("budgetWorkspace.showDetails")}
-                          </UITooltipContent>
-                        </UITooltip>
-                      </UITooltipProvider>
-                      <Link
-                        href={`/projects/${row.projectId}`}
-                        aria-label={t("budgetWorkspace.viewProject", { project: row.projectCode })}
-                      >
-                        <span className="inline-flex items-center gap-0.5 h-6 px-2 text-xs text-primary hover:underline cursor-pointer whitespace-nowrap">
-                          {t("budgetWorkspace.view")}
-                          <ChevronRight className="h-3 w-3 rtl:rotate-180" />
-                        </span>
-                      </Link>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-
-              if (!isExp) return [mainRow];
-
-              const detailRow = (
-                <TableRow key={`bp-detail-${row.projectId}`} className="bg-muted/10">
-                  <TableCell colSpan={BP_TABLE_COLS} id={`bp-detail-${row.projectId}`} className="px-5 pb-4 pt-2">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3 text-xs">
-                      <div className="col-span-2 sm:col-span-3 lg:col-span-4">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailTitle")}</p>
-                        <p className="text-foreground leading-snug">{row.projectTitle}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailCode")}</p>
-                        <p className="font-mono text-foreground">{row.projectCode}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailDonor")}</p>
-                        <p className="text-foreground">{row.donorName ?? "—"}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailBudgetBasis")}</p>
-                        <p className="text-foreground">{formatBudgetBasisLabel(row.budgetBasis)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailCurrency")}</p>
-                        <p className="text-foreground">
-                          {row.currency
-                            ? row.currency
-                            : <span className="text-amber-600 dark:text-amber-400 font-medium">{t("budgetWorkspace.missingCurrency")}</span>
-                          }
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailAllocated")}</p>
-                        <p className="tabular-nums text-foreground">{fmtMoney(row.allocatedBudget, row.currency)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailExpenditure")}</p>
-                        <p className="tabular-nums text-foreground">
-                          {row.missingStateExpenditure ? "—" : fmtMoney(row.spent, row.currency)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailRemaining")}</p>
-                        <p className={`tabular-nums ${row.missingStateExpenditure ? "text-foreground" : (row.remainingBalance != null && row.remainingBalance < 0 ? "text-destructive dark:text-red-400 font-medium" : "text-foreground")}`}>
-                          {row.missingStateExpenditure ? "—" : fmtMoney(row.remainingBalance, row.currency)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailUtilisation")}</p>
-                        <p className="tabular-nums text-foreground">{row.missingStateExpenditure ? "—" : pct(row.utilisationRate)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailStatus")}</p>
-                        <p className="text-foreground">{formatStatusLabel(row.projectStatus ?? "")}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailStates")}</p>
-                        <p className="text-foreground"><LocalizedStateNames names={row.stateNames} namesAr={(row as unknown as { stateNamesAr?: string[] }).stateNamesAr} /></p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailSector")}</p>
-                        <p className="text-foreground">{row.sector ?? "—"}</p>
-                      </div>
-                      {isSpo && row.stateAllocationAmount != null && (
-                        <div>
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailStateAllocation")}</p>
-                          <p className="tabular-nums text-foreground font-medium">{fmtMoney(row.stateAllocationAmount, row.currency)}</p>
-                        </div>
-                      )}
-                      {/* Project-Level Expenditure — informational context for State Allocation rows only */}
-                      {row.missingStateExpenditure && row.projectLevelSpent != null && (
-                        <div>
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectLevelExpenditureLabel")}</p>
-                          <p className="tabular-nums text-muted-foreground">{fmtMoney(row.projectLevelSpent, row.currency)}</p>
-                          <p className="text-[9px] text-muted-foreground/70 mt-0.5 leading-tight">{t("budgetWorkspace.projectLevelExpenditureNote")}</p>
-                        </div>
-                      )}
-                      {row.lastFinancialUpdate && (
-                        <div>
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{t("budgetWorkspace.projectDetailLastUpdate")}</p>
-                          <p className="text-foreground">{row.lastFinancialUpdate.slice(0, 10)}</p>
-                        </div>
-                      )}
-                      {/* State-level Expenditure unavailable notice */}
-                      {row.missingStateExpenditure && (
-                        <div className="col-span-2 sm:col-span-3 lg:col-span-4 pt-1">
-                          <p className="text-[10px] text-amber-700 dark:text-amber-400 italic leading-snug">
-                            {t("budgetWorkspace.stateExpenditureUnavailableNote")}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-
-              return [mainRow, detailRow];
-            })}
-          </TableBody>
-        </Table>
-      </div>
+        <>
+          <DataGrid
+            aria-label={t("budgetWorkspace.projectTable")}
+            data={pageRows}
+            columns={bpColumns}
+            getRowId={(row) => row.projectId}
+            contentClassName="min-w-[1380px]"
+            sortDescriptor={{ column: sortKey, direction: sortDir === "asc" ? "ascending" : "descending" }}
+            onSortChange={(d) => { setSortKey(d.column as BpSortKey); setSortDir(d.direction === "ascending" ? "asc" : "desc"); setCurrentPage(1); }}
+            renderEmptyState={() => (
+              <p className="py-8 text-center text-sm text-[var(--muted)]">
+                {filteredRows.length === 0 && (data?.length ?? 0) > 0
+                  ? t("budgetWorkspace.noProjectsFiltered")
+                  : t("budgetWorkspace.noProjectsAvailable")}
+              </p>
+            )}
+          />
+          {/* Row details — HeroUI Pro Sheet from the inline end. */}
+          <Sheet
+            isOpen={sheetRow != null}
+            onOpenChange={(open) => { if (!open) setExpandedId(null); }}
+            placement={document.documentElement.dir === "rtl" ? "left" : "right"}
+          >
+            <Sheet.Backdrop>
+              <Sheet.Content className="w-[min(440px,100vw)]">
+                <Sheet.Dialog>
+                  <Sheet.CloseTrigger />
+                  {sheetRow && (
+                    <>
+                      <Sheet.Header className="ltr:pe-10 rtl:ps-10">
+                        <span className="font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{sheetRow.projectCode}</bdi></span>
+                        <Sheet.Heading>{sheetRow.projectTitle}</Sheet.Heading>
+                        {sheetRow.donorName && <p className="text-sm text-[var(--muted)]">{sheetRow.donorName}</p>}
+                      </Sheet.Header>
+                      <Sheet.Body>
+                        <ProjectBudgetCondensedDetails row={sheetRow} isSpo={isSpo} compact />
+                      </Sheet.Body>
+                      <Sheet.Footer>
+                        <HLink href={`/projects/${sheetRow.projectId}`} className="inline-flex items-center gap-1 text-sm no-underline">
+                          {t("budgetWorkspace.view")} <ChevronRight className="h-3 w-3 rtl:rotate-180" aria-hidden="true" />
+                        </HLink>
+                      </Sheet.Footer>
+                    </>
+                  )}
+                </Sheet.Dialog>
+              </Sheet.Content>
+            </Sheet.Backdrop>
+          </Sheet>
+        </>
       ) : viewMode === "card" ? (
         pageRows.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/60 py-10 text-center text-sm text-muted-foreground">
@@ -5960,7 +5673,7 @@ export function ProjectBudgetPerformanceTable({
       {totalPages > 1 && (
         <div className="flex items-center justify-between gap-4 pt-1">
           <p className="text-xs text-muted-foreground" aria-live="polite">
-            Showing {(safePage - 1) * BP_PAGE_SIZE + 1}–{Math.min(safePage * BP_PAGE_SIZE, sortedRows.length)} of {sortedRows.length} projects
+            {t("budgetWorkspace.donorPaginationInfo", { from: (safePage - 1) * BP_PAGE_SIZE + 1, to: Math.min(safePage * BP_PAGE_SIZE, sortedRows.length), total: sortedRows.length, entity: t("budgetWorkspace.projectEntity") })}
           </p>
           <Pagination className="w-auto mx-0">
             <PaginationContent>
@@ -6022,7 +5735,6 @@ type BpDataAvailFilter = "all" | "with_budget" | "without_budget" | "missing_cur
 
 const BP_PAGE_SIZE = 10;
 
-const BP_TABLE_COLS = 10 as const;
 
 type BpBasisFilter = "all" | "Project-Level Budget" | "State Allocation";
 
