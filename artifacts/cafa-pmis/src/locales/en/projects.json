@@ -59,7 +59,8 @@
     "budget": "Budget",
     "beneficiaries": "Beneficiaries",
     "endDate": "End Date",
-    "actions": "Actions"
+    "actions": "Actions",
+    "sectorDonor": "Sector / Donor"
   },
   "coverage": {
     "stateNotAssigned": "State Not Assigned",

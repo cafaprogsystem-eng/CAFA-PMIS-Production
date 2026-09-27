@@ -59,7 +59,8 @@
     "budget": "الميزانية",
     "beneficiaries": "المستفيدون",
     "endDate": "تاريخ النهاية",
-    "actions": "الإجراءات"
+    "actions": "الإجراءات",
+    "sectorDonor": "القطاع / الجهة المانحة"
   },
   "coverage": {
     "stateNotAssigned": "لم تُعيَّن ولاية",

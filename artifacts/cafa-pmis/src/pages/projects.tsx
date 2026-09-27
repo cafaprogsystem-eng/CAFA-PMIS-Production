@@ -303,20 +303,29 @@ export default function ProjectsPage() {
   );
 
   const isAr = i18n.language.startsWith("ar");
+  // English titles inside the Arabic UI keep their own direction (dir="auto")
+  // so truncation lands at the end of the text, while the inline-block
+  // wrapper keeps them aligned with the column.
+  // Fixed layout with explicit header widths: the grid fits the standard
+  // desktop content width (1,128 px), so no column slides under the pinned
+  // project/actions columns. Narrower screens scroll between the pins.
   const columns = useMemo<DataGridColumn<ProjectItem>[]>(() => [
-    { id: "project", header: t("table.project"), isRowHeader: true, width: 240, pinned: "start",
+    { id: "project", header: t("table.project"), isRowHeader: true, width: 206, pinned: "start", headerClassName: "w-[206px]",
       cell: (p) => (
         <div className="flex min-w-0 flex-col">
-          <span className="truncate font-medium text-foreground" title={p.title}>{p.title}</span>
+          <span className="block"><span dir="auto" className="inline-block max-w-full truncate align-top font-medium text-foreground" title={p.title}>{p.title}</span></span>
           {p.code && <span className="truncate font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{p.code}</bdi></span>}
         </div>
       ) },
-    { id: "status", header: t("table.status"), width: 120, cell: (p) => <ProjectStatusBadge status={p.status} /> },
-    { id: "sector", header: t("table.sector"), width: 140,
-      cell: (p) => <span className="block truncate text-sm" title={p.sector}>{p.sector}</span> },
-    { id: "donor", header: t("table.donor"), width: 120,
-      cell: (p) => <span className="block truncate text-sm text-[var(--muted)]" title={p.donor}>{p.donor}</span> },
-    { id: "states", header: t("table.states"), width: 160,
+    { id: "status", header: t("table.status"), width: 110, headerClassName: "w-[110px]", cell: (p) => <ProjectStatusBadge status={p.status} /> },
+    { id: "sectorDonor", header: t("table.sectorDonor"), width: 140, headerClassName: "w-[140px]",
+      cell: (p) => (
+        <div className="flex min-w-0 flex-col">
+          <span className="block"><span dir="auto" className="inline-block max-w-full truncate align-top text-sm" title={p.sector}>{p.sector}</span></span>
+          <span className="block"><span dir="auto" className="inline-block max-w-full truncate align-top text-xs text-[var(--muted)]" title={p.donor}>{p.donor}</span></span>
+        </div>
+      ) },
+    { id: "states", header: t("table.states"), width: 116, headerClassName: "w-[116px]",
       cell: (p) => {
         const names = isAr && p.stateNamesAr?.length === p.stateNames.length ? p.stateNamesAr : p.stateNames;
         return (
@@ -329,26 +338,32 @@ export default function ProjectsPage() {
           </div>
         );
       } },
-    { id: "budget", header: t("table.budget"), width: 160,
+    { id: "budget", header: t("table.budget"), width: 140, headerClassName: "w-[140px]",
       cell: (p) => (
         <div className="flex flex-col gap-1">
-          <ProgressBar value={p.budgetSpent} max={p.budgetTotal} color="bg-secondary" label={`${t("table.budget")}: ${formatCurrency(p.budgetSpent)} / ${formatCurrency(p.budgetTotal)}`} />
-          <span className="whitespace-nowrap text-xs tabular-nums text-[var(--muted)]"><bdi dir="ltr">{formatCurrency(p.budgetSpent)} / {formatCurrency(p.budgetTotal)}</bdi></span>
+          <ProgressBar value={p.budgetSpent} max={p.budgetTotal} color="bg-secondary" label={`${t("table.budget")}: ${formatCurrency(p.budgetSpent)} ${t("detail.of")} ${formatCurrency(p.budgetTotal)}`} />
+          <span className="text-xs leading-tight tabular-nums">
+            <bdi dir="ltr" className="block font-medium text-foreground">{formatCurrency(p.budgetSpent)}</bdi>
+            <span className="text-[var(--muted)]">{t("detail.of")} <bdi dir="ltr">{formatCurrency(p.budgetTotal)}</bdi></span>
+          </span>
         </div>
       ) },
-    { id: "beneficiaries", header: t("table.beneficiaries"), width: 140,
+    { id: "beneficiaries", header: t("table.beneficiaries"), width: 120, headerClassName: "w-[120px]",
       cell: (p) => (
         <div className="flex flex-col gap-1">
-          <ProgressBar value={p.beneficiariesReached} max={p.beneficiariesTarget} label={`${t("table.beneficiaries")}: ${p.beneficiariesReached.toLocaleString()} / ${p.beneficiariesTarget.toLocaleString()}`} />
-          <span className="whitespace-nowrap text-xs tabular-nums text-[var(--muted)]"><bdi dir="ltr">{p.beneficiariesReached.toLocaleString()} / {p.beneficiariesTarget.toLocaleString()}</bdi></span>
+          <ProgressBar value={p.beneficiariesReached} max={p.beneficiariesTarget} label={`${t("table.beneficiaries")}: ${p.beneficiariesReached.toLocaleString()} ${t("detail.of")} ${p.beneficiariesTarget.toLocaleString()}`} />
+          <span className="text-xs leading-tight tabular-nums">
+            <bdi dir="ltr" className="block font-medium text-foreground">{p.beneficiariesReached.toLocaleString()}</bdi>
+            <span className="text-[var(--muted)]">{t("detail.of")} <bdi dir="ltr">{p.beneficiariesTarget.toLocaleString()}</bdi></span>
+          </span>
         </div>
       ) },
-    { id: "endDate", header: t("table.endDate"), width: 110,
+    { id: "endDate", header: t("table.endDate"), width: 116, headerClassName: "w-[116px]",
       cell: (p) => {
         const overdue = !!p.endDate && new Date(p.endDate) < new Date() && p.status !== "closed" && p.status !== "completed";
         return <span className={`whitespace-nowrap text-sm ${overdue ? "font-medium text-[var(--danger)]" : "text-[var(--muted)]"}`}><bdi dir="ltr">{formatDate(p.endDate)}</bdi></span>;
       } },
-    { id: "actions", header: <span className="sr-only">{t("table.actions")}</span>, width: 130, pinned: "end", align: "end",
+    { id: "actions", header: <span className="sr-only">{t("table.actions")}</span>, width: 180, pinned: "end", headerClassName: "w-[180px]", align: "end",
       cell: (p) => (
         <div className="flex items-center justify-end gap-1">
           {p.status === "draft" && canContinueEdit && (
@@ -498,7 +513,7 @@ export default function ProjectsPage() {
             columns={columns}
             getRowId={(p) => p.id}
             onRowAction={(key) => openRecord("project", Number(key))}
-            contentClassName="min-w-[1320px]"
+            contentClassName="min-w-[1128px] table-fixed"
             verticalAlign="middle"
           />
         )
