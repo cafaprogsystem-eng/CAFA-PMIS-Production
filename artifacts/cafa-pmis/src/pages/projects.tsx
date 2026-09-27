@@ -97,7 +97,7 @@ function CoverageBadge({ count }: { count: number }) {
 
 /** Percentage bar on HeroUI ProgressBar; `color` is kept for callers and maps
  *  "bg-secondary" (budget spend) to the neutral tone. */
-function ProgressBar({ value, max, color, label }: { value: number; max: number; color?: string; label?: string }) {
+function ProgressBar({ value, max, color, label, className = "min-w-[120px]" }: { value: number; max: number; color?: string; label?: string; className?: string }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
     <HProgressBar
@@ -105,7 +105,7 @@ function ProgressBar({ value, max, color, label }: { value: number; max: number;
       value={pct}
       color="accent"
       aria-label={label ?? `${pct}%`}
-      className="min-w-[120px] gap-1"
+      className={`${className} gap-1`}
     >
       <HProgressBar.Output className="text-xs tabular-nums text-[var(--muted)]" />
       <HProgressBar.Track><HProgressBar.Fill className={color === "bg-secondary" ? "bg-[var(--muted)]" : undefined} /></HProgressBar.Track>
@@ -303,9 +303,10 @@ export default function ProjectsPage() {
   );
 
   const isAr = i18n.language.startsWith("ar");
-  // English titles inside the Arabic UI keep their own direction (dir="auto")
-  // so truncation lands at the end of the text, while the inline-block
-  // wrapper keeps them aligned with the column.
+  // Long text wraps inside the cell instead of truncating (capped at three
+  // lines as a guard; the full value stays in the title tooltip). English
+  // text in the Arabic UI keeps its own direction (dir="auto") while the
+  // inline-block wrapper keeps it aligned with the column.
   // Fixed layout with explicit header widths: the grid fits the standard
   // desktop content width (1,128 px), so no column slides under the pinned
   // project/actions columns. Narrower screens scroll between the pins.
@@ -313,7 +314,7 @@ export default function ProjectsPage() {
     { id: "project", header: t("table.project"), isRowHeader: true, width: 206, pinned: "start", headerClassName: "w-[206px]",
       cell: (p) => (
         <div className="flex min-w-0 flex-col">
-          <span className="block"><span dir="auto" className="inline-block max-w-full truncate align-top font-medium text-foreground" title={p.title}>{p.title}</span></span>
+          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end font-medium leading-snug text-foreground" title={p.title}>{p.title}</span></span>
           {p.code && <span className="truncate font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{p.code}</bdi></span>}
         </div>
       ) },
@@ -321,8 +322,8 @@ export default function ProjectsPage() {
     { id: "sectorDonor", header: t("table.sectorDonor"), width: 140, headerClassName: "w-[140px]",
       cell: (p) => (
         <div className="flex min-w-0 flex-col">
-          <span className="block"><span dir="auto" className="inline-block max-w-full truncate align-top text-sm" title={p.sector}>{p.sector}</span></span>
-          <span className="block"><span dir="auto" className="inline-block max-w-full truncate align-top text-xs text-[var(--muted)]" title={p.donor}>{p.donor}</span></span>
+          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end text-sm leading-snug" title={p.sector}>{p.sector}</span></span>
+          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end text-xs leading-snug text-[var(--muted)]" title={p.donor}>{p.donor}</span></span>
         </div>
       ) },
     { id: "states", header: t("table.states"), width: 116, headerClassName: "w-[116px]",
@@ -341,7 +342,7 @@ export default function ProjectsPage() {
     { id: "budget", header: t("table.budget"), width: 140, headerClassName: "w-[140px]",
       cell: (p) => (
         <div className="flex flex-col gap-1">
-          <ProgressBar value={p.budgetSpent} max={p.budgetTotal} color="bg-secondary" label={`${t("table.budget")}: ${formatCurrency(p.budgetSpent)} ${t("detail.of")} ${formatCurrency(p.budgetTotal)}`} />
+          <ProgressBar className="w-full min-w-0" value={p.budgetSpent} max={p.budgetTotal} color="bg-secondary" label={`${t("table.budget")}: ${formatCurrency(p.budgetSpent)} ${t("detail.of")} ${formatCurrency(p.budgetTotal)}`} />
           <span className="text-xs leading-tight tabular-nums">
             <bdi dir="ltr" className="block font-medium text-foreground">{formatCurrency(p.budgetSpent)}</bdi>
             <span className="text-[var(--muted)]">{t("detail.of")} <bdi dir="ltr">{formatCurrency(p.budgetTotal)}</bdi></span>
@@ -351,7 +352,7 @@ export default function ProjectsPage() {
     { id: "beneficiaries", header: t("table.beneficiaries"), width: 120, headerClassName: "w-[120px]",
       cell: (p) => (
         <div className="flex flex-col gap-1">
-          <ProgressBar value={p.beneficiariesReached} max={p.beneficiariesTarget} label={`${t("table.beneficiaries")}: ${p.beneficiariesReached.toLocaleString()} ${t("detail.of")} ${p.beneficiariesTarget.toLocaleString()}`} />
+          <ProgressBar className="w-full min-w-0" value={p.beneficiariesReached} max={p.beneficiariesTarget} label={`${t("table.beneficiaries")}: ${p.beneficiariesReached.toLocaleString()} ${t("detail.of")} ${p.beneficiariesTarget.toLocaleString()}`} />
           <span className="text-xs leading-tight tabular-nums">
             <bdi dir="ltr" className="block font-medium text-foreground">{p.beneficiariesReached.toLocaleString()}</bdi>
             <span className="text-[var(--muted)]">{t("detail.of")} <bdi dir="ltr">{p.beneficiariesTarget.toLocaleString()}</bdi></span>
