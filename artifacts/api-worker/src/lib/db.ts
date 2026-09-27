@@ -35,6 +35,11 @@ export interface Bindings {
   AI_INTEGRATIONS_OPENAI_BASE_URL?: string;
   NODE_ENV?: string;
   CAFA_DEMO_MODE?: string;
+  HISTORICAL_IMPORT_S3_BUCKET?: string;
+  HISTORICAL_IMPORT_S3_REGION?: string;
+  HISTORICAL_IMPORT_S3_ENDPOINT_URL?: string;
+  HISTORICAL_IMPORT_S3_ACCESS_KEY_ID?: string;
+  HISTORICAL_IMPORT_S3_SECRET_ACCESS_KEY?: string;
 }
 
 export type AppContext = Context<{ Bindings: Bindings; Variables: Variables }>;
