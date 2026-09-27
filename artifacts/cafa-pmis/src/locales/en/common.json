@@ -215,7 +215,6 @@
       "years": "{{count}}y ago"
     }
   },
-
   "calendarWidget": {
     "calendar": "Calendar",
     "calendarOptions": "Calendar options",
@@ -561,13 +560,21 @@
     "changeLocation": "Change location",
     "activeLocation": "Active location",
     "mobileHeading": "Location Scope"
-  }
-  ,"connectionStatus": {
+  },
+  "connectionStatus": {
     "live": "Live updates",
     "liveTitle": "Realtime updates connected",
     "reconnecting": "Reconnecting updates",
     "reconnectingTitle": "Realtime updates are reconnecting",
     "disconnected": "Live updates unavailable",
     "disconnectedTitle": "Realtime updates are disconnected; CAFA connectivity is still checked separately"
+  },
+  "recordDetails": {
+    "title": "Record details",
+    "close": "Close record details",
+    "loading": "Loading record details",
+    "projectTitle": "Project details",
+    "planTitle": "Plan details",
+    "description": "Authorised record information and actions"
   }
 }

@@ -216,7 +216,6 @@
       "years": "منذ {{count}} سنة"
     }
   },
-
   "calendarWidget": {
     "calendar": "التقويم",
     "calendarOptions": "خيارات التقويم",
@@ -569,13 +568,21 @@
     "retry": "حاول مجدداً",
     "downloadFile": "تنزيل الملف",
     "fileUnavailable": "الملف غير متاح"
-  }
-  ,"connectionStatus": {
+  },
+  "connectionStatus": {
     "live": "التحديثات المباشرة",
     "liveTitle": "التحديثات المباشرة متصلة",
     "reconnecting": "جارٍ إعادة اتصال التحديثات",
     "reconnectingTitle": "جارٍ إعادة اتصال التحديثات المباشرة",
     "disconnected": "التحديثات المباشرة غير متاحة",
     "disconnectedTitle": "التحديثات المباشرة منفصلة؛ يتم التحقق من اتصال CAFA بشكل مستقل"
+  },
+  "recordDetails": {
+    "title": "تفاصيل السجل",
+    "close": "إغلاق تفاصيل السجل",
+    "loading": "جارٍ تحميل تفاصيل السجل",
+    "projectTitle": "تفاصيل المشروع",
+    "planTitle": "تفاصيل الخطة",
+    "description": "معلومات السجل والإجراءات المصرح بها"
   }
 }

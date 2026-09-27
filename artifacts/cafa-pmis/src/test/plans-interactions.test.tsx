@@ -23,6 +23,8 @@ vi.mock("react-i18next", () => ({
       continueEditing: "Continue Editing",
       continueEditingAriaLabel: `Continue Editing ${options?.title ?? ""}`,
       "recordDetails.close": "Close record details",
+      "recordDetails.planTitle": "Plan details",
+      "recordDetails.projectTitle": "Project details",
       "pagination.firstPage": "First page",
       "pagination.previousPage": "Previous page",
       "pagination.nextPage": "Next page",

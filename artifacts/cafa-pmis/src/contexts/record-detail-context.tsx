@@ -57,6 +57,7 @@ export function useRecordDetail() {
  * /projects/:id and /plans/:id routes remain canonical refresh-safe fallbacks.
  */
 export function RecordDetailProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation("common");
   const [, setLocation] = useLocation();
   const [request, setRequest] = React.useState<RecordDetailRequest | null>(null);
   const [header, setHeader] = React.useState<RecordDetailHeader | null>(null);
@@ -118,7 +119,7 @@ export function RecordDetailProvider({ children }: { children: React.ReactNode }
   }, [request, setLocation]);
 
   const value = React.useMemo(() => ({ openRecord, openRecordPath, closeRecord }), [openRecord, openRecordPath, closeRecord]);
-  const fallbackTitle = request?.kind === "project" ? "Project details" : "Plan details";
+  const fallbackTitle = request?.kind === "project" ? t("recordDetails.projectTitle") : t("recordDetails.planTitle");
 
   return (
     <RecordDetailContext.Provider value={value}>
@@ -127,7 +128,7 @@ export function RecordDetailProvider({ children }: { children: React.ReactNode }
         open={!!request}
         onClose={closeRecord}
         title={header?.title ?? fallbackTitle}
-        description={header?.description ?? "Authorised record information and actions"}
+        description={header?.description ?? t("recordDetails.description")}
         restoreFocusRef={request?.restoreFocusRef}
         bodyClassName="pb-8"
       >
