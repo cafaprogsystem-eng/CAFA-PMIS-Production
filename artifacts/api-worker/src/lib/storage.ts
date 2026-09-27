@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
-import { DOMParser, Node as XmlDomNode } from "@xmldom/xmldom";
+import "./aws-sdk-polyfills";
 import {
   S3Client,
   GetObjectCommand,
@@ -20,23 +20,6 @@ import type { Bindings } from "./db";
  * branches (dev-only / Replit-only) have no equivalent need here and are
  * dropped, not ported.
  */
-
-// AWS SDK v3 parses S3's XML error/response bodies with the DOM's
-// DOMParser, a browser API Workers doesn't provide even under
-// nodejs_compat. Without this, any request that gets back an XML body
-// (e.g. a HeadObjectCommand 404) throws "DOMParser is not defined" instead
-// of the SDK's own NotFound error.
-if (typeof (globalThis as { DOMParser?: unknown }).DOMParser === "undefined") {
-  (globalThis as { DOMParser?: unknown }).DOMParser = DOMParser;
-}
-// Some XML response shapes (confirmed: CopyObjectCommand's success body, used
-// by finalizeObjectEntityUpload) walk the parsed DOM generically and reference
-// the global `Node` constructor (e.g. its ELEMENT_NODE/TEXT_NODE constants) —
-// a second browser DOM global Workers doesn't provide, needing the same
-// polyfill treatment as DOMParser above.
-if (typeof (globalThis as { Node?: unknown }).Node === "undefined") {
-  (globalThis as { Node?: unknown }).Node = XmlDomNode;
-}
 
 export class ObjectNotFoundError extends Error {
   constructor() {
