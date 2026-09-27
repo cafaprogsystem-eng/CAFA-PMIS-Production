@@ -243,3 +243,40 @@ export const riskLevelClass = (level: string) => {
   if (l === "low")      return "bg-emerald-500 text-white";
   return "bg-muted text-foreground";
 };
+
+const ENGLISH_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+/**
+ * Localised label for a chart month key. The dashboard's monthly series
+ * types `month` as a free string, so this accepts both a machine key
+ * ("2026-09", "2026-09-01") and an English name or abbreviation ("Sep",
+ * "September"), and renders the month in the UI language ("سبتمبر" in
+ * Arabic, "Sep" in English; the year is added only for "YYYY-MM" keys when
+ * `withYear` is set). Anything else is returned unchanged.
+ */
+export function formatMonthLabel(value: string | number | undefined | null, language?: string, withYear = false): string {
+  if (value == null) return "";
+  const raw = String(value).trim();
+  // en-US keeps the familiar three-letter "Sep" (en-GB writes "Sept").
+  const locale = language?.toLowerCase().startsWith("ar") ? "ar-u-nu-latn" : "en-US";
+  const iso = raw.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (iso) {
+    const date = new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, 1));
+    return new Intl.DateTimeFormat(locale, { month: "short", ...(withYear ? { year: "numeric" } : {}), timeZone: "UTC" }).format(date);
+  }
+  // English name or 3-letter abbreviation ("Sep", "Sept", "September"),
+  // optionally followed by a 2- or 4-digit year ("Sep 26", as the project
+  // budget series sends it).
+  const named = raw.match(/^([A-Za-z]+)\.?(?:\s+(\d{2}|\d{4}))?$/);
+  if (named) {
+    const word = named[1].toLowerCase();
+    const index = ENGLISH_MONTHS.findIndex((name) => word === name || word === name.slice(0, 3) || (name === "september" && word === "sept"));
+    if (index >= 0) {
+      const year = named[2] ? Number(named[2].length === 2 ? `20${named[2]}` : named[2]) : 2000;
+      return new Intl.DateTimeFormat(locale, {
+        month: "short", ...(named[2] ? { year: named[2].length === 2 ? "2-digit" : "numeric" } : {}), timeZone: "UTC",
+      }).format(new Date(Date.UTC(year, index, 1)));
+    }
+  }
+  return raw;
+}

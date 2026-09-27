@@ -92,7 +92,7 @@ import {
   TooltipTrigger as UITooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SECTORS } from "@/lib/sectors";
-import { formatStatusLabel, statusBadgeVariant } from "@/lib/format";
+import { formatMonthLabel, formatStatusLabel, statusBadgeVariant } from "@/lib/format";
 import { entityTypeTranslationKey } from "@/lib/notification-presentation";
 
 /* ── Follow-Up Project types — imported from generated API client ────────
@@ -2310,8 +2310,9 @@ function MonthlyTrendChart({
   descriptionKey?: string;
   emptyMessageKey?: string;
 }) {
-  const { t } = useTranslation("dashboard");
+  const { t, i18n } = useTranslation("dashboard");
   const entries = monthlyData ?? [];
+  const monthLabel = (value: string | number) => formatMonthLabel(value, i18n.language);
   const targetLabel = t("performanceTab.targetVsAchievement");
   const achievedLabel = t("performanceTab.beneficiaryPerformance");
   const showChart = !isLoading && entries.length > 0;
@@ -2348,7 +2349,7 @@ function MonthlyTrendChart({
               </linearGradient>
             </defs>
             <ProAreaChart.Grid vertical={false} />
-            <ProAreaChart.XAxis dataKey="month" tickMargin={8} />
+            <ProAreaChart.XAxis dataKey="month" tickMargin={8} tickFormatter={monthLabel} />
             <ProAreaChart.YAxis tickFormatter={fmtCompact} width={40} />
             <ProAreaChart.Area
               dataKey="target" name={targetLabel} type="monotone"
@@ -2360,7 +2361,7 @@ function MonthlyTrendChart({
               stroke="var(--chart-3)" strokeWidth={2}
               fill={`url(#trend-achieved-${gradientSuffix})`} dot={false}
             />
-            <ProAreaChart.Tooltip content={<SeriesTooltip />} />
+            <ProAreaChart.Tooltip content={<SeriesTooltip labelFormatter={monthLabel} />} />
           </ProAreaChart>
         )}
       </div>
@@ -2389,14 +2390,15 @@ function ChartLegend({ items }: { items: { label: string; color: string; dashed?
 type SeriesTooltipProps = {
   active?: boolean;
   label?: string | number;
+  labelFormatter?: (label: string | number) => string;
   payload?: Array<{ dataKey?: unknown; name?: unknown; value?: unknown; color?: string; stroke?: string }>;
 };
 
-function SeriesTooltip({ active, label, payload }: SeriesTooltipProps) {
+function SeriesTooltip({ active, label, payload, labelFormatter }: SeriesTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <ChartTooltip>
-      <ChartTooltip.Header>{label}</ChartTooltip.Header>
+      <ChartTooltip.Header>{label != null && labelFormatter ? labelFormatter(label) : label}</ChartTooltip.Header>
       {payload.map((entry) => (
         <ChartTooltip.Item key={String(entry.dataKey)}>
           <ChartTooltip.Indicator color={entry.color ?? entry.stroke} />

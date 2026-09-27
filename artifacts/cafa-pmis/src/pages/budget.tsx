@@ -40,7 +40,7 @@ import {
 } from "@/components/icons";
 import { MAIN_SECTORS, getSectorMeta } from "@/lib/sectors";
 import type { SectorBudgetCurrencyEntry } from "@workspace/api-client-react";
-import { formatCurrency, formatPercent, hasPerm } from "@/lib/format";
+import { formatCurrency, formatMonthLabel, formatPercent, hasPerm } from "@/lib/format";
 import {
   formatBudgetLineLevel,
   formatProjectBudgetMoney,
@@ -347,7 +347,7 @@ function BudgetLineRow({ line, depth = 0, currency }: { line: BudgetLine; depth?
 interface ProjectInfo { code: string; title: string; donor?: string; sector?: string; currency?: string }
 
 function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; projectInfo?: ProjectInfo }) {
-  const { t } = useTranslation("budget");
+  const { t, i18n } = useTranslation("budget");
   const { data, isLoading } = useGetProjectBudget(projectId);
   const { data: stateAllocations } = useListProjectStateAllocations(projectId);
 
@@ -433,7 +433,7 @@ function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; proj
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.monthly}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--cafa-border))" />
-              <XAxis dataKey="month" stroke="hsl(var(--cafa-muted-foreground))" fontSize={12} />
+              <XAxis dataKey="month" stroke="hsl(var(--cafa-muted-foreground))" fontSize={12} tickFormatter={(value) => formatMonthLabel(value, i18n.language)} />
               {/* BUD-006: currency-aware axis/tooltip — no hardcoded "$" */}
               <YAxis
                 stroke="hsl(var(--cafa-muted-foreground))"
@@ -442,6 +442,7 @@ function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; proj
               />
               <Tooltip
                 contentStyle={{ backgroundColor: 'hsl(var(--cafa-card))', borderColor: 'hsl(var(--cafa-border))' }}
+                labelFormatter={(label) => formatMonthLabel(label, i18n.language)}
                 formatter={(v: number) => fmtMoney(v, projectInfo?.currency)}
               />
               <Legend />
