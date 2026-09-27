@@ -512,7 +512,12 @@
     "noActiveRisks": "لا توجد مخاطر مرتفعة أو حرجة نشطة",
     "riskTitle": "المخاطر المرتفعة والحرجة النشطة حسب الولاية",
     "riskDesc": "مراجعة المخاطر المرتفعة والحرجة النشطة عبر الولايات المعتمدة.",
-    "combined": "مجموع:"
+    "combined": "مجموع:",
+    "chartSummary_one": "مخطط أعمدة أفقي لعدد المخاطر الحرجة والعالية النشطة في ولاية مصرح بها واحدة.",
+    "chartSummary_two": "مخطط أعمدة أفقي لعدد المخاطر الحرجة والعالية النشطة في ولايتين مصرح بهما، مرتبتين حسب المجموع.",
+    "chartSummary_few": "مخطط أعمدة أفقي لعدد المخاطر الحرجة والعالية النشطة في {{count}} ولايات مصرح بها، مرتبة حسب المجموع.",
+    "chartSummary_many": "مخطط أعمدة أفقي لعدد المخاطر الحرجة والعالية النشطة في {{count}} ولاية مصرحًا بها، مرتبة حسب المجموع.",
+    "chartSummary_other": "مخطط أعمدة أفقي لعدد المخاطر الحرجة والعالية النشطة في {{count}} ولاية مصرح بها، مرتبة حسب المجموع."
   },
   "followUp": {
     "noProjects": "لا توجد مشاريع تحتاج متابعة حالياً",
@@ -625,7 +630,9 @@
     "stateProgramme": "برنامج الولاية",
     "stateProgrammeReports": "تقارير برنامج الولاية",
     "monthlyReports": "التقارير الشهرية",
-    "genericReports": "التقارير"
+    "genericReports": "التقارير",
+    "activity": "تقرير نشاط",
+    "project": "تقرير مشروع"
   },
   "reportStatus": {
     "submitted": "مُقدَّم",
@@ -764,5 +771,43 @@
     "missingData": "البيانات الناقصة",
     "achievementRate": "معدل الإنجاز",
     "viewProject": "عرض المشروع"
+  },
+  "followUpReason": {
+    "active_critical_risk_zero": "لا مخاطر حرجة",
+    "active_critical_risk_one": "خطر حرج نشط",
+    "active_critical_risk_two": "خطران حرجان نشطان",
+    "active_critical_risk_few": "{{count}} مخاطر حرجة نشطة",
+    "active_critical_risk_many": "{{count}} خطرًا حرجًا نشطًا",
+    "active_critical_risk_other": "{{count}} خطر حرج نشط",
+    "overdue_risk_mitigation_zero": "لا إجراءات تخفيف متأخرة",
+    "overdue_risk_mitigation_one": "إجراء تخفيف متأخر",
+    "overdue_risk_mitigation_two": "إجراءا تخفيف متأخران",
+    "overdue_risk_mitigation_few": "{{count}} إجراءات تخفيف متأخرة",
+    "overdue_risk_mitigation_many": "{{count}} إجراءً متأخرًا",
+    "overdue_risk_mitigation_other": "{{count}} إجراء تخفيف متأخر",
+    "returned_report_zero": "لا تقارير مُعادة",
+    "returned_report_one": "تقرير مُعاد",
+    "returned_report_two": "تقريران مُعادان",
+    "returned_report_few": "{{count}} تقارير مُعادة",
+    "returned_report_many": "{{count}} تقريرًا مُعادًا",
+    "returned_report_other": "{{count}} تقرير مُعاد",
+    "report_awaiting_approval_zero": "لا تقارير بانتظار الاعتماد",
+    "report_awaiting_approval_one": "تقرير بانتظار الاعتماد",
+    "report_awaiting_approval_two": "تقريران بانتظار الاعتماد",
+    "report_awaiting_approval_few": "{{count}} تقارير بانتظار الاعتماد",
+    "report_awaiting_approval_many": "{{count}} تقريرًا بانتظار الاعتماد",
+    "report_awaiting_approval_other": "{{count}} تقرير بانتظار الاعتماد",
+    "draft_project_report_zero": "لا مسودات تقارير",
+    "draft_project_report_one": "مسودة تقرير مشروع",
+    "draft_project_report_two": "مسودتا تقرير مشروع",
+    "draft_project_report_few": "{{count}} مسودات تقارير مشاريع",
+    "draft_project_report_many": "{{count}} مسودةً لتقارير المشاريع",
+    "draft_project_report_other": "{{count}} مسودة تقرير مشروع",
+    "draft_project_zero": "لا مسودات مشاريع",
+    "draft_project_one": "مسودة مشروع",
+    "draft_project_two": "مسودتا مشروع",
+    "draft_project_few": "{{count}} مسودات مشاريع",
+    "draft_project_many": "{{count}} مسودةً للمشاريع",
+    "draft_project_other": "{{count}} مسودة مشروع"
   }
 }

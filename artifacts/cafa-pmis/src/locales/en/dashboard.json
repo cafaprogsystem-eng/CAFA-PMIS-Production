@@ -504,7 +504,9 @@
     "noActiveRisks": "No Active High Or Critical Risks Available",
     "riskTitle": "Active High And Critical Risks By State",
     "riskDesc": "Review active High and Critical Risks across authorised States.",
-    "combined": "Combined:"
+    "combined": "Combined:",
+    "chartSummary_one": "Horizontal grouped bar chart of Active Critical and Active High Risk counts for {{count}} authorised State, ordered by combined count.",
+    "chartSummary_other": "Horizontal grouped bar chart of Active Critical and Active High Risk counts for {{count}} authorised States, ordered by combined count."
   },
   "followUp": {
     "noProjects": "No Projects Currently Require Follow-Up",
@@ -617,7 +619,9 @@
     "stateProgramme": "State Programme",
     "stateProgrammeReports": "State Programme Reports",
     "monthlyReports": "Monthly Reports",
-    "genericReports": "Reports"
+    "genericReports": "Reports",
+    "activity": "Activity Report",
+    "project": "Project Report"
   },
   "reportStatus": {
     "submitted": "Submitted",
@@ -756,5 +760,19 @@
     "missingData": "Missing Data",
     "achievementRate": "Achievement Rate",
     "viewProject": "View Project"
+  },
+  "followUpReason": {
+    "active_critical_risk_one": "Active critical risk",
+    "active_critical_risk_other": "{{count}} active critical risks",
+    "overdue_risk_mitigation_one": "Overdue risk mitigation",
+    "overdue_risk_mitigation_other": "{{count}} overdue risk mitigations",
+    "returned_report_one": "Returned report",
+    "returned_report_other": "{{count}} returned reports",
+    "report_awaiting_approval_one": "Report awaiting approval",
+    "report_awaiting_approval_other": "{{count}} reports awaiting approval",
+    "draft_project_report_one": "Draft project report",
+    "draft_project_report_other": "{{count}} draft project reports",
+    "draft_project_one": "Draft project",
+    "draft_project_other": "{{count}} draft projects"
   }
 }
