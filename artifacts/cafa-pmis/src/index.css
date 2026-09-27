@@ -67,7 +67,7 @@
 
 /* ══════════════════════════════════════════════════════════════════════
    LIGHT MODE — Enterprise reference palette
-   Primary  #2563EB  · Background #F5F7FB  · Sidebar #FAFBFD
+   Primary  #0485F7 (HeroUI accent)  · Background #F5F7FB  · Sidebar #FAFBFD
    ══════════════════════════════════════════════════════════════════════ */
 :root {
   /* ── Page canvas ─────────────────────────────────────────────── */
@@ -75,7 +75,7 @@
   --cafa-foreground:        215 28% 17%;    /* #1F2937 — deep navy-charcoal */
   --cafa-border:            214 32% 91%;    /* #E2E8F0 */
   --cafa-input:             214 32% 91%;
-  --cafa-ring:              221 83% 53%;    /* #2563EB */
+  --cafa-ring:              208 97% 49%;    /* #0485F7 — HeroUI accent */
 
   /* ── Cards / surfaces ────────────────────────────────────────── */
   --cafa-card:              0 0% 100%;
@@ -87,7 +87,7 @@
   --cafa-popover-border:    214 32% 91%;
 
   /* ── Brand blue ──────────────────────────────────────────────── */
-  --cafa-primary:           221 83% 53%;    /* #2563EB */
+  --cafa-primary:           208 97% 49%;    /* #0485F7 — HeroUI accent */
   --cafa-primary-foreground: 0 0% 100%;
 
   /* ── Secondary (slate) ───────────────────────────────────────── */
@@ -119,14 +119,14 @@
   --cafa-sidebar:                     220 43% 98.6%;  /* #FAFBFD — near-white cool */
   --cafa-sidebar-foreground:          223 47% 11%;    /* #0F172A */
   --cafa-sidebar-border:              214 32% 91%;    /* #E2E8F0 */
-  --cafa-sidebar-primary:             221 83% 53%;    /* #2563EB active bg */
+  --cafa-sidebar-primary:             208 97% 49%;    /* #0485F7 active bg */
   --cafa-sidebar-primary-foreground:  0 0% 100%;      /* white text on active */
   --cafa-sidebar-accent:              210 40% 96%;    /* #F1F5F9 — neutral sidebar hover */
   --cafa-sidebar-accent-foreground:   215 28% 17%;    /* #1F2937 — dark text on neutral hover */
-  --cafa-sidebar-ring:                221 83% 53%;
+  --cafa-sidebar-ring:                208 97% 49%;
 
   /* ── KPI card accent palette ─────────────────────────────────── */
-  --cafa-kpi-blue:    221 83% 53%;
+  --cafa-kpi-blue:    208 97% 49%;
   --cafa-kpi-green:   160 84% 39%;
   --cafa-kpi-amber:   38 92% 50%;
   --cafa-kpi-red:     0 84% 60%;
@@ -134,8 +134,10 @@
   --cafa-kpi-teal:    175 65% 40%;
 
   /* ── Fonts & radius ──────────────────────────────────────────── */
-  --cafa-font-sans:   'Inter', 'Segoe UI', system-ui, sans-serif;
-  --cafa-font-arabic: 'IBM Plex Sans Arabic', 'Noto Sans Arabic', 'Cairo', sans-serif;
+  /* HeroUI Pro ships no web font: it uses the stock Tailwind system stack
+     (SF Pro / SF Arabic on Apple, Segoe UI on Windows, Roboto / Noto Sans
+     Arabic on Android), which covers Arabic natively. */
+  --cafa-font-sans:   ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --cafa-radius: 0.75rem;   /* 12px — premium rounded corners */
 }
 
@@ -192,50 +194,65 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   HEROUI BRIDGE — HeroUI's raw variables, derived from the CAFA palette
-   HeroUI components read these names directly. They are unlayered, so
-   they beat HeroUI's own (layered) defaults, and they only reference
-   --cafa-* tokens, so light/dark follows the blocks above. Declared on
-   .dark too so a .dark subtree never falls back to HeroUI's dark theme.
-   Note the two semantic translations: HeroUI "accent" is the brand
-   colour (our primary) and HeroUI "muted" is a text colour (our
-   muted-foreground). Radius is intentionally left at HeroUI's default.
+   HEROUI BRIDGE
+   HeroUI and HeroUI Pro components keep their stock colour tokens
+   (--background, --surface, --accent, --muted, --default, --border …)
+   so they look exactly like the library's own examples; the legacy
+   --cafa-* palette above only styles screens not yet moved to HeroUI,
+   and its brand blue matches HeroUI's accent. The one local decision
+   is outlined form fields (HeroUI's default is borderless).
    ══════════════════════════════════════════════════════════════════════ */
 :root,
 .dark {
-  --background:          hsl(var(--cafa-background));
-  --foreground:          hsl(var(--cafa-foreground));
-
-  --surface:             hsl(var(--cafa-card));
-  --surface-foreground:  hsl(var(--cafa-card-foreground));
-  --overlay:             hsl(var(--cafa-popover));
-  --overlay-foreground:  hsl(var(--cafa-popover-foreground));
-
-  --accent:              hsl(var(--cafa-primary));
-  --accent-foreground:   hsl(var(--cafa-primary-foreground));
-  --muted:               hsl(var(--cafa-muted-foreground));
-  --default:             hsl(var(--cafa-accent));
-  --default-foreground:  hsl(var(--cafa-accent-foreground));
-
-  --danger:              hsl(var(--cafa-destructive));
-  --danger-foreground:   hsl(var(--cafa-destructive-foreground));
-  --success:             hsl(var(--cafa-success));
-  --success-foreground:  hsl(var(--cafa-success-foreground));
-  --warning:             hsl(var(--cafa-warning));
-  --warning-foreground:  hsl(var(--cafa-warning-foreground));
-
-  --border:              hsl(var(--cafa-border));
-  --separator:           hsl(var(--cafa-border));
-  --focus:               hsl(var(--cafa-ring));
-
-  /* Our fields are outlined; HeroUI's default is borderless. */
   --field-background:    hsl(var(--cafa-card));
   --field-foreground:    hsl(var(--cafa-foreground));
   --field-border:        hsl(var(--cafa-input));
   --field-border-width:  1px;
   /* Referenced by HeroUI's invalid-field styles but never defined in the
      package (3.2.6); undefined, the border falls back to the text colour. */
-  --color-field-border-invalid: hsl(var(--cafa-destructive));
+  --color-field-border-invalid: var(--danger);
+}
+
+/* HeroUI Pro's precompiled stylesheet reads HeroUI's Tailwind theme names
+   (--color-accent, --color-muted, --radius-sm, --shadow-surface …), which
+   HeroUI's own @theme would emit. Our @theme is `inline`, so Tailwind never
+   emits these variables (and would give accent/muted CAFA meanings anyway);
+   they are declared here exactly as HeroUI's theme defines them. Our
+   utilities are unaffected: with `inline` they never read these names. */
+:root,
+.dark {
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-foreground: var(--accent-soft-foreground);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-border-secondary: var(--border-secondary);
+  --color-separator: var(--separator);
+  --color-separator-secondary: var(--separator-secondary);
+  --color-separator-tertiary: var(--separator-tertiary);
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-secondary-foreground: var(--surface-secondary-foreground);
+  --color-surface-tertiary: var(--surface-tertiary);
+  --color-default: var(--default);
+  --color-default-foreground: var(--default-foreground);
+  --color-default-hover: var(--default-hover);
+  --color-muted: var(--muted);
+  --color-focus: var(--focus);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-field-border: var(--field-border);
+  --color-field-border-hover: var(--field-border-hover);
+  --color-field-border-focus: var(--field-border-focus);
+  --color-field-focus: var(--field-focus);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --shadow-surface: var(--surface-shadow);
+  --shadow-overlay: var(--overlay-shadow);
+  --blur-xs: 4px;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -251,27 +268,24 @@
     text-size-adjust: 100%;
   }
 
+  /* Stock HeroUI Pro canvas: system font at 16px / 1.5, foreground text,
+     white page behind the grey --background chrome (sidebar, navbar). */
   body {
-    @apply font-sans antialiased bg-background text-foreground;
-    line-height: 1.6;
-    font-size: 15px;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    @apply font-sans antialiased;
+    color: var(--foreground);
     /* Prevent accidental page-level horizontal overflow */
     overflow-x: clip;
   }
 
-  /* ── Typography scale — premium enterprise (responsive) ─────── */
-  h1 { @apply text-2xl sm:text-3xl font-bold tracking-tight;    line-height: 1.2;  }
-  h2 { @apply text-xl sm:text-2xl font-semibold tracking-tight; line-height: 1.25; }
-  h3 { @apply text-lg sm:text-xl font-semibold;                 line-height: 1.35; }
-  h4 { @apply text-base font-semibold;              line-height: 1.4;  }
-  h5 { @apply text-sm font-semibold;                line-height: 1.5;  }
-  h6 { @apply text-sm font-medium;                  line-height: 1.5;  }
-
-  p  { line-height: 1.65; }
+  /* ── Typography scale — HeroUI Typography h1…h6 (all 600, tight) ── */
+  h1 { @apply text-4xl font-semibold tracking-tight; }
+  h2 { @apply text-3xl font-semibold tracking-tight; }
+  h3 { @apply text-2xl font-semibold tracking-tight; }
+  h4 { @apply text-xl font-semibold tracking-tight; }
+  h5 { @apply text-lg font-semibold tracking-tight; }
+  h6 { @apply text-base font-semibold tracking-tight; }
+  /* Negative tracking pulls joined Arabic letters apart. */
+  :lang(ar) :is(h1, h2, h3, h4, h5, h6) { letter-spacing: normal; }
 
   /* ── Tables ──────────────────────────────────────────────────── */
   table { @apply w-full text-sm; }
@@ -495,16 +509,6 @@
     transform: none;
     transition: none;
   }
-}
-
-/* Arabic needs a glyph-complete family and more leading for joined forms. */
-html[lang="ar"] {
-  --cafa-font-sans: var(--cafa-font-arabic);
-}
-
-html[lang="ar"] body {
-  font-family: var(--cafa-font-arabic);
-  line-height: 1.75;
 }
 
 html[lang="ar"] :is(button, input, select, textarea) {

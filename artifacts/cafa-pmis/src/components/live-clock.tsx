@@ -93,16 +93,14 @@ export function LiveClock({ timezone }: LiveClockProps) {
         <time
           dateTime={iso}
           aria-label={tooltipLines.join(" — ")}
-          className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground/65 select-none cursor-default whitespace-nowrap leading-none tabular-nums"
+          // Label + value pair from the HeroUI Pro navbar "Dashboard" example.
+          className="flex items-center gap-1.5 select-none cursor-default whitespace-nowrap tabular-nums"
         >
-          {/* Full month name — large desktop only */}
-          <span className="hidden lg:inline">{dateFull}</span>
-          {/* Abbreviated month — standard desktop / tablet (md–lg) */}
-          <span className="hidden md:inline lg:hidden">{dateShort}</span>
-          {/* Separator dot */}
-          <span className="text-muted-foreground/35" aria-hidden="true">·</span>
+          {/* Full month name — large desktop only; abbreviated on md–lg */}
+          <span className="hidden lg:inline text-[var(--muted)] text-[11px] font-medium uppercase tracking-wider rtl:tracking-normal">{dateFull}</span>
+          <span className="hidden md:inline lg:hidden text-[var(--muted)] text-[11px] font-medium uppercase tracking-wider rtl:tracking-normal">{dateShort}</span>
           {/* Time is always shown when the component is visible */}
-          <span>{time}</span>
+          <span className="text-foreground text-sm font-semibold">{time}</span>
         </time>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs space-y-0.5">

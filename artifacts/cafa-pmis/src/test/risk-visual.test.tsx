@@ -517,9 +517,9 @@ describe("RISK-VIS-VM: table, card, and board presentations", () => {
     expect(toolbar.className).toContain("border");
     expect(within(toolbar).getByRole("textbox", { name: "Search risks" })).toHaveClass("h-10");
     expect(toolbar.querySelector('[data-orientation="vertical"]')).toBeInTheDocument();
-    const viewMode = within(toolbar).getByRole("group", { name: "View mode" });
+    const viewMode = within(toolbar).getByRole("radiogroup", { name: "View mode" });
     expect(viewMode).toBeInTheDocument();
-    expect(within(viewMode).getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(viewMode).getByRole("radio", { name: "Grid" })).toHaveAttribute("aria-checked", "false");
     expect(container.querySelector('[draggable="true"]')).toBeNull();
   });
 
@@ -572,7 +572,7 @@ describe("RISK-VIS-VM: table, card, and board presentations", () => {
     MOCK_SEARCH = "riskLevel=high&page=2&from=dashboard";
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Grid" }));
     expect(mockNavigate).toHaveBeenCalledWith(
       "/risks?riskLevel=high&page=2&from=dashboard&view=card",
       { replace: false },

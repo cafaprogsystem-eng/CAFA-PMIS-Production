@@ -30,11 +30,12 @@ import {
   Settings,
   Archive,
   Check,
+  Search,
 } from "lucide-react";
 import { AppLayout as ShellLayout } from "@heroui-pro/react/app-layout";
 import { Sidebar } from "@heroui-pro/react/sidebar";
 import { Navbar } from "@heroui-pro/react/navbar";
-import { Avatar, Breadcrumbs, Button, Dropdown, Label, RouterProvider, Separator, Tooltip, type Key } from "@heroui/react";
+import { Avatar, Breadcrumbs, Button, Dropdown, Label, RouterProvider, Separator, type Key } from "@heroui/react";
 import { LiveClock } from "@/components/live-clock";
 import { AIChatWidget } from "@/components/ai-chat-widget";
 import { CommandPalette } from "@/components/command-palette";
@@ -108,9 +109,11 @@ type ShellUser = { name?: string | null; email?: string | null; roleLabel?: stri
 
 function UserAvatar({ user, className = "size-7" }: { user: ShellUser | undefined; className?: string }) {
   return (
-    <Avatar className={`shrink-0 ${className}`}>
+    // Soft avatar as in the Pro navbar examples (brand accent instead of the
+    // demo's green).
+    <Avatar className={`shrink-0 ${className}`} color="accent" variant="soft">
       {user?.avatarUrl && <Avatar.Image src={`/api/storage${user.avatarUrl}`} alt={user.name ?? ""} className="object-cover" />}
-      <Avatar.Fallback className="bg-primary text-primary-foreground text-xs font-semibold">
+      <Avatar.Fallback className="text-xs font-semibold">
         {user?.name?.substring(0, 2).toUpperCase() ?? "??"}
       </Avatar.Fallback>
     </Avatar>
@@ -183,26 +186,20 @@ function SidebarNavigation({
   );
 }
 
-/** Profile + explicit sign-out, at the foot of the desktop sidebar and the mobile sheet. */
+/**
+ * Footer actions of the desktop sidebar and the mobile sheet, as in the HeroUI
+ * Pro examples (plain icon + label rows). The signed-in user is shown by the
+ * navbar avatar menu, as in Pro.
+ */
 function SidebarAccount({
-  user, onLogout, isLoggingOut, labels,
+  onLogout, isLoggingOut, labels,
 }: {
-  user: ShellUser;
   onLogout: () => void;
   isLoggingOut: boolean;
-  labels: { account: string; profile: string; signOut: string };
+  labels: { account: string; signOut: string };
 }) {
   return (
     <Sidebar.Menu aria-label={labels.account}>
-      <Sidebar.MenuItem id="profile" href="/profile" textValue={labels.profile} tooltip={user.name ?? labels.profile}>
-        <Sidebar.MenuIcon><UserAvatar user={user} className="size-5" /></Sidebar.MenuIcon>
-        <Sidebar.MenuLabel>
-          <span className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-[12px] font-medium text-foreground">{user.name}</span>
-            <span className="truncate text-[10px] text-muted-foreground">{user.roleLabel}</span>
-          </span>
-        </Sidebar.MenuLabel>
-      </Sidebar.MenuItem>
       <Sidebar.MenuItem
         id="sign-out"
         textValue={labels.signOut}
@@ -538,6 +535,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return crumbs;
   }, [location, routeTitleMap, tNav]);
 
+  // Icon of the navigation entry the current page belongs to (longest match),
+  // shown on the last breadcrumb as in the Pro "With Breadcrumbs" example.
+  let currentNavItem: NavItem | undefined;
+  for (const entry of navEntries) {
+    for (const item of entry.kind === "group" ? entry.group.items : [entry.item]) {
+      if (!item) continue;
+      const hit = location === item.href || (item.href !== "/" && location.startsWith(item.href + "/"))
+        || (item.href === "/" && location === "/dashboard");
+      if (hit && (!currentNavItem || item.href.length > currentNavItem.href.length)) currentNavItem = item;
+    }
+  }
+  const CurrentIcon = currentNavItem?.icon;
+
   // A Reports child route keeps its parent expanded, as before.
   const reportsChildActive = location.startsWith("/reports/");
   const effectiveExpandedKeys = useMemo(
@@ -545,15 +555,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     [expandedKeys, reportsChildActive],
   );
   const navMenuLabel = (entry: NavEntry) => (entry.kind === "group" ? entry.group.title : entry.item.label);
-  const accountLabels = { account: tNav("user.myProfile"), profile: tNav("user.myProfile"), signOut: tNav("user.signOut") };
+  const accountLabels = { account: tNav("user.myProfile"), signOut: tNav("user.signOut") };
 
   // In the icon rail the title hides (data-sidebar="label") and the logo
   // carries the product name as a tooltip instead.
   const brand = (
     <Sidebar.Tooltip content={tNav("tooltips.platformName")} placement={isRtl ? "left" : "right"}>
-      <div className="flex min-w-0 items-center gap-2.5 px-1 py-1.5">
-        <img src={cafaLogo} alt={tNav("brand.name")} className="size-8 shrink-0 object-contain" />
-        <p data-testid="sidebar-brand-title" data-sidebar="label" className="whitespace-nowrap text-[16px] font-medium leading-tight tracking-tight text-foreground">{tNav("brand.name")}</p>
+      <div className="flex min-w-0 items-center gap-3 px-1 py-2">
+        <img src={cafaLogo} alt={tNav("brand.name")} className="size-6 shrink-0 object-contain" />
+        <span data-testid="sidebar-brand-title" data-sidebar="label" className="text-foreground truncate text-sm font-semibold">{tNav("brand.name")}</span>
       </div>
     </Sidebar.Tooltip>
   );
@@ -596,7 +606,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Sidebar.Content>{navigation}</Sidebar.Content>
               {meData?.user && (
                 <Sidebar.Footer>
-                  <SidebarAccount user={meData.user} onLogout={handleLogout} isLoggingOut={isLoggingOut} labels={accountLabels} />
+                  <SidebarAccount onLogout={handleLogout} isLoggingOut={isLoggingOut} labels={accountLabels} />
                 </Sidebar.Footer>
               )}
               <Sidebar.Rail />
@@ -607,7 +617,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <MobileLocationPicker />
               {meData?.user && (
                 <Sidebar.Footer>
-                  <SidebarAccount user={meData.user} onLogout={handleLogout} isLoggingOut={isLoggingOut} labels={accountLabels} />
+                  <SidebarAccount onLogout={handleLogout} isLoggingOut={isLoggingOut} labels={accountLabels} />
                 </Sidebar.Footer>
               )}
             </Sidebar.Mobile>
@@ -615,135 +625,135 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         }
         navbar={
           <Navbar maxWidth="full">
-            <Navbar.Header className="gap-3">
-              <ShellLayout.MenuToggle aria-label={tNav("tooltips.openMenu")} />
-              <Sidebar.Trigger aria-label={sidebarCollapsed ? tNav("tooltips.expandSidebar") : tNav("tooltips.collapseSidebar")} />
+            <Navbar.Header>
+              <ShellLayout.MenuToggle className="shrink-0" aria-label={tNav("tooltips.openMenu")} />
+              <Sidebar.Trigger className="shrink-0" aria-label={sidebarCollapsed ? tNav("tooltips.expandSidebar") : tNav("tooltips.collapseSidebar")} />
 
-              {/* Breadcrumb on md+ for nested routes, plain title otherwise */}
-              <div className="min-w-0">
-                {breadcrumbs.length > 2 ? (
-                  <Breadcrumbs
-                    className="hidden md:flex"
-                    aria-label={tCommon("breadcrumb")}
-                    separator={<BreadcrumbSep className="h-3 w-3 text-muted-foreground/40 shrink-0" aria-hidden />}
-                  >
-                    {breadcrumbs.map((crumb, i) => (
-                      <Breadcrumbs.Item key={i} href={crumb.href} className={crumb.href ? "max-w-[120px] truncate text-sm text-muted-foreground/70" : "max-w-[160px] truncate text-sm font-semibold text-foreground"}>
-                        {crumb.label}
-                      </Breadcrumbs.Item>
-                    ))}
-                  </Breadcrumbs>
-                ) : null}
-                <h1 className={`font-semibold text-foreground truncate leading-tight ${breadcrumbs.length > 2 ? "text-sm md:hidden" : "text-[15px]"}`}>
-                  {pageTitle}
-                </h1>
+              {/* Page trail, as in the Pro "With Breadcrumbs" example: earlier
+                  crumbs muted (middle ones hidden on phones), the current page
+                  semibold with its navigation icon. */}
+              <Breadcrumbs className="min-w-0 max-w-[40%] shrink-0" aria-label={tCommon("breadcrumb")} separator={<BreadcrumbSep className="size-3.5 text-[var(--muted)]" aria-hidden />}>
+                {breadcrumbs.map((crumb, index) => {
+                  const isLast = index === breadcrumbs.length - 1;
+                  const isMiddle = !isLast && index > 0;
+                  return (
+                    <Breadcrumbs.Item
+                      key={`${crumb.label}-${index}`}
+                      href={isLast ? undefined : crumb.href}
+                      className={`min-w-0 ${isLast ? "font-semibold" : "text-[var(--muted)]"} ${isMiddle ? "hidden md:flex" : ""}`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+                        {isLast && CurrentIcon ? <CurrentIcon className="size-4 shrink-0" aria-hidden /> : null}
+                        <span className="truncate" {...(isLast ? { "data-testid": "shell-page-title" } : {})}>{isLast ? pageTitle : crumb.label}</span>
+                      </span>
+                    </Breadcrumbs.Item>
+                  );
+                })}
+              </Breadcrumbs>
+
+              <Navbar.Spacer />
+
+              {/* Search, centred between the trail and the actions */}
+              <div className="hidden lg:flex min-w-0 flex-[0_1_420px]">
+                <GlobalSearch />
               </div>
 
+              <Navbar.Spacer />
+
               {/* Live date & time — desktop/tablet only */}
-              <div className="hidden md:flex items-center gap-2 shrink-0 border-s border-border/40 ps-3 ms-0.5">
+              <div className="hidden md:flex items-center">
                 <LiveClock timezone={(meData?.user as unknown as Record<string, string | undefined>)?.timezone} />
               </div>
 
-              {/* Search — takes the free space between title and actions, centred */}
-              <div className="hidden md:flex min-w-0 flex-1 justify-center px-2">
-                <div className="w-full max-w-[420px]">
-                  <GlobalSearch />
-                </div>
+              {/* Global location scope selector — HQ roles only, hidden on mobile */}
+              <div className="hidden md:flex items-center">
+                <GlobalLocationSelector />
               </div>
 
-              <div className="flex items-center gap-0.5 shrink-0">
+              <Navbar.Content className="gap-0">
+                {/* Where the inline field does not fit (md–lg), search is an
+                    icon item opening the command palette, as in the Pro
+                    AppLayout example. */}
+                <Navbar.Item
+                  className="hidden md:flex lg:hidden"
+                  aria-label={tCommon("globalSearch.openCommandPalette")}
+                  onClick={() => document.dispatchEvent(new CustomEvent("open-command-palette"))}
+                >
+                  <Search className="size-4" aria-hidden />
+                </Navbar.Item>
                 <GlobalLanguageSwitcher />
-
-                {/* Global location scope selector — HQ roles only, hidden on mobile */}
-                <div className="hidden md:flex me-1">
-                  <GlobalLocationSelector />
-                </div>
-
                 <NotificationsBell />
                 <MessagesDropdown />
 
                 {/* Desktop View toggle (touch/narrow viewports) */}
-                <Tooltip delay={200}>
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="ghost"
-                    className="lg:hidden"
-                    onPress={toggleDesktopView}
-                    aria-label={desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
-                  >
-                    <MonitorSmartphone className={`h-4 w-4 ${desktopView ? "text-primary" : ""}`} />
-                  </Button>
-                  <Tooltip.Content placement="bottom">{desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}</Tooltip.Content>
-                </Tooltip>
+                <Navbar.Item
+                  className="lg:hidden"
+                  onClick={toggleDesktopView}
+                  aria-label={desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
+                  aria-pressed={desktopView}
+                >
+                  <MonitorSmartphone className={`size-4 ${desktopView ? "text-[var(--accent)]" : ""}`} aria-hidden />
+                </Navbar.Item>
 
                 {/* Sync status */}
                 {syncBadgeCount > 0 && (
-                  <Tooltip delay={200}>
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="ghost"
-                      className={`relative ${failedCount > 0 || conflictCount > 0 ? "text-red-500 hover:text-red-600" : "text-amber-500 hover:text-amber-600"}`}
-                      onPress={() => navigate("/sync-status")}
-                      aria-label={tNav("items.syncStatus")}
-                    >
-                      {isSyncing
-                        ? <RefreshCw className="h-4 w-4 animate-spin" />
-                        : failedCount > 0 || conflictCount > 0
-                        ? <CloudOff className="h-4 w-4" />
-                        : <RefreshCw className="h-4 w-4" />
-                      }
-                      {/* -end-0.5: logical end positioning (right in LTR, left in RTL) */}
-                      <span className={`absolute -top-0.5 -end-0.5 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold text-white ${failedCount > 0 || conflictCount > 0 ? "bg-red-500" : "bg-amber-500"}`}>
-                        {syncBadgeCount > 9 ? "9+" : syncBadgeCount}
-                      </span>
-                    </Button>
-                    <Tooltip.Content placement="bottom">
-                      {isSyncing
+                  <Navbar.Item
+                    onClick={() => navigate("/sync-status")}
+                    aria-label={`${tNav("items.syncStatus")}: ${
+                      isSyncing
                         ? tCommon("sync.syncingItems", { count: pendingCount })
                         : failedCount > 0
                         ? tCommon("sync.syncFailures", { count: failedCount })
                         : tCommon("sync.offlineChangesPending", { count: pendingCount })
-                      }
-                    </Tooltip.Content>
-                  </Tooltip>
+                    }`}
+                    className={failedCount > 0 || conflictCount > 0 ? "text-[var(--danger)]" : "text-[var(--warning)]"}
+                  >
+                    {isSyncing
+                      ? <RefreshCw className="size-4 animate-spin" aria-hidden />
+                      : failedCount > 0 || conflictCount > 0
+                      ? <CloudOff className="size-4" aria-hidden />
+                      : <RefreshCw className="size-4" aria-hidden />
+                    }
+                    {/* -end-0.5: logical end positioning (right in LTR, left in RTL) */}
+                    <span className={`absolute -top-0.5 -end-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none text-white ${failedCount > 0 || conflictCount > 0 ? "bg-[var(--danger)]" : "bg-[var(--warning)]"}`} aria-hidden>
+                      {syncBadgeCount > 9 ? "9+" : syncBadgeCount}
+                    </span>
+                  </Navbar.Item>
                 )}
+
+                <Navbar.Separator className="mx-2" />
 
                 {/* User menu */}
                 <Dropdown>
                   <Button
+                    isIconOnly
                     variant="ghost"
-                    className="ms-1 h-9 gap-2 rounded-full ps-1 pe-2.5"
                     aria-label={`${meData?.user?.name ?? "User"} — ${tNav("user.myProfile")}`}
                   >
                     <UserAvatar user={meData?.user} />
-                    <span className="hidden sm:flex flex-col items-start leading-tight">
-                      <span className="text-sm font-semibold text-foreground">{meData?.user?.name ?? tCommon("loading")}</span>
-                      <span className="text-xs text-muted-foreground/80">{meData?.user?.roleLabel ?? tCommon("role")}</span>
-                    </span>
                   </Button>
-                  <Dropdown.Popover placement="bottom end" className="w-64">
-                    <div className="flex items-center gap-3 px-3 py-3">
-                      <UserAvatar user={meData?.user} className="size-9" />
+                  <Dropdown.Popover placement="bottom end" className="min-w-[200px]">
+                    {/* Identity header, as in the Pro "With Avatar" example */}
+                    <div className="flex items-center gap-3 px-3 py-2.5">
+                      <UserAvatar user={meData?.user} className="size-8" />
                       <div className="flex min-w-0 flex-col">
-                        <p className="truncate text-sm font-semibold text-foreground">{meData?.user?.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">{meData?.user?.email}</p>
+                        <span className="text-foreground truncate text-sm font-medium leading-tight">{meData?.user?.name}</span>
+                        <span className="text-[var(--muted)] truncate text-xs leading-tight">{meData?.user?.roleLabel ?? meData?.user?.email}</span>
                       </div>
                     </div>
                     <Separator />
                     <Dropdown.Menu aria-label={tNav("user.myProfile")} onAction={onUserMenuAction}>
                       <Dropdown.Item id="profile" textValue={tNav("user.myProfile")}>
-                        <User className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        <User className="text-[var(--muted)] size-4" aria-hidden />
                         <Label>{tNav("user.myProfile")}</Label>
                       </Dropdown.Item>
                       <Dropdown.Item id="notification-preferences" textValue={tNav("user.notificationPreferences")}>
-                        <Settings className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        <Settings className="text-[var(--muted)] size-4" aria-hidden />
                         <Label>{tNav("user.notificationPreferences")}</Label>
                       </Dropdown.Item>
                       {isInstallable ? (
                         <Dropdown.Item id="install" textValue={tNav("user.installApp")}>
-                          <MonitorSmartphone className="h-4 w-4 text-muted-foreground" aria-hidden />
+                          <MonitorSmartphone className="text-[var(--muted)] size-4" aria-hidden />
                           <Label>{tNav("user.installApp")}</Label>
                         </Dropdown.Item>
                       ) : null}
@@ -756,7 +766,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         ))}
                       </Dropdown.Section>
                       <Dropdown.Item id="sign-out" textValue={tNav("user.signOut")} variant="danger" isDisabled={isLoggingOut} data-testid="header-profile-logout">
-                        <LogOut className="h-4 w-4" aria-hidden />
+                        <LogOut className="size-4" aria-hidden />
                         <Label>{tNav("user.signOut")}</Label>
                       </Dropdown.Item>
                       {demoModeEnabled && isSuperAdmin ? (
@@ -775,7 +785,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     </Dropdown.Menu>
                   </Dropdown.Popover>
                 </Dropdown>
-              </div>
+              </Navbar.Content>
             </Navbar.Header>
           </Navbar>
         }

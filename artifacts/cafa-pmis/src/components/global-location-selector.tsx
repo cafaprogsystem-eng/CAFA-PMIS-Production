@@ -69,27 +69,13 @@ export function GlobalLocationSelector() {
           aria-label={`${t("locationContext.label")}: ${label}`}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className={cn(
-            "flex h-9 shrink-0 items-center gap-1.5 rounded-md",
-            "border border-border/60 bg-card px-2.5 shadow-none",
-            "text-xs font-medium text-foreground",
-            "hover:bg-muted/50 hover:border-border",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-            "transition-colors duration-150 max-w-[180px]",
-          )}
+          // HeroUI Pro InlineSelect trigger styling, as in the Pro navbar
+          // "Dashboard" example (the menu itself stays a Radix one).
+          className="inline-select inline-select__trigger flex gap-2 focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
         >
-          <MapPin
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70"
-            aria-hidden="true"
-          />
-          <span className="truncate max-w-[120px]">{label}</span>
-          <ChevronDown
-            className={cn(
-              "h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform duration-150",
-              open && "rotate-180",
-            )}
-            aria-hidden="true"
-          />
+          <MapPin className="size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+          <span className="inline-select__value text-foreground text-sm font-medium">{label}</span>
+          <ChevronDown className="inline-select__indicator" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
 

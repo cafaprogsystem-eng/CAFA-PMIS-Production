@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { MessageSquare, Users, User } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -83,14 +82,15 @@ export function MessagesDropdown() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label={t("items.communicationCentre")}>
-          <MessageSquare className="h-5 w-5" />
+        {/* HeroUI Pro Navbar.Item styling (the trigger stays a Radix one). */}
+        <button type="button" className="navbar__item" aria-label={t("items.communicationCentre")}>
+          <MessageSquare className="size-4" aria-hidden="true" />
           {hasUnread && (
-            <Badge className="absolute -top-1 -end-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs bg-red-500 hover:bg-red-500">
+            <Badge className="absolute -end-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center bg-destructive px-1 text-[10px] leading-none hover:bg-destructive">
               {unread! > 99 ? "99+" : unread}
             </Badge>
           )}
-        </Button>
+        </button>
       </PopoverTrigger>
       <PopoverContent
         className="w-[min(24rem,calc(100vw-1rem))] max-h-[min(32rem,calc(100dvh-1rem))] p-0 flex flex-col overflow-hidden"

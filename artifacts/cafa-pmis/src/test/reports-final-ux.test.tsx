@@ -207,29 +207,25 @@ describe("REP-UX-10: Responsive form footer visible, no horizontal overflow", ()
 // REP-A11Y-01: PMR tabs have correct ARIA (role, aria-selected, keyboard)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("REP-A11Y-01: PMR tabs have correct ARIA (role, aria-selected, keyboard)", () => {
-  it("tablist role and aria-label present", () => {
-    expect(reportsSrc).toMatch(/role="tablist"\s+aria-label=\{t\("form\.tabsAriaLabel"\)\}/);
+describe("REP-A11Y-01: report sections use a named, clickable HeroUI Pro Stepper", () => {
+  it("stepper carries the sections aria-label", () => {
+    expect(reportsSrc).toMatch(/<Stepper\s+aria-label=\{t\("form\.tabsAriaLabel"\)\}/);
   });
 
-  it("each tab button has role=tab and aria-selected", () => {
-    expect(reportsSrc).toContain('role="tab"');
-    expect(reportsSrc).toMatch(/aria-selected=\{isActive\}/);
+  it("current step follows the active section and every step can be pressed", () => {
+    expect(reportsSrc).toContain("currentStep={Math.max(0, activeNavItems.findIndex((n) => n.id === activeSection))}");
+    expect(reportsSrc).toMatch(/onStepChange=\{\(index\) =>/);
   });
 
-  it("tabs have aria-controls pointing to section panel id", () => {
-    expect(reportsSrc).toMatch(/aria-controls=\{id\}/);
+  it("each section panel is a region labelled by its step", () => {
+    expect(reportsSrc).toContain('<Stepper.Step key={id} id={`tab-${id}`}');
+    expect(reportsSrc).toContain('role="region"');
+    expect(reportsSrc).toContain('aria-labelledby="tab-ar-section-basic"');
+    expect(reportsSrc).not.toContain('role="tabpanel"');
   });
 
-  it("keyboard navigation: ArrowRight, ArrowLeft, Home, End handled", () => {
-    expect(reportsSrc).toContain('"ArrowRight"');
-    expect(reportsSrc).toContain('"ArrowLeft"');
-    expect(reportsSrc).toContain('"Home"');
-    expect(reportsSrc).toContain('"End"');
-  });
-
-  it("non-active tabs have tabIndex=-1 (roving tabindex pattern)", () => {
-    expect(reportsSrc).toMatch(/tabIndex=\{isActive \? 0 : -1\}/);
+  it("a step with validation errors says so in words under its title", () => {
+    expect(reportsSrc).toMatch(/<Stepper\.Description[^>]*>\s*\{t\("form\.validationErrors", \{ count: errCount \}\)\}/);
   });
 });
 

@@ -281,20 +281,23 @@ describe("REP-VIS-08: Loading skeleton renders without layout shift — toolbar 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REP-VIS-09: View mode switcher has aria-label on group and aria-pressed on buttons
+// REP-VIS-09: View mode switcher is a labelled single-selection Segment
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("REP-VIS-09: View mode switcher has aria-label on the group and aria-pressed on each button", () => {
+describe("REP-VIS-09: View mode switcher is a labelled single-selection Segment", () => {
   it("ViewModeSwitcher component is used in the reports page", () => {
     expect(reportsSrc).toContain("ViewModeSwitcher");
   });
 
-  it("view-mode-switcher.tsx has aria-pressed on each mode button", () => {
+  it("view-mode-switcher.tsx exposes the selected mode (Segment radios) with a name per mode", () => {
     const switcherSrc = readFileSync(
       join(here, "../components/view-modes/view-mode-switcher.tsx"),
       "utf8",
     );
-    expect(switcherSrc).toContain("aria-pressed");
+    // HeroUI Pro Segment renders a radiogroup; its items announce aria-checked.
+    expect(switcherSrc).toContain("<Segment");
+    expect(switcherSrc).toContain("selectedKey={current}");
+    expect(switcherSrc).toContain("aria-label={label}");
   });
 
   it("view-mode-switcher.tsx has aria-label on the group container", () => {

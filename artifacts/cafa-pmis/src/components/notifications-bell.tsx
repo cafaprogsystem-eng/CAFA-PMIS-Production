@@ -79,8 +79,9 @@ export function NotificationsBell() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-lg focus-visible:ring-2 focus-visible:ring-ring" aria-label={t("title")}>
-          <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
+        {/* HeroUI Pro Navbar.Item styling (the trigger stays a Radix one). */}
+        <button type="button" className="navbar__item" aria-label={t("title")}>
+          <Bell className="size-4" aria-hidden="true" />
           {hasUnreadCount && unread > 0 && (
             /* -end-1: logical-end positioning (right in LTR, left in RTL) */
             <Badge
@@ -90,7 +91,7 @@ export function NotificationsBell() {
               {unread > 99 ? "99+" : unread}
             </Badge>
           )}
-        </Button>
+        </button>
       </PopoverTrigger>
       <PopoverContent dir={i18n.dir()} className="w-[calc(100vw-2rem)] max-w-sm overflow-hidden p-0" align="end">
         <div className="flex items-center justify-between border-b px-3.5 py-2.5">

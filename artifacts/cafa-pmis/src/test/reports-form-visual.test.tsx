@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import React from "react";
 import "@testing-library/jest-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -176,32 +176,26 @@ async function openCreateDialog(lockedType = "project") {
 describe("REP-FORM-VIS — Reports Form Visual Contracts", () => {
 
   /**
-   * REP-FORM-VIS-01: PMR dialog renders all tabs with role="tab" and aria-selected;
-   * ArrowRight keyboard event on the tablist advances selection;
-   * tab error badges (numeric) appear when a tab contains a validation error.
+   * REP-FORM-VIS-01: PMR dialog renders its sections as a HeroUI Pro Stepper —
+   * a named ordered list of step buttons, exactly one marked as the current
+   * step, and pressing another step makes it current.
    */
-  it("REP-FORM-VIS-01: PMR dialog renders tabs with correct ARIA roles and keyboard nav", async () => {
+  it("REP-FORM-VIS-01: PMR dialog renders a named stepper whose steps are buttons", async () => {
     await openCreateDialog("project");
     const dialog = screen.getByRole("dialog");
 
-    // All PMR tabs have role="tab"
-    const tabs = dialog.querySelectorAll('[role="tab"]');
-    expect(tabs.length).toBeGreaterThanOrEqual(5);
+    const stepper = within(dialog).getByRole("list", { name: "form.tabsAriaLabel" });
+    const steps = within(stepper).getAllByRole("button");
+    expect(steps.length).toBeGreaterThanOrEqual(5);
+    expect(stepper.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
+    expect(steps[0]).toHaveAttribute("aria-current", "step");
 
-    // At least one tab has aria-selected="true" (the active one)
-    const selectedTab = dialog.querySelector('[role="tab"][aria-selected="true"]');
-    expect(selectedTab).not.toBeNull();
+    fireEvent.click(steps[1]);
+    expect(steps[1]).toHaveAttribute("aria-current", "step");
+    expect(steps[0]).not.toHaveAttribute("aria-current");
 
-    // Keyboard: ArrowRight on the tablist should be handled
-    const tablist = dialog.querySelector('[role="tablist"]');
-    expect(tablist).not.toBeNull();
-    fireEvent.keyDown(tablist!, { key: "ArrowRight" });
-
-    // After navigation the tablist still renders without crash
-    expect(dialog.querySelectorAll('[role="tab"]').length).toBeGreaterThanOrEqual(5);
-
-    // Exactly one tablist — no duplicate nav bars
-    expect(dialog.querySelectorAll('[role="tablist"]').length).toBe(1);
+    // Exactly one step navigation — no duplicate nav bars
+    expect(dialog.querySelectorAll(".stepper")).toHaveLength(1);
   });
 
   /**
@@ -212,9 +206,9 @@ describe("REP-FORM-VIS — Reports Form Visual Contracts", () => {
     await openCreateDialog("activity");
     const dialog = screen.getByRole("dialog");
 
-    // Wizard uses same tablist/tabpanel structure
-    const tabs = dialog.querySelectorAll('[role="tab"]');
-    expect(tabs.length).toBeGreaterThanOrEqual(5);
+    // Wizard uses the same stepper structure
+    const stepper = within(dialog).getByRole("list", { name: "form.tabsAriaLabel" });
+    expect(within(stepper).getAllByRole("button").length).toBeGreaterThanOrEqual(5);
 
     // i18n mock returns key → "stateForm.next" or "stateForm.submitReport"
     const nextOrSubmit =
@@ -230,16 +224,16 @@ describe("REP-FORM-VIS — Reports Form Visual Contracts", () => {
   });
 
   /**
-   * REP-FORM-VIS-03: Exactly one tablist (nav bar) in the dialog — no duplicate
+   * REP-FORM-VIS-03: Exactly one stepper (nav bar) in the dialog — no duplicate
    * action areas. Dialog uses a flex-col layout (shrink-0 header + scrollable body
    * + shrink-0 footer). Footer contains Save Draft + Next/Submit as the action bar.
    */
-  it("REP-FORM-VIS-03: Dialog has exactly one tablist and no duplicate footer action bars", async () => {
+  it("REP-FORM-VIS-03: Dialog has exactly one stepper and no duplicate footer action bars", async () => {
     await openCreateDialog("project");
     const dialog = screen.getByRole("dialog");
 
-    // Exactly one tablist — no duplicate nav bars
-    expect(dialog.querySelectorAll('[role="tablist"]').length).toBe(1);
+    // Exactly one step navigation — no duplicate nav bars
+    expect(dialog.querySelectorAll(".stepper")).toHaveLength(1);
 
     // Footer action buttons present (Save Draft + Next or Submit)
     const footerBtns = Array.from(dialog.querySelectorAll("button")).filter((b) =>

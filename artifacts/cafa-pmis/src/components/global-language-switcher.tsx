@@ -1,7 +1,6 @@
 import { Check, Globe } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLanguage, type Language } from "@/contexts/language-context";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,15 +19,15 @@ export function GlobalLanguageSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
+        {/* HeroUI Pro Navbar.Item styling (the trigger stays a Radix one). */}
+        <button
+          type="button"
           data-testid="global-language-switcher"
           aria-label={t("language.switch")}
-          className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-accent/80"
+          className="navbar__item"
         >
-          <Globe className="h-4 w-4" aria-hidden="true" />
-        </Button>
+          <Globe className="size-4" aria-hidden="true" />
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         {(["en", "ar"] as Language[]).map((code) => (

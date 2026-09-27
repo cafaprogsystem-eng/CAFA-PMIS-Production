@@ -55,7 +55,8 @@ describe("Notifications final visual closure", () => {
   });
 
   it("NOTIF-FINAL-VIS-06 keeps the bell and popover coherent with the inbox", () => {
-    expect(bell).toContain("relative h-9 w-9 rounded-lg");
+    // Trigger uses the HeroUI Pro Navbar.Item styling like its neighbours.
+    expect(bell).toContain('<button type="button" className="navbar__item" aria-label={t("title")}>');
     expect(bell).toContain("w-[calc(100vw-2rem)] max-w-sm");
     expect(bell).toContain("max-h-[min(420px,calc(100dvh-8rem))]");
     expect(bell).toContain('t("viewAll")');

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Kbd } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import { useRecentItems } from "@/hooks/use-recent-items";
@@ -561,52 +562,58 @@ export function GlobalSearch() {
 
   return (
     <div className="relative w-full">
-      {/* ── Input ─────────────────────────────────────────────────── */}
-      <div className="relative">
-        <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-[15px] w-[15px] text-muted-foreground/55 pointer-events-none" />
-        <input
-          ref={inputRef}
-          type="search"
-          value={query}
-          onChange={handleChange}
-          onFocus={handleFocus}
-          onKeyDown={handleKeyDown}
-          placeholder={t("globalSearch.placeholder")}
-          autoComplete="off"
-          spellCheck={false}
-          aria-label={t("globalSearch.ariaLabel")}
-          aria-expanded={showPanel}
-          aria-autocomplete="list"
-          aria-haspopup="listbox"
-          className="w-full h-10 rounded-xl border border-border/70 bg-muted/30 ps-9 pe-16 text-sm placeholder:text-muted-foreground/45 hover:bg-muted/50 hover:border-border focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 focus:bg-background transition-all duration-150"
-        />
-        <div className="absolute end-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-          {loading && (
-            <Loader2 className="h-3.5 w-3.5 text-muted-foreground/50 animate-spin" />
-          )}
-          {query && !loading && (
-            <button
-              onClick={clear}
-              aria-label={t("globalSearch.clearSearch")}
-              tabIndex={-1}
-              className="h-5 w-5 flex items-center justify-center rounded-full text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-          {!query && (
-            <button
-              type="button"
-              onClick={() => document.dispatchEvent(new CustomEvent("open-command-palette"))}
-              className="hidden lg:flex items-center cursor-pointer"
-              aria-label={t("globalSearch.openCommandPalette")}
-              tabIndex={-1}
-            >
-              <kbd className="inline-flex items-center rounded border border-border/60 bg-muted/80 px-1.5 py-px text-xs font-medium text-muted-foreground/50 tracking-wide hover:border-border hover:bg-muted transition-colors">
-                ⌘K
-              </kbd>
-            </button>
-          )}
+      {/* ── Input — HeroUI SearchField anatomy (secondary variant, h-8,
+          ⌘K Kbd), as in the HeroUI Pro navbar examples. Plain elements
+          with its classes keep the combobox wiring below unchanged; the
+          field border is cleared because the app outlines other fields. */}
+      <div className="search-field search-field--secondary w-full" style={{ "--field-border": "transparent" } as React.CSSProperties}>
+        <div className="search-field__group h-8 w-full">
+          <Search className="search-field__search-icon" aria-hidden />
+          <input
+            ref={inputRef}
+            type="search"
+            value={query}
+            onChange={handleChange}
+            onFocus={handleFocus}
+            onKeyDown={handleKeyDown}
+            placeholder={t("globalSearch.placeholder")}
+            autoComplete="off"
+            spellCheck={false}
+            aria-label={t("globalSearch.ariaLabel")}
+            aria-expanded={showPanel}
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            className="search-field__input min-w-0 [&::-webkit-search-cancel-button]:hidden"
+          />
+          <div className="flex shrink-0 items-center gap-1.5 pe-1.5">
+            {loading && (
+              <Loader2 className="h-3.5 w-3.5 text-[var(--muted)] animate-spin" />
+            )}
+            {query && !loading && (
+              <button
+                onClick={clear}
+                aria-label={t("globalSearch.clearSearch")}
+                tabIndex={-1}
+                className="search-field__clear-button"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+            {!query && (
+              <button
+                type="button"
+                onClick={() => document.dispatchEvent(new CustomEvent("open-command-palette"))}
+                className="hidden lg:flex items-center cursor-pointer"
+                aria-label={t("globalSearch.openCommandPalette")}
+                tabIndex={-1}
+              >
+                <Kbd className="pointer-events-none text-xs">
+                  <Kbd.Abbr keyValue="command" />
+                  <Kbd.Content>K</Kbd.Content>
+                </Kbd>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

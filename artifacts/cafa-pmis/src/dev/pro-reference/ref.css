@@ -1,0 +1,7 @@
+/* Stock HeroUI + HeroUI Pro setup, exactly as the Pro installation guide
+   prescribes, with none of the CAFA theme. Used only by pro-reference.html
+   to render the library's own examples as a visual baseline. */
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "@heroui-pro/react/css";
+@source "./";

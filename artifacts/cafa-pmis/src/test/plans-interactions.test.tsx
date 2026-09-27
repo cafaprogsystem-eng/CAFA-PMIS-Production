@@ -181,7 +181,7 @@ describe("Plans workspace interaction contract", () => {
     expect(screen.queryByText("Completed 21")).not.toBeInTheDocument();
 
     for (const mode of ["Card", "List", "Compact", "Kanban", "Calendar"]) {
-      fireEvent.click(screen.getByRole("button", { name: mode }));
+      fireEvent.click(screen.getByRole("radio", { name: mode }));
       const view = screen.getByRole("button", { name: "View Draft Plan" });
       fireEvent.click(view);
       expect(screen.getByRole("dialog", { name: "Plan details" })).toHaveTextContent("Shared Plan Detail 1");
@@ -201,7 +201,7 @@ describe("Plans workspace interaction contract", () => {
     expect(screen.getByText("Completed 21")).toBeInTheDocument();
     expect(screen.queryByText("Draft Plan")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Card" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Card" }));
     expect(screen.getByText("Completed 21")).toBeInTheDocument();
     expect(screen.queryByText("Draft Plan")).not.toBeInTheDocument();
     expect(screen.getByText("2 / 2")).toBeInTheDocument();
@@ -213,7 +213,7 @@ describe("Plans workspace interaction contract", () => {
     renderWorkspace();
 
     for (const mode of ["Card", "List", "Compact", "Kanban", "Calendar"]) {
-      fireEvent.click(screen.getByRole("button", { name: mode }));
+      fireEvent.click(screen.getByRole("radio", { name: mode }));
       const edit = screen.getByRole("button", { name: "Continue Editing Draft Plan" });
       fireEvent.click(edit);
       expect(setLocation).toHaveBeenLastCalledWith("/plans/1?edit=1");
@@ -227,7 +227,7 @@ describe("Plans workspace interaction contract", () => {
     renderWorkspace();
 
     expect(screen.queryByRole("button", { name: /Continue Editing/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Card" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Card" }));
     const view = screen.getByRole("button", { name: "View Draft Plan" });
     fireEvent.click(view);
     expect(screen.getByRole("dialog", { name: "Plan details" })).toHaveTextContent("Shared Plan Detail 1");
@@ -294,7 +294,7 @@ describe("Plans workspace interaction contract", () => {
   it("does not offer Continue Editing for a non-draft plan and supports keyboard View", async () => {
     apiState.plans = [plan(2, "completed", "Completed Plan")];
     renderWorkspace();
-    fireEvent.click(screen.getByRole("button", { name: "Card" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Card" }));
 
     expect(screen.queryByRole("button", { name: /Continue Editing/ })).not.toBeInTheDocument();
     const view = screen.getByRole("button", { name: "View Completed Plan" });

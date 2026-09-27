@@ -252,11 +252,11 @@ describe("Accent token — neutral hover surface (not saturated blue)", () => {
 /* ══════════════════════════════════════════════════════════════════════
    §7  Primary (CAFA blue) — #2563EB, unchanged
    ══════════════════════════════════════════════════════════════════════ */
-describe("Primary token — CAFA blue (#2563EB family), unchanged", () => {
-  it("20. Primary hue is in the 218–224 range (blue)", () => {
+describe("Primary token — HeroUI accent blue (#0485F7), shared with HeroUI components", () => {
+  it("20. Primary hue is HeroUI's accent hue (blue, 205–212)", () => {
     const { h } = light("--primary");
-    expect(h).toBeGreaterThanOrEqual(218);
-    expect(h).toBeLessThanOrEqual(224);
+    expect(h).toBeGreaterThanOrEqual(205);
+    expect(h).toBeLessThanOrEqual(212);
   });
 
   it("21. Primary saturation is ≥ 80% (vivid brand blue)", () => {
@@ -264,7 +264,7 @@ describe("Primary token — CAFA blue (#2563EB family), unchanged", () => {
     expect(s).toBeGreaterThanOrEqual(80);
   });
 
-  it("22. Primary lightness is in the 48–58% range (#2563EB family)", () => {
+  it("22. Primary lightness is in the 48–58% range (vivid, readable on white)", () => {
     const { l } = light("--primary");
     expect(l).toBeGreaterThanOrEqual(48);
     expect(l).toBeLessThanOrEqual(58);

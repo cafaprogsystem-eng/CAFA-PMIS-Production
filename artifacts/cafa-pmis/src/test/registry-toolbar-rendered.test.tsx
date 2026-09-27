@@ -103,9 +103,9 @@ describe("Budget registry toolbars", () => {
     expect(toolbar.className).toContain("border");
     expect(within(toolbar).getByRole("searchbox", { name: "Search donor name, project code or title…" })).toHaveClass("h-10");
     expect(toolbar.querySelector('[data-orientation="vertical"]')).toBeInTheDocument();
-    expect(within(toolbar).getByRole("button", { name: "Grid / Card" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(toolbar).getByRole("radio", { name: "Grid / Card" })).toHaveAttribute("aria-checked", "false");
 
-    fireEvent.click(within(toolbar).getByRole("button", { name: "Grid / Card" }));
+    fireEvent.click(within(toolbar).getByRole("radio", { name: "Grid / Card" }));
     expect(window.location.search).toBe("?tab=overview&projectBudgetView=compact&external=keep&donorPortfolioView=card");
   });
 
@@ -127,9 +127,9 @@ describe("Budget registry toolbars", () => {
     expect(toolbar.className).toContain("border");
     expect(within(toolbar).getByRole("searchbox", { name: "Search project code, title or donor…" })).toHaveClass("h-10");
     expect(toolbar.querySelector('[data-orientation="vertical"]')).toBeInTheDocument();
-    const compact = within(toolbar).getByRole("button", { name: "Compact List" });
+    const compact = within(toolbar).getByRole("radio", { name: "Compact List" });
     expect(compact.tagName).toBe("BUTTON");
-    expect(compact).toHaveAttribute("aria-pressed", "false");
+    expect(compact).toHaveAttribute("aria-checked", "false");
 
     fireEvent.click(compact);
     expect(window.location.search).toBe("?tab=overview&donorPortfolioView=card&external=keep&projectBudgetView=compact");

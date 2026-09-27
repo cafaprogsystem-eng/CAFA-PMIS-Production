@@ -275,7 +275,7 @@ describe("PLAN-VIS-05: long plan title renders; action links remain accessible",
 // ─────────────────────────────────────────────────────────────────────────────
 // PLAN-VIS-06: ViewModeSwitcher aria attributes
 // ─────────────────────────────────────────────────────────────────────────────
-describe("PLAN-VIS-06: ViewModeSwitcher aria-label and aria-pressed", () => {
+describe("PLAN-VIS-06: ViewModeSwitcher label and selected state", () => {
   it("group element has aria-label", () => {
     render(
       <TooltipProvider>
@@ -286,11 +286,11 @@ describe("PLAN-VIS-06: ViewModeSwitcher aria-label and aria-pressed", () => {
         />
       </TooltipProvider>,
     );
-    const group = document.querySelector("[role='group']");
+    const group = document.querySelector("[role='radiogroup']");
     expect(group).toHaveAttribute("aria-label");
   });
 
-  it("active mode button has aria-pressed=true", () => {
+  it("active mode is checked", () => {
     render(
       <TooltipProvider>
         <ViewModeSwitcher
@@ -300,12 +300,12 @@ describe("PLAN-VIS-06: ViewModeSwitcher aria-label and aria-pressed", () => {
         />
       </TooltipProvider>,
     );
-    // Find the button with aria-pressed="true"
-    const pressedButtons = document.querySelectorAll("button[aria-pressed='true']");
-    expect(pressedButtons.length).toBeGreaterThanOrEqual(1);
+    const checked = document.querySelectorAll("[role='radio'][aria-checked='true']");
+    expect(checked).toHaveLength(1);
+    expect(checked[0]).toHaveAttribute("aria-label", "viewModes.card");
   });
 
-  it("inactive mode buttons have aria-pressed=false", () => {
+  it("inactive modes are unchecked", () => {
     render(
       <TooltipProvider>
         <ViewModeSwitcher
@@ -315,8 +315,8 @@ describe("PLAN-VIS-06: ViewModeSwitcher aria-label and aria-pressed", () => {
         />
       </TooltipProvider>,
     );
-    const notPressedButtons = document.querySelectorAll("button[aria-pressed='false']");
-    expect(notPressedButtons.length).toBeGreaterThanOrEqual(2);
+    const unchecked = document.querySelectorAll("[role='radio'][aria-checked='false']");
+    expect(unchecked.length).toBeGreaterThanOrEqual(2);
   });
 
   it("clicking an inactive mode calls onChange", () => {
@@ -331,7 +331,7 @@ describe("PLAN-VIS-06: ViewModeSwitcher aria-label and aria-pressed", () => {
       </TooltipProvider>,
     );
     const notPressedButtons = Array.from(
-      document.querySelectorAll<HTMLButtonElement>("button[aria-pressed='false']"),
+      document.querySelectorAll<HTMLButtonElement>("[role='radio'][aria-checked='false']"),
     );
     expect(notPressedButtons.length).toBeGreaterThan(0);
     fireEvent.click(notPressedButtons[0]);

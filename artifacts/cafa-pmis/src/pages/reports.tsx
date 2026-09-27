@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { Segment } from "@heroui-pro/react/segment";
+import { Stepper } from "@heroui-pro/react/stepper";
 import { useLocationContext } from "@/contexts/location-context";
 import {
   validateActivityForSubmission,
@@ -1653,9 +1655,9 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
   // the dialog/page scroll — prevents the first tab being clipped at the left edge
   // when returning from a later step.
   useEffect(() => {
-    const el = document.querySelector<HTMLElement>(`[role="tab"][id="tab-${activeSection}"]`);
+    const el = document.querySelector<HTMLElement>(`[data-stepper-scroll] [id="tab-${activeSection}"]`);
     if (!el) return;
-    const tablist = el.closest<HTMLElement>('[role="tablist"]');
+    const tablist = el.closest<HTMLElement>("[data-stepper-scroll]");
     if (!tablist) return;
     const elLeft = el.offsetLeft;
     const elRight = elLeft + el.offsetWidth;
@@ -3807,61 +3809,35 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                   })()}
                 </div>
 
-                {/* ── True tab navigation (ARIA) ── */}
+                {/* ── Step navigation — HeroUI Pro Stepper (horizontal, md). Every
+                    step stays clickable, as the sections always were; a section
+                    with validation errors says so under its title. ── */}
                 <div className="border-b shrink-0 bg-background">
-                  <div
-                    role="tablist"
-                    aria-label={t("form.tabsAriaLabel")}
-                    className="flex gap-0.5 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                    onKeyDown={(e) => {
-                      const ids = activeNavItems.map((n) => n.id);
-                      const cur = ids.indexOf(activeSection);
-                      let next: number;
-                      if (e.key === "ArrowRight") next = (cur + 1) % ids.length;
-                      else if (e.key === "ArrowLeft") next = (cur - 1 + ids.length) % ids.length;
-                      else if (e.key === "Home") next = 0;
-                      else if (e.key === "End") next = ids.length - 1;
-                      else return;
-                      e.preventDefault();
-                      setActiveSection(ids[next]);
-                      (e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next])?.focus();
-                    }}
-                  >
-                    {activeNavItems.map(({ id, labelKey }) => {
-                      const errCount = tabErrors[id] ?? 0;
-                      const isActive = activeSection === id;
-                      return (
-                        <button
-                          key={id}
-                          role="tab"
-                          id={`tab-${id}`}
-                          type="button"
-                          tabIndex={isActive ? 0 : -1}
-                          aria-selected={isActive}
-                          aria-controls={id}
-                          onClick={() => setActiveSection(id)}
-                          className={cn(
-                            "shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex items-center gap-1",
-                            isActive
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                          )}
-                        >
-                          {t(labelKey)}
-                          {errCount > 0 && (
-                            <span
-                              aria-label={t("form.validationErrors", { count: errCount })}
-                              className={cn(
-                                "inline-flex items-center justify-center rounded-full text-[10px] font-bold h-4 min-w-4 px-1",
-                                isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-destructive text-destructive-foreground",
+                  <div data-stepper-scroll className="overflow-x-auto px-5 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <Stepper
+                      aria-label={t("form.tabsAriaLabel")}
+                      className="min-w-[640px]"
+                      currentStep={Math.max(0, activeNavItems.findIndex((n) => n.id === activeSection))}
+                      onStepChange={(index) => { const next = activeNavItems[index]; if (next) setActiveSection(next.id); }}
+                    >
+                      {activeNavItems.map(({ id, labelKey }) => {
+                        const errCount = tabErrors[id] ?? 0;
+                        return (
+                          <Stepper.Step key={id} id={`tab-${id}`} data-section={id}>
+                            <Stepper.Indicator />
+                            <Stepper.Content>
+                              <Stepper.Title>{t(labelKey)}</Stepper.Title>
+                              {errCount > 0 && (
+                                <Stepper.Description className="text-[var(--danger)]">
+                                  {t("form.validationErrors", { count: errCount })}
+                                </Stepper.Description>
                               )}
-                            >
-                              {errCount}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                            </Stepper.Content>
+                            <Stepper.Separator />
+                          </Stepper.Step>
+                        );
+                      })}
+                    </Stepper>
                   </div>
                 </div>
 
@@ -3959,7 +3935,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                   {/* ── TAB 1 (non-activity): BASIC INFORMATION ── */}
                   <section
-                    role="tabpanel"
+                    role="region"
                     id="rp-section-basic"
                     aria-labelledby="tab-rp-section-basic"
                     className={(!isActivity && activeSection === "rp-section-basic") ? "space-y-3" : "hidden"}
@@ -4298,7 +4274,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                   {/* ── ACTIVITY REPORT TAB 1: BASIC INFORMATION (ar-section-basic) ── */}
                   {isActivity && (
                     <section
-                      role="tabpanel"
+                      role="region"
                       id="ar-section-basic"
                       aria-labelledby="tab-ar-section-basic"
                       className={activeSection === "ar-section-basic" ? "space-y-4" : "hidden"}
@@ -4356,26 +4332,21 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                         {/* Link To Existing Record — optional 3-mode selector */}
                         <div>
-                          <p className="text-[11px] font-semibold text-muted-foreground mb-1.5">
+                          <p id="ar-link-mode-label" className="text-[11px] font-semibold text-muted-foreground mb-1.5">
                             {t("form.linkExistingRecord")} <span className="font-normal normal-case tracking-normal text-muted-foreground/70">({t("form.optional")})</span>
                           </p>
-                          <div className="flex rounded-md border border-border overflow-hidden">
+                          {/* HeroUI Pro Segment (default variant, md) */}
+                          <Segment
+                            aria-labelledby="ar-link-mode-label"
+                            selectedKey={linkMode}
+                            onSelectionChange={(key) => handleLinkModeChange(key as "standalone" | "activity" | "project")}
+                          >
                             {(["standalone", "activity", "project"] as const).map((m) => (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => handleLinkModeChange(m)}
-                                className={cn(
-                                  "flex-1 px-2 py-1.5 text-xs font-medium transition-colors text-center border-r last:border-r-0 border-border",
-                                  linkMode === m
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                                )}
-                              >
+                              <Segment.Item key={m} id={m}>
                                 {m === "standalone" ? t("form.standalone") : m === "activity" ? t("form.existingActivity") : t("fields.project")}
-                              </button>
+                              </Segment.Item>
                             ))}
-                          </div>
+                          </Segment>
                           {linkMode === "standalone" && (
                             <p className="text-xs text-muted-foreground mt-1">{t("form.standaloneLinkHelp")}</p>
                           )}
@@ -4697,7 +4668,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                   {/* ── TAB 2: PROGRESS ── */}
                   <section
-                    role="tabpanel"
+                    role="region"
                     id={isActivity ? "ar-section-progress" : "rp-section-progress"}
                     aria-labelledby={`tab-${isActivity ? "ar-section-progress" : "rp-section-progress"}`}
                     className={(isActivity ? activeSection === "ar-section-progress" : activeSection === "rp-section-progress") ? "space-y-3" : "hidden"}
@@ -4884,7 +4855,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                   {/* ── ACTIVITY REPORT TAB 3: RESULTS & BENEFICIARIES (ar-section-results) ── */}
                   {isActivity && (
                     <section
-                      role="tabpanel"
+                      role="region"
                       id="ar-section-results"
                       aria-labelledby="tab-ar-section-results"
                       className={activeSection === "ar-section-results" ? "space-y-6" : "hidden"}
@@ -5021,7 +4992,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                   {/* ── TAB 3: ACTIVITIES (includes indicator progress, beneficiary reach, financial summary) — non-activity types only ── */}
                   <section
-                    role="tabpanel"
+                    role="region"
                     id="rp-section-activities"
                     aria-labelledby="tab-rp-section-activities"
                     className={(!isActivity && activeSection === "rp-section-activities") ? "space-y-3" : "hidden"}
@@ -5477,7 +5448,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                   {/* ── TAB 4: CHALLENGES / CHALLENGES & ACTIONS ── */}
                   <section
-                    role="tabpanel"
+                    role="region"
                     id={isActivity ? "ar-section-challenges" : "rp-section-challenges"}
                     aria-labelledby={`tab-${isActivity ? "ar-section-challenges" : "rp-section-challenges"}`}
                     className={(isActivity ? activeSection === "ar-section-challenges" : activeSection === "rp-section-challenges") ? "space-y-4" : "hidden"}
@@ -5702,7 +5673,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                   {/* ── TAB 5: LESSONS LEARNED (project and activity types) ── */}
                   {(isProject || isActivity) && sectionsCfg.narrative && sectionsCfg.narrative.length > 0 && (
                     <section
-                      role="tabpanel"
+                      role="region"
                       id={isActivity ? "ar-section-lessons" : "rp-section-lessons"}
                       aria-labelledby={`tab-${isActivity ? "ar-section-lessons" : "rp-section-lessons"}`}
                       className={(isActivity ? activeSection === "ar-section-lessons" : activeSection === "rp-section-lessons") ? "space-y-6" : "hidden"}
@@ -5944,7 +5915,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                   {/* ── TAB 6: ATTACHMENTS & VOICE ── */}
                   <section
-                    role="tabpanel"
+                    role="region"
                     id={isActivity ? "ar-section-attachments" : "rp-section-attachments"}
                     aria-labelledby={`tab-${isActivity ? "ar-section-attachments" : "rp-section-attachments"}`}
                     className={(isActivity ? activeSection === "ar-section-attachments" : activeSection === "rp-section-attachments") ? "space-y-6" : "hidden"}

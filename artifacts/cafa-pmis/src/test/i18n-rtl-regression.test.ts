@@ -624,12 +624,13 @@ describe("Business-module RTL production guardrails", () => {
     ).toHaveLength(0);
   });
 
-  it("activates the Arabic-capable font stack and readable leading for Arabic documents", () => {
+  it("uses an Arabic-capable font stack and keeps Arabic headings joined", () => {
     const css = source("index.css");
-    expect(css).toContain('html[lang="ar"] {');
-    expect(css).toContain("--cafa-font-sans: var(--cafa-font-arabic)");
-    expect(css).toContain("font-family: var(--cafa-font-arabic)");
-    expect(css).toContain("line-height: 1.75");
+    // HeroUI Pro's system stack: system-ui resolves to an Arabic-complete
+    // face on every platform (SF Arabic, Segoe UI, Noto Sans Arabic).
+    expect(css).toMatch(/--cafa-font-sans:\s*ui-sans-serif, system-ui, sans-serif/);
+    expect(css).not.toMatch(/--cafa-font-sans:[^;]*Inter/);
+    expect(css).toContain(":lang(ar) :is(h1, h2, h3, h4, h5, h6) { letter-spacing: normal; }");
     expect(css).toContain("html[lang=\"ar\"] :is(button, input, select, textarea)");
   });
 

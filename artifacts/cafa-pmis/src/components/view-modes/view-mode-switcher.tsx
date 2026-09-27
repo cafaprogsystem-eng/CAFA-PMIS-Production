@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { LayoutGrid, List, Table2, Rows3, Kanban, Calendar, Map } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip } from "@heroui/react";
+import { Segment } from "@heroui-pro/react/segment";
 import type { ViewMode } from "@/lib/view-modes";
 
 interface ViewModeSwitcherProps {
@@ -10,6 +10,11 @@ interface ViewModeSwitcherProps {
   onChange: (mode: ViewMode) => void;
 }
 
+/**
+ * Icon-only HeroUI Pro Segment, built like the icon segment in the Pro
+ * navbar "Docs Site" example (size sm, 28px square items, 14px icons).
+ * Each item keeps its name as aria-label and a tooltip.
+ */
 export function ViewModeSwitcher({ available, current, onChange }: ViewModeSwitcherProps) {
   const { t } = useTranslation("common");
 
@@ -25,33 +30,25 @@ export function ViewModeSwitcher({ available, current, onChange }: ViewModeSwitc
   };
 
   return (
-    <div className="inline-flex h-10 items-center gap-0.5 p-1 rounded-lg bg-muted border border-border/60" role="group" aria-label={t("viewModes.viewMode")}>
+    <Segment
+      aria-label={t("viewModes.viewMode")}
+      size="sm"
+      className="gap-0"
+      selectedKey={current}
+      onSelectionChange={(key) => onChange(key as ViewMode)}
+    >
       {available.map((mode) => {
         const { icon: Icon, labelKey } = MODE_CONFIG[mode];
         const label = t(labelKey);
-        const active = current === mode;
         return (
-          <Tooltip key={mode}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-8 w-8 transition-all duration-150 ${
-                  active
-                    ? "bg-background shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/60"
-                }`}
-                onClick={() => onChange(mode)}
-                aria-label={label}
-                aria-pressed={active}
-              >
-                <Icon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">{label}</TooltipContent>
+          <Tooltip key={mode} delay={400}>
+            <Segment.Item id={mode} aria-label={label} className="size-[28px] px-0">
+              <Icon className="size-3.5" aria-hidden />
+            </Segment.Item>
+            <Tooltip.Content placement="bottom">{label}</Tooltip.Content>
           </Tooltip>
         );
       })}
-    </div>
+    </Segment>
   );
 }

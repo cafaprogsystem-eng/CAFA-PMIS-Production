@@ -324,9 +324,11 @@ describe("Sidebar brand hierarchy", () => {
   });
 
   it("uses a compact logo/title row whose title hides in the icon rail", () => {
-    expect(layoutSource).toContain('className="size-8 shrink-0 object-contain"');
+    // HeroUI Pro example brand row: 24px mark, gap-3 px-1 py-2, text-sm semibold.
+    expect(layoutSource).toContain('<div className="flex min-w-0 items-center gap-3 px-1 py-2">');
+    expect(layoutSource).toContain('className="size-6 shrink-0 object-contain"');
     expect(layoutSource).toContain('data-testid="sidebar-brand-title" data-sidebar="label"');
-    expect(layoutSource).toContain("text-[16px] font-medium leading-tight");
+    expect(layoutSource).toContain("text-foreground truncate text-sm font-semibold");
     expect(layoutSource).toContain("<Sidebar.Header>{brand}</Sidebar.Header>");
     expect(layoutSource).not.toContain("bg-primary flex items-center justify-center shadow-sm");
   });
@@ -337,8 +339,8 @@ describe("Sidebar brand hierarchy", () => {
   });
 
   it("keeps collapse, expand and mobile-menu controls named for assistive tech", () => {
-    expect(layoutSource).toContain('<Sidebar.Trigger aria-label={sidebarCollapsed ? tNav("tooltips.expandSidebar") : tNav("tooltips.collapseSidebar")} />');
-    expect(layoutSource).toContain('<ShellLayout.MenuToggle aria-label={tNav("tooltips.openMenu")} />');
+    expect(layoutSource).toContain('<Sidebar.Trigger className="shrink-0" aria-label={sidebarCollapsed ? tNav("tooltips.expandSidebar") : tNav("tooltips.collapseSidebar")} />');
+    expect(layoutSource).toContain('<ShellLayout.MenuToggle className="shrink-0" aria-label={tNav("tooltips.openMenu")} />');
     expect(layoutSource).toContain("<Sidebar.Rail />");
   });
 
@@ -558,9 +560,9 @@ describe("Profile footer — logout affordances", () => {
     expect(layoutSource).toContain("clearOfflineData()");
   });
 
-  it("keeps long account names safely truncated in the footer and the header menu", () => {
+  it("keeps long account names safely truncated in the header menu; the footer holds actions only", () => {
     const account = layoutSource.slice(layoutSource.indexOf("function SidebarAccount("), layoutSource.indexOf("function MobileLocationPicker("));
-    expect((account.match(/\btruncate\b/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(account).not.toContain("user.name");
     const menu = layoutSource.slice(layoutSource.indexOf("{/* User menu */}"));
     expect((menu.match(/\btruncate\b/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
