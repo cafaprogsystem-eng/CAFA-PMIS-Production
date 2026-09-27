@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { MapPin } from "lucide-react";
+import { MapPin } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import type { ViewRecord } from "@/lib/view-modes";
 import { StateLabel, getStateLabel } from "@/components/state-label";

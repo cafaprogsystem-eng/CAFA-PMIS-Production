@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryCache, QueryClient, QueryClientProvider, MutationCache, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@workspace/api-client-react";
-import { Loader2 } from "lucide-react";
+import { Loader2 } from "@/components/icons";
 import { DirectionProvider } from "@radix-ui/react-direction";
 import { I18nProvider } from "@heroui/react";
 import { Toaster } from "@/components/ui/toaster";

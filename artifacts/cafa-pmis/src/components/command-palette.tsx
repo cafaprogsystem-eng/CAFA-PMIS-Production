@@ -8,7 +8,7 @@ import {
   MapPin, PieChart, ShieldAlert, UserCog, Bell, MessageSquare,
   BookOpen, Database, Bot, BookMarked, Archive,
   RefreshCw, ArrowRight, Zap, Star,
-} from "lucide-react";
+} from "@/components/icons";
 import { useGetMe } from "@workspace/api-client-react";
 import { useRecentItems } from "@/hooks/use-recent-items";
 import { timeAgo } from "@/lib/recent-items";

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Bot, Settings, ToggleLeft, ToggleRight, RefreshCw,
   Search, Download, Activity, Users, MessageSquare, Globe, Shield
-} from "lucide-react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

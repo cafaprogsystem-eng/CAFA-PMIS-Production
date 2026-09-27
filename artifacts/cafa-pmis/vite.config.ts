@@ -179,7 +179,7 @@ export default defineConfig({
         // (both are precached) and lets that chunk stay cached across app
         // releases.
         manualChunks(id) {
-          if (/node_modules\/\.pnpm\/(@heroui|@heroui-pro|react-aria|@react-aria|react-stately|@react-stately|@react-types|@internationalized|tailwind-variants)[+@]/.test(id)) {
+          if (/node_modules\/\.pnpm\/(@heroui|@heroui-pro|@gravity-ui|react-aria|@react-aria|react-stately|@react-stately|@react-types|@internationalized|tailwind-variants)[+@]/.test(id)) {
             return "ui-vendor";
           }
         },

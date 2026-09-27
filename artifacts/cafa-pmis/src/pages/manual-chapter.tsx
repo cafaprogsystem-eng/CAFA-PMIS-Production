@@ -9,7 +9,7 @@ import {
   Search, ChevronRight, Pencil, Trash2, Plus, X, Save, FileDown,
   Download, ClipboardCheck, ThumbsUp, ThumbsDown, ArrowRight,
   Menu, Archive, Bot,
-} from "lucide-react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";

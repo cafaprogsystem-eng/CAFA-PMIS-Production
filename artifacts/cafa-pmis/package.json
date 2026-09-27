@@ -53,7 +53,6 @@
     "@replit/vite-plugin-cartographer": "catalog:",
     "@replit/vite-plugin-dev-banner": "catalog:",
     "@replit/vite-plugin-runtime-error-modal": "catalog:",
-    "@tabler/icons-react": "3.48.0",
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
@@ -110,6 +109,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@gravity-ui/icons": "2.22.0",
     "@heroui-pro/react": "1.0.0-beta.10",
     "@radix-ui/react-direction": "^1.1.4",
     "dexie": "^4.4.3",

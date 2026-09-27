@@ -39,7 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertTriangle, AlertCircle, Plus, Search, X, Clock, CheckCircle2, User, Filter,
   Calendar, Shield, FileText, History, MessageSquare,
-} from "lucide-react";
+} from "@/components/icons";
 import { RISK_STATUS_OPTIONS, RISK_STATUS_VALUES, formatRiskStatus } from "@/lib/risk-statuses";
 import { LocationSelector } from "@/components/location-selector";
 import { StateLabel } from "@/components/state-label";

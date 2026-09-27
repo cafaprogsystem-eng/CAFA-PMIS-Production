@@ -21,7 +21,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Plus, Trash2, Save, Send, CheckCircle2, X, ChevronRight, AlertTriangle, MapPin, AlertCircle, ChevronDown, ChevronUp, Pencil, MoreHorizontal, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Send, CheckCircle2, X, ChevronRight, AlertTriangle, MapPin, AlertCircle, ChevronDown, ChevronUp, Pencil, MoreHorizontal, RotateCcw } from "@/components/icons";
 import { toast } from "sonner";
 import { formatDate, formatCurrency, formatStatusLabel, formatPlanType, hasPerm, statusBadgeVariant, formatLocation } from "@/lib/format";
 import { getLinkedStateLabel } from "@/components/state-label";

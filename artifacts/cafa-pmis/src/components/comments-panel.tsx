@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Reply, CheckCircle2, RotateCcw, Trash2, Loader2 } from "lucide-react";
+import { MessageSquare, Reply, CheckCircle2, RotateCcw, Trash2, Loader2 } from "@/components/icons";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";

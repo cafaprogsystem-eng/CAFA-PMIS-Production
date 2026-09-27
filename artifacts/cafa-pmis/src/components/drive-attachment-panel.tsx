@@ -16,7 +16,7 @@ import {
 import {
   Upload, FileText, FileImage, FileSpreadsheet, Loader2, Trash2,
   Download, ExternalLink, Paperclip,
-} from "lucide-react";
+} from "@/components/icons";
 
 /**
  * Plan and risk files use the canonical descriptor → object upload → finalise

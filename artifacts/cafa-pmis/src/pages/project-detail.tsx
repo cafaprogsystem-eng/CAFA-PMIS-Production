@@ -51,7 +51,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateTime, formatPercent, formatStatusLabel, hasPerm, severityBadgeVariant } from "@/lib/format";
 import { ProjectStatusBadge, ProgressBar } from "./projects";
-import { CheckCircle2, ArrowLeft, DollarSign, Users, Target, Activity as ActivityIcon, AlertCircle, FileText, TrendingUp, Plus, Shield, Building2, CalendarDays, Hash, Tag, Pencil, Trash2, Lock, Upload, Archive } from "lucide-react";
+import { CheckCircle2, ArrowLeft, DollarSign, Users, Target, Activity as ActivityIcon, AlertCircle, FileText, TrendingUp, Plus, Shield, Building2, CalendarDays, Hash, Tag, Pencil, Trash2, Lock, Upload, Archive } from "@/components/icons";
 import { ErrorState } from "@/components/ui/error-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { CommentsPanel, useUnresolvedRequiredCorrections } from "@/components/comments-panel";

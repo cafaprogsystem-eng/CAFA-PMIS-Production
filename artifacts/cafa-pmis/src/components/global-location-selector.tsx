@@ -10,7 +10,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { getStateLabel } from "@/components/state-label";
-import { MapPin, ChevronDown, Check, Search, X } from "lucide-react";
+import { MapPin, ChevronDown, Check, Search, X } from "@/components/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,

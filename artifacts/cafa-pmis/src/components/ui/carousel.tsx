@@ -2,7 +2,7 @@ import * as React from "react"
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
 } from "embla-carousel-react"
-import { ArrowLeft, ArrowRight } from "lucide-react"
+import { ArrowLeft, ArrowRight } from "@/components/icons"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"

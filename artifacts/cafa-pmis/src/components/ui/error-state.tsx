@@ -6,7 +6,7 @@ import {
   WifiOff,
   ShieldAlert,
   RefreshCw,
-} from "lucide-react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Button } from "@heroui/react";
 

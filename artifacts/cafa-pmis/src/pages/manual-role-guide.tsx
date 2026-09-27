@@ -5,7 +5,7 @@ import {
   LayoutDashboard, FileText, AlertTriangle,
   Bell, ShieldCheck, Eye, Pencil,
   ArrowRight,
-} from "lucide-react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { useGetMe } from "@workspace/api-client-react";
 import { useLanguage } from "@/contexts/language-context";

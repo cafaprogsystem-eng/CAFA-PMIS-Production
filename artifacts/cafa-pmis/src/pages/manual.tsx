@@ -9,7 +9,7 @@ import {
   BookMarked, Paperclip, Loader2, X,
   Clock, ChevronRight, HelpCircle, ChevronDown,
   ArrowRight, Bot, Archive, UserCheck,
-} from "lucide-react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

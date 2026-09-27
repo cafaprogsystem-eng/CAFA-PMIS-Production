@@ -13,7 +13,7 @@ import { KPI } from "@heroui-pro/react/kpi";
 import { KPIGroup } from "@heroui-pro/react/kpi-group";
 import { NumberValue } from "@heroui-pro/react/number-value";
 import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
-import { FolderKanban, ShieldAlert, Users, Wallet } from "lucide-react";
+import { FolderKanban, ShieldAlert, Users, Wallet } from "@/components/icons";
 import { useLanguage } from "@/contexts/language-context";
 import { useIsMobile } from "@/hooks/use-mobile";
 

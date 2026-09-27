@@ -26,7 +26,7 @@ import {
   Plus, Trash2, Send, Upload, FileText, Loader2, X, AlertTriangle,
   ChevronDown, ChevronRight, TrendingUp, Users, Activity, ShieldAlert, Clock,
   CheckCircle2, AlertCircle, Lock,
-} from "lucide-react";
+} from "@/components/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { SECTORS } from "@/lib/sectors";

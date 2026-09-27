@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mic, Square, Play, Pause, RotateCcw, Volume2, Loader2, X } from "lucide-react";
+import { Mic, Square, Play, Pause, RotateCcw, Volume2, Loader2, X } from "@/components/icons";
 
 const MAX_RECORD_SECONDS = 300;
 

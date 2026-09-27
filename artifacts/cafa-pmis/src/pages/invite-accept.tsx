@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, CheckCircle2, ShieldAlert } from "lucide-react";
+import { AlertCircle, CheckCircle2, ShieldAlert } from "@/components/icons";
 import { Alert, Button, Card, Spinner } from "@heroui/react";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { PasswordField } from "@/components/password-field";

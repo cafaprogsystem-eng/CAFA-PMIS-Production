@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { RefreshCw, X } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 export function PwaUpdatePrompt() {

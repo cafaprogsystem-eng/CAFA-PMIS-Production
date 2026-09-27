@@ -5,7 +5,7 @@ import { Link, useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, MoreHorizontal,
   CalendarDays, RefreshCw, Filter, X, ArrowRight, Clock,
-} from "lucide-react";
+} from "@/components/icons";
 import { useGetDashboardAgenda } from "@workspace/api-client-react";
 import type { AgendaItem } from "@workspace/api-client-react";
 import {

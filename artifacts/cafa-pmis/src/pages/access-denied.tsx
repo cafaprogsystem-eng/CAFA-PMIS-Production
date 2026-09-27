@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ShieldOff, ArrowLeft, Home } from "lucide-react";
+import { ShieldOff, ArrowLeft, Home } from "@/components/icons";
 import { useLocation } from "wouter";
 import { Button } from "@heroui/react";
 

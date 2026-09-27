@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Calendar, MapPin, ChevronRight } from "lucide-react";
+import { Calendar, MapPin, ChevronRight } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { BidiIsolate } from "@/components/bidi-isolate";
 import type { ViewRecord } from "@/lib/view-modes";

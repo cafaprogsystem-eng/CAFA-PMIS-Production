@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { WifiOff, RefreshCw, AlertCircle } from "lucide-react";
+import { WifiOff, RefreshCw, AlertCircle } from "@/components/icons";
 import { useTranslation } from "react-i18next";
 import { useSyncContext } from "@/contexts/sync-context";
 

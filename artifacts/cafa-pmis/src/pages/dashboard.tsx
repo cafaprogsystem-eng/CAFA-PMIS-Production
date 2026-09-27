@@ -61,7 +61,7 @@ import {
   Filter, X, ChevronUp, ChevronDown, ChevronRight, MessageSquare,
   TrendingUp as TrendingUpIcon, Info, RotateCcw,
   Search, Building2,
-} from "lucide-react";
+} from "@/components/icons";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell, LabelList,

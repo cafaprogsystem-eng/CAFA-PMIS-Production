@@ -6,7 +6,7 @@ import type {
   GetConsolidatedProjectReportParams,
   ConsolidatedReportLocation,
 } from "@workspace/api-client-react";
-import { ChevronRight, ArrowLeft } from "lucide-react";
+import { ChevronRight, ArrowLeft } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";

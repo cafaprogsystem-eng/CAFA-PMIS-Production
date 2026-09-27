@@ -31,7 +31,7 @@ import {
   Archive,
   Check,
   Search,
-} from "lucide-react";
+} from "@/components/icons";
 import { AppLayout as ShellLayout } from "@heroui-pro/react/app-layout";
 import { Sidebar } from "@heroui-pro/react/sidebar";
 import { Navbar } from "@heroui-pro/react/navbar";

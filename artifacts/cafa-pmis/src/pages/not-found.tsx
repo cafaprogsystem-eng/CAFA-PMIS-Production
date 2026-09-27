@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Card } from "@heroui/react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle } from "@/components/icons";
 
 export default function NotFound() {
   const { t } = useTranslation("errors");

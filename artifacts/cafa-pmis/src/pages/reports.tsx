@@ -61,7 +61,7 @@ import {
   Download, Building2, MapPin, FolderKanban, Send, TrendingUp, TrendingDown, Minus,
   AlertCircle, Paperclip, Filter, X, MoreHorizontal, Pencil, Copy, ChevronRight,
   Lock, Loader2, ChevronLeft, PlusCircle,
-} from "lucide-react";
+} from "@/components/icons";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Bell, Mail, Settings2, Lock, Save, Loader2, ChevronRight, AlertCircle } from "lucide-react";
+import { Bell, Mail, Settings2, Lock, Save, Loader2, ChevronRight, AlertCircle } from "@/components/icons";
 import { Link } from "wouter";
 import type { ReactNode } from "react";
 import {

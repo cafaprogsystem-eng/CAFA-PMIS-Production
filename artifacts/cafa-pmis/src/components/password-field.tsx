@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, Lock } from "lucide-react";
+import { Eye, EyeOff, Lock } from "@/components/icons";
 import { FieldError, InputGroup, Label, TextField, ToggleButton } from "@heroui/react";
 
 type PasswordFieldProps = {

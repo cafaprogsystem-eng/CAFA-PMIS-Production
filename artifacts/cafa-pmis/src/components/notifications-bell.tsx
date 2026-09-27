@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   Bell, CheckCheck, FolderOpen, FileText, ClipboardList,
   AlertTriangle, MessageCircle, Upload, DollarSign, Info, ExternalLink, ArrowRight,
-} from "lucide-react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Mail, ArrowLeft, CheckCircle2 } from "@/components/icons";
 import { Alert, Button, InputGroup, Label, Spinner, TextField } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 

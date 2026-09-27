@@ -9,13 +9,39 @@ import { requestUploadUrl, useGetMe } from "@workspace/api-client-react";
 import { useSocket } from "@/lib/socket";
 import EmojiPickerLib from "emoji-picker-react";
 import {
-  Search, Plus, MoreVertical, Send, Paperclip, Smile,
-  ArrowLeft, Users, Edit2, Trash2, Reply, X, Check,
-  MessageSquare, Building2, FolderKanban, MapPin, Layers, Megaphone,
-  Mic, Play, Pause, DownloadCloud, GalleryHorizontal,
-  Forward, StopCircle, Image as ImageIcon, Volume2,
-  Circle, Copy, Pin, PinOff,
-} from "lucide-react";
+  Search,
+  Plus,
+  MoreVertical,
+  Send,
+  Paperclip,
+  Smile,
+  ArrowLeft,
+  Users,
+  Edit2,
+  Trash2,
+  Reply,
+  X,
+  Check,
+  MessageSquare,
+  Building2,
+  FolderKanban,
+  MapPin,
+  Layers,
+  Megaphone,
+  Mic,
+  Play,
+  Pause,
+  DownloadCloud,
+  GalleryHorizontal,
+  Forward,
+  StopCircle,
+  Image as ImageIcon,
+  Volume2,
+  Copy,
+  Pin,
+  PinOff,
+  CircleFill,
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -2103,7 +2129,7 @@ export default function Messages() {
                       {convDetail.type === "direct"
                         ? presence
                           ? <span className={cn("flex items-center gap-1", presence.online ? "text-success" : "")}>
-                              {presence.online && <Circle className="h-2 w-2 fill-success text-success" />}
+                              {presence.online && <CircleFill className="h-2 w-2 text-success" />}
                               {presence.online ? t("online") : presence.label}
                               {!presence.online && convSubtitle(convDetail) && ` · ${convSubtitle(convDetail)}`}
                             </span>

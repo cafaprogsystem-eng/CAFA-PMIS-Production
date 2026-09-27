@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Lock } from "lucide-react";
+import { Lock } from "@/components/icons";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSocket, useWatchRecord } from "@/lib/socket";
 

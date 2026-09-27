@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, Loader2, RefreshCw } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import type { StateReferenceStatus as Status } from "@/lib/state-reference-data";
 

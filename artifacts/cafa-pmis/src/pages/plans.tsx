@@ -73,7 +73,7 @@ import {
   ArrowUpDown,
   MoreHorizontal,
   Trash2,
-} from "lucide-react";
+} from "@/components/icons";
 import { formatDate, formatStatusLabel, formatPlanType, hasPerm, statusBadgeVariant, formatLocation } from "@/lib/format";
 import { AttachmentCountBadge } from "@/components/drive-attachment-panel";
 import { useViewMode } from "@/lib/view-modes";

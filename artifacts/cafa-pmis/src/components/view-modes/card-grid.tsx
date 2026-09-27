@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Calendar, MapPin, ArrowRight } from "lucide-react";
+import { Calendar, MapPin, ArrowRight } from "@/components/icons";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";

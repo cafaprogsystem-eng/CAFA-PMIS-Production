@@ -15,7 +15,7 @@ import {
   Wallet, ShieldAlert, Files, BookOpen, Sparkles,
   Shield, HelpCircle, BookMarked,
   Search, Network, Check,
-} from "lucide-react";
+} from "@/components/icons";
 import cafaLogo from "@/assets/cafa-icon.png";
 import cafaField from "@/assets/cafa-field.png";
 import ssDashboard from "@/assets/landing-dashboard.webp";

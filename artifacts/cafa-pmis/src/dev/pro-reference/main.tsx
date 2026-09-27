@@ -3,9 +3,8 @@
  *
  * Renders the documentation examples for AppLayout (with its Navbar and
  * Sidebar), Segment and Stepper verbatim on a stock HeroUI Pro setup, so the
- * CAFA versions can be compared against the original look. The only change
- * from the docs is the icon set: Gravity icons are swapped for their lucide
- * equivalents at the same size, since lucide is the app's icon library.
+ * CAFA versions can be compared against the original look, with the same
+ * Gravity UI icons the docs use.
  *
  *   /pro-reference.html?c=app|groups|segment|stepper[&dir=rtl]
  */
@@ -18,9 +17,18 @@ import { Navbar } from "@heroui-pro/react/navbar";
 import { Sidebar } from "@heroui-pro/react/sidebar";
 import { Segment } from "@heroui-pro/react/segment";
 import { Stepper } from "@heroui-pro/react/stepper";
-import {
-  Bell, ChartColumn, CircleHelp, House, LayoutList, ListChecks, LogOut, Receipt, Search, Settings, User, Users,
-} from "lucide-react";
+import ArrowRightFromSquare from "@gravity-ui/icons/ArrowRightFromSquare";
+import Bell from "@gravity-ui/icons/Bell";
+import ChartColumn from "@gravity-ui/icons/ChartColumn";
+import CircleQuestion from "@gravity-ui/icons/CircleQuestion";
+import Gear from "@gravity-ui/icons/Gear";
+import House from "@gravity-ui/icons/House";
+import LayoutList from "@gravity-ui/icons/LayoutList";
+import ListCheck from "@gravity-ui/icons/ListCheck";
+import Magnifier from "@gravity-ui/icons/Magnifier";
+import Person from "@gravity-ui/icons/Person";
+import Persons from "@gravity-ui/icons/Persons";
+import Receipt from "@gravity-ui/icons/Receipt";
 import "./ref.css";
 
 const params = new URLSearchParams(location.search);
@@ -34,8 +42,8 @@ const BreadcrumbItems = [{ icon: <House className="size-4" />, label: "Dashboard
 const navItems = [
   { icon: House, label: "Dashboard" },
   { icon: ChartColumn, items: ["Overview", "Reports", "Conversions"], label: "Analytics" },
-  { badge: "New", icon: ListChecks, label: "Tracker" },
-  { icon: Settings, items: ["General", "Team", "Notifications"], label: "Settings" },
+  { badge: "New", icon: ListCheck, label: "Tracker" },
+  { icon: Gear, items: ["General", "Team", "Notifications"], label: "Settings" },
 ];
 
 function NavTree({ mobile = false }: { mobile?: boolean }) {
@@ -92,11 +100,11 @@ function DemoSidebar() {
         <Sidebar.Footer>
           <Sidebar.Menu aria-label="Footer actions">
             <Sidebar.MenuItem href="#" id="help" textValue="Help & Information">
-              <Sidebar.MenuIcon><CircleHelp className="size-4" /></Sidebar.MenuIcon>
+              <Sidebar.MenuIcon><CircleQuestion className="size-4" /></Sidebar.MenuIcon>
               <Sidebar.MenuLabel>Help & Information</Sidebar.MenuLabel>
             </Sidebar.MenuItem>
             <Sidebar.MenuItem href="#" id="logout" textValue="Log out">
-              <Sidebar.MenuIcon><LogOut className="size-4" /></Sidebar.MenuIcon>
+              <Sidebar.MenuIcon><ArrowRightFromSquare className="size-4" /></Sidebar.MenuIcon>
               <Sidebar.MenuLabel>Log out</Sidebar.MenuLabel>
             </Sidebar.MenuItem>
           </Sidebar.Menu>
@@ -129,7 +137,7 @@ function DemoNavbar() {
         </Breadcrumbs>
         <Navbar.Spacer />
         <Navbar.Content>
-          <Navbar.Item aria-label="Search"><Search className="size-4" /></Navbar.Item>
+          <Navbar.Item aria-label="Search"><Magnifier className="size-4" /></Navbar.Item>
           <Navbar.Item aria-label="Notifications"><Bell className="size-4" /></Navbar.Item>
           <Navbar.Separator />
           <Dropdown>
@@ -140,10 +148,10 @@ function DemoNavbar() {
             </Button>
             <Dropdown.Popover className="min-w-[200px]" placement="bottom end">
               <Dropdown.Menu>
-                <Dropdown.Item id="account" textValue="Account"><User className="text-muted size-4" /><Label>Account</Label></Dropdown.Item>
-                <Dropdown.Item id="settings" textValue="Settings"><Settings className="text-muted size-4" /><Label>Settings</Label></Dropdown.Item>
+                <Dropdown.Item id="account" textValue="Account"><Person className="text-muted size-4" /><Label>Account</Label></Dropdown.Item>
+                <Dropdown.Item id="settings" textValue="Settings"><Gear className="text-muted size-4" /><Label>Settings</Label></Dropdown.Item>
                 <Separator />
-                <Dropdown.Item id="sign-out" textValue="Log out"><LogOut className="text-muted size-4" /><Label>Log out</Label></Dropdown.Item>
+                <Dropdown.Item id="sign-out" textValue="Log out"><ArrowRightFromSquare className="text-muted size-4" /><Label>Log out</Label></Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown>
@@ -192,8 +200,8 @@ function SidebarWithGroups() {
           <Sidebar.Group>
             <Sidebar.GroupLabel>Settings</Sidebar.GroupLabel>
             <Sidebar.Menu aria-label="Settings">
-              {item("general", "General", Settings)}
-              {item("team", "Team", Users)}
+              {item("general", "General", Gear)}
+              {item("team", "Team", Persons)}
               {item("notifications", "Notifications", Bell)}
             </Sidebar.Menu>
           </Sidebar.Group>
@@ -212,8 +220,8 @@ const tabs = [
 const iconTabs = [
   { icon: <LayoutList />, id: "dashboard", label: "Dashboard" },
   { icon: <ChartColumn />, id: "analytics", label: "Analytics" },
-  { icon: <User />, id: "team", label: "Team" },
-  { icon: <Settings />, id: "settings", label: "Settings" },
+  { icon: <Person />, id: "team", label: "Team" },
+  { icon: <Gear />, id: "settings", label: "Settings" },
 ];
 function SegmentExamples() {
   return (

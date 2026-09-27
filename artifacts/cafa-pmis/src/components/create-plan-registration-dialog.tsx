@@ -66,7 +66,7 @@ import { SECTORS } from "@/lib/sectors";
 import {
   Plus, Trash2, ChevronDown, ChevronUp, MapPin, X, AlertCircle, AlertTriangle,
   Check, ChevronsUpDown, Loader2,
-} from "lucide-react";
+} from "@/components/icons";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";

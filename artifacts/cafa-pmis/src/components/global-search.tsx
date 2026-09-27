@@ -19,7 +19,8 @@ import {
   TrendingUp,
   Star,
   MapPin,
-} from "lucide-react";
+  StarFill,
+} from "@/components/icons";
 import { useFavorites } from "@/hooks/use-favorites";
 import { rankScore, buildRecentMap } from "@/lib/favorites";
 import { useRecordDetail } from "@/contexts/record-detail-context";
@@ -650,7 +651,7 @@ export function GlobalSearch() {
               {favorites.length > 0 && (
                 <div className="px-3 pt-1.5 pb-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground/55 mb-1 select-none flex items-center gap-1.5">
-                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                    <StarFill className="h-3 w-3 text-amber-400" />
                     {t("globalSearch.favorites")}
                   </p>
                   <div className="space-y-0.5">
@@ -678,7 +679,7 @@ export function GlobalSearch() {
                           title={t("globalSearch.removeFromFavorites")}
                           className="h-5 w-5 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 text-amber-500 hover:bg-muted transition-all shrink-0"
                         >
-                          <Star className="h-3 w-3 fill-amber-500" />
+                          <StarFill className="h-3 w-3 text-amber-500" />
                         </button>
                       </div>
                     ))}

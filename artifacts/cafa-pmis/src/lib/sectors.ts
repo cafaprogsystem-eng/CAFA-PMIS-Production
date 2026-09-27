@@ -1,4 +1,4 @@
-import { Heart, Droplets, Shield, BookOpen, Wheat, Apple, Home, type LucideIcon } from "lucide-react";
+import { Heart, Droplets, Shield, BookOpen, Wheat, Apple, Home, type IconComponent } from "@/components/icons";
 
 // ── Canonical 7 Main Sectors (approved taxonomy) ─────────────────────────────
 export const MAIN_SECTORS = Object.freeze([
@@ -112,7 +112,7 @@ export interface SectorMeta {
   color: string;
   bg: string;
   border: string;
-  icon: LucideIcon;
+  icon: IconComponent;
 }
 
 export const SECTOR_META: Record<string, SectorMeta> = {

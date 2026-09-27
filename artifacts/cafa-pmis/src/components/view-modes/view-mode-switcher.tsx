@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { LayoutGrid, List, Table2, Rows3, Kanban, Calendar, Map } from "lucide-react";
+import { LayoutGrid, List, Table2, Rows3, Kanban, Calendar, Map } from "@/components/icons";
 import { Tooltip } from "@heroui/react";
 import { Segment } from "@heroui-pro/react/segment";
 import type { ViewMode } from "@/lib/view-modes";

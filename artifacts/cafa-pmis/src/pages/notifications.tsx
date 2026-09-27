@@ -6,7 +6,7 @@ import {
   Bell, CheckCheck, FolderOpen, FileText, ClipboardList,
   AlertTriangle, MessageCircle, Upload, DollarSign, Info,
   Search, ExternalLink, Filter, Check,
-} from "lucide-react";
+} from "@/components/icons";
 import { Button, Chip, InputGroup, Skeleton, Tabs, TextField } from "@heroui/react";
 import { SelectField } from "@/components/select-field";
 import {

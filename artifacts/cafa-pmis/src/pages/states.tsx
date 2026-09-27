@@ -13,7 +13,7 @@ import {
   type StateRecord,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
-import { AlertCircle, Building2, MapPin, Pencil, Plus, Search } from "lucide-react";
+import { AlertCircle, Building2, MapPin, Pencil, Plus, Search } from "@/components/icons";
 import { Alert, Button, Card, FieldError, Input, InputGroup, Label, Modal, Skeleton, Table, TextArea, TextField } from "@heroui/react";
 
 const STATE_ADMIN_ROLES = new Set(["super_admin", "executive_director", "program_manager"]);

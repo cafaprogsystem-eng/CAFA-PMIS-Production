@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   Bell, Camera, CheckCircle2, Eye, EyeOff, Loader2, Lock, Save,
   Settings, Shield, Trash2, Upload, User,
-} from "lucide-react";
+} from "@/components/icons";
 import {
   getGetProfileQueryKey,
   useChangePassword,

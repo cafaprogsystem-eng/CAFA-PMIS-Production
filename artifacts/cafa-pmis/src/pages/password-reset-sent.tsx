@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearch } from "wouter";
-import { Mail, ArrowLeft } from "lucide-react";
+import { Mail, ArrowLeft } from "@/components/icons";
 import { Button } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Pencil } from "lucide-react";
+import { Pencil } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 type ContinueEditingActionProps = {

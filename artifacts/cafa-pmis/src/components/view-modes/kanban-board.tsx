@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, MapPin } from "lucide-react";
+import { Calendar, MapPin } from "@/components/icons";
 import { BidiIsolate } from "@/components/bidi-isolate";
 import { getStateLabel } from "@/components/state-label";
 import type { ViewRecord } from "@/lib/view-modes";

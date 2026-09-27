@@ -1,4 +1,4 @@
-import { Bot, ShieldCheck } from "lucide-react";
+import { Bot, ShieldCheck } from "@/components/icons";
 import { useTranslation } from "react-i18next";
 import { useGetMe } from "@workspace/api-client-react";
 import { AIChatWidget } from "@/components/ai-chat-widget";

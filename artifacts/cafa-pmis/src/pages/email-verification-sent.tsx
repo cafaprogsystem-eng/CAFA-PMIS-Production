@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearch } from "wouter";
-import { Mail, ArrowLeft, RefreshCw } from "lucide-react";
+import { Mail, ArrowLeft, RefreshCw } from "@/components/icons";
 import { useState } from "react";
 import { Button, Spinner } from "@heroui/react";
 import cafaLogo from "@/assets/cafa-logo.png";

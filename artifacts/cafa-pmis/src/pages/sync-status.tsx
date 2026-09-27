@@ -6,7 +6,7 @@ import {
   RefreshCw, Trash2, AlertCircle, CheckCircle2, Clock, Loader2,
   GitMerge, RotateCcw, Wifi, WifiOff, ChevronDown, ChevronRight,
   Paperclip, UploadCloud, XCircle, AlertTriangle, ServerCrash,
-} from "lucide-react";
+} from "@/components/icons";
 import { db, type SyncQueueItem, type SyncStatus, type AttachmentQueueItem, type AttachmentStatus } from "@/lib/offline/db";
 import { syncService } from "@/lib/offline/sync-service";
 import { dismissAttachment, tryUploadAttachment } from "@/lib/offline/attachment-store";

@@ -12,7 +12,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { SelectField } from "@/components/select-field";
 import {
   ChevronDown, ChevronUp, Filter, Info, RefreshCw, Search, ShieldAlert, X,
-} from "lucide-react";
+} from "@/components/icons";
 import { formatDateTime } from "@/lib/format";
 
 const ALL_MODULES = [

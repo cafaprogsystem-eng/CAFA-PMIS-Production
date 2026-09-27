@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { AlertCircle, CheckCircle2, Clock, GitMerge, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, GitMerge, Loader2 } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import type { DraftStatus } from "@/lib/offline/draft-store";
 

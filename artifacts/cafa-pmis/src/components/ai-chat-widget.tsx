@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Bot, X, Minimize2, Send, Trash2, RotateCcw } from "lucide-react";
+import { Bot, X, Minimize2, Send, Trash2, RotateCcw } from "@/components/icons";
 import { useQuery } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";

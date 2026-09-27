@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Mail, Lock } from "@/components/icons";
 import { Alert, Button, Checkbox, InputGroup, Label, Spinner, TextField, ToggleButton } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 

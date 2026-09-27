@@ -8,8 +8,8 @@ import {
   File, FileArchive, FileSpreadsheet, FileText, FolderKanban, FolderOpen, Handshake, Image,
   Landmark, Loader2, Megaphone, MoreHorizontal, Package, RotateCcw, Scale,
   Search, ShieldCheck, Trash2, Upload, Users, WalletCards, Wrench, X,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+} from "@/components/icons";
+import type { IconComponent } from "@/components/icons";
 import { toast } from "sonner";
 import { useGetMe } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -135,7 +135,7 @@ function classificationIcon(classification: string) {
 }
 
 const CLASSIFICATION_PRESENTATION: Record<string, {
-  icon: LucideIcon;
+  icon: IconComponent;
   colour: string;
 }> = {
   "Governance & Legal": { icon: Scale, colour: "text-violet-600" },

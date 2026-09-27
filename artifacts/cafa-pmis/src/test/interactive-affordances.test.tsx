@@ -7,7 +7,7 @@ import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatCard } from "@/components/ui/stat-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toggle } from "@/components/ui/toggle";
-import { Circle } from "lucide-react";
+import { Circle } from "@/components/icons";
 
 describe("shared interactive affordances", () => {
   it("marks enabled semantic controls as actionable and disabled controls as unavailable", () => {

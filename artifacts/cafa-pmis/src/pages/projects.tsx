@@ -41,7 +41,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyTitle, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ErrorState } from "@/components/ui/error-state";
-import { Plus, FolderKanban, Filter, X, MoreHorizontal, Trash2, Send, Copy } from "lucide-react";
+import { Plus, FolderKanban, Filter, X, MoreHorizontal, Trash2, Send, Copy } from "@/components/icons";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";

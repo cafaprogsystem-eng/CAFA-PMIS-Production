@@ -113,9 +113,9 @@ import {
   MapPin,
   Building2,
   FolderOpen,
-  Circle,
   CircleOff,
-} from "lucide-react";
+  CircleFill,
+} from "@/components/icons";
 import { formatDate, formatDateTime, hasPerm } from "@/lib/format";
 import { SECTORS } from "@/lib/sectors";
 import { localizeUserApiError } from "@/lib/user-error-localization";
@@ -287,7 +287,7 @@ function PresenceValue({
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs" aria-label={label}>
       {isOnline
-        ? <Circle className="h-3 w-3 fill-success text-success" aria-hidden="true" />
+        ? <CircleFill className="h-3 w-3 text-success" aria-hidden="true" />
         : <CircleOff className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
       <span className={isOnline ? "text-success" : "text-muted-foreground"}>{label}</span>
     </span>

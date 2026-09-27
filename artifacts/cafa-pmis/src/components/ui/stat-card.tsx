@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "wouter";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /* ─────────────────────────────────────────────────────────────────────

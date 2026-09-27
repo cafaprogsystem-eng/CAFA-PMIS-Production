@@ -37,7 +37,7 @@ import {
   AlertTriangle, DollarSign, TrendingUp, PiggyBank, Lock,
   AlertCircle, Download, Filter, X, Info,
   Activity, FolderOpen, ChevronRight, FileText, FileSpreadsheet,
-} from "lucide-react";
+} from "@/components/icons";
 import { MAIN_SECTORS, getSectorMeta } from "@/lib/sectors";
 import type { SectorBudgetCurrencyEntry } from "@workspace/api-client-react";
 import { formatCurrency, formatPercent, hasPerm } from "@/lib/format";

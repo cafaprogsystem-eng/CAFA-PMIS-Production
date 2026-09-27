@@ -25,7 +25,7 @@ import {
   Plus, Trash2, Send, Upload, FileText, Loader2, X,
   TrendingUp, Users, Activity, ShieldAlert, Clock,
   MapPin, BarChart3, AlertTriangle, Link2, AlertCircle,
-} from "lucide-react";
+} from "@/components/icons";
 import { CommentsPanel } from "@/components/comments-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";

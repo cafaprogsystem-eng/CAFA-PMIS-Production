@@ -29,7 +29,7 @@ import {
   FileText, Target, Users, AlertTriangle, Info, Paperclip,
   ChevronRight, MapPin, BookOpen, Calendar, User, Send,
   ClipboardCheck,
-} from "lucide-react";
+} from "@/components/icons";
 import { formatDate, formatDateTime, formatLocation } from "@/lib/format";
 import { VoiceNotePanel } from "@/components/voice-note-panel";
 import { CommentsPanel } from "@/components/comments-panel";

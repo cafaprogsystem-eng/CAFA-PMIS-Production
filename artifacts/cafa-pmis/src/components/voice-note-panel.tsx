@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mic, Square, Play, Pause, Trash2, RotateCcw, Loader2, Volume2,
-} from "lucide-react";
+} from "@/components/icons";
 import { requestUploadUrl, useListVoiceNotes } from "@workspace/api-client-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────

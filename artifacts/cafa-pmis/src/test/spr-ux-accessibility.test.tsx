@@ -898,7 +898,7 @@ describe("ChipSelect — rendered keyboard interaction (SPR-A11Y-05b)", () => {
 // ── Source integrity guards ───────────────────────────────────────────────────
 
 describe("Source integrity guards (closed contracts)", () => {
-  it("Lock icon imported from lucide-react", () => {
+  it("Lock icon imported from the icon module", () => {
     expect(SRC).toContain("Lock,");
   });
 

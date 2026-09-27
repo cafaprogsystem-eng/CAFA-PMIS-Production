@@ -2,7 +2,7 @@ import { useState, useMemo, type FormEvent } from "react";
 import { useSearch, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, ArrowLeft, CheckCircle2, ShieldAlert } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, ShieldAlert } from "@/components/icons";
 import { Alert, Button, Spinner } from "@heroui/react";
 import { AuthShell } from "@/components/auth-shell";
 import { PasswordField } from "@/components/password-field";

@@ -6,7 +6,7 @@ import {
   HelpCircle, Search, BookOpen, ChevronRight, ChevronDown,
   FolderKanban, FileText, AlertTriangle, CalendarClock,
   Bell, Users, Settings, Loader2, X, Archive, Bot,
-} from "lucide-react";
+} from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/language-context";
 

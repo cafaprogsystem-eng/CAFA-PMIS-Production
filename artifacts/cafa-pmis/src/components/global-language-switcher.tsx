@@ -1,4 +1,4 @@
-import { Check, Globe } from "lucide-react";
+import { Check, Globe } from "@/components/icons";
 import { useTranslation } from "react-i18next";
 import { useLanguage, type Language } from "@/contexts/language-context";
 import {

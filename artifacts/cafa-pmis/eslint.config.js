@@ -68,19 +68,37 @@ export default [
       "react/prop-types": "off",            // TypeScript handles this
 
       // ── Icons ─────────────────────────────────────────────────────────
-      // lucide-react is the icon set; Tabler only fills gaps and goes through
-      // src/components/icons.ts so every use is deliberate and per-icon.
+      // Every icon comes from src/components/icons.tsx (HeroUI Pro's Gravity
+      // UI set). No direct icon-package imports anywhere else.
       "no-restricted-imports": ["error", {
+        paths: [
+          { name: "lucide-react", message: "Import icons from \"@/components/icons\" (Gravity UI). lucide is limited to three registered exceptions." },
+          { name: "@gravity-ui/icons", message: "Import icons from \"@/components/icons\"." },
+        ],
         patterns: [{
-          group: ["@tabler/icons-react", "@tabler/icons-react/*"],
-          message: "Use lucide-react first. If lucide has no suitable icon, add the Tabler icon to src/components/icons.ts and import it from \"@/components/icons\".",
+          group: ["@gravity-ui/icons/*", "@tabler/icons-react", "@tabler/icons-react/*"],
+          message: "Import icons from \"@/components/icons\".",
         }],
       }],
     },
   },
   {
-    // The one place Tabler icons are registered, plus their type shim.
-    files: ["src/components/icons.ts", "src/tabler-icons.d.ts"],
+    // The icon registry: Gravity per-icon imports, and lucide for exactly the
+    // three icons Gravity has no equivalent for. Adding a fourth fails lint.
+    files: ["src/components/icons.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        paths: [{
+          name: "lucide-react",
+          allowImportNames: ["Building2", "Handshake", "Wheat"],
+          message: "Only Building2, Handshake and Wheat may come from lucide; use a Gravity UI icon.",
+        }],
+      }],
+    },
+  },
+  {
+    // Dev-only page that renders the HeroUI Pro examples verbatim.
+    files: ["src/dev/pro-reference/**"],
     rules: {
       "no-restricted-imports": "off",
     },

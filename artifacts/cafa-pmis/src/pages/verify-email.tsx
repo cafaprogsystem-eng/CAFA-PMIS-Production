@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, XCircle, ArrowLeft } from "lucide-react";
+import { CheckCircle2, XCircle, ArrowLeft } from "@/components/icons";
 import { Button, Spinner } from "@heroui/react";
 import cafaLogo from "@/assets/cafa-logo.png";
 

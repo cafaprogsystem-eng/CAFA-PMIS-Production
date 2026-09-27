@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useGetState } from "@workspace/api-client-react";
-import { ArrowLeft, Building2, FolderKanban, MapPin, Users } from "lucide-react";
+import { ArrowLeft, Building2, FolderKanban, MapPin, Users } from "@/components/icons";
 import { Card, Skeleton, Table } from "@heroui/react";
 
 export default function StateDetailPage({ params }: { params: { stateId: string } }) {

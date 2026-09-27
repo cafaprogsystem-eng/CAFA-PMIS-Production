@@ -47,7 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Upload, X, FileText, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, GitMerge, AlertCircle, Lock, TriangleAlert,
-} from "lucide-react";
+} from "@/components/icons";
 import {
   Dialog,
   DialogContent,
