@@ -2,7 +2,6 @@ import * as React from "react";
 import {
   AlertCircle,
   AlertTriangle,
-  ServerCrash,
   WifiOff,
   ShieldAlert,
   RefreshCw,
@@ -42,7 +41,9 @@ const VARIANT_CONFIG: Record<
     descDefault: "An unexpected error occurred. Please try again.",
   },
   server: {
-    icon: ServerCrash,
+    // A warning sign reads as "something failed" more clearly than a server
+    // glyph, which Gravity only has in a plain (not crashed) form.
+    icon: AlertTriangle,
     iconClass: "text-destructive",
     titleDefault: "Server error",
     descDefault: "We couldn't complete your request. Our team has been notified.",
