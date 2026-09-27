@@ -30,7 +30,6 @@ import { filesRoutes } from "./routes/files";
 import { storageRoutes } from "./routes/storage";
 import { attachmentsRoutes } from "./routes/attachments";
 import { voiceNotesRoutes } from "./routes/voice-notes";
-import { driveRoutes } from "./routes/drive";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -339,7 +338,6 @@ app.route("/", filesRoutes);
 app.route("/", storageRoutes);
 app.route("/", attachmentsRoutes);
 app.route("/", voiceNotesRoutes);
-app.route("/", driveRoutes);
 
 /**
  * Ported from artifacts/api-server/src/lib/error-handler.ts's
