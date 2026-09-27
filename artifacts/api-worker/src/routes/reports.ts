@@ -3884,3 +3884,364 @@ reportsRoutes.post(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// GET /reports/:reportId/attachments/:attachmentId/download
+// Authenticated, authorised download for a single attachment.
+// Uses the canonical assertCanViewReport check (sector + state scope).
+// The object_path is resolved server-side — the client never sees the raw path.
+// ---------------------------------------------------------------------------
+
+reportsRoutes.get(
+  "/reports/:reportId/attachments/:attachmentId/download",
+  requirePerm("reports.view"),
+  async (c) => {
+    const user = c.get("currentUser");
+    const { db, close } = openDb(c);
+    try {
+      const reportId = Number(c.req.param("reportId"));
+      const attachmentId = Number(c.req.param("attachmentId"));
+      if (isNaN(reportId) || isNaN(attachmentId)) {
+        return c.json({ error: "invalid id" }, 400);
+      }
+      // Full canonical auth: sector scope + state scope
+      const authResult = await assertCanViewReport(db, user, reportId);
+      if (!authResult.ok) return c.json(authResult.body, authResult.status as 403);
+
+      // Resolve the attachment — WHERE includes report_id so a client cannot
+      // reach attachments from other reports by guessing attachment IDs.
+      const { rows } = await db.query<{
+        objectPath: string;
+        fileName: string;
+        contentType: string | null;
+        availabilityStatus: string;
+      }>(
+        `SELECT object_path AS "objectPath", file_name AS "fileName",
+                content_type AS "contentType",
+                availability_status AS "availabilityStatus"
+         FROM report_attachments WHERE id = $1 AND report_id = $2`,
+        [attachmentId, reportId],
+      );
+      if (rows.length === 0) {
+        return c.json({ error: "attachment not found" }, 404);
+      }
+      const { objectPath, fileName, contentType } = rows[0];
+      if (rows[0].availabilityStatus === "unavailable") {
+        return c.json({ error: "file_unavailable", message: "File Unavailable" }, 410);
+      }
+      if (!objectPath) {
+        return c.json({ error: "file_unavailable", message: "Historical file requires owner reconciliation." }, 410);
+      }
+      try {
+        const storageFile = await objectStorageService.getObjectEntityFile(c.env, objectPath);
+        const storageResponse = await objectStorageService.downloadObject(c.env, storageFile);
+        const headers = new Headers(storageResponse.headers);
+        if (contentType) headers.set("Content-Type", contentType);
+        headers.set("Content-Disposition", contentDispositionHeader(fileName, "attachment"));
+        return new Response(storageResponse.body, { status: storageResponse.status, headers });
+      } catch (storageErr) {
+        if (storageErr instanceof ObjectNotFoundError) {
+          return c.json({ error: "attachment file not found in storage" }, 404);
+        }
+        throw storageErr;
+      }
+    } finally {
+      close();
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /reports/:reportId/attachments — list saved attachments for a report
+// Uses the canonical assertCanViewReport check (sector + state scope).
+// ---------------------------------------------------------------------------
+
+function toPublicReportAttachmentDto(row: Record<string, unknown>) {
+  return {
+    ...row,
+    availabilityStatus: row.availabilityStatus ?? "available",
+  };
+}
+
+async function persistReportAttachmentPresentation(
+  db: QueryExecutor,
+  reportId: number,
+  attachment: Record<string, unknown>,
+  attachmentType?: string,
+): Promise<void> {
+  const attachmentId = Number(attachment.id);
+  if (!Number.isFinite(attachmentId)) return;
+  const presentation = {
+    attachmentId,
+    fileName: String(attachment.fileName ?? ""),
+    contentType: String(attachment.contentType ?? ""),
+    size: Number(attachment.size ?? 0),
+    attachmentType: typeof attachmentType === "string" && attachmentType.trim()
+      ? attachmentType.trim().slice(0, 100)
+      : "Other",
+  };
+  await db.query(
+    `UPDATE reports
+     SET sections = jsonb_set(
+       COALESCE(sections, '{}'::jsonb),
+       '{attachments}',
+       COALESCE(sections->'attachments', '[]'::jsonb) || $2::jsonb,
+       true
+     )
+     WHERE id = $1
+       AND NOT EXISTS (
+         SELECT 1
+         FROM jsonb_array_elements(COALESCE(sections->'attachments', '[]'::jsonb)) entry
+         WHERE entry->>'attachmentId' = $3
+       )`,
+    [reportId, JSON.stringify([presentation]), String(attachmentId)],
+  );
+}
+
+reportsRoutes.get(
+  "/reports/:reportId/attachments",
+  requirePerm("reports.view"),
+  async (c) => {
+    const user = c.get("currentUser");
+    const { db, close } = openDb(c);
+    try {
+      const reportId = Number(c.req.param("reportId"));
+      if (isNaN(reportId)) return c.json({ error: "invalid report id" }, 400);
+      // Full canonical auth: sector scope + state scope (fixes state-bypass gap)
+      const authResult = await assertCanViewReport(db, user, reportId);
+      if (!authResult.ok) return c.json(authResult.body, authResult.status as 403);
+      const { rows } = await db.query<Record<string, unknown>>(
+        `SELECT id, report_id AS "reportId", file_name AS "fileName",
+                content_type AS "contentType", size,
+                uploaded_at AS "uploadedAt", availability_status AS "availabilityStatus"
+         FROM report_attachments WHERE report_id = $1 ORDER BY uploaded_at ASC`,
+        [reportId],
+      );
+      return c.json(rows.map(toPublicReportAttachmentDto));
+    } finally {
+      close();
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /reports/:reportId/attachments — record a newly uploaded attachment
+// Requires: reports.update + draft status + author ownership + sector scope
+//
+// ATT-02 hardened: client must supply an uploadToken issued by this server
+// via POST /storage/uploads/request-url. The objectPath, contentType, and size
+// are taken exclusively from the verified token — client-supplied values for
+// those fields are ignored.
+// ---------------------------------------------------------------------------
+
+reportsRoutes.post(
+  "/reports/:reportId/attachments",
+  requirePerm("reports.update"),
+  async (c) => {
+    const user = c.get("currentUser")!;
+    const { db, close } = openDb(c);
+    try {
+      const reportId = Number(c.req.param("reportId"));
+      if (isNaN(reportId)) return c.json({ error: "invalid report id" }, 400);
+
+      // Re-authorise at registration time (catches status changes between upload issuance and registration).
+      const authCheck = await assertAttachmentMutationAllowed(db, user, reportId);
+      if (!authCheck.ok) return c.json(authCheck.body, authCheck.status as 403);
+
+      const body = (await c.req.json().catch(() => ({}))) as { fileName?: string; uploadToken?: string; attachmentType?: string };
+      if (!body.fileName || !body.uploadToken) {
+        return c.json({ error: "fileName and uploadToken are required" }, 400);
+      }
+
+      // Verify the upload token.
+      let descriptor;
+      try {
+        descriptor = verifyUploadToken(body.uploadToken, c.env.SESSION_SECRET);
+      } catch (err) {
+        if (err instanceof UploadTokenError) {
+          return c.json({ error: "invalid_upload_token", message: err.message }, 400);
+        }
+        throw err;
+      }
+
+      // Token must belong to the requesting user.
+      if (descriptor.userId !== user.id) {
+        return c.json({ error: "upload_token_user_mismatch" }, 403);
+      }
+
+      // Token must be bound to this specific report.
+      if (descriptor.reportId !== reportId) {
+        return c.json({ error: "upload_not_bound_to_report" }, 403);
+      }
+
+      // Token must be for an attachment, not a voice note.
+      if (descriptor.entityType !== "attachment") {
+        return c.json({ error: "upload_token_entity_type_mismatch" }, 400);
+      }
+
+      // Sanitise the display file name (strip path traversal, limit length).
+      const safeName = (body.fileName ?? "")
+        .replace(/\.\.[/\\]/g, "")
+        .replace(/[/\\]/g, "_")
+        .slice(0, 255);
+      if (!safeName) {
+        return c.json({ error: "invalid_file_name" }, 400);
+      }
+
+      // Verify the object was actually uploaded to storage before registering it.
+      // This closes the gap where a valid token could be used without uploading the file.
+      try {
+        await objectStorageService.getObjectEntityFile(c.env, descriptor.objectPath);
+        const metadata = await objectStorageService.getObjectEntityMetadata(c.env, descriptor.objectPath);
+        if (
+          metadata.size !== descriptor.maxSize
+          || !metadata.contentType
+          || metadata.contentType.split(";")[0].trim().toLowerCase() !== descriptor.contentType.split(";")[0].trim().toLowerCase()
+        ) {
+          return c.json({ error: "provider_metadata_mismatch" }, 422);
+        }
+      } catch (storageErr) {
+        if (storageErr instanceof ObjectNotFoundError) {
+          return c.json({
+            error: "object_not_found_in_storage",
+            message: "The file has not been uploaded yet. Upload the file before registering.",
+          }, 422);
+        }
+        throw storageErr;
+      }
+
+      // Atomic INSERT with UNIQUE constraint on object_path — prevents race-prone
+      // duplicate registrations under concurrent retries.
+      // ON CONFLICT DO NOTHING: if a duplicate exists (concurrent retry), no row is
+      // inserted and RETURNING yields empty; we then SELECT the existing row.
+      const { rows } = await db.query<Record<string, unknown>>(
+        `WITH inserted AS (
+           INSERT INTO report_attachments (report_id, file_name, content_type, size, object_path, uploaded_by_id)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (object_path) DO NOTHING
+           RETURNING id, report_id, file_name, content_type, size, uploaded_at, availability_status
+         ),
+         indexed AS (
+           INSERT INTO document_registry_entries
+             (source_kind, source_id, title, classification, confidentiality, related_record_type, related_record_id)
+           SELECT 'report_attachment', inserted.id, inserted.file_name,
+             CASE WHEN COALESCE(r.sections->>'reportingAudience', r.sections->>'reportAudience', '') = 'donor'
+                         OR r.kind ILIKE '%donor%' THEN 'Donor Reports' ELSE 'Programme Reports' END,
+             'internal', 'report', r.id
+           FROM inserted
+           JOIN reports r ON r.id = inserted.report_id
+           ON CONFLICT (source_kind, source_id) DO NOTHING
+         )
+         SELECT id, report_id AS "reportId", file_name AS "fileName",
+                 content_type AS "contentType", size, uploaded_at AS "uploadedAt",
+                 availability_status AS "availabilityStatus"
+         FROM inserted`,
+        [
+          reportId,
+          safeName,
+          descriptor.contentType,   // from token — never from client body
+          descriptor.maxSize,       // from token — never from client body
+          descriptor.objectPath,    // from token — never from client body
+          user.id,
+        ],
+      );
+
+      if (rows.length > 0) {
+        await persistReportAttachmentPresentation(db, reportId, rows[0], body.attachmentType);
+        return c.json(toPublicReportAttachmentDto(rows[0]), 201);
+      }
+
+      // Conflict: another concurrent request already registered this object_path.
+      // Return the existing row (idempotent — safe for HTTP retry).
+      const { rows: existing } = await db.query<Record<string, unknown>>(
+        `SELECT id, report_id AS "reportId", file_name AS "fileName",
+                content_type AS "contentType", size,
+                uploaded_at AS "uploadedAt",
+                availability_status AS "availabilityStatus"
+         FROM report_attachments WHERE object_path = $1`,
+        [descriptor.objectPath],
+      );
+      if (existing[0]) {
+        await db.query(
+          `INSERT INTO document_registry_entries
+             (source_kind, source_id, title, classification, confidentiality, related_record_type, related_record_id)
+           SELECT 'report_attachment', ra.id, ra.file_name,
+             CASE WHEN COALESCE(r.sections->>'reportingAudience', r.sections->>'reportAudience', '') = 'donor'
+                         OR r.kind ILIKE '%donor%' THEN 'Donor Reports' ELSE 'Programme Reports' END,
+             'internal', 'report', r.id
+           FROM report_attachments ra
+           JOIN reports r ON r.id = ra.report_id
+           WHERE ra.id = $1
+           ON CONFLICT (source_kind, source_id) DO NOTHING`,
+          [existing[0].id],
+        );
+        await persistReportAttachmentPresentation(db, reportId, existing[0], body.attachmentType);
+      }
+      return c.json(existing[0] ? toPublicReportAttachmentDto(existing[0]) : undefined, 201);
+    } finally {
+      close();
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// DELETE /reports/:reportId/attachments/:attachId — remove a saved attachment
+// Requires: reports.update + draft status + author ownership + sector scope
+// ---------------------------------------------------------------------------
+
+reportsRoutes.delete(
+  "/reports/:reportId/attachments/:attachId",
+  requirePerm("reports.update"),
+  async (c) => {
+    const user = c.get("currentUser");
+    const { db, close } = openDb(c);
+    try {
+      const reportId = Number(c.req.param("reportId"));
+      const attachId = Number(c.req.param("attachId"));
+      if (isNaN(reportId) || isNaN(attachId)) return c.json({ error: "invalid id" }, 400);
+      const authCheck = await assertAttachmentMutationAllowed(db, user, reportId);
+      if (!authCheck.ok) return c.json(authCheck.body, authCheck.status as 403);
+      // Step 1: Fetch the object_path from DB first (storage-first ordering)
+      const fetchResult = await db.query<{ object_path: string }>(
+        `SELECT object_path FROM report_attachments WHERE id = $1 AND report_id = $2`,
+        [attachId, reportId],
+      );
+      if (fetchResult.rows.length === 0) return c.json({ error: "not found" }, 404);
+      const objectPath = fetchResult.rows[0].object_path;
+      // Step 2: Delete storage object before DB row (storage-first), with
+      //         cross-table ownership check to prevent deleting a storage object
+      //         that is also referenced by a voice_notes record.
+      if (objectPath) {
+        const storageSafe = await isStorageDeleteSafeForRecord(db, objectPath, "report_attachments");
+        if (storageSafe) {
+          try {
+            await deleteObjectSafely(c.env, objectPath);
+          } catch (_storErr) {
+            console.error(`[ATT-05] attachment_delete storage_error attachId=${attachId} reportId=${reportId}`);
+            return c.json({ error: "attachment_storage_delete_failed" }, 500);
+          }
+        } else {
+          console.warn(`[ATT-05] attachment_delete skipping storage delete — objectPath cross-referenced in voice_notes attachId=${attachId}`);
+        }
+      }
+      // Step 3: Delete DB row
+      const result = await db.query<{ id: number }>(
+        `WITH deleted AS (
+           DELETE FROM report_attachments WHERE id = $1 AND report_id = $2 RETURNING id
+         ),
+         registry_deleted AS (
+           DELETE FROM document_registry_entries dre
+           USING deleted
+           WHERE dre.source_kind = 'report_attachment' AND dre.source_id = deleted.id
+           RETURNING dre.id
+         )
+         SELECT id FROM deleted`,
+        [attachId, reportId],
+      );
+      if (result.rows.length === 0) return c.json({ error: "not found" }, 404);
+      return c.json({ ok: true });
+    } finally {
+      close();
+    }
+  },
+);
