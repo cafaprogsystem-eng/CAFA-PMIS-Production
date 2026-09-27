@@ -309,7 +309,8 @@
     "freeTextDonorValue": "قيمة المانح النصية:",
     "freeTextDonorMismatch": "— تختلف عن اسم المانح المعتمد؛ يرجى التحقق من بيانات المصدر.",
     "portfolioShareOf": "حصة {{donor}} من المحفظة",
-    "projectEntity": "المشاريع"
+    "projectEntity": "المشاريع",
+    "projectPagination": "ترقيم أداء ميزانية المشاريع"
   },
   "beneficiaries": {
     "title": "توزيع المستفيدين",

@@ -301,7 +301,8 @@
     "freeTextDonorValue": "Free-text Donor value:",
     "freeTextDonorMismatch": "— differs from the canonical Donor name; please verify source data.",
     "portfolioShareOf": "{{donor}} portfolio share",
-    "projectEntity": "Projects"
+    "projectEntity": "Projects",
+    "projectPagination": "Project Budget Performance pagination"
   },
   "beneficiaries": {
     "title": "Beneficiary Breakdown",

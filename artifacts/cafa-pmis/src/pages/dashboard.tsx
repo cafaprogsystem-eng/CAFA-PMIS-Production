@@ -49,7 +49,7 @@ import {
   useHierarchicalPerformance,
 } from "@/hooks/use-hierarchical-performance";
 import { useLocationContext } from "@/contexts/location-context";
-import { Alert, Button as HButton, Calendar, DateField, DatePicker, Card as UICard, Chip, Label as HLabel, Link as HLink, ProgressBar, SearchField, Separator as HSeparator, Skeleton as HSkeleton, Tabs, ToggleButton } from "@heroui/react";
+import { Alert, Button as HButton, Modal, Pagination as HPagination, Spinner, Calendar, DateField, DatePicker, Card as UICard, Chip, Label as HLabel, Link as HLink, ProgressBar, SearchField, Separator as HSeparator, Skeleton as HSkeleton, Tabs, ToggleButton } from "@heroui/react";
 import { KPI } from "@heroui-pro/react/kpi";
 import { parseDate, type CalendarDate } from "@internationalized/date";
 import { Sheet } from "@heroui-pro/react/sheet";
@@ -62,8 +62,6 @@ import { Segment } from "@heroui-pro/react/segment";
 import { AreaChart as ProAreaChart } from "@heroui-pro/react/area-chart";
 import { PieChart as ProPieChart } from "@heroui-pro/react/pie-chart";
 import { ChartTooltip } from "@heroui-pro/react/chart-tooltip";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   FolderKanban, Users, DollarSign, AlertTriangle, ArrowRight,
   Activity, CheckCircle2, FileText, Clock, Target,
@@ -74,17 +72,10 @@ import {
 } from "@/components/icons";
 import { Cell } from "recharts";
 import { Link, useLocation } from "wouter";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Pagination, PaginationContent, PaginationItem,
-  PaginationLink, PaginationPrevious, PaginationNext,
-} from "@/components/ui/pagination";
 import { CalendarProvider, CalendarGridCard, ScheduleCard, RemindersCard } from "@/components/calendar-widget";
 import { ViewModeSwitcher } from "@/components/view-modes/view-mode-switcher";
 import { useUrlViewMode, RECORD_REGISTRY_VIEWS, type RecordRegistryView } from "@/lib/view-modes";
 import { useRecordDetail } from "@/contexts/record-detail-context";
-import { Separator } from "@/components/ui/separator";
 import { ErrorState } from "@/components/ui/error-state";
 import type { ErrorVariant } from "@/components/ui/error-state";
 import {
@@ -94,7 +85,7 @@ import {
   TooltipTrigger as UITooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SECTORS } from "@/lib/sectors";
-import { formatMonthLabel, formatStatusLabel, statusBadgeVariant } from "@/lib/format";
+import { formatMonthLabel, formatStatusLabel } from "@/lib/format";
 import { entityTypeTranslationKey } from "@/lib/notification-presentation";
 
 /* ── Follow-Up Project types — imported from generated API client ────────
@@ -496,7 +487,7 @@ function NotificationsSummaryWidget() {
 
           {recent.length > 0 && (
             <>
-              <Separator className="my-1.5" />
+              <HSeparator className="my-1.5" />
               <p className="px-2 pb-0.5 pt-1 text-xs font-medium text-muted-foreground">
                 {t("notifications.recentActivity")}
               </p>
@@ -1797,6 +1788,177 @@ function BudgetKpi({ icon: Icon, status, title, value, note, progress }: {
   );
 }
 
+/* ── Table pagination — HeroUI Pagination with summary and page size ─── */
+function pageWindow(page: number, total: number): (number | "ellipsis")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out: (number | "ellipsis")[] = [1];
+  if (page > 3) out.push("ellipsis");
+  for (let p = Math.max(2, page - 1); p <= Math.min(total - 1, page + 1); p++) out.push(p);
+  if (page < total - 2) out.push("ellipsis");
+  out.push(total);
+  return out;
+}
+
+function TablePagination({
+  page, pageCount, onPageChange, summary, label, pageSize, pageSizes, onPageSizeChange, pageSizeLabel,
+}: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+  summary: string;
+  label: string;
+  pageSize?: number;
+  pageSizes?: number[];
+  onPageSizeChange?: (size: number) => void;
+  pageSizeLabel?: string;
+}) {
+  const { t } = useTranslation("dashboard");
+  const { t: tc } = useTranslation("common");
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--separator)] pt-3" aria-label={label}>
+      <HPagination size="sm" className="w-full flex-wrap gap-3">
+        <HPagination.Summary aria-live="polite">{summary}</HPagination.Summary>
+        <div className="flex items-center gap-2">
+          {pageSizes && onPageSizeChange && pageSize != null && (
+            <SelectField
+              aria-label={pageSizeLabel}
+              value={String(pageSize)}
+              onChange={v => onPageSizeChange(Number(v))}
+              triggerClassName="h-8 min-w-[7.5rem]"
+              options={pageSizes.map(n => ({ value: String(n), label: t("budgetWorkspace.perPage", { count: n }) }))}
+            />
+          )}
+          <HPagination.Content>
+            <HPagination.Item>
+              <HPagination.Previous isDisabled={page <= 1} onPress={() => onPageChange(page - 1)} aria-label={tc("previous")}>
+                <HPagination.PreviousIcon className="rtl:rotate-180" />
+                <span className="hidden sm:inline">{tc("previous")}</span>
+              </HPagination.Previous>
+            </HPagination.Item>
+            {pageWindow(page, pageCount).map((p, i) => p === "ellipsis" ? (
+              <HPagination.Item key={`e${i}`}><HPagination.Ellipsis /></HPagination.Item>
+            ) : (
+              <HPagination.Item key={p}>
+                <HPagination.Link isActive={p === page} onPress={() => onPageChange(p)} className="tabular-nums">{p}</HPagination.Link>
+              </HPagination.Item>
+            ))}
+            <HPagination.Item>
+              <HPagination.Next isDisabled={page >= pageCount} onPress={() => onPageChange(page + 1)} aria-label={tc("next")}>
+                <span className="hidden sm:inline">{tc("next")}</span>
+                <HPagination.NextIcon className="rtl:rotate-180" />
+              </HPagination.Next>
+            </HPagination.Item>
+          </HPagination.Content>
+        </div>
+      </HPagination>
+    </div>
+  );
+}
+
+/* ── Beneficiary breakdown — HeroUI Modal, Pro KPIGroup and DataGrid ── */
+type BenRow = { male: number; female: number; boys: number; girls: number; total: number } & Record<string, unknown>;
+
+function BeneficiaryBreakdownModal({ isOpen, onOpenChange, data, isLoading }: {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  data: { summary: { male: number; female: number; boys: number; girls: number; total: number }; byState?: unknown[]; bySector?: unknown[]; byProject?: unknown[] } | undefined;
+  isLoading: boolean;
+}) {
+  const { t, i18n } = useTranslation("dashboard");
+  const isMobile = useIsMobile();
+  const numCols: DataGridColumn<BenRow>[] = (["male", "female", "boys", "girls", "total"] as const).map(k => ({
+    id: k,
+    header: t(k === "male" ? "beneficiaries.men" : k === "female" ? "beneficiaries.women" : k === "total" ? "beneficiaries.total" : `beneficiaries.${k}`),
+    align: "end", width: 110, allowsSorting: true,
+    sortFn: (a, b) => a[k] - b[k],
+    cell: (r) => <span className={`tabular-nums ${k === "total" ? "font-semibold" : ""}`}>{fmt(r[k])}</span>,
+  }));
+  const sections: { id: string; title: string; rows: BenRow[]; first: DataGridColumn<BenRow>[]; key: (r: BenRow) => string | number }[] = data ? [
+    { id: "byState", title: t("beneficiaries.byState"), rows: (data.byState ?? []) as BenRow[], key: r => String(r.stateId),
+      first: [{ id: "name", header: t("table.state"), isRowHeader: true, minWidth: 160, width: 180,
+        cell: r => <span className="font-medium">{getStateLabel({ name: String(r.stateName ?? ""), nameAr: r.stateNameAr as string | null | undefined }, i18n.language)}</span> }] },
+    { id: "bySector", title: t("beneficiaries.bySector"), rows: (data.bySector ?? []) as BenRow[], key: r => String(r.sector),
+      first: [{ id: "name", header: t("beneficiaries.sectorCol"), isRowHeader: true, width: 200,
+        cell: r => <span className="font-medium">{String(r.sector ?? "—")}</span> }] },
+    { id: "byProject", title: t("beneficiaries.byProject"), rows: (data.byProject ?? []) as BenRow[], key: r => String(r.projectId),
+      first: [
+        { id: "name", header: t("beneficiaries.projectCol"), isRowHeader: true, width: 240,
+          cell: r => (
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate font-medium">{String(r.projectTitle ?? "")}</span>
+              <span className="font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{String(r.projectCode ?? "")}</bdi></span>
+            </div>
+          ) },
+        { id: "states", header: t("beneficiaries.statesCol"), width: 160,
+          cell: r => <span className="text-sm"><LocalizedStateNames names={r.stateNames as string[]} namesAr={r.stateNamesAr as string[] | undefined} /></span> },
+        { id: "sector", header: t("beneficiaries.sectorCol"), width: 150, cell: r => <span className="text-sm">{String(r.sector ?? "—")}</span> },
+      ] },
+  ] : [];
+
+  return (
+    <Modal isOpen={isOpen} onOpenChange={onOpenChange}>
+      <Modal.Backdrop>
+        <Modal.Container size="lg" scroll="inside">
+          <Modal.Dialog className="max-h-[85vh] sm:max-w-5xl">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{t("beneficiaries.dialogTitle")}</Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("beneficiaries.dialogSubtitle")}</p>
+            </Modal.Header>
+            <Modal.Body className="flex flex-col gap-6 overflow-y-auto">
+              {isLoading || !data ? (
+                <div className="flex h-40 items-center justify-center" role="status">
+                  <Spinner aria-label={t("common:loading")} />
+                </div>
+              ) : (
+                <>
+                  <section className="flex flex-col gap-3">
+                    <h3 className="text-sm font-semibold text-foreground">{t("beneficiaries.overallSummary")}</h3>
+                    <KPIGroup orientation={isMobile ? "vertical" : "horizontal"}>
+                      {[
+                        { label: t("beneficiaries.men"),   value: data.summary.male },
+                        { label: t("beneficiaries.women"), value: data.summary.female },
+                        { label: t("beneficiaries.boys"),  value: data.summary.boys },
+                        { label: t("beneficiaries.girls"), value: data.summary.girls },
+                        { label: t("beneficiaries.totalBeneficiaries"), value: data.summary.total, total: true },
+                      ].map((b, index) => (
+                        <Fragment key={b.label}>
+                          {index > 0 && <KPIGroup.Separator />}
+                          <KPI>
+                            <KPI.Header>
+                              {b.total && <KPI.Icon status="success"><Users aria-hidden="true" /></KPI.Icon>}
+                              <KPI.Title>{b.label}</KPI.Title>
+                            </KPI.Header>
+                            <KPI.Content><KPI.Value value={b.value} maximumFractionDigits={0} /></KPI.Content>
+                          </KPI>
+                        </Fragment>
+                      ))}
+                    </KPIGroup>
+                  </section>
+                  {sections.map(sec => (
+                    <section key={sec.id} className="flex flex-col gap-3">
+                      <h3 className="text-sm font-semibold text-foreground">{sec.title}</h3>
+                      <DataGrid
+                        aria-label={t("aria.beneficiaryBreakdownRegion", { section: sec.title })}
+                        data={sec.rows}
+                        columns={[...sec.first, ...numCols]}
+                        getRowId={sec.key}
+                        contentClassName={sec.id === "byProject" ? "min-w-[1100px]" : "min-w-[720px]"}
+                        defaultSortDescriptor={{ column: "total", direction: "descending" }}
+                        renderEmptyState={() => <p className="py-6 text-center text-sm text-[var(--muted)]">{t("chartEmpty.beneficiary")}</p>}
+                      />
+                    </section>
+                  ))}
+                </>
+              )}
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 function ChartCard({
   title, description, children, colSpan, action, className,
 }: {
@@ -2320,7 +2482,6 @@ function ProjectBudgetCard({
   onOpen: (trigger: HTMLElement | null) => void;
 }) {
   const { t } = useTranslation("dashboard");
-  const { variant: statusVariant, className: statusCls } = statusBadgeVariant(row.projectStatus ?? "");
   const remNeg = row.remainingBalance != null && row.remainingBalance < 0 && !row.missingStateExpenditure;
   const unavailable = row.missingStateExpenditure;
 
@@ -2338,9 +2499,9 @@ function ProjectBudgetCard({
             <h3 className="line-clamp-2 text-[15px] font-medium leading-snug group-hover:text-primary">{row.projectTitle}</h3>
             <p className="mt-1 truncate font-mono text-[11px] tracking-wide text-muted-foreground">{row.projectCode}</p>
           </div>
-          <Badge variant={statusVariant} className={`shrink-0 text-[10px] ${statusCls ?? ""}`}>
-            {formatStatusLabel(row.projectStatus)}
-          </Badge>
+          <Chip size="sm" variant="soft" color={PROJECT_STATUS_CHIP[row.projectStatus] ?? "default"} className="shrink-0">
+            {t(`projectStatus.${row.projectStatus}`, { defaultValue: formatStatusLabel(row.projectStatus) })}
+          </Chip>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
           <span>{row.donorName ?? t("budgetWorkspace.unknownDonor")}</span>
@@ -2395,7 +2556,6 @@ function ProjectBudgetCompactRow({
   onOpen: (trigger: HTMLElement | null) => void;
 }) {
   const { t } = useTranslation("dashboard");
-  const { variant: statusVariant, className: statusCls } = statusBadgeVariant(row.projectStatus ?? "");
   const unavailable = row.missingStateExpenditure;
   return (
     <div className={`relative border-b last:border-b-0 ${isExpanded ? "bg-muted/20" : "hover:bg-muted/30"}`}>
@@ -2413,7 +2573,7 @@ function ProjectBudgetCompactRow({
         <span className="hidden w-24 text-end tabular-nums lg:inline"><bdi dir="ltr">{fmtMoney(row.allocatedBudget, row.currency)}</bdi></span>
         <span className="hidden w-24 text-end tabular-nums lg:inline" aria-label={unavailable ? t("budgetWorkspace.stateExpenditureUnavailable") : undefined}><bdi dir="ltr">{unavailable ? "—" : fmtMoney(row.spent, row.currency)}</bdi></span>
         <span className="hidden w-16 text-end tabular-nums xl:inline"><bdi dir="ltr">{unavailable ? "—" : pct(row.utilisationRate)}</bdi></span>
-        <Badge variant={statusVariant} className={`shrink-0 text-[10px] ${statusCls ?? ""}`}>{formatStatusLabel(row.projectStatus)}</Badge>
+        <Chip size="sm" variant="soft" color={PROJECT_STATUS_CHIP[row.projectStatus] ?? "default"} className="shrink-0">{t(`projectStatus.${row.projectStatus}`, { defaultValue: formatStatusLabel(row.projectStatus) })}</Chip>
         <button
           type="button"
           className="pointer-events-auto relative z-10 inline-flex min-h-8 min-w-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -2962,9 +3122,9 @@ export function DonorPortfolioTable({
           <p className="text-sm font-medium text-foreground">{t("budgetWorkspace.donorLoadTitle")}</p>
           <p className="text-xs text-muted-foreground mt-1">{t("budgetWorkspace.donorLoadDescription")}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={onRetry} className="text-xs gap-1.5">
-          <RotateCcw className="h-3 w-3" aria-hidden="true" /> {t("budgetWorkspace.retry")}
-        </Button>
+        <HButton variant="secondary" size="sm" onPress={onRetry}>
+          <RotateCcw className="size-3.5" aria-hidden="true" /> {t("budgetWorkspace.retry")}
+        </HButton>
       </div>
     );
   }
@@ -3128,93 +3288,67 @@ export function DonorPortfolioTable({
 
       {/* Pagination footer — always inside the Donor Portfolio card */}
       {donorTotal > 0 && (
-        <div className="flex items-center justify-between gap-3 border-t border-border/40 pt-3 flex-wrap" aria-label={t("budgetWorkspace.donorPagination")}>
-          <p className="text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
-            {t("budgetWorkspace.donorPaginationInfo", { from: (safePageD - 1) * donorPageSize + 1, to: Math.min(safePageD * donorPageSize, donorTotal), total: donorTotal, entity: t("budgetWorkspace.donorEntity") })}
-          </p>
-          <div className="flex items-center gap-2 shrink-0">
-            <select
-              value={donorPageSize}
-              onChange={e => { setDonorPageSize(Number(e.target.value)); setDonorPage(1); }}
-              className="h-7 rounded border border-border bg-card text-xs px-1.5 text-muted-foreground focus-visible:outline-none focus-visible:ring-1"
-              aria-label={t("aria.donorsPerPage")}
-            >
-              {[5, 10, 20].map(s => <option key={s} value={s}>{t("budgetWorkspace.perPage", { count: s })}</option>)}
-            </select>
-            <Pagination className="w-auto mx-0">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={() => handleDonorPageChange(safePageD - 1)}
-                    aria-disabled={safePageD <= 1}
-                    tabIndex={safePageD <= 1 ? -1 : undefined}
-                    className={safePageD <= 1 ? "pointer-events-none opacity-40" : "cursor-pointer"}
-                  />
-                </PaginationItem>
-                <PaginationItem>
-                  <span className="px-3 text-xs text-muted-foreground tabular-nums select-none" aria-current="page">
-                    {safePageD} / {donorPages}
-                  </span>
-                </PaginationItem>
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={() => handleDonorPageChange(safePageD + 1)}
-                    aria-disabled={safePageD >= donorPages}
-                    tabIndex={safePageD >= donorPages ? -1 : undefined}
-                    className={safePageD >= donorPages ? "pointer-events-none opacity-40" : "cursor-pointer"}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
-        </div>
+        <TablePagination
+          label={t("budgetWorkspace.donorPagination")}
+          page={safePageD}
+          pageCount={donorPages}
+          onPageChange={handleDonorPageChange}
+          summary={t("budgetWorkspace.donorPaginationInfo", { from: (safePageD - 1) * donorPageSize + 1, to: Math.min(safePageD * donorPageSize, donorTotal), total: donorTotal, entity: t("budgetWorkspace.donorEntity") })}
+          pageSize={donorPageSize}
+          pageSizes={[5, 10, 20]}
+          onPageSizeChange={(n) => { setDonorPageSize(n); setDonorPage(1); }}
+          pageSizeLabel={t("aria.donorsPerPage")}
+        />
       )}
 
-      {/* Data quality issues dialog */}
-      <Dialog open={showIssues} onOpenChange={setShowIssues}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t("donorIssues.title")}</DialogTitle>
-            <DialogDescription>
-              {t("donorIssues.description")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5 mt-3">
-            {issueRows.flatMap(d => {
-              const pList    = d.projectList ?? [];
-              const ds       = d.dataStatus ?? "unlinked";
-              const issues   = d.dataIssues ?? [];
-              const freeText = d.freeTextDonorName;
-              return pList.map(p => (
-                <div key={`${p.id}-${ds}`} className="flex items-start justify-between gap-3 rounded-lg border border-border/40 bg-muted/10 px-3 py-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                      <span className="font-mono font-medium text-muted-foreground">{p.code}</span>
-                      <span className="font-medium text-foreground truncate">{p.title}</span>
+      {/* Data quality issues — HeroUI Modal */}
+      <Modal isOpen={showIssues} onOpenChange={setShowIssues}>
+        <Modal.Backdrop>
+          <Modal.Container size="lg">
+            <Modal.Dialog className="max-h-[80vh]">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{t("donorIssues.title")}</Modal.Heading>
+                <p className="text-sm text-[var(--muted)]">{t("donorIssues.description")}</p>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-2 overflow-y-auto">
+                {issueRows.flatMap(d => {
+                  const pList    = d.projectList ?? [];
+                  const ds       = d.dataStatus ?? "unlinked";
+                  const issues   = d.dataIssues ?? [];
+                  const freeText = d.freeTextDonorName;
+                  return pList.map(p => (
+                    <div key={`${p.id}-${ds}`} className="flex items-start justify-between gap-3 rounded-xl bg-[var(--default)] px-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{p.code}</bdi></span>
+                          <span className="truncate font-medium text-foreground">{p.title}</span>
+                        </div>
+                        <dl className="mt-1 grid gap-0.5 text-xs text-[var(--muted)]">
+                          {d.donorId != null && (
+                            <div>{t("donorIssues.canonicalId")}: {d.donorId} · {t("donorIssues.name")}: <span className="font-medium text-foreground">{d.donorName ?? d.donor}</span></div>
+                          )}
+                          {freeText && (
+                            <div>{t("donorIssues.freeText")}: <span className="rounded bg-[var(--surface)] px-1 font-mono">{freeText}</span></div>
+                          )}
+                          <div>{t("donorIssues.currency")}: {d.currency ? <span className="font-medium text-foreground">{d.currency}</span> : <span className="italic">{t("donorIssues.missing")}</span>}</div>
+                          {issues.length > 0 && (
+                            <div>{t("donorIssues.issues", { count: issues.length })}: <span className="font-medium text-foreground">{issues.join(", ")}</span></div>
+                          )}
+                        </dl>
+                      </div>
+                      <DonorStatusBadge status={ds} />
                     </div>
-                    <div className="mt-0.5 text-[10px] text-muted-foreground space-y-0.5">
-                      {d.donorId != null && (
-                        <div>{t("donorIssues.canonicalId")}: {d.donorId} · {t("donorIssues.name")}: <span className="font-medium">{d.donorName ?? d.donor}</span></div>
-                      )}
-                      {freeText && (
-                        <div>{t("donorIssues.freeText")}: <span className="font-mono bg-muted/50 px-0.5 rounded">{freeText}</span></div>
-                      )}
-                      <div>{t("donorIssues.currency")}: {d.currency ? <span className="font-medium">{d.currency}</span> : <span className="italic">{t("donorIssues.missing")}</span>}</div>
-                      {issues.length > 0 && (
-                        <div>{t("donorIssues.issues", { count: issues.length })}: <span className="font-medium">{issues.join(", ")}</span></div>
-                      )}
-                    </div>
-                  </div>
-                  <DonorStatusBadge status={ds} />
-                </div>
-              ));
-            })}
-            {issueRows.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">{t("donorIssues.noneFound")}</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+                  ));
+                })}
+                {issueRows.length === 0 && (
+                  <p className="py-4 text-center text-sm text-[var(--muted)]">{t("donorIssues.noneFound")}</p>
+                )}
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </div>
   );
 }
@@ -4933,95 +5067,13 @@ export default function Dashboard() {
         </Tabs.Panel>
       </Tabs>
 
-      {/* ── Beneficiary Breakdown Dialog (always mounted at root) ────── */}
-      <Dialog open={benOpen} onOpenChange={setBenOpen}>
-        <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden flex flex-col p-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/20">
-            <DialogTitle className="text-lg font-semibold">{t("beneficiaries.dialogTitle")}</DialogTitle>
-            <DialogDescription className="text-sm">
-              {t("beneficiaries.dialogSubtitle")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="overflow-y-auto px-6 py-5 space-y-8">
-            {isBenLoading || !benBreakdown ? (
-              <div className="flex h-40 items-center justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
-              </div>
-            ) : (
-              <>
-                <section className="space-y-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("beneficiaries.overallSummary")}</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    {[
-                      { label: t("beneficiaries.men"),   value: benBreakdown.summary.male   },
-                      { label: t("beneficiaries.women"), value: benBreakdown.summary.female },
-                      { label: t("beneficiaries.boys"),  value: benBreakdown.summary.boys   },
-                      { label: t("beneficiaries.girls"), value: benBreakdown.summary.girls  },
-                      { label: t("beneficiaries.totalBeneficiaries"), value: benBreakdown.summary.total, highlight: true },
-                    ].map(s => (
-                      <div key={s.label} className={`rounded-xl border p-4 ${"highlight" in s && s.highlight ? "bg-primary/5 border-primary/25" : "bg-muted/30 border-border"}`}>
-                        <div className="text-xs text-muted-foreground font-medium">{s.label}</div>
-                        <div className={`mt-1.5 text-xl font-bold tabular-nums ${"highlight" in s && s.highlight ? "text-primary" : ""}`}>
-                          {fmt(s.value)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                {[
-                  { id: "byState",   title: t("beneficiaries.byState"),   headerLabel: t("table.state"), rows: benBreakdown.byState,   keyField: "stateId",   nameField: "stateName",    extra: false },
-                  { id: "bySector",  title: t("beneficiaries.bySector"),  headerLabel: t("beneficiaries.sectorCol"), rows: benBreakdown.bySector,  keyField: "sector",    nameField: "sector",       extra: false },
-                  { id: "byProject", title: t("beneficiaries.byProject"), headerLabel: t("beneficiaries.projectCol"), rows: benBreakdown.byProject, keyField: "projectId", nameField: "projectTitle", extra: true  },
-                ].map(({ id, title, headerLabel, rows, keyField, nameField, extra }) => (
-                  <section key={id} className="space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{title}</h3>
-                    <div className="rounded-xl border border-border overflow-hidden overflow-x-auto" role="region" aria-label={t("aria.beneficiaryBreakdownRegion", { section: title })}>
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/40">
-                            <TableHead className="font-semibold">{headerLabel}</TableHead>
-                            {extra && <TableHead className="font-semibold">{t("beneficiaries.statesCol")}</TableHead>}
-                            {extra && <TableHead className="font-semibold">{t("beneficiaries.sectorCol")}</TableHead>}
-                            <TableHead className="text-end font-semibold">{t("beneficiaries.men")}</TableHead>
-                            <TableHead className="text-end font-semibold">{t("beneficiaries.women")}</TableHead>
-                            <TableHead className="text-end font-semibold">{t("beneficiaries.boys")}</TableHead>
-                            <TableHead className="text-end font-semibold">{t("beneficiaries.girls")}</TableHead>
-                            <TableHead className="text-end font-semibold">{t("beneficiaries.total")}</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {(rows as any[]).map(r => (
-                            <TableRow key={r[keyField]}>
-                              <TableCell className="font-medium">
-                                {extra ? (
-                                  <>
-                                    <div className="font-medium">{r.projectTitle}</div>
-                                    <div className="text-xs text-muted-foreground">{r.projectCode}</div>
-                                  </>
-                                ) : (
-                                  <span className="capitalize">{nameField === "stateName" ? getStateLabel({ name: r.stateName, nameAr: r.stateNameAr }, i18n.language) : r[nameField]}</span>
-                                )}
-                              </TableCell>
-                              {extra && <TableCell className="text-sm"><LocalizedStateNames names={r.stateNames} namesAr={r.stateNamesAr} /></TableCell>}
-                              {extra && <TableCell className="capitalize text-sm">{r.sector}</TableCell>}
-                              <TableCell className="text-end tabular-nums">{fmt(r.male)}</TableCell>
-                              <TableCell className="text-end tabular-nums">{fmt(r.female)}</TableCell>
-                              <TableCell className="text-end tabular-nums">{fmt(r.boys)}</TableCell>
-                              <TableCell className="text-end tabular-nums">{fmt(r.girls)}</TableCell>
-                              <TableCell className="text-end tabular-nums font-semibold">{fmt(r.total)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </section>
-                ))}
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* ── Beneficiary Breakdown (always mounted at root) ─────────────── */}
+      <BeneficiaryBreakdownModal
+        isOpen={benOpen}
+        onOpenChange={setBenOpen}
+        data={benBreakdown}
+        isLoading={isBenLoading}
+      />
 
     </div>
   );
@@ -5234,9 +5286,9 @@ export function ProjectBudgetPerformanceTable({
           <p className="text-sm font-medium text-foreground">{t("budgetWorkspace.projectLoadTitle")}</p>
           <p className="text-xs text-muted-foreground mt-1">{t("budgetWorkspace.projectLoadDescription")}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={onRetry} className="text-xs gap-1.5">
-          <RotateCcw className="h-3 w-3" aria-hidden="true" /> {t("budgetWorkspace.retry")}
-        </Button>
+        <HButton variant="secondary" size="sm" onPress={onRetry}>
+          <RotateCcw className="size-3.5" aria-hidden="true" /> {t("budgetWorkspace.retry")}
+        </HButton>
       </div>
     );
   }
@@ -5441,52 +5493,13 @@ export function ProjectBudgetPerformanceTable({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between gap-4 pt-1">
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            {t("budgetWorkspace.donorPaginationInfo", { from: (safePage - 1) * BP_PAGE_SIZE + 1, to: Math.min(safePage * BP_PAGE_SIZE, sortedRows.length), total: sortedRows.length, entity: t("budgetWorkspace.projectEntity") })}
-          </p>
-          <Pagination className="w-auto mx-0">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  aria-disabled={safePage <= 1}
-                  className={safePage <= 1 ? "pointer-events-none opacity-40" : "cursor-pointer"}
-                />
-              </PaginationItem>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let page: number;
-                if (totalPages <= 5) {
-                  page = i + 1;
-                } else if (safePage <= 3) {
-                  page = i + 1;
-                } else if (safePage >= totalPages - 2) {
-                  page = totalPages - 4 + i;
-                } else {
-                  page = safePage - 2 + i;
-                }
-                return (
-                  <PaginationItem key={page}>
-                    <PaginationLink
-                      isActive={page === safePage}
-                      onClick={() => setCurrentPage(page)}
-                      className="cursor-pointer text-xs"
-                    >
-                      {page}
-                    </PaginationLink>
-                  </PaginationItem>
-                );
-              })}
-              <PaginationItem>
-                <PaginationNext
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  aria-disabled={safePage >= totalPages}
-                  className={safePage >= totalPages ? "pointer-events-none opacity-40" : "cursor-pointer"}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
+        <TablePagination
+          label={t("budgetWorkspace.projectPagination")}
+          page={safePage}
+          pageCount={totalPages}
+          onPageChange={setCurrentPage}
+          summary={t("budgetWorkspace.donorPaginationInfo", { from: (safePage - 1) * BP_PAGE_SIZE + 1, to: Math.min(safePage * BP_PAGE_SIZE, sortedRows.length), total: sortedRows.length, entity: t("budgetWorkspace.projectEntity") })}
+        />
       )}
     </div>
   );

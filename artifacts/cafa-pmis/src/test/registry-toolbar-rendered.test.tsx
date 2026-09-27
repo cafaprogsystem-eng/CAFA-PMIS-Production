@@ -193,10 +193,12 @@ describe("Budget registry toolbars", () => {
     }
 
     renderWithTooltips(<ControlledPortfolio />);
+    // HeroUI Pagination marks the current page link with aria-current="page".
+    const currentPage = () => document.querySelector('[aria-current="page"]')?.textContent;
     fireEvent.click(screen.getByLabelText("next"));
-    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    expect(currentPage()).toBe("2");
 
     fireEvent.click(screen.getByRole("button", { name: "EUR" }));
-    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(currentPage()).toBe("1");
   });
 });
