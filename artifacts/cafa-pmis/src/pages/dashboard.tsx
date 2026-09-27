@@ -49,6 +49,11 @@ import {
   useHierarchicalPerformance,
 } from "@/hooks/use-hierarchical-performance";
 import { useLocationContext } from "@/contexts/location-context";
+import { Button as HButton, Card as UICard, Chip, Link as HLink, Tabs } from "@heroui/react";
+import { KPI } from "@heroui-pro/react/kpi";
+import { AreaChart as ProAreaChart } from "@heroui-pro/react/area-chart";
+import { PieChart as ProPieChart } from "@heroui-pro/react/pie-chart";
+import { ChartTooltip } from "@heroui-pro/react/chart-tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -63,7 +68,7 @@ import {
   Search, Building2,
 } from "@/components/icons";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell, LabelList,
 } from "recharts";
 import { Link, useLocation } from "wouter";
@@ -414,44 +419,41 @@ function NotificationsSummaryWidget() {
   const notificationModuleLabel = (module: string) =>
     t(entityTypeTranslationKey(NOTIF_MODULE_ENTITY_TYPES[module] ?? "unknown"), { ns: "notifications" });
 
+  const heading = (
+    <UICard.Title className="flex items-center gap-2 text-base">
+      <Bell className="size-4 text-muted-foreground" aria-hidden="true" /> {t("sections.notifications")}
+    </UICard.Title>
+  );
+
   if (isLoading) return (
-    <Card className="rounded-xl border-border shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Bell className="h-3.5 w-3.5 text-muted-foreground" /> {t("sections.notifications")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <UICard>
+      <UICard.Header>{heading}</UICard.Header>
+      <UICard.Content>
         <div className="space-y-1">
           {[1, 2, 3].map((i) => (
             <div key={i} className="flex items-center gap-3 px-2 py-2.5 animate-pulse">
-              <div className="h-[30px] w-[30px] rounded-full bg-muted/50 shrink-0" />
-              <div className="h-3 flex-1 rounded bg-muted/50" />
-              <div className="h-[18px] w-[18px] rounded-full bg-muted/40" />
+              <div className="size-8 rounded-full bg-[var(--default)] shrink-0" />
+              <div className="h-3 flex-1 rounded bg-[var(--default)]" />
             </div>
           ))}
         </div>
-      </CardContent>
-    </Card>
+      </UICard.Content>
+    </UICard>
   );
 
   if (isError) return (
-    <Card className="rounded-xl border-border shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Bell className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> {t("sections.notifications")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <UICard>
+      <UICard.Header>{heading}</UICard.Header>
+      <UICard.Content>
         <div className="flex flex-col items-center gap-2 py-6 text-center">
-          <AlertTriangle className="h-5 w-5 text-destructive/60" aria-hidden="true" />
+          <AlertTriangle className="size-5 text-destructive/70" aria-hidden="true" />
           <p className="text-xs text-muted-foreground">{t("errorLoading", { ns: "notifications" })}</p>
-          <Button variant="outline" size="sm" className="h-8" onClick={() => void refetch()}>
+          <HButton variant="outline" size="sm" onPress={() => void refetch()}>
             {t("retry", { ns: "notifications" })}
-          </Button>
+          </HButton>
         </div>
-      </CardContent>
-    </Card>
+      </UICard.Content>
+    </UICard>
   );
 
   const totalUnread = notifSummary?.totalUnread ?? 0;
@@ -459,29 +461,21 @@ function NotificationsSummaryWidget() {
   const recent = notifSummary?.recent ?? [];
 
   return (
-    <Card className="rounded-xl border-border shadow-sm flex flex-col">
-      <CardHeader className="pb-3 shrink-0">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Bell className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-            {t("sections.notifications")}
-          </CardTitle>
-          {totalUnread > 0 && (
-            <span
-              className="inline-flex items-center h-5 rounded-full bg-primary/10 text-primary text-xs font-medium px-2 tabular-nums"
-              aria-label={t("notifications.unreadCount", { count: totalUnread })}
-            >
-              {totalUnread} {t("notifications.unread")}
-            </span>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0 pb-3 flex flex-col flex-1 min-h-0">
+    <UICard className="flex flex-col">
+      <UICard.Header className="flex-row items-center justify-between gap-2">
+        {heading}
+        {totalUnread > 0 && (
+          <Chip size="sm" variant="soft" color="accent" aria-label={t("notifications.unreadCount", { count: totalUnread })}>
+            {totalUnread} {t("notifications.unread")}
+          </Chip>
+        )}
+      </UICard.Header>
+      <UICard.Content className="flex flex-col flex-1 min-h-0">
         {/* Scrollable content area — caps height to prevent card growing past adjacent charts */}
         <div className="overflow-y-auto max-h-[260px] space-y-0.5 pe-0.5">
           {byModule.length === 0 ? (
             <div className="flex flex-col items-center py-8 gap-2 text-center">
-              <CheckCircle2 className="h-6 w-6 text-emerald-400/70" aria-hidden="true" />
+              <CheckCircle2 className="size-6 text-success" aria-hidden="true" />
               <p className="text-xs text-muted-foreground">{t("notifications.allCaughtUp")}</p>
             </div>
           ) : (
@@ -490,16 +484,16 @@ function NotificationsSummaryWidget() {
               const Icon = meta.icon;
               return (
                 <Link key={m.module} href={meta.href}
-                  className={`flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors duration-150 group ${m.unread > 0 ? "hover:bg-primary/[0.04]" : "hover:bg-muted/40"}`}>
-                  <div className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full transition-colors ${m.unread > 0 ? "bg-primary/10" : "bg-muted/40"}`}>
-                    <Icon className={`h-3.5 w-3.5 ${m.unread > 0 ? "text-primary" : meta.color}`} aria-hidden="true" />
+                  className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors duration-150 hover:bg-[var(--default)]">
+                  <div className={`flex size-8 shrink-0 items-center justify-center rounded-full ${m.unread > 0 ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--default)] text-muted-foreground"}`}>
+                    <Icon className="size-4" aria-hidden="true" />
                   </div>
-                  <span className={`text-sm flex-1 font-medium group-hover:text-primary transition-colors truncate ${m.unread > 0 ? "text-foreground" : "text-muted-foreground"}`}>
+                  <span className={`text-sm flex-1 font-medium truncate ${m.unread > 0 ? "text-foreground" : "text-muted-foreground"}`}>
                     {notificationModuleLabel(m.module)}
                   </span>
                   {m.unread > 0
-                    ? <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] rounded-full bg-primary text-primary-foreground text-xs font-medium px-1 tabular-nums shrink-0" aria-label={`${m.unread} ${t("unread", { ns: "notifications" })}`}>{m.unread}</span>
-                    : <span className="text-xs text-muted-foreground/50 tabular-nums shrink-0">{m.total}</span>
+                    ? <Chip size="sm" variant="primary" color="accent" className="tabular-nums" aria-label={`${m.unread} ${t("unread", { ns: "notifications" })}`}>{m.unread}</Chip>
+                    : <span className="text-xs text-muted-foreground tabular-nums shrink-0">{m.total}</span>
                   }
                 </Link>
               );
@@ -509,7 +503,7 @@ function NotificationsSummaryWidget() {
           {recent.length > 0 && (
             <>
               <Separator className="my-1.5" />
-              <p className="px-2 pb-0.5 pt-1 text-xs font-medium text-muted-foreground/60">
+              <p className="px-2 pb-0.5 pt-1 text-xs font-medium text-muted-foreground">
                 {t("notifications.recentActivity")}
               </p>
               {recent.slice(0, 3).map((n: { id: number; title: string; module: string; isRead: boolean }) => {
@@ -517,17 +511,17 @@ function NotificationsSummaryWidget() {
                 const RIcon = meta.icon;
                 return (
                   <Link key={n.id} href={meta.href ?? "/notifications"}
-                    className="flex items-start gap-2.5 rounded-lg px-2 py-2 hover:bg-muted/40 transition-colors duration-150 group">
-                    <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${!n.isRead ? "bg-primary/10" : "bg-muted/40"}`}>
-                      <RIcon className={`h-3 w-3 ${!n.isRead ? "text-primary" : "text-muted-foreground/60"}`} aria-hidden="true" />
+                    className="flex items-start gap-2.5 rounded-xl px-2 py-2 hover:bg-[var(--default)] transition-colors duration-150">
+                    <div className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${!n.isRead ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--default)] text-muted-foreground"}`}>
+                      <RIcon className="size-3" aria-hidden="true" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={`text-xs leading-snug line-clamp-2 ${!n.isRead ? "font-medium text-foreground" : "text-muted-foreground"}`}>
                         {n.title}
                       </p>
-                      <p className="text-xs text-muted-foreground/60 mt-0.5">{notificationModuleLabel(n.module)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{notificationModuleLabel(n.module)}</p>
                     </div>
-                    {!n.isRead && <div className="mt-2 h-1.5 w-1.5 rounded-full bg-primary shrink-0 flex-none" aria-hidden="true" />}
+                    {!n.isRead && <div className="mt-2 size-1.5 rounded-full bg-[var(--accent)] shrink-0" aria-hidden="true" />}
                   </Link>
                 );
               })}
@@ -536,13 +530,13 @@ function NotificationsSummaryWidget() {
         </div>
 
         {/* "View All" always visible outside scroll area */}
-        <div className="pt-2 mt-auto shrink-0">
-          <Link href="/notifications" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
-            {t("notifications.viewAll")} <ArrowRight className="h-3 w-3 rtl:rotate-180" aria-hidden="true" />
-          </Link>
+        <div className="pt-3 mt-auto shrink-0">
+          <HLink href="/notifications" className="inline-flex items-center gap-1 text-sm">
+            {t("notifications.viewAll")} <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden="true" />
+          </HLink>
         </div>
-      </CardContent>
-    </Card>
+      </UICard.Content>
+    </UICard>
   );
 }
 
@@ -1792,7 +1786,7 @@ function PriorityActionsPanel({
   const items = useMemo(() => {
     type PItem = {
       id: string; title: string; typeLabel: string; meta: string;
-      statusLabel: string; statusCls: string; href: string; urgency: number;
+      statusLabel: string; statusColor: "danger" | "warning"; href: string; urgency: number;
     };
     const result: PItem[] = [];
 
@@ -1804,7 +1798,7 @@ function PriorityActionsPanel({
         typeLabel: t("priorityActions.typeReport"),
         meta: r.daysWaiting != null ? t("priorityActions.daysOverdue", { count: r.daysWaiting }) : (r.stateName ? getStateLabel({ name: r.stateName, nameAr: (r as unknown as { stateNameAr?: string | null }).stateNameAr }, i18n.language) : ""),
         statusLabel: t("priorityActions.statusOverdue"),
-        statusCls: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400",
+        statusColor: "danger",
         href: lrHref(r.reportType, r.id),
         urgency: 1,
       });
@@ -1822,7 +1816,7 @@ function PriorityActionsPanel({
         typeLabel: t("priorityActions.typeProject"),
         meta: t("priorityActions.criticalRiskCount", { count: critCount }),
         statusLabel: t("priorityActions.statusCritical"),
-        statusCls: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400",
+        statusColor: "danger",
         href: `/projects/${p.projectId}`,
         urgency: 1,
       });
@@ -1836,7 +1830,7 @@ function PriorityActionsPanel({
         typeLabel: t("priorityActions.typeProject"),
         meta: (p.status ?? "").replace(/_/g, " "),
         statusLabel: t("priorityActions.statusAwaitingApproval"),
-        statusCls: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
+        statusColor: "warning",
         href: `/projects/${p.id}`,
         urgency: 2,
       });
@@ -1850,7 +1844,7 @@ function PriorityActionsPanel({
         typeLabel: t("priorityActions.typeReport"),
         meta: r.stateName ? getStateLabel({ name: r.stateName, nameAr: (r as unknown as { stateNameAr?: string | null }).stateNameAr }, i18n.language) : "",
         statusLabel: t("priorityActions.statusAwaitingReview"),
-        statusCls: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
+        statusColor: "warning",
         href: lrHref(r.reportType, r.id),
         urgency: 2,
       });
@@ -1865,78 +1859,68 @@ function PriorityActionsPanel({
   }, [lateReports, approvals, attentionProjects, t, i18n.language]);
 
   return (
-    <Card className="rounded-xl border-border shadow-sm">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-[15px] font-semibold leading-snug">{t("priorityActions.title")}</CardTitle>
-            <CardDescription className="text-xs mt-0.5">{t("priorityActions.description")}</CardDescription>
-          </div>
-          {!isLoading && items.length > 0 && (
-            <span className="inline-flex items-center justify-center h-5 min-w-5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 text-xs font-semibold px-1.5 tabular-nums shrink-0">
-              {items.length}
-            </span>
-          )}
+    <UICard>
+      <UICard.Header className="flex-row items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <UICard.Title className="text-base">{t("priorityActions.title")}</UICard.Title>
+          <UICard.Description>{t("priorityActions.description")}</UICard.Description>
         </div>
-      </CardHeader>
-      <CardContent className="pt-0 pb-4">
+        {!isLoading && items.length > 0 && (
+          <Chip size="sm" variant="soft" color="warning" className="tabular-nums">{items.length}</Chip>
+        )}
+      </UICard.Header>
+      <UICard.Content>
         {isLoading ? (
           <div className="space-y-2 animate-pulse">
             {[1, 2, 3].map(i => (
               <div key={i} className="flex items-center gap-3 px-3 py-3">
-                <div className="h-3 flex-1 rounded bg-muted/50" />
-                <div className="h-5 w-24 rounded-full bg-muted/40" />
+                <div className="h-3 flex-1 rounded bg-[var(--default)]" />
+                <div className="h-5 w-24 rounded-full bg-[var(--default)]" />
               </div>
             ))}
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-            <CheckCircle2 className="h-6 w-6 text-emerald-400/70" />
+            <CheckCircle2 className="size-6 text-success" />
             <p className="text-sm text-muted-foreground">{t("priorityActions.empty")}</p>
           </div>
         ) : (
           <>
-            <div className="divide-y divide-border/40">
+            <div className="divide-y divide-border">
               {items.map(item => (
                 <Link
                   key={item.id}
                   href={item.href}
-                  className="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-muted/40 transition-colors group -mx-2"
+                  className="flex items-center gap-3 py-2.5 px-2 rounded-xl hover:bg-[var(--default)] transition-colors -mx-2"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[13px] font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                        {item.title}
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-border/50 bg-muted/40 text-muted-foreground text-[10px] font-medium px-1.5 py-0.5 shrink-0">
-                        {item.typeLabel}
-                      </span>
+                      <span className="text-sm font-medium text-foreground truncate">{item.title}</span>
+                      <Chip size="sm" variant="soft" color="default">{item.typeLabel}</Chip>
                     </div>
                     {item.meta && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{item.meta}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.meta}</p>
                     )}
                   </div>
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0 ${item.statusCls}`}>
-                    {item.statusLabel}
-                  </span>
+                  <Chip size="sm" variant="soft" color={item.statusColor} className="shrink-0">{item.statusLabel}</Chip>
                 </Link>
               ))}
             </div>
-            <div className="mt-3 pt-2.5 border-t border-border/60 flex flex-wrap items-center gap-x-4 gap-y-1">
-              <Link href="/risks" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
-                {t("priorityActions.allRisks")} <ArrowRight className="h-3 w-3 rtl:rotate-180" />
-              </Link>
-              <Link href="/reports/project" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
-                {t("priorityActions.allReports")} <ArrowRight className="h-3 w-3 rtl:rotate-180" />
-              </Link>
-              <Link href="/projects" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
-                {t("priorityActions.allProjects")} <ArrowRight className="h-3 w-3 rtl:rotate-180" />
-              </Link>
+            <div className="mt-3 pt-3 border-t border-border flex flex-wrap items-center gap-x-4 gap-y-1">
+              <HLink href="/risks" className="inline-flex items-center gap-1 text-sm">
+                {t("priorityActions.allRisks")} <ArrowRight className="size-3.5 rtl:rotate-180" />
+              </HLink>
+              <HLink href="/reports/project" className="inline-flex items-center gap-1 text-sm">
+                {t("priorityActions.allReports")} <ArrowRight className="size-3.5 rtl:rotate-180" />
+              </HLink>
+              <HLink href="/projects" className="inline-flex items-center gap-1 text-sm">
+                {t("priorityActions.allProjects")} <ArrowRight className="size-3.5 rtl:rotate-180" />
+              </HLink>
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </UICard.Content>
+    </UICard>
   );
 }
 
@@ -1981,21 +1965,18 @@ function ChartCard({
   action?: React.ReactNode;
   className?: string;
 }) {
+  // HeroUI Card, laid out like the HeroUI Pro chart examples.
   return (
-    <Card className={`${colSpan ?? ""} ${className ?? ""} rounded-xl border-border shadow-sm`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle className="text-[15px] font-semibold leading-snug">{title}</CardTitle>
-            {description && (
-              <CardDescription className="text-xs mt-0.5 leading-relaxed">{description}</CardDescription>
-            )}
-          </div>
-          {action}
+    <UICard className={`${colSpan ?? ""} ${className ?? ""}`}>
+      <UICard.Header className="flex-row items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <UICard.Title className="text-base">{title}</UICard.Title>
+          {description && <UICard.Description>{description}</UICard.Description>}
         </div>
-      </CardHeader>
-      <CardContent className="pt-0">{children}</CardContent>
-    </Card>
+        {action}
+      </UICard.Header>
+      <UICard.Content>{children}</UICard.Content>
+    </UICard>
   );
 }
 
@@ -2331,66 +2312,120 @@ function MonthlyTrendChart({
 }) {
   const { t } = useTranslation("dashboard");
   const entries = monthlyData ?? [];
+  const targetLabel = t("performanceTab.targetVsAchievement");
+  const achievedLabel = t("performanceTab.beneficiaryPerformance");
+  const showChart = !isLoading && entries.length > 0;
   return (
     <ChartCard
       colSpan="col-span-4"
       title={t(titleKey)}
       description={t(descriptionKey)}
     >
+      {showChart && (
+        <div className="mb-3">
+          <ChartLegend items={[
+            { label: achievedLabel, color: "var(--chart-3)" },
+            { label: targetLabel, color: "var(--chart-1)", dashed: true },
+          ]} />
+        </div>
+      )}
       <div style={{ height }}>
         {isLoading ? (
-          <div className="h-full rounded-lg bg-muted/40 animate-pulse" />
+          <div className="h-full rounded-xl bg-[var(--default)] animate-pulse" />
         ) : entries.length === 0 ? (
           <ChartEmptyState message={t(emptyMessageKey)} />
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={entries} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
-              <defs>
-                <linearGradient id={`colorAchieved${gradientSuffix}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={CC.achievement} stopOpacity={0.10} />
-                  <stop offset="95%" stopColor={CC.achievement} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id={`colorTarget${gradientSuffix}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={CC.target} stopOpacity={0.07} />
-                  <stop offset="95%" stopColor={CC.target} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.4} />
-              <XAxis
-                dataKey="month"
-                stroke="hsl(var(--cafa-muted-foreground))"
-                fontSize={11} tickLine={false} axisLine={false} tickMargin={6}
-              />
-              <YAxis
-                stroke="hsl(var(--cafa-muted-foreground))"
-                fontSize={11} tickLine={false} axisLine={false}
-                tickFormatter={fmtCompact}
-                width={40}
-              />
-              <Tooltip
-                contentStyle={TT.contentStyle}
-                labelStyle={TT.labelStyle}
-                itemStyle={TT.itemStyle}
-                formatter={(value: number, name: string) => [fmt(value), name]}
-              />
-              <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }} />
-              <Area
-                type="monotone" dataKey="target" name={t("performanceTab.targetVsAchievement")}
-                stroke={CC.target} strokeWidth={1.5} strokeDasharray="5 3"
-                fillOpacity={1} fill={`url(#colorTarget${gradientSuffix})`}
-                dot={false} activeDot={{ r: 3, strokeWidth: 0 }}
-              />
-              <Area
-                type="monotone" dataKey="achieved" name={t("performanceTab.beneficiaryPerformance")}
-                stroke={CC.achievement} strokeWidth={2}
-                fillOpacity={1} fill={`url(#colorAchieved${gradientSuffix})`}
-                dot={false} activeDot={{ r: 4, strokeWidth: 0 }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          // HeroUI Pro AreaChart, as in its "Multi Area" example.
+          <ProAreaChart data={entries} height={height}>
+            <defs>
+              <linearGradient id={`trend-achieved-${gradientSuffix}`} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="var(--chart-3)" stopOpacity={0.2} />
+                <stop offset="100%" stopColor="var(--chart-3)" stopOpacity={0.02} />
+              </linearGradient>
+              <linearGradient id={`trend-target-${gradientSuffix}`} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.12} />
+                <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.01} />
+              </linearGradient>
+            </defs>
+            <ProAreaChart.Grid vertical={false} />
+            <ProAreaChart.XAxis dataKey="month" tickMargin={8} />
+            <ProAreaChart.YAxis tickFormatter={fmtCompact} width={40} />
+            <ProAreaChart.Area
+              dataKey="target" name={targetLabel} type="monotone"
+              stroke="var(--chart-1)" strokeWidth={2} strokeDasharray="5 3"
+              fill={`url(#trend-target-${gradientSuffix})`} dot={false}
+            />
+            <ProAreaChart.Area
+              dataKey="achieved" name={achievedLabel} type="monotone"
+              stroke="var(--chart-3)" strokeWidth={2}
+              fill={`url(#trend-achieved-${gradientSuffix})`} dot={false}
+            />
+            <ProAreaChart.Tooltip content={<SeriesTooltip />} />
+          </ProAreaChart>
         )}
       </div>
     </ChartCard>
+  );
+}
+
+/* ── Chart legend + tooltips (HeroUI Pro chart examples) ──────────────── */
+function ChartLegend({ items }: { items: { label: string; color: string; dashed?: boolean }[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-center gap-1.5">
+          <span
+            className="size-3 shrink-0 rounded-full"
+            style={item.dashed ? { border: `2px dashed ${item.color}` } : { backgroundColor: item.color }}
+            aria-hidden="true"
+          />
+          <span className="text-xs text-muted-foreground">{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type SeriesTooltipProps = {
+  active?: boolean;
+  label?: string | number;
+  payload?: Array<{ dataKey?: unknown; name?: unknown; value?: unknown; color?: string; stroke?: string }>;
+};
+
+function SeriesTooltip({ active, label, payload }: SeriesTooltipProps) {
+  if (!active || !payload?.length) return null;
+  return (
+    <ChartTooltip>
+      <ChartTooltip.Header>{label}</ChartTooltip.Header>
+      {payload.map((entry) => (
+        <ChartTooltip.Item key={String(entry.dataKey)}>
+          <ChartTooltip.Indicator color={entry.color ?? entry.stroke} />
+          <ChartTooltip.Label>{String(entry.name ?? "")}</ChartTooltip.Label>
+          <ChartTooltip.Value>{fmt(Number(entry.value))}</ChartTooltip.Value>
+        </ChartTooltip.Item>
+      ))}
+    </ChartTooltip>
+  );
+}
+
+type ShareTooltipProps = {
+  active?: boolean;
+  payload?: Array<{ name?: unknown; value?: unknown; payload?: { fill?: string; color?: string } }>;
+  total: number;
+};
+
+function ShareTooltip({ active, payload, total }: ShareTooltipProps) {
+  const entry = payload?.[0];
+  if (!active || !entry) return null;
+  const value = Number(entry.value);
+  return (
+    <ChartTooltip>
+      <ChartTooltip.Item>
+        <ChartTooltip.Indicator color={entry.payload?.color ?? entry.payload?.fill} />
+        <ChartTooltip.Label>{String(entry.name ?? "")}</ChartTooltip.Label>
+        <ChartTooltip.Value>{fmt(value)} ({total ? Math.round((value / total) * 100) : 0}%)</ChartTooltip.Value>
+      </ChartTooltip.Item>
+    </ChartTooltip>
   );
 }
 
@@ -3775,16 +3810,6 @@ export default function Dashboard() {
     return () => window.removeEventListener("popstate", syncTabFromUrl);
   }, []);
 
-  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, tabId: TabId) => {
-    const idx = (TABS as readonly string[]).indexOf(tabId);
-    let next: TabId | undefined;
-    if (e.key === "ArrowLeft")  { e.preventDefault(); next = TABS[(idx - 1 + TABS.length) % TABS.length]; }
-    if (e.key === "ArrowRight") { e.preventDefault(); next = TABS[(idx + 1) % TABS.length]; }
-    if (e.key === "Home")       { e.preventDefault(); next = TABS[0]; }
-    if (e.key === "End")        { e.preventDefault(); next = TABS[TABS.length - 1]; }
-    if (next) { switchTab(next); setTimeout(() => document.getElementById(`tab-${next}`)?.focus(), 0); }
-  };
-
   /* ── Derived chart data (must be before any early return) ───────────── */
   /* statusChartData uses useMemo — Hooks must be called unconditionally.   */
   /* Placing this after an early return would change the hook call order    */
@@ -3956,12 +3981,12 @@ export default function Dashboard() {
 
   // Project implementation status — derived from existing summary fields; no new API calls
   const projectStatusData = [
-    { name: t("projectStatus.active"),    value: summary?.activeProjects ?? 0,    color: CC.achievement },
-    { name: t("projectStatus.completed"), value: summary?.completedProjects ?? 0, color: CC.target },
+    { name: t("projectStatus.active"),    value: summary?.activeProjects ?? 0,    color: "var(--chart-3)" },
+    { name: t("projectStatus.completed"), value: summary?.completedProjects ?? 0, color: "var(--chart-1)" },
     {
       name: t("projectStatus.other"),
       value: Math.max(0, (summary?.totalProjects ?? 0) - (summary?.activeProjects ?? 0) - (summary?.completedProjects ?? 0)),
-      color: "hsl(var(--cafa-muted-foreground)/0.35)",
+      color: "var(--chart-5)",
     },
   ].filter(d => d.value > 0);
   const projectStatusTotal = projectStatusData.reduce((s, d) => s + d.value, 0);
@@ -3984,9 +4009,9 @@ export default function Dashboard() {
             <h1 className="text-foreground text-xl font-semibold leading-tight">
               {t("header.title")}
             </h1>
-            <span className="hidden sm:inline-flex items-center rounded-full border border-border/60 bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+            <Chip size="sm" variant="soft" color="default" className="hidden sm:inline-flex">
               {t(`roles.${role}`, { defaultValue: ROLE_LABELS[role] ?? role })}
-            </span>
+            </Chip>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {t("header.description")}
@@ -4039,82 +4064,89 @@ export default function Dashboard() {
         </UITooltipProvider>
       )}
 
-      {/* ── Tabbed Panel ────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-
-        {/* Tab bar */}
-        <div
-          role="tablist"
-          aria-label={t("aria.dashboardSections")}
-          className="flex overflow-x-auto border-b border-border/80 bg-muted/25"
-          style={{ scrollbarWidth: "none" }}
-        >
-          {TAB_CONFIG.map(({ id, labelKey }) => {
-            const isActive = activeTab === id;
-            return (
-              <button
-                key={id}
-                id={`tab-${id}`}
-                role="tab"
-                aria-selected={isActive}
-                aria-controls={`panel-${id}`}
-                tabIndex={isActive ? 0 : -1}
-                onClick={() => switchTab(id)}
-                onKeyDown={e => handleTabKeyDown(e, id)}
-                className={[
-                  "relative flex-shrink-0 px-4 h-[38px] text-[13px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40 whitespace-nowrap border-b-2",
-                  isActive
-                    ? "text-primary border-primary font-semibold bg-background"
-                    : "text-muted-foreground/70 border-transparent font-medium hover:text-foreground hover:bg-muted/40",
-                ].join(" ")}
-              >
+      {/* ── Tabs (HeroUI Tabs; the selected tab's content is the single panel) ── */}
+      <Tabs selectedKey={activeTab} onSelectionChange={(key) => switchTab(key as TabId)}>
+        <Tabs.ListContainer className="overflow-x-auto">
+          <Tabs.List aria-label={t("aria.dashboardSections")}>
+            {TAB_CONFIG.map(({ id, labelKey }) => (
+              <Tabs.Tab key={id} id={id} className="whitespace-nowrap">
                 {t(labelKey)}
-              </button>
-            );
-          })}
-        </div>
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs.ListContainer>
 
-        {/* ── Tab panels ─────────────────────────────────────────────── */}
-        <div className="p-5 sm:p-6">
+        {/* ── Tab panel ──────────────────────────────────────────────── */}
+        <Tabs.Panel id={activeTab} className="mt-4">
 
           {/* ════════════════════════════════════════════════════════════
               OVERVIEW
               ════════════════════════════════════════════════════════════ */}
           {activeTab === "overview" && (
             <CalendarProvider>
-              <div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" className="space-y-4">
+              <div id="panel-overview" className="space-y-4">
 
-                {/* ── Row 1: KPI Summary — 4 cards, equal width ─────────── */}
-                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                  <OvKpiCard
-                    icon={Activity} iconColor="text-blue-500"
-                    label={t("overviewTab.activeProjects")}
-                    value={fmt(summary?.activeProjects ?? 0)}
-                    sub={t("overviewTab.totalProjects", { count: summary?.totalProjects ?? 0 })}
-                  />
-                  <OvKpiCard
-                    icon={Users} iconColor="text-emerald-500"
-                    label={t("overviewTab.beneficiariesReached")}
-                    value={fmtCompact(summary?.totalBeneficiaries ?? 0)}
-                    sub={t("overviewTab.viewBreakdown")}
-                    onClick={() => setBenOpen(true)}
-                  />
-                  <OvKpiCard
-                    icon={DollarSign} iconColor="text-amber-500"
-                    label={t("overviewTab.budgetUtilisation")}
-                    value={pct(summary?.burnRatePct)}
-                    sub={summary?.currencyMixed
-                      ? t("overviewTab.mixedCurrencyUnavailable")
-                      : t("overviewTab.spentToDate", { amount: fmtMoney(summary?.totalSpent, summary?.currency) })}
-                    href="/budget"
-                  />
-                  <OvKpiCard
-                    icon={AlertTriangle} iconColor="text-red-500"
-                    label={t("overviewTab.activitiesAttention")}
-                    value={fmt(summary?.delayedActivities ?? 0)}
-                    sub={t("overviewTab.delayedOrPastDeadline")}
-                    alert={!!(summary?.delayedActivities && summary.delayedActivities > 0)}
-                  />
+                {/* ── Row 1: KPI Summary — HeroUI Pro KPI cards ("With Footer") ─── */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <KPI>
+                    <KPI.Header>
+                      <KPI.Icon><Activity aria-hidden="true" /></KPI.Icon>
+                      <KPI.Title>{t("overviewTab.activeProjects")}</KPI.Title>
+                    </KPI.Header>
+                    <KPI.Content>
+                      <KPI.Value value={summary?.activeProjects ?? 0} maximumFractionDigits={0} />
+                    </KPI.Content>
+                    <KPI.Footer>
+                      <span className="text-sm text-muted-foreground">{t("overviewTab.totalProjects", { count: summary?.totalProjects ?? 0 })}</span>
+                    </KPI.Footer>
+                  </KPI>
+                  <KPI>
+                    <KPI.Header>
+                      <KPI.Icon status="success"><Users aria-hidden="true" /></KPI.Icon>
+                      <KPI.Title>{t("overviewTab.beneficiariesReached")}</KPI.Title>
+                    </KPI.Header>
+                    <KPI.Content>
+                      <KPI.Value value={summary?.totalBeneficiaries ?? 0} notation="compact" maximumFractionDigits={1} />
+                    </KPI.Content>
+                    <KPI.Footer>
+                      <HLink className="text-sm" onPress={() => setBenOpen(true)}>{t("overviewTab.viewBreakdown")}</HLink>
+                    </KPI.Footer>
+                  </KPI>
+                  <KPI>
+                    <KPI.Header>
+                      <KPI.Icon status="warning"><DollarSign aria-hidden="true" /></KPI.Icon>
+                      <KPI.Title>{t("overviewTab.budgetUtilisation")}</KPI.Title>
+                    </KPI.Header>
+                    <KPI.Content>
+                      {summary?.burnRatePct == null
+                        ? <span className="text-2xl font-semibold text-muted-foreground">—</span>
+                        : <KPI.Value value={summary.burnRatePct / 100} style="percent" maximumFractionDigits={0} />}
+                    </KPI.Content>
+                    {summary?.burnRatePct != null && (
+                      <KPI.Progress value={Math.min(100, Math.max(0, summary.burnRatePct))} status="warning" />
+                    )}
+                    <KPI.Footer className="flex flex-col items-start gap-1">
+                      <span className="text-sm text-muted-foreground">
+                        {summary?.currencyMixed
+                          ? t("overviewTab.mixedCurrencyUnavailable")
+                          : t("overviewTab.spentToDate", { amount: fmtMoney(summary?.totalSpent, summary?.currency) })}
+                      </span>
+                      <HLink href="/budget" className="text-sm">{t("overviewTab.viewBudget")}</HLink>
+                    </KPI.Footer>
+                  </KPI>
+                  <KPI>
+                    <KPI.Header>
+                      <KPI.Icon status={summary?.delayedActivities ? "danger" : undefined}><AlertTriangle aria-hidden="true" /></KPI.Icon>
+                      <KPI.Title>{t("overviewTab.activitiesAttention")}</KPI.Title>
+                    </KPI.Header>
+                    <KPI.Content>
+                      <KPI.Value value={summary?.delayedActivities ?? 0} maximumFractionDigits={0} />
+                    </KPI.Content>
+                    <KPI.Footer>
+                      <span className="text-sm text-muted-foreground">{t("overviewTab.delayedOrPastDeadline")}</span>
+                    </KPI.Footer>
+                  </KPI>
                 </div>
 
                 {/* ── Row 2: Monthly Trend (5/12) · Project Status (4/12) · Notifications (3/12) ── */}
@@ -4131,46 +4163,43 @@ export default function Dashboard() {
                       title={t("overviewTab.projectImplementationStatus")}
                       description={t("overviewTab.progressDistribution")}
                     >
-                      <div className="relative h-[340px]">
-                        {projectStatusTotal === 0 ? (
+                      {projectStatusTotal === 0 ? (
+                        <div className="h-[340px]">
                           <ChartEmptyState message={t("overviewTab.noProjectData")} icon={FolderKanban} />
-                        ) : (
-                          <>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={projectStatusData}
-                                  cx="50%" cy="40%"
-                                  innerRadius={66} outerRadius={96}
-                                  paddingAngle={3} dataKey="value" nameKey="name"
-                                >
-                                  {projectStatusData.map((entry, i) => (
-                                    <Cell key={i} fill={entry.color} strokeWidth={0} />
-                                  ))}
-                                </Pie>
-                                <Tooltip
-                                  contentStyle={TT.contentStyle}
-                                  labelStyle={TT.labelStyle}
-                                  itemStyle={TT.itemStyle}
-                                  formatter={(v: number, name: string) => [
-                                    `${fmt(v)} project${v !== 1 ? "s" : ""} (${Math.round((v / projectStatusTotal) * 100)}%)`,
-                                    name,
-                                  ]}
-                                />
-                                <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                            {/* Centre total — uses pre-existing projectStatusTotal value; no new calculation */}
-                            <div
-                              className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-none select-none"
-                              aria-hidden="true"
-                            >
-                              <p className="text-xl font-bold tabular-nums text-foreground leading-none">{fmt(projectStatusTotal)}</p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">{t("overviewTab.projects")}</p>
+                        </div>
+                      ) : (
+                        // HeroUI Pro PieChart, as in its "Donut With Content" example.
+                        <div className="flex min-h-[340px] flex-col items-center justify-center gap-4">
+                          <div className="relative">
+                            <ProPieChart height={220} width={220}>
+                              <ProPieChart.Pie
+                                cornerRadius={12} cx="50%" cy="50%"
+                                data={projectStatusData} dataKey="value" nameKey="name"
+                                innerRadius="68%" paddingAngle={-20} strokeWidth={0}
+                              >
+                                {projectStatusData.map((entry) => (
+                                  <ProPieChart.Cell key={entry.name} fill={entry.color} />
+                                ))}
+                              </ProPieChart.Pie>
+                              <ProPieChart.Tooltip content={<ShareTooltip total={projectStatusTotal} />} />
+                            </ProPieChart>
+                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
+                              <span className="text-3xl font-bold tabular-nums text-foreground">{fmt(projectStatusTotal)}</span>
+                              <span className="text-sm text-muted-foreground">{t("overviewTab.projects")}</span>
                             </div>
-                          </>
-                        )}
-                      </div>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {projectStatusData.map((entry) => (
+                              <div key={entry.name} className="flex items-center gap-3">
+                                <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: entry.color }} aria-hidden="true" />
+                                <span className="w-24 text-sm text-foreground">{entry.name}</span>
+                                <span className="text-sm font-semibold tabular-nums text-foreground">{fmt(entry.value)}</span>
+                                <span className="text-xs text-muted-foreground">({Math.round((entry.value / projectStatusTotal) * 100)}%)</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </ChartCard>
                   </div>
 
@@ -4221,7 +4250,7 @@ export default function Dashboard() {
               PROGRAMME PERFORMANCE
               ════════════════════════════════════════════════════════════ */}
           {activeTab === "performance" && (
-            <div id="panel-performance" role="tabpanel" aria-labelledby="tab-performance" className="space-y-5">
+            <div id="panel-performance" className="space-y-5">
 
               {/* ── 1. Performance KPI Summary ───────────────────────────── */}
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -4871,7 +4900,7 @@ export default function Dashboard() {
               PROJECTS & STATES
               ════════════════════════════════════════════════════════════ */}
           {activeTab === "projects" && (
-            <div id="panel-projects" role="tabpanel" aria-labelledby="tab-projects" className="space-y-6">
+            <div id="panel-projects" className="space-y-6">
 
               {/* ── Tab header ──────────────────────────────────────────── */}
               <div className="flex items-start justify-between gap-4">
@@ -5208,7 +5237,7 @@ export default function Dashboard() {
               BUDGET & DONORS
               ════════════════════════════════════════════════════════════ */}
           {activeTab === "budget" && (
-            <div id="panel-budget" role="tabpanel" aria-labelledby="tab-budget" className="space-y-6">
+            <div id="panel-budget" className="space-y-6">
               {canViewBudgetAndDonors(role) ? (
                 <>
                   {/* Fail-closed: approved role but scope not yet configured.
@@ -5408,7 +5437,7 @@ export default function Dashboard() {
               RISKS & FOLLOW-UP
               ════════════════════════════════════════════════════════════ */}
           {activeTab === "risks" && (
-            <div id="panel-risks" role="tabpanel" aria-labelledby="tab-risks" className="space-y-6">
+            <div id="panel-risks" className="space-y-6">
 
               {/* Section header */}
               <SectionHeader
@@ -5464,8 +5493,8 @@ export default function Dashboard() {
             </div>
           )}
 
-        </div>{/* /p-5 sm:p-6 */}
-      </div>{/* /tabbed panel */}
+        </Tabs.Panel>
+      </Tabs>
 
       {/* ── Beneficiary Breakdown Dialog (always mounted at root) ────── */}
       <Dialog open={benOpen} onOpenChange={setBenOpen}>

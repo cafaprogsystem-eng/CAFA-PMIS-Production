@@ -449,6 +449,7 @@
     "totalProjects": "إجمالي {{count}} مشروع",
     "beneficiariesReached": "المستفيدون الفعليون",
     "viewBreakdown": "عرض التوزيع حسب الجنس والولاية",
+    "viewBudget": "عرض الميزانية",
     "budgetUtilisation": "معدل استهلاك الميزانية",
     "spentToDate": "{{amount}} منفق حتى الآن",
     "mixedCurrencyUnavailable": "عملات متعددة — لا يتوفر معدل استهلاك أو إنفاق موحد",

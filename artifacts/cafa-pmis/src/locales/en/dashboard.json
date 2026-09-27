@@ -449,6 +449,7 @@
     "totalProjects": "{{count}} total projects",
     "beneficiariesReached": "Beneficiaries Reached",
     "viewBreakdown": "View breakdown by gender & state",
+    "viewBudget": "View budget",
     "budgetUtilisation": "Budget Utilisation",
     "spentToDate": "{{amount}} spent to date",
     "mixedCurrencyUnavailable": "Multiple currencies — combined utilisation and spend are unavailable",

@@ -92,13 +92,14 @@ describe("Dashboard HQ location filter safety", () => {
     dashboardState.location = null;
     dashboardState.summary = { totalProjects: 987 };
     render(<Dashboard />);
-    expect(screen.getByText("987")).toBeInTheDocument();
+    // Shown in the status donut's centre and in its legend (HeroUI Pro pattern).
+    expect(screen.getAllByText("987").length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByRole("combobox", { name: "filters.allSectors" }));
     await userEvent.click(await screen.findByRole("option", { name: "Education" }));
 
     expect(screen.getByText("This metric does not support the current filters.")).toBeInTheDocument();
-    expect(screen.queryByText("987")).not.toBeInTheDocument();
+    expect(screen.queryAllByText("987")).toHaveLength(0);
     expect(screen.queryByText("kpi.totalProjects")).not.toBeInTheDocument();
   });
   it("sends only the supported location and sector contract to state performance", () => {
