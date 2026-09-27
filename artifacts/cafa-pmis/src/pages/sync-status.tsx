@@ -622,7 +622,7 @@ export default function SyncStatusPage() {
                     >
                       {filters.map((f) => (
                         <Segment.Item key={f.id} id={f.id} className="whitespace-nowrap">
-                          {f.label} (<bdi dir="ltr">{f.count}</bdi>)
+                          {`${f.label} (${f.count})`}
                         </Segment.Item>
                       ))}
                     </Segment>
