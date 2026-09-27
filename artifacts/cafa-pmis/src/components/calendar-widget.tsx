@@ -8,11 +8,7 @@ import {
 } from "@/components/icons";
 import { useGetDashboardAgenda } from "@workspace/api-client-react";
 import type { AgendaItem } from "@workspace/api-client-react";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuTrigger,
-  DropdownMenuRadioGroup, DropdownMenuRadioItem,
-} from "@/components/ui/dropdown-menu";
+import { Button, Card, Chip, Dropdown, Header, Label, Separator, type Key } from "@heroui/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ErrorState, type ErrorVariant } from "@/components/ui/error-state";
 
@@ -71,12 +67,13 @@ function toLocalDateStr(d: Date) {
 }
 
 /* ─── type metadata ─────────────────────────────────────────────────────── */
-const TYPE_META: Record<string, { labelKey: string; bg: string; text: string }> = {
-  project:       { labelKey: "project",       bg: "bg-blue-50",   text: "text-blue-700"   },
-  plan:          { labelKey: "plan",          bg: "bg-violet-50", text: "text-violet-700" },
-  plan_activity: { labelKey: "plan_activity", bg: "bg-cyan-50",   text: "text-cyan-700"   },
-  report:        { labelKey: "report",        bg: "bg-amber-50",  text: "text-amber-700"  },
-  risk:          { labelKey: "risk",          bg: "bg-red-50",    text: "text-red-700"    },
+type ChipColor = "default" | "accent" | "success" | "warning" | "danger";
+const TYPE_META: Record<string, { labelKey: string; color: ChipColor }> = {
+  project:       { labelKey: "project",       color: "accent"  },
+  plan:          { labelKey: "plan",          color: "default" },
+  plan_activity: { labelKey: "plan_activity", color: "success" },
+  report:        { labelKey: "report",        color: "warning" },
+  risk:          { labelKey: "risk",          color: "danger"  },
 };
 
 /** Localised type label with a safe, localised fallback for unknown API values. */
@@ -87,10 +84,10 @@ function typeLabel(t: TFunction, type: string): string {
     : calendarText(t, "calendarWidget.unknownType");
 }
 
-const DUE_META: Record<string, { labelKey: string; cls: string }> = {
-  overdue:  { labelKey: "overdue",  cls: "bg-red-100 text-red-700"   },
-  today:    { labelKey: "today",    cls: "bg-green-100 text-green-700" },
-  upcoming: { labelKey: "upcoming", cls: "bg-blue-100 text-blue-700"  },
+const DUE_META: Record<string, { labelKey: string; color: ChipColor }> = {
+  overdue:  { labelKey: "overdue",  color: "danger"  },
+  today:    { labelKey: "today",    color: "success" },
+  upcoming: { labelKey: "upcoming", color: "accent"  },
 };
 
 /** Localised due label with a safe, localised fallback for unknown API values. */
@@ -119,20 +116,20 @@ const DONE_STATUSES = new Set([
 ]);
 
 function getCircleClass(items: ExtItem[], isToday: boolean, isSelected: boolean): string {
-  if (isSelected) return "bg-[#1a3a5c] text-white shadow-md";
+  if (isSelected) return "bg-[var(--accent)] text-[var(--accent-foreground)]";
   if (!items.length) {
-    if (isToday) return "bg-blue-100 text-blue-700";
-    return "hover:bg-muted/50 text-foreground";
+    if (isToday) return "bg-[color-mix(in_oklab,var(--accent)_14%,transparent)] text-[var(--accent)] font-semibold";
+    return "text-foreground hover:bg-[var(--default)]";
   }
   if (items.some(i => i.dueLabel === "overdue"))
-    return "bg-red-500 text-white shadow-sm shadow-red-200 ring-2 ring-red-100";
+    return "bg-[var(--danger)] text-[var(--danger-foreground)]";
   if (isToday)
-    return "bg-[#1a2744] text-white shadow-md ring-2 ring-[#1a2744]/20";
+    return "bg-foreground text-[var(--background)] ring-2 ring-[var(--accent)]/30";
   if (items.some(i => PENDING_STATUSES.has(i.status ?? "")))
-    return "bg-orange-400 text-white shadow-sm shadow-orange-100";
+    return "bg-[var(--warning)] text-[var(--warning-foreground)]";
   if (items.every(i => DONE_STATUSES.has(i.status ?? "")))
-    return "bg-emerald-500 text-white shadow-sm shadow-emerald-100";
-  return "bg-violet-500 text-white shadow-sm shadow-violet-100";
+    return "bg-[var(--success)] text-[var(--success-foreground)]";
+  return "bg-violet-500 text-white";
 }
 
 function buildTooltip(t: TFunction, items: ExtItem[]): string {
@@ -159,19 +156,28 @@ function DateBadge({ dateStr, color, locale }: { dateStr: string; color: string;
   const mon = d.toLocaleString(locale, { month: "short" });
   const day = d.getDate();
   return (
-    <div className={`shrink-0 flex flex-col items-center justify-center w-8 h-8 rounded-lg ${color} font-medium leading-none`}>
-      <span className="text-[8px] uppercase tracking-wider opacity-70">{mon}</span>
-      <span className="text-sm">{day}</span>
+    <div className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl font-medium leading-none ${color}`}>
+      <span className="text-[10px] opacity-70">{mon}</span>
+      <span className="text-sm font-semibold">{day}</span>
     </div>
   );
 }
 
 const DATE_COLORS = [
-  "bg-blue-50 text-blue-700",
-  "bg-amber-50 text-amber-700",
-  "bg-green-50 text-green-700",
-  "bg-violet-50 text-violet-700",
+  "bg-[color-mix(in_oklab,var(--accent)_12%,transparent)] text-[var(--accent)]",
+  "bg-[color-mix(in_oklab,var(--warning)_14%,transparent)] text-[var(--warning)]",
+  "bg-[color-mix(in_oklab,var(--success)_14%,transparent)] text-[var(--success)]",
+  "bg-[var(--default)] text-foreground",
 ];
+
+/* Shared card header: title on the start, an icon-only options menu on the end. */
+function CardMenuButton({ label }: { label: string }) {
+  return (
+    <Button isIconOnly size="sm" variant="ghost" aria-label={label}>
+      <MoreHorizontal className="size-4 text-[var(--muted)]" aria-hidden="true" />
+    </Button>
+  );
+}
 
 /* ─── Context ────────────────────────────────────────────────────────────── */
 type CalCtx = {
@@ -364,43 +370,54 @@ export function CalendarGridCard() {
   } = useCalendarCtx();
 
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+    <Card className="gap-0 overflow-hidden p-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <span className="text-[15px] font-semibold text-foreground">{calendarText(t, "calendarWidget.calendar")}</span>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-1 rounded-md hover:bg-muted/60 transition-colors" aria-label={calendarText(t, "calendarWidget.calendarOptions")}>
-              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">{calendarText(t, "calendarWidget.navigation")}</DropdownMenuLabel>
-            <DropdownMenuItem onClick={goToToday} disabled={isViewingCurrentMonth && selectedDate === todayStr} className="gap-2 text-sm">
-              <CalendarDays className="h-3.5 w-3.5" /> {calendarText(t, "calendarWidget.goToToday")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={prevMonth} className="gap-2 text-sm">
-              <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.previousMonth")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={nextMonth} className="gap-2 text-sm">
-              <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.nextMonth")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">{calendarText(t, "calendarWidget.goTo")}</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => navigate("/projects")} className="gap-2 text-sm">
-              <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.allProjects")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/plans")} className="gap-2 text-sm">
-              <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.allPlans")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/reports")} className="gap-2 text-sm">
-              <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.allReports")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="text-base font-semibold text-foreground">{calendarText(t, "calendarWidget.calendar")}</span>
+        <Dropdown>
+          <CardMenuButton label={calendarText(t, "calendarWidget.calendarOptions")} />
+          <Dropdown.Popover placement="bottom end" className="min-w-44">
+            <Dropdown.Menu
+              aria-label={calendarText(t, "calendarWidget.calendarOptions")}
+              disabledKeys={isViewingCurrentMonth && selectedDate === todayStr ? ["today"] : []}
+              onAction={(key: Key) => {
+                if (key === "today") goToToday();
+                else if (key === "prev") prevMonth();
+                else if (key === "next") nextMonth();
+                else navigate(String(key));
+              }}
+            >
+              <Dropdown.Section>
+                <Header>{calendarText(t, "calendarWidget.navigation")}</Header>
+                <Dropdown.Item id="today" textValue={calendarText(t, "calendarWidget.goToToday")}>
+                  <CalendarDays className="size-4 text-[var(--muted)]" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.goToToday")}</Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="prev" textValue={calendarText(t, "calendarWidget.previousMonth")}>
+                  <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.previousMonth")}</Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="next" textValue={calendarText(t, "calendarWidget.nextMonth")}>
+                  <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.nextMonth")}</Label>
+                </Dropdown.Item>
+              </Dropdown.Section>
+              <Dropdown.Section>
+                <Header>{calendarText(t, "calendarWidget.goTo")}</Header>
+                <Dropdown.Item id="/projects" textValue={calendarText(t, "calendarWidget.allProjects")}>
+                  <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.allProjects")}</Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="/plans" textValue={calendarText(t, "calendarWidget.allPlans")}>
+                  <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.allPlans")}</Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="/reports" textValue={calendarText(t, "calendarWidget.allReports")}>
+                  <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.allReports")}</Label>
+                </Dropdown.Item>
+              </Dropdown.Section>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
       </div>
+      <Separator />
       {isError && (
-        <div className="border-b border-border/50" aria-live="assertive">
+        <div className="border-b border-[var(--separator)]" aria-live="assertive">
           <AgendaErrorState error={error} onRetry={doRefetch} />
         </div>
       )}
@@ -412,26 +429,26 @@ export function CalendarGridCard() {
 
       {/* Month navigation */}
       <div className="flex items-center justify-between px-4 py-2.5">
-        <button onClick={prevMonth} aria-label={calendarText(t, "calendarWidget.previousMonth")} className="p-1 rounded-md hover:bg-muted/60 transition-colors">
-          <ChevronLeft className="h-4 w-4 text-muted-foreground rtl:rotate-180" />
-        </button>
+        <Button isIconOnly size="sm" variant="ghost" onPress={prevMonth} aria-label={calendarText(t, "calendarWidget.previousMonth")}>
+          <ChevronLeft className="size-4 text-[var(--muted)] rtl:rotate-180" aria-hidden="true" />
+        </Button>
         <span className="text-sm font-medium text-foreground">
           {monthName(t, viewMonth)} {calendarYear(t, viewYear, i18n.language)}
         </span>
-        <button onClick={nextMonth} aria-label={calendarText(t, "calendarWidget.nextMonth")} className="p-1 rounded-md hover:bg-muted/60 transition-colors">
-          <ChevronRight className="h-4 w-4 text-muted-foreground rtl:rotate-180" />
-        </button>
+        <Button isIconOnly size="sm" variant="ghost" onPress={nextMonth} aria-label={calendarText(t, "calendarWidget.nextMonth")}>
+          <ChevronRight className="size-4 text-[var(--muted)] rtl:rotate-180" aria-hidden="true" />
+        </Button>
       </div>
 
       {/* Legend */}
       <div className="flex items-center gap-3 px-4 pb-1 flex-wrap">
         {[
-          { color: "bg-red-500",     label: calendarText(t, "calendarWidget.legendOverdue")   },
-          { color: "bg-orange-400",  label: calendarText(t, "calendarWidget.legendPending")   },
-          { color: "bg-emerald-500", label: calendarText(t, "calendarWidget.legendDone")      },
-          { color: "bg-violet-500",  label: calendarText(t, "calendarWidget.legendScheduled") },
+          { color: "bg-[var(--danger)]",  label: calendarText(t, "calendarWidget.legendOverdue")   },
+          { color: "bg-[var(--warning)]", label: calendarText(t, "calendarWidget.legendPending")   },
+          { color: "bg-[var(--success)]", label: calendarText(t, "calendarWidget.legendDone")      },
+          { color: "bg-violet-500",       label: calendarText(t, "calendarWidget.legendScheduled") },
         ].map(({ color, label }) => (
-          <span key={label} className="flex items-center gap-1 text-xs text-muted-foreground/70">
+          <span key={label} className="flex items-center gap-1 text-xs text-[var(--muted)]">
             <span className={`inline-block w-2 h-2 rounded-full ${color}`} aria-hidden="true" />
             {label}
           </span>
@@ -441,7 +458,7 @@ export function CalendarGridCard() {
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 px-3 pb-1" role="row" aria-label={calendarText(t, "calendarWidget.weekdays")}>
         {Array.from({ length: 7 }, (_, i) => dayName(t, i)).map((d, i) => (
-          <div key={i} role="columnheader" className="min-w-0 text-center text-[10px] sm:text-xs font-medium text-muted-foreground/60 py-1 leading-tight whitespace-nowrap">
+          <div key={i} role="columnheader" className="min-w-0 text-center text-[10px] sm:text-xs font-medium text-[var(--muted)] py-1 leading-tight whitespace-nowrap">
             {d}
           </div>
         ))}
@@ -464,7 +481,7 @@ export function CalendarGridCard() {
               onClick={() => setSelectedDate(isSelected ? null : dateStr)}
               aria-label={`${calendarDateLabel(t, viewYear, viewMonth, day, i18n.language)}${tipText ? `: ${tipText}` : ""}`}
               aria-pressed={isSelected}
-              className={`relative flex items-center justify-center h-7 w-7 mx-auto rounded-full text-xs font-medium transition-all duration-150 ${circleCls} ${!dateItems.length && !isToday && !isSelected ? "hover:bg-muted/50" : ""}`}
+              className={`relative mx-auto flex size-8 items-center justify-center rounded-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${circleCls}`}
             >
               {day}
             </button>
@@ -484,7 +501,7 @@ export function CalendarGridCard() {
           );
         })}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -498,63 +515,80 @@ export function ScheduleCard() {
   } = useCalendarCtx();
 
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+    <Card className="gap-0 overflow-hidden p-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <span className="text-[15px] font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="flex flex-wrap items-center gap-1.5 text-base font-semibold text-foreground">
           {calendarText(t, "calendarWidget.schedule")}
           {selectedDate && (
-            <span className="font-normal text-muted-foreground text-xs">
+            <span className="text-xs font-normal text-[var(--muted)]">
               — {new Date(selectedDate + "T00:00:00").toLocaleDateString(dateLocale, { month: "short", day: "numeric" })}
             </span>
           )}
           {scheduleTypeFilter !== "all" && (
-            <span className="inline-flex items-center gap-0.5 bg-primary/10 text-primary text-xs font-medium rounded-full px-1.5 py-0.5">
-              <Filter className="h-2.5 w-2.5" aria-hidden="true" />
+            <Chip size="sm" variant="soft" color="accent">
+              <Filter className="size-3" aria-hidden="true" />
               {typeLabel(t, scheduleTypeFilter)}
-            </span>
+            </Chip>
           )}
         </span>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-1 rounded-md hover:bg-muted/60 transition-colors" aria-label={calendarText(t, "calendarWidget.scheduleOptions")}>
-              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">{calendarText(t, "calendarWidget.date")}</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => setSelectedDate(todayStr)} disabled={selectedDate === todayStr} className="gap-2 text-sm">
-              <CalendarDays className="h-3.5 w-3.5" /> {calendarText(t, "calendarWidget.showToday")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setSelectedDate(null)} disabled={!selectedDate} className="gap-2 text-sm">
-              <X className="h-3.5 w-3.5" /> {calendarText(t, "calendarWidget.clearSelection")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">{calendarText(t, "calendarWidget.filterByType")}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={scheduleTypeFilter} onValueChange={v => setScheduleTypeFilter(v as ScheduleTypeFilter)}>
-              <DropdownMenuRadioItem value="all"          className="text-sm">{calendarText(t, "calendarWidget.allTypes")}</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="project"      className="text-sm">{calendarText(t, "calendarWidget.projectsOnly")}</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="plan"         className="text-sm">{calendarText(t, "calendarWidget.plansOnly")}</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="report"       className="text-sm">{calendarText(t, "calendarWidget.reportsOnly")}</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="risk"         className="text-sm">{calendarText(t, "calendarWidget.risksOnly")}</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/plans")} className="gap-2 text-sm">
-              <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.viewAllPlans")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/projects")} className="gap-2 text-sm">
-              <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.viewAllProjects")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Dropdown>
+          <CardMenuButton label={calendarText(t, "calendarWidget.scheduleOptions")} />
+          <Dropdown.Popover placement="bottom end" className="min-w-48">
+            <Dropdown.Menu
+              aria-label={calendarText(t, "calendarWidget.scheduleOptions")}
+              disabledKeys={[...(selectedDate === todayStr ? ["showToday"] : []), ...(!selectedDate ? ["clear"] : [])]}
+              onAction={(key: Key) => {
+                if (key === "showToday") setSelectedDate(todayStr);
+                else if (key === "clear") setSelectedDate(null);
+                else if (typeof key === "string" && key.startsWith("/")) navigate(key);
+              }}
+            >
+              <Dropdown.Section>
+                <Header>{calendarText(t, "calendarWidget.date")}</Header>
+                <Dropdown.Item id="showToday" textValue={calendarText(t, "calendarWidget.showToday")}>
+                  <CalendarDays className="size-4 text-[var(--muted)]" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.showToday")}</Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="clear" textValue={calendarText(t, "calendarWidget.clearSelection")}>
+                  <X className="size-4 text-[var(--muted)]" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.clearSelection")}</Label>
+                </Dropdown.Item>
+              </Dropdown.Section>
+              <Dropdown.Section
+                selectionMode="single"
+                selectedKeys={[scheduleTypeFilter]}
+                onSelectionChange={(keys) => { const k = [...keys][0]; if (k) setScheduleTypeFilter(String(k) as ScheduleTypeFilter); }}
+              >
+                <Header>{calendarText(t, "calendarWidget.filterByType")}</Header>
+                {([
+                  ["all", "calendarWidget.allTypes"], ["project", "calendarWidget.projectsOnly"], ["plan", "calendarWidget.plansOnly"],
+                  ["report", "calendarWidget.reportsOnly"], ["risk", "calendarWidget.risksOnly"],
+                ] as const).map(([id, key]) => (
+                  <Dropdown.Item key={id} id={id} textValue={calendarText(t, key)}>
+                    <Label>{calendarText(t, key)}</Label>
+                    <Dropdown.ItemIndicator />
+                  </Dropdown.Item>
+                ))}
+              </Dropdown.Section>
+              <Dropdown.Section>
+                <Dropdown.Item id="/plans" textValue={calendarText(t, "calendarWidget.viewAllPlans")}>
+                  <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.viewAllPlans")}</Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="/projects" textValue={calendarText(t, "calendarWidget.viewAllProjects")}>
+                  <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.viewAllProjects")}</Label>
+                </Dropdown.Item>
+              </Dropdown.Section>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
       </div>
+      <Separator />
 
-      <div className="divide-y divide-border/40">
+      <div className="divide-y divide-[var(--separator)]">
         {isError ? (
           <AgendaErrorState error={error} onRetry={doRefetch} />
         ) : isLoading ? (
-          <div className="space-y-1 p-3 animate-pulse">
-            {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-lg bg-muted/40" />)}
+          <div className="space-y-1 p-3 animate-pulse" aria-hidden="true">
+            {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-xl bg-[var(--default)]" />)}
           </div>
         ) : selectedItems.length === 0 ? (
           <div role="status" aria-live="polite" className="flex flex-col items-center justify-center gap-2 text-center px-4 min-h-[130px]">
@@ -574,18 +608,18 @@ export function ScheduleCard() {
             return (
               <Link
                 key={item.id} href={item.link}
-                className="flex items-start gap-3 px-4 py-3 hover:bg-muted/40 transition-colors group"
+                className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]"
               >
                 <DateBadge dateStr={item.date} color={colorCls} locale={dateLocale} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate leading-snug group-hover:text-primary transition-colors">
+                  <p className="truncate text-sm font-medium leading-snug text-foreground">
                     {item.title}
                   </p>
-                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${meta.bg} ${meta.text}`}>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <Chip size="sm" variant="soft" color={meta.color}>
                       {typeLabel(t, item.type)}
-                    </span>
-                    <span className="text-xs text-muted-foreground capitalize">
+                    </Chip>
+                    <span className="text-xs text-[var(--muted)]">
                        {statusLabel(t, item.status)}
                     </span>
                   </div>
@@ -595,7 +629,7 @@ export function ScheduleCard() {
           })
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -609,80 +643,72 @@ export function RemindersCard() {
   } = useCalendarCtx();
 
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+    <Card className="gap-0 overflow-hidden p-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <span className="text-[15px] font-semibold text-foreground flex items-center gap-1.5">
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="flex items-center gap-1.5 text-base font-semibold text-foreground">
           {calendarText(t, "calendarWidget.reminders")}
           {reminderFilter !== "all" && (
-            <span className={`inline-flex items-center gap-0.5 text-xs font-medium rounded-full px-1.5 py-0.5 ${DUE_META[reminderFilter]?.cls ?? ""}`}>
-              <Filter className="h-2.5 w-2.5" aria-hidden="true" />
+            <Chip size="sm" variant="soft" color={DUE_META[reminderFilter]?.color ?? "default"}>
+              <Filter className="size-3" aria-hidden="true" />
               {dueLabel(t, reminderFilter)}
-            </span>
+            </Chip>
           )}
         </span>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-1 rounded-md hover:bg-muted/60 transition-colors" aria-label={calendarText(t, "calendarWidget.remindersOptions")}>
-              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">{calendarText(t, "calendarWidget.filterDeadlines")}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={reminderFilter} onValueChange={v => setReminderFilter(v as ReminderFilter)}>
-              <DropdownMenuRadioItem value="all" className="text-sm">{calendarText(t, "calendarWidget.allUpcoming")}</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="overdue" className="text-sm">
-                <span className="flex items-center justify-between w-full gap-2">
-                  {calendarText(t, "calendarWidget.overdueOnly")}
-                  {reminderCounts.overdue > 0 && (
-                    <span className="bg-red-100 text-red-700 text-xs font-medium rounded-full px-1.5 py-0.5">
-                      {reminderCounts.overdue}
-                    </span>
-                  )}
-                </span>
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="today" className="text-sm">
-                <span className="flex items-center justify-between w-full gap-2">
-                   {calendarText(t, "calendarWidget.dueToday")}
-                  {reminderCounts.today > 0 && (
-                    <span className="bg-green-100 text-green-700 text-xs font-medium rounded-full px-1.5 py-0.5">
-                      {reminderCounts.today}
-                    </span>
-                  )}
-                </span>
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="upcoming" className="text-sm">
-                <span className="flex items-center justify-between w-full gap-2">
-                 {calendarText(t, "calendarWidget.upcoming")}
-                  {reminderCounts.upcoming > 0 && (
-                    <span className="bg-blue-100 text-blue-700 text-xs font-medium rounded-full px-1.5 py-0.5">
-                      {reminderCounts.upcoming}
-                    </span>
-                  )}
-                </span>
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={doRefetch} className="gap-2 text-sm">
-              <RefreshCw className="h-3.5 w-3.5" /> {calendarText(t, "calendarWidget.refresh")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/risks")} className="gap-2 text-sm">
-              <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.viewAllRisks")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/projects")} className="gap-2 text-sm">
-              <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" /> {calendarText(t, "calendarWidget.viewAllProjects")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Dropdown>
+          <CardMenuButton label={calendarText(t, "calendarWidget.remindersOptions")} />
+          <Dropdown.Popover placement="bottom end" className="min-w-52">
+            <Dropdown.Menu
+              aria-label={calendarText(t, "calendarWidget.remindersOptions")}
+              onAction={(key: Key) => {
+                if (key === "refresh") doRefetch();
+                else if (typeof key === "string" && key.startsWith("/")) navigate(key);
+              }}
+            >
+              <Dropdown.Section
+                selectionMode="single"
+                selectedKeys={[reminderFilter]}
+                onSelectionChange={(keys) => { const k = [...keys][0]; if (k) setReminderFilter(String(k) as ReminderFilter); }}
+              >
+                <Header>{calendarText(t, "calendarWidget.filterDeadlines")}</Header>
+                {([
+                  ["all", "calendarWidget.allUpcoming", 0, "default"],
+                  ["overdue", "calendarWidget.overdueOnly", reminderCounts.overdue, "danger"],
+                  ["today", "calendarWidget.dueToday", reminderCounts.today, "success"],
+                  ["upcoming", "calendarWidget.upcoming", reminderCounts.upcoming, "accent"],
+                ] as const).map(([id, key, count, color]) => (
+                  <Dropdown.Item key={id} id={id} textValue={calendarText(t, key)}>
+                    <Label>{calendarText(t, key)}</Label>
+                    {count > 0 && <Chip size="sm" variant="soft" color={color} className="ms-auto tabular-nums">{count}</Chip>}
+                    <Dropdown.ItemIndicator />
+                  </Dropdown.Item>
+                ))}
+              </Dropdown.Section>
+              <Dropdown.Section>
+                <Dropdown.Item id="refresh" textValue={calendarText(t, "calendarWidget.refresh")}>
+                  <RefreshCw className="size-4 text-[var(--muted)]" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.refresh")}</Label>
+                </Dropdown.Item>
+              </Dropdown.Section>
+              <Dropdown.Section>
+                <Dropdown.Item id="/risks" textValue={calendarText(t, "calendarWidget.viewAllRisks")}>
+                  <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.viewAllRisks")}</Label>
+                </Dropdown.Item>
+                <Dropdown.Item id="/projects" textValue={calendarText(t, "calendarWidget.viewAllProjects")}>
+                  <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /><Label>{calendarText(t, "calendarWidget.viewAllProjects")}</Label>
+                </Dropdown.Item>
+              </Dropdown.Section>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
       </div>
+      <Separator />
 
-      <div className="divide-y divide-border/40">
+      <div className="divide-y divide-[var(--separator)]">
         {isError ? (
           <AgendaErrorState error={error} onRetry={doRefetch} />
         ) : isLoading ? (
-          <div className="space-y-1 p-3 animate-pulse">
-            {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-lg bg-muted/40" />)}
+          <div className="space-y-1 p-3 animate-pulse" aria-hidden="true">
+            {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-xl bg-[var(--default)]" />)}
           </div>
         ) : reminders.length === 0 ? (
           <div role="status" aria-live="polite" className="flex flex-col items-center justify-center gap-2 text-center px-4 min-h-[130px]">
@@ -703,12 +729,12 @@ export function RemindersCard() {
             return (
               <Link
                 key={item.id} href={item.link}
-                className="flex items-start gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors group"
+                className="group flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]"
               >
                 <div className="flex-1 min-w-0">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+                      <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
                         {item.title}
                       </p>
                     </TooltipTrigger>
@@ -717,17 +743,17 @@ export function RemindersCard() {
                     </TooltipContent>
                   </Tooltip>
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-[var(--muted)]">
                       {new Date(item.date + "T00:00:00").toLocaleDateString(dateLocale, { month: "short", day: "numeric" })}
                     </span>
-                    <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${typeMeta.bg} ${typeMeta.text}`}>
-                       {typeLabel(t, item.type)}
-                    </span>
+                    <Chip size="sm" variant="soft" color={typeMeta.color}>
+                      {typeLabel(t, item.type)}
+                    </Chip>
                   </div>
                 </div>
-                <span className={`shrink-0 self-center inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${dueMeta.cls}`}>
+                <Chip size="sm" variant="soft" color={dueMeta.color} className="shrink-0 self-center">
                   {dueLabel(t, due)}
-                </span>
+                </Chip>
               </Link>
             );
           })
@@ -736,7 +762,7 @@ export function RemindersCard() {
       {/* Reminders are a mixed collection of projects, plans, activities, and
           reports. Each rendered item has its own canonical record link; there
           is intentionally no misleading single-module "View all" destination. */}
-    </div>
+    </Card>
   );
 }
 
