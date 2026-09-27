@@ -616,7 +616,7 @@ export default function ProjectDetailPage({
       title: data.project.title,
       description: [data.project.code, t(`status.${data.project.status}`, { defaultValue: formatStatusLabel(data.project.status) })].filter(Boolean).join(" · "),
     });
-  }, [data, onRecordLoaded]);
+  }, [data, onRecordLoaded, t]);
 
   // PRJ-BD-04: Document management state
   const uploadInputRef = useRef<HTMLInputElement>(null);
