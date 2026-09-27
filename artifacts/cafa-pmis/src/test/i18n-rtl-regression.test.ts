@@ -277,6 +277,10 @@ describe("English fallback — no keys missing from EN namespaces", () => {
     const arFlat = flattenKeys(readJson(path.join(LOCALES_DIR, "ar", "common.json")));
     const missing: string[] = [];
     for (const key of Object.keys(arFlat)) {
+      // Arabic-only plural forms (zero/two/few/many) of a key whose _other
+      // exists in English are expected; English never requests them.
+      const plural = key.match(/^(.*)_(zero|two|few|many)$/);
+      if (plural && `${plural[1]}_other` in enFlat) continue;
       if (!(key in enFlat)) {
         missing.push(`AR key "${key}" has no EN counterpart — fallback would show raw key`);
       }

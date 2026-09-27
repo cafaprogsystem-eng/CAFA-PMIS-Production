@@ -390,7 +390,13 @@ describe("§7  Structural completeness — all 17 namespaces", () => {
 
       if (Object.keys(arFlat).length === 0) return; // empty stub — skip
 
-      const orphaned = Object.keys(arFlat).filter((k) => !(k in enFlat));
+      // Arabic plural forms English lacks (zero/two/few/many) are expected for a
+      // key whose _other exists in English; English never asks for them.
+      const isArabicPluralForm = (k: string) => {
+        const m = k.match(/^(.*)_(zero|two|few|many)$/);
+        return !!m && `${m[1]}_other` in enFlat;
+      };
+      const orphaned = Object.keys(arFlat).filter((k) => !(k in enFlat) && !isArabicPluralForm(k));
       expect(
         orphaned,
         `${ns}: AR has keys not in EN (would display raw key on EN fallback): ${orphaned.slice(0, 10).join(", ")}`,
