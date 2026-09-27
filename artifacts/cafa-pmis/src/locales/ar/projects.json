@@ -74,7 +74,12 @@
     "approved": "مُعتمَد",
     "active": "نشط",
     "closed": "مُغلَق",
-    "rejected": "مرفوض"
+    "rejected": "مرفوض",
+    "state_reviewed": "مراجَع من الولاية",
+    "completed": "مكتمل",
+    "on_hold": "متوقف مؤقتاً",
+    "returned": "مُعاد",
+    "cancelled": "ملغى"
   },
   "filters": {
     "allStatuses": "جميع الحالات",

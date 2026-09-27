@@ -74,7 +74,12 @@
     "approved": "Approved",
     "active": "Active",
     "closed": "Closed",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "state_reviewed": "State Reviewed",
+    "completed": "Completed",
+    "on_hold": "On Hold",
+    "returned": "Returned",
+    "cancelled": "Cancelled"
   },
   "filters": {
     "allStatuses": "All statuses",

@@ -8,24 +8,9 @@ import {
   type ListProjectsQueryResult,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Button as HButton, Card, Chip, Dropdown, Label, ProgressBar as HProgressBar, Separator, Skeleton } from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
+import { SelectField } from "@/components/select-field";
 import {
   Dialog,
   DialogContent,
@@ -34,18 +19,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyTitle, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ErrorState } from "@/components/ui/error-state";
 import { Plus, FolderKanban, Filter, X, MoreHorizontal, Trash2, Send, Copy } from "@/components/icons";
 import { toast } from "sonner";
-import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatCurrency, formatDate, formatStatusLabel, hasPerm, statusBadgeVariant } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { formatCurrency, formatDate, formatStatusLabel, hasPerm } from "@/lib/format";
 import { ProjectRegistrationForm } from "@/components/project-registration-form";
 import { DeleteProjectDialog } from "@/components/delete-project-dialog";
 import { SECTORS } from "@/lib/sectors";
@@ -69,54 +48,68 @@ const STATUSES = ["draft", "submitted", "state_reviewed", "technically_approved"
 
 const PROJECT_VIEWS = ["table", "card", "list", "compact", "kanban", "calendar", "map"] as const;
 
-// Column header colors mirror the semantic badge variants defined in badge.tsx.
-// When badge.tsx variant colors change, update the matching entry here too.
-const PROJECT_KANBAN_COLS: KanbanColumn[] = [
-  { key: "draft",                  label: "Draft",                   color: "border border-slate-200 bg-slate-50 text-slate-600" },
-  { key: "submitted",              label: "Submitted",               color: "border border-blue-200 bg-blue-50 text-blue-700" },
-  { key: "technically_approved",   label: "Technically Approved",    color: "border border-indigo-200 bg-indigo-50 text-indigo-700" },
-  { key: "coordination_approved",  label: "Coordination Approved",   color: "border border-violet-200 bg-violet-50 text-violet-700" },
-  { key: "approved",               label: "Approved",                color: "border border-emerald-200 bg-emerald-50 text-emerald-700" },
-  { key: "active",                 label: "Active",                  color: "border border-emerald-200 bg-emerald-50 text-emerald-700" },
-  { key: "closed",                 label: "Closed",                  color: "border border-slate-200 bg-slate-100 text-slate-600" },
-  { key: "rejected",               label: "Rejected",                color: "border border-red-200 bg-red-50 text-red-700" },
-];
+// Kanban columns — one per workflow status, in workflow order, so no project
+// falls into the first column; the board hides empty columns. Labels are
+// resolved from projects:status.* at render.
+const PROJECT_KANBAN_KEYS = [
+  "draft", "submitted", "state_reviewed", "technically_approved", "coordination_approved", "approved",
+  "active", "on_hold", "returned", "completed", "closed", "cancelled", "rejected",
+] as const;
+const KANBAN_TONE: Record<string, string> = {
+  draft: "border border-[var(--border)] bg-[var(--default)] text-foreground",
+  submitted: "border border-[color-mix(in_oklab,var(--accent)_30%,transparent)] bg-[color-mix(in_oklab,var(--accent)_10%,transparent)] text-[var(--accent)]",
+  technically_approved: "border border-[color-mix(in_oklab,var(--accent)_30%,transparent)] bg-[color-mix(in_oklab,var(--accent)_10%,transparent)] text-[var(--accent)]",
+  coordination_approved: "border border-[color-mix(in_oklab,var(--accent)_30%,transparent)] bg-[color-mix(in_oklab,var(--accent)_10%,transparent)] text-[var(--accent)]",
+  approved: "border border-[color-mix(in_oklab,var(--success)_30%,transparent)] bg-[color-mix(in_oklab,var(--success)_10%,transparent)] text-[var(--success)]",
+  active: "border border-[color-mix(in_oklab,var(--success)_30%,transparent)] bg-[color-mix(in_oklab,var(--success)_10%,transparent)] text-[var(--success)]",
+  state_reviewed: "border border-[color-mix(in_oklab,var(--accent)_30%,transparent)] bg-[color-mix(in_oklab,var(--accent)_10%,transparent)] text-[var(--accent)]",
+  on_hold: "border border-[color-mix(in_oklab,var(--warning)_30%,transparent)] bg-[color-mix(in_oklab,var(--warning)_12%,transparent)] text-[var(--warning)]",
+  returned: "border border-[color-mix(in_oklab,var(--warning)_30%,transparent)] bg-[color-mix(in_oklab,var(--warning)_12%,transparent)] text-[var(--warning)]",
+  completed: "border border-[color-mix(in_oklab,var(--success)_30%,transparent)] bg-[color-mix(in_oklab,var(--success)_10%,transparent)] text-[var(--success)]",
+  cancelled: "border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-[var(--danger)]",
+  closed: "border border-[var(--border)] bg-[var(--default)] text-[var(--muted)]",
+  rejected: "border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-[var(--danger)]",
+};
+
+/** HeroUI Chip colour per project workflow status. */
+const STATUS_CHIP: Record<string, "default" | "accent" | "success" | "warning" | "danger"> = {
+  draft: "default", submitted: "accent", state_reviewed: "accent", technically_approved: "accent",
+  coordination_approved: "accent", approved: "success", active: "success", completed: "success",
+  on_hold: "warning", returned: "warning", closed: "default", cancelled: "danger", rejected: "danger",
+};
 
 function ProjectStatusBadge({ status }: { status: string }) {
-  const { variant, className } = statusBadgeVariant(status);
-  const label = formatStatusLabel(status);
+  const { t } = useTranslation("projects");
+  const label = t(`status.${status}`, { defaultValue: formatStatusLabel(status) });
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Badge variant={variant} className={className} aria-label={label}>
-          {label}
-        </Badge>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
-        {label}
-      </TooltipContent>
-    </Tooltip>
+    <Chip size="sm" variant="soft" color={STATUS_CHIP[status] ?? "default"} className="whitespace-nowrap">
+      {label}
+    </Chip>
   );
 }
 
 function CoverageBadge({ count }: { count: number }) {
   const { t } = useTranslation("projects");
-  if (count === 0) return <Badge variant="outline" className="text-xs text-muted-foreground">{t("coverage.stateNotAssigned")}</Badge>;
-  if (count === 1) return <Badge variant="submitted" className="text-xs cursor-default">{t("coverage.singleState")}</Badge>;
-  return <Badge variant="completed" className="text-xs cursor-default">{t("coverage.multiState")}</Badge>;
+  if (count === 0) return <Chip size="sm" variant="soft" className="whitespace-nowrap">{t("coverage.stateNotAssigned")}</Chip>;
+  if (count === 1) return <Chip size="sm" variant="soft" color="accent" className="whitespace-nowrap">{t("coverage.singleState")}</Chip>;
+  return <Chip size="sm" variant="soft" color="success" className="whitespace-nowrap">{t("coverage.multiState")}</Chip>;
 }
 
-function ProgressBar({ value, max, color = "bg-primary" }: { value: number; max: number; color?: string }) {
+/** Percentage bar on HeroUI ProgressBar; `color` is kept for callers and maps
+ *  "bg-secondary" (budget spend) to the neutral tone. */
+function ProgressBar({ value, max, color, label }: { value: number; max: number; color?: string; label?: string }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div className="space-y-1 min-w-[120px]">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span><bdi dir="ltr">{pct}%</bdi></span>
-      </div>
-      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-        <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
+    <HProgressBar
+      size="sm"
+      value={pct}
+      color="accent"
+      aria-label={label ?? `${pct}%`}
+      className="min-w-[120px] gap-1"
+    >
+      <HProgressBar.Output className="text-xs tabular-nums text-[var(--muted)]" />
+      <HProgressBar.Track><HProgressBar.Fill className={color === "bg-secondary" ? "bg-[var(--muted)]" : undefined} /></HProgressBar.Track>
+    </HProgressBar>
   );
 }
 
@@ -145,6 +138,51 @@ function NewProjectDialog() {
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+type ProjectItem = ListProjectsQueryResult[number];
+
+/* Row actions: HeroUI Dropdown with submit / duplicate / delete. */
+function ProjectActionsMenu({ project, canDelete, onSubmit, onDuplicate, onDelete, label }: {
+  project: ProjectItem;
+  canDelete: boolean;
+  onSubmit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  label: string;
+}) {
+  const { t } = useTranslation("projects");
+  const isDraft = project.status === "draft";
+  if (!isDraft && !canDelete) return null;
+  return (
+    <Dropdown>
+      <HButton isIconOnly size="sm" variant="ghost" aria-label={label}>
+        <MoreHorizontal className="size-4" aria-hidden="true" />
+      </HButton>
+      <Dropdown.Popover placement="bottom end" className="min-w-44">
+        <Dropdown.Menu
+          aria-label={label}
+          onAction={(key) => { if (key === "submit") onSubmit(); else if (key === "duplicate") onDuplicate(); else if (key === "delete") onDelete(); }}
+        >
+          {isDraft ? (
+            <Dropdown.Item id="submit" textValue={t("submit")}>
+              <Send className="size-4 text-[var(--muted)]" aria-hidden="true" /><Label>{t("submit")}</Label>
+            </Dropdown.Item>
+          ) : null}
+          {isDraft || canDelete ? (
+            <Dropdown.Item id="duplicate" textValue={t("duplicate")}>
+              <Copy className="size-4 text-[var(--muted)]" aria-hidden="true" /><Label>{t("duplicate")}</Label>
+            </Dropdown.Item>
+          ) : null}
+          {canDelete ? (
+            <Dropdown.Item id="delete" textValue={t("deleteProject")} variant="danger">
+              <Trash2 className="size-4" aria-hidden="true" /><Label>{t("deleteProject")}</Label>
+            </Dropdown.Item>
+          ) : null}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   );
 }
 
@@ -190,17 +228,18 @@ export default function ProjectsPage() {
     [setLocation],
   );
 
-  async function handleDirectSubmitProject(project: ListProjectsQueryResult[number]) {
+  const { mutateAsync: transitionProject } = transitionMutation;
+  const handleDirectSubmitProject = useCallback(async (project: ListProjectsQueryResult[number]) => {
     try {
-      await transitionMutation.mutateAsync({ projectId: project.id, data: { action: "submit" } as never });
+      await transitionProject({ projectId: project.id, data: { action: "submit" } as never });
       toast.success(t("submitSuccess"));
       qc.invalidateQueries();
     } catch (e: unknown) {
       toast.error((e as Error).message);
     }
-  }
+  }, [transitionProject, t, qc]);
 
-  function handleDuplicateProject(project: ListProjectsQueryResult[number]) {
+  const handleDuplicateProject = useCallback((project: ListProjectsQueryResult[number]) => {
     // Opens the full registration form prefilled from the source project
     // (title, budget, outputs/indicators/activities, state allocations, ...)
     // instead of POSTing a 5-field payload that was missing every field the
@@ -208,7 +247,7 @@ export default function ProjectsPage() {
     // frequency, at least one operational location, at least one output) —
     // that always failed validation in practice.
     setDuplicateSourceId(project.id);
-  }
+  }, []);
 
   const viewRecords: ViewRecord[] = useMemo(
     () =>
@@ -244,37 +283,88 @@ export default function ProjectsPage() {
                 onClick={() => continueEdit(p.id)}
               />
             )}
-            {canDelete && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("projectActionsAria")}>
-                    <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  {p.status === "draft" && (
-                    <DropdownMenuItem onClick={() => handleDirectSubmitProject(p)} className="gap-2">
-                      <Send className="h-3.5 w-3.5" /> {t("submit")}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => handleDuplicateProject(p)} className="gap-2">
-                    <Copy className="h-3.5 w-3.5" /> {t("duplicate")}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setDeleteTarget({ id: p.id, code: p.code ?? "", title: p.title })}
-                    className="gap-2 text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Delete Project
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <ProjectActionsMenu
+              project={p}
+              canDelete={canDelete}
+              label={t("projectActionsAria")}
+              onSubmit={() => handleDirectSubmitProject(p)}
+              onDuplicate={() => handleDuplicateProject(p)}
+              onDelete={() => setDeleteTarget({ id: p.id, code: p.code ?? "", title: p.title })}
+            />
           </div>
         ) : undefined,
       })),
     [projects, openRecord, t, tCommon, canContinueEdit, continueEdit, canDelete, handleDirectSubmitProject, handleDuplicateProject],
   );
+
+  const kanbanColumns: KanbanColumn[] = useMemo(
+    () => PROJECT_KANBAN_KEYS.map(key => ({ key, label: t(`status.${key}`, { defaultValue: formatStatusLabel(key) }), color: KANBAN_TONE[key] })),
+    [t],
+  );
+
+  const isAr = i18n.language.startsWith("ar");
+  const columns = useMemo<DataGridColumn<ProjectItem>[]>(() => [
+    { id: "project", header: t("table.project"), isRowHeader: true, width: 240, pinned: "start",
+      cell: (p) => (
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate font-medium text-foreground" title={p.title}>{p.title}</span>
+          {p.code && <span className="truncate font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{p.code}</bdi></span>}
+        </div>
+      ) },
+    { id: "status", header: t("table.status"), width: 120, cell: (p) => <ProjectStatusBadge status={p.status} /> },
+    { id: "sector", header: t("table.sector"), width: 140,
+      cell: (p) => <span className="block truncate text-sm" title={p.sector}>{p.sector}</span> },
+    { id: "donor", header: t("table.donor"), width: 120,
+      cell: (p) => <span className="block truncate text-sm text-[var(--muted)]" title={p.donor}>{p.donor}</span> },
+    { id: "states", header: t("table.states"), width: 160,
+      cell: (p) => {
+        const names = isAr && p.stateNamesAr?.length === p.stateNames.length ? p.stateNamesAr : p.stateNames;
+        return (
+          <div className="flex max-w-[200px] flex-col items-start gap-1">
+            <CoverageBadge count={p.stateNames.length} />
+            <div className="flex flex-wrap gap-1">
+              {names.slice(0, 3).map((n, i) => <Chip key={i} size="sm" variant="soft" className="whitespace-nowrap">{n}</Chip>)}
+              {p.stateNames.length > 3 && <Chip size="sm" variant="soft">+{p.stateNames.length - 3}</Chip>}
+            </div>
+          </div>
+        );
+      } },
+    { id: "budget", header: t("table.budget"), width: 160,
+      cell: (p) => (
+        <div className="flex flex-col gap-1">
+          <ProgressBar value={p.budgetSpent} max={p.budgetTotal} color="bg-secondary" label={`${t("table.budget")}: ${formatCurrency(p.budgetSpent)} / ${formatCurrency(p.budgetTotal)}`} />
+          <span className="whitespace-nowrap text-xs tabular-nums text-[var(--muted)]"><bdi dir="ltr">{formatCurrency(p.budgetSpent)} / {formatCurrency(p.budgetTotal)}</bdi></span>
+        </div>
+      ) },
+    { id: "beneficiaries", header: t("table.beneficiaries"), width: 140,
+      cell: (p) => (
+        <div className="flex flex-col gap-1">
+          <ProgressBar value={p.beneficiariesReached} max={p.beneficiariesTarget} label={`${t("table.beneficiaries")}: ${p.beneficiariesReached.toLocaleString()} / ${p.beneficiariesTarget.toLocaleString()}`} />
+          <span className="whitespace-nowrap text-xs tabular-nums text-[var(--muted)]"><bdi dir="ltr">{p.beneficiariesReached.toLocaleString()} / {p.beneficiariesTarget.toLocaleString()}</bdi></span>
+        </div>
+      ) },
+    { id: "endDate", header: t("table.endDate"), width: 110,
+      cell: (p) => {
+        const overdue = !!p.endDate && new Date(p.endDate) < new Date() && p.status !== "closed" && p.status !== "completed";
+        return <span className={`whitespace-nowrap text-sm ${overdue ? "font-medium text-[var(--danger)]" : "text-[var(--muted)]"}`}><bdi dir="ltr">{formatDate(p.endDate)}</bdi></span>;
+      } },
+    { id: "actions", header: <span className="sr-only">{t("table.actions")}</span>, width: 130, pinned: "end", align: "end",
+      cell: (p) => (
+        <div className="flex items-center justify-end gap-1">
+          {p.status === "draft" && canContinueEdit && (
+            <ContinueEditingAction recordTitle={p.title} onClick={() => continueEdit(p.id)} />
+          )}
+          <ProjectActionsMenu
+            project={p}
+            canDelete={canDelete}
+            label={p.status === "draft" ? tCommon("moreActions") : t("projectActionsAria")}
+            onSubmit={() => handleDirectSubmitProject(p)}
+            onDuplicate={() => handleDuplicateProject(p)}
+            onDelete={() => setDeleteTarget({ id: p.id, code: p.code ?? "", title: p.title })}
+          />
+        </div>
+      ) },
+  ], [t, tCommon, isAr, canContinueEdit, canDelete, continueEdit, handleDirectSubmitProject, handleDuplicateProject]);
 
   const hasFilters = !!(statusFilter || sectorFilter || stateFilter);
 
@@ -288,15 +378,15 @@ export default function ProjectsPage() {
         </EmptyDescription>
       </EmptyHeader>
       {hasFilters && (
-        <Button
-          variant="outline"
+        <HButton
+          variant="secondary"
           size="sm"
           className="mt-3"
-          onClick={() => { setStatusFilter(""); setSectorFilter(""); setStateFilter(""); }}
+          onPress={() => { setStatusFilter(""); setSectorFilter(""); setStateFilter(""); }}
         >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
+          <X className="size-3.5" aria-hidden="true" />
           {t("clearFilters")}
-        </Button>
+        </HButton>
       )}
     </Empty>
   );
@@ -309,78 +399,64 @@ export default function ProjectsPage() {
           <div className="flex items-center gap-2.5">
             <h1 className="text-foreground text-xl font-semibold">{t("title")}</h1>
             {!isLoading && !isError && projects && (
-              <span className="text-sm font-medium text-muted-foreground bg-muted rounded-full px-2.5 py-0.5 tabular-nums">
-                {projects.length}
-              </span>
+              <Chip size="sm" variant="soft" className="tabular-nums">{projects.length}</Chip>
             )}
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
+          <p className="mt-1 text-sm text-[var(--muted)]">
             {t("managedProjects")}
           </p>
         </div>
         {canCreate && <NewProjectDialog />}
       </div>
 
-      {/* Enterprise control bar: filters (left) + view switcher (right) */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5">
+      {/* Enterprise control bar: filters (start) + view switcher (end) */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
 
-        {/* ── Left: filter region ── */}
-        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground shrink-0 select-none">
-            <Filter className="h-4 w-4" aria-hidden="true" />
+        {/* ── Start: filter region ── */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div className="flex shrink-0 select-none items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
+            <Filter className="size-4" aria-hidden="true" />
             {tCommon("filter")}
           </div>
-          <Separator orientation="vertical" className="h-5 hidden sm:block shrink-0" />
+          <Separator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
 
-          <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
-            <SelectTrigger className="h-10 min-w-[7rem] w-auto max-w-[12rem] text-sm border-border/60" aria-label={tCommon("status")}>
-              <SelectValue placeholder={t("filters.allStatuses")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allStatuses")}</SelectItem>
-              {STATUSES.map(s => (
-                <SelectItem key={s} value={s}>
-                  {s.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={sectorFilter || "all"} onValueChange={(v) => setSectorFilter(v === "all" ? "" : v)}>
-            <SelectTrigger className="h-10 min-w-[7rem] w-auto max-w-[12rem] text-sm border-border/60" aria-label={tCommon("sector")}>
-              <SelectValue placeholder={t("filters.allSectors")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allSectors")}</SelectItem>
-              {SECTORS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Select value={stateFilter || "all"} onValueChange={(v) => setStateFilter(v === "all" ? "" : v)}>
-            <SelectTrigger className="h-10 min-w-[7rem] w-auto max-w-[12rem] text-sm border-border/60" aria-label={tCommon("state")}>
-              <SelectValue placeholder={t("filters.allStates")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allStates")}</SelectItem>
-              {states?.map(s => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SelectField
+            aria-label={tCommon("status")}
+            value={statusFilter || "all"}
+            onChange={(v) => setStatusFilter(v === "all" ? "" : v)}
+            triggerClassName="h-10 min-w-[9rem]"
+            options={[{ value: "all", label: t("filters.allStatuses") }, ...STATUSES.map(st => ({ value: st, label: t(`status.${st}`, { defaultValue: formatStatusLabel(st) }) }))]}
+          />
+          <SelectField
+            aria-label={tCommon("sector")}
+            value={sectorFilter || "all"}
+            onChange={(v) => setSectorFilter(v === "all" ? "" : v)}
+            triggerClassName="h-10 min-w-[9rem]"
+            options={[{ value: "all", label: t("filters.allSectors") }, ...SECTORS.map(sec => ({ value: sec, label: sec }))]}
+          />
+          <SelectField
+            aria-label={tCommon("state")}
+            value={stateFilter || "all"}
+            onChange={(v) => setStateFilter(v === "all" ? "" : v)}
+            triggerClassName="h-10 min-w-[9rem]"
+            options={[{ value: "all", label: t("filters.allStates") }, ...(states ?? []).map(st => ({ value: String(st.id), label: <StateLabel state={st} />, textValue: st.name }))]}
+          />
 
           {hasFilters && (
-            <Button
+            <HButton
               variant="ghost"
               size="sm"
-              className="h-9 px-2.5 text-sm text-muted-foreground hover:text-foreground gap-1.5 shrink-0"
-              onClick={() => { setStatusFilter(""); setSectorFilter(""); setStateFilter(""); }}
+              className="shrink-0"
+              onPress={() => { setStatusFilter(""); setSectorFilter(""); setStateFilter(""); }}
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="size-3.5" aria-hidden="true" />
               {t("clearFilters")}
-            </Button>
+            </HButton>
           )}
         </div>
 
         {/* ── Divider ── */}
-        <Separator orientation="vertical" className="h-6 hidden md:block shrink-0" />
+        <Separator orientation="vertical" className="hidden h-6 shrink-0 md:block" />
 
         {/* ── Right: view-mode switcher ── */}
         <ViewModeSwitcher
@@ -391,190 +467,62 @@ export default function ProjectsPage() {
       </div>
 
       {isError ? (
-        <Card>
-          <CardContent className="p-0">
-            <ErrorState
-              variant="server"
-              title={t("loadError")}
-              description={t("loadErrorDesc")}
-              onRetry={() => refetch()}
-            />
-          </CardContent>
+        <Card className="p-0">
+          <ErrorState
+            variant="server"
+            title={t("loadError")}
+            description={t("loadErrorDesc")}
+            onRetry={() => refetch()}
+          />
         </Card>
       ) : isLoading ? (
-        <Card>
-          <CardContent className="p-0">
-            <div className="divide-y divide-border/60">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4 px-4 py-3.5">
-                  <Skeleton className="h-4 w-20 shrink-0" />
-                  <Skeleton className="h-4 flex-1" />
-                  <Skeleton className="h-5 w-20 shrink-0" />
-                  <Skeleton className="h-4 w-24 shrink-0 hidden md:block" />
-                  <Skeleton className="h-4 w-32 shrink-0 hidden lg:block" />
-                  <Skeleton className="h-4 w-16 shrink-0 hidden xl:block" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
+        <Card className="p-0">
+          <div className="divide-y divide-[var(--separator)]" aria-hidden="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-4 py-3.5">
+                <Skeleton className="h-4 w-20 shrink-0 rounded" />
+                <Skeleton className="h-4 flex-1 rounded" />
+                <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
+                <Skeleton className="hidden h-4 w-24 shrink-0 rounded md:block" />
+                <Skeleton className="hidden h-4 w-32 shrink-0 rounded lg:block" />
+                <Skeleton className="hidden h-4 w-16 shrink-0 rounded xl:block" />
+              </div>
+            ))}
+          </div>
         </Card>
       ) : viewMode === "table" ? (
-        <Card>
-          <CardContent className="p-0">
-            {!projects || projects.length === 0 ? emptyNode : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("table.project")}</TableHead>
-                      <TableHead>{t("table.status")}</TableHead>
-                      <TableHead>{t("table.sector")}</TableHead>
-                      <TableHead>{t("table.donor")}</TableHead>
-                      <TableHead>{t("table.states")}</TableHead>
-                      <TableHead>{t("table.budget")}</TableHead>
-                      <TableHead>{t("table.beneficiaries")}</TableHead>
-                      <TableHead className="whitespace-nowrap">{t("table.endDate")}</TableHead>
-                      <TableHead className="w-[160px]">{t("table.actions")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {projects.map(p => (
-                      <TableRow
-                        key={p.id}
-                        className="cursor-pointer hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                        tabIndex={0}
-                        aria-label={`View ${p.title}`}
-                        onClick={(event) => openRecord("project", p.id, event.currentTarget)}
-                        onKeyDown={(event) => {
-                          if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
-                          event.preventDefault();
-                          openRecord("project", p.id, event.currentTarget);
-                        }}
-                      >
-                        <TableCell className="min-w-[200px] max-w-[280px]">
-                          <div className="font-medium truncate">{p.title}</div>
-                          {p.code && <div className="text-xs font-mono text-muted-foreground truncate"><bdi dir="ltr">{p.code}</bdi></div>}
-                        </TableCell>
-                        <TableCell><ProjectStatusBadge status={p.status} /></TableCell>
-                        <TableCell className="max-w-[140px] truncate text-sm">{p.sector}</TableCell>
-                        <TableCell className="max-w-[140px] truncate text-sm text-muted-foreground">{p.donor}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1 max-w-[200px]">
-                            <CoverageBadge count={p.stateNames.length} />
-                            <div className="flex flex-wrap gap-1">
-                              {(i18n.language.startsWith("ar") && p.stateNamesAr?.length === p.stateNames.length
-                                ? p.stateNamesAr
-                                : p.stateNames).slice(0, 3).map((n, i) => (
-                                <Badge key={i} variant="outline" className="text-xs">{n}</Badge>
-                              ))}
-                              {p.stateNames.length > 3 && <Badge variant="outline" className="text-xs">+{p.stateNames.length - 3}</Badge>}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <ProgressBar value={p.budgetSpent} max={p.budgetTotal} color="bg-secondary" />
-                            <div className="text-xs text-muted-foreground">{formatCurrency(p.budgetSpent)} / {formatCurrency(p.budgetTotal)}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <ProgressBar value={p.beneficiariesReached} max={p.beneficiariesTarget} />
-                            <div className="text-xs text-muted-foreground">{p.beneficiariesReached.toLocaleString()} / {p.beneficiariesTarget.toLocaleString()}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell className={`text-sm whitespace-nowrap ${p.endDate && new Date(p.endDate) < new Date() && p.status !== "closed" && p.status !== "completed" ? "text-destructive font-medium" : "text-muted-foreground"}`}>{formatDate(p.endDate)}</TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()} className="py-2">
-                          {p.status === "draft" ? (
-                            <div className="flex items-center gap-1">
-                              {canContinueEdit && (
-                                <ContinueEditingAction
-                                  recordTitle={p.title}
-                                  onClick={() => continueEdit(p.id)}
-                                />
-                              )}
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={tCommon("moreActions")}>
-                                    <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-40">
-                                  <DropdownMenuItem onClick={() => handleDirectSubmitProject(p)} className="gap-2">
-                                    <Send className="h-3.5 w-3.5" /> {t("submit")}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleDuplicateProject(p)} className="gap-2">
-                                    <Copy className="h-3.5 w-3.5" /> {t("duplicate")}
-                                  </DropdownMenuItem>
-                                  {canDelete && (
-                                    <>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() => setDeleteTarget({ id: p.id, code: p.code ?? "", title: p.title })}
-                                        className="gap-2 text-destructive focus:text-destructive"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" /> Delete Project
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          ) : canDelete ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("projectActionsAria")}>
-                                  <MoreHorizontal className="h-3.5 w-3.5" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-40">
-                                <DropdownMenuItem
-                                  onClick={() => setDeleteTarget({ id: p.id, code: p.code ?? "", title: p.title })}
-                                  className="gap-2 text-destructive focus:text-destructive"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" /> Delete Project
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : null}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        !projects || projects.length === 0 ? <Card>{emptyNode}</Card> : (
+          <DataGrid
+            aria-label={t("title")}
+            data={projects}
+            columns={columns}
+            getRowId={(p) => p.id}
+            onRowAction={(key) => openRecord("project", Number(key))}
+            contentClassName="min-w-[1320px]"
+            verticalAlign="middle"
+          />
+        )
       ) : viewMode === "card" ? (
         <CardGrid items={viewRecords} empty={emptyNode} />
       ) : viewMode === "list" ? (
-        <Card>
-          <CardContent className="p-0">
-            <ListView items={viewRecords} empty={emptyNode} />
-          </CardContent>
+        <Card className="p-0">
+          <ListView items={viewRecords} empty={emptyNode} />
         </Card>
       ) : viewMode === "compact" ? (
-        <Card>
-          <CardContent className="p-0">
-            <CompactView items={viewRecords} empty={emptyNode} />
-          </CardContent>
+        <Card className="p-0">
+          <CompactView items={viewRecords} empty={emptyNode} />
         </Card>
       ) : viewMode === "kanban" ? (
         <div className="p-1">
-          <KanbanBoard items={viewRecords} columns={PROJECT_KANBAN_COLS} empty={emptyNode} />
+          <KanbanBoard items={viewRecords} columns={kanbanColumns} empty={emptyNode} />
         </div>
       ) : viewMode === "calendar" ? (
         <Card>
-          <CardContent className="p-4">
-            <CalendarGrid items={viewRecords} empty={emptyNode} />
-          </CardContent>
+          <CalendarGrid items={viewRecords} empty={emptyNode} />
         </Card>
       ) : viewMode === "map" ? (
         <Card>
-          <CardContent className="p-4">
-            <StateMap items={viewRecords} states={states ?? []} empty={emptyNode} />
-          </CardContent>
+          <StateMap items={viewRecords} states={states ?? []} empty={emptyNode} />
         </Card>
       ) : null}
 
