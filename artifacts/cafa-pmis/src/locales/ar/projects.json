@@ -291,7 +291,31 @@
     "editReportingConfiguration": "تعديل إعدادات التقارير",
     "notConfigured": "غير مُهيأ",
     "documentLockedAria": "المستند مقفل",
-    "overrideReasonPlaceholder": "أدخل سبب حذف هذا المستند…"
+    "overrideReasonPlaceholder": "أدخل سبب حذف هذا المستند…",
+    "actions": {
+      "submit": "إرسال",
+      "technical_review": "مراجعة المنسق الفني",
+      "coordination_review": "مراجعة منسق البرامج الأول",
+      "final_approve": "اعتماد مدير البرامج",
+      "activate": "تفعيل المشروع",
+      "close": "إغلاق المشروع",
+      "request_revision": "طلب مراجعة",
+      "reject": "رفض"
+    },
+    "actionApplied": "تم تطبيق «{{action}}».",
+    "errors": {
+      "unresolvedCorrections_zero": "لا يمكن الاعتماد — لا توجد تصحيحات مطلوبة معلّقة.",
+      "unresolvedCorrections_one": "لا يمكن الاعتماد — يوجد تصحيح مطلوب واحد لم يُحل. عالجه أولًا.",
+      "unresolvedCorrections_two": "لا يمكن الاعتماد — يوجد تصحيحان مطلوبان لم يُحلّا. عالجهما أولًا.",
+      "unresolvedCorrections_few": "لا يمكن الاعتماد — توجد {{count}} تصحيحات مطلوبة لم تُحل. عالجها أولًا.",
+      "unresolvedCorrections_many": "لا يمكن الاعتماد — يوجد {{count}} تصحيحًا مطلوبًا لم يُحل. عالجها أولًا.",
+      "unresolvedCorrections_other": "لا يمكن الاعتماد — يوجد {{count}} تصحيح مطلوب لم يُحل. عالجها أولًا.",
+      "budgetBreakdownExceeds": "التكاليف التفصيلية تتجاوز إجمالي الميزانية المعتمد.",
+      "beneficiariesBreakdownExceeds": "المستفيدون المصنّفون يتجاوزون العدد المستهدف.",
+      "statusConflict": "تغيّرت حالة المشروع؛ يرجى التحديث والمحاولة مرة أخرى."
+    },
+    "documentsTab": "المستندات",
+    "sectionsAria": "أقسام المشروع"
   },
   "form": {
     "tabs": {

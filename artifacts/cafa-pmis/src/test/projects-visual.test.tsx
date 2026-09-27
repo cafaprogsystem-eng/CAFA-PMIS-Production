@@ -894,7 +894,7 @@ describe("PRJ-FINAL-VIS-06 — budget_spent renders read-only", () => {
 describe("PRJ-FINAL-VIS-07 — allocation semantics unchanged", () => {
   it("state allocations still come from the dedicated hook and tab", () => {
     expect(detailSrc).toContain("useListProjectStateAllocations(projectId)");
-    expect(detailSrc).toContain('<TabsContent value="state-allocations"');
+    expect(detailSrc).toContain('<Tabs.Panel id="state-allocations"');
   });
 });
 

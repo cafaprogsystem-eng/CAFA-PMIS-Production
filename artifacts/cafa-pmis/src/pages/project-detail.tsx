@@ -23,7 +23,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -53,7 +52,6 @@ import { formatCurrency, formatDate, formatDateTime, formatPercent, formatStatus
 import { ProjectStatusBadge, ProgressBar } from "./projects";
 import { CheckCircle2, ArrowLeft, DollarSign, Users, Target, Activity as ActivityIcon, AlertCircle, FileText, TrendingUp, Plus, Shield, Building2, CalendarDays, Hash, Tag, Pencil, Trash2, Lock, Upload, Archive } from "@/components/icons";
 import { ErrorState } from "@/components/ui/error-state";
-import { StatCard } from "@/components/ui/stat-card";
 import { CommentsPanel, useUnresolvedRequiredCorrections } from "@/components/comments-panel";
 import { EditProjectDialog } from "@/components/project-registration-form";
 import { DeleteProjectDialog } from "@/components/delete-project-dialog";
@@ -64,6 +62,9 @@ import { useTranslation } from "react-i18next";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { StateLabel } from "@/components/state-label";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
+import { Alert, Button as HButton, Chip, Tabs, Input as HInput, Label as HLabel, Link as HLink, Modal, TextArea as HTextArea, TextField } from "@heroui/react";
+import { KPI } from "@heroui-pro/react/kpi";
+import { SelectField } from "@/components/select-field";
 
 type Action = "submit" | "technical_review" | "coordination_review" | "final_approve" | "activate" | "close" | "reject" | "request_revision";
 
@@ -96,6 +97,14 @@ const ACTIONS: ActionDef[] = [
   { action: "reject", label: "Reject", perm: "projects.approve.final", fromStatuses: ["coordination_approved"], variant: "destructive" },
 ];
 
+/** HeroUI Button variant for a workflow action. */
+function actionVariant(v: ActionDef["variant"]): "primary" | "secondary" | "outline" | "danger-soft" {
+  if (v === "destructive") return "danger-soft";
+  if (v === "outline") return "outline";
+  if (v === "secondary") return "secondary";
+  return "primary";
+}
+
 function TransitionDialog({ projectId, action, label, open, onOpenChange }: {
   projectId: number;
   action: Action;
@@ -107,6 +116,7 @@ function TransitionDialog({ projectId, action, label, open, onOpenChange }: {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { t } = useTranslation("projects");
+  const { t: tCommon } = useTranslation("common");
   const transition = useTransitionProject();
   // Spec: rationale required for revision/rejection.
   const commentRequired = action === "request_revision" || action === "reject";
@@ -116,7 +126,7 @@ function TransitionDialog({ projectId, action, label, open, onOpenChange }: {
       { projectId, data: { action, comment: comment || undefined } },
       {
         onSuccess: () => {
-          toast({ title: t("detail.actionRecorded"), description: `${label} applied.` });
+          toast({ title: t("detail.actionRecorded"), description: t("detail.actionApplied", { action: label }) });
           qc.invalidateQueries();
           setComment("");
           onOpenChange(false);
@@ -136,15 +146,15 @@ function TransitionDialog({ projectId, action, label, open, onOpenChange }: {
           };
           const code = err.data?.error;
           const msg = code === "unresolved_required_corrections"
-            ? `Cannot approve — ${err.data?.count ?? 0} unresolved Required Correction(s). Resolve them first.`
+            ? t("detail.errors.unresolvedCorrections", { count: err.data?.count ?? 0 })
             : code === "comment_required_for_revision_or_reject"
             ? t("detail.reasonCommentRequired")
             : code === "budget_breakdown_exceeds_total"
-            ? err.data?.detail ?? "Detailed costs exceed the approved Budget Total."
+            ? err.data?.detail ?? t("detail.errors.budgetBreakdownExceeds")
             : code === "beneficiaries_breakdown_exceeds_target"
-            ? err.data?.detail ?? "Disaggregated beneficiaries exceed the Beneficiaries Target."
+            ? err.data?.detail ?? t("detail.errors.beneficiariesBreakdownExceeds")
             : code === "project_status_conflict"
-            ? "The project status has changed; please refresh and try again."
+            ? t("detail.errors.statusConflict")
             : err.data?.detail ?? String(e);
           toast({ title: t("detail.actionFailed"), description: msg, variant: "destructive" });
         },
@@ -153,28 +163,36 @@ function TransitionDialog({ projectId, action, label, open, onOpenChange }: {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{label}</DialogTitle>
-          <DialogDescription>
-            {commentRequired ? t("detail.reasonRequired") : t("detail.commentOptional")}
-          </DialogDescription>
-        </DialogHeader>
-        <Textarea
-          rows={4}
-          placeholder={commentRequired ? t("detail.reasonPlaceholder") : t("detail.commentPlaceholder")}
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-        />
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("detail.confirm") === "تأكيد" ? "إلغاء" : "Cancel"}</Button>
-          <Button onClick={submit} disabled={transition.isPending || (commentRequired && !comment.trim())}>
-            {transition.isPending ? t("detail.saving") : t("detail.confirm")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal isOpen={open} onOpenChange={onOpenChange}>
+      <Modal.Backdrop>
+        <Modal.Container size="md">
+          <Modal.Dialog>
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{label}</Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">
+                {commentRequired ? t("detail.reasonRequired") : t("detail.commentOptional")}
+              </p>
+            </Modal.Header>
+            <Modal.Body>
+              <TextField value={comment} onChange={setComment} aria-label={commentRequired ? t("detail.reasonRequired") : t("detail.commentOptional")} fullWidth>
+                <HTextArea rows={4} placeholder={commentRequired ? t("detail.reasonPlaceholder") : t("detail.commentPlaceholder")} />
+              </TextField>
+            </Modal.Body>
+            <Modal.Footer>
+              <HButton variant="secondary" onPress={() => onOpenChange(false)}>{tCommon("cancel")}</HButton>
+              <HButton
+                variant={action === "reject" ? "danger" : "primary"}
+                onPress={submit}
+                isDisabled={transition.isPending || (commentRequired && !comment.trim())}
+              >
+                {transition.isPending ? t("detail.saving") : t("detail.confirm")}
+              </HButton>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -228,53 +246,47 @@ function DonorCorrectionDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) close(); else setOpen(true); }}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="h-9 gap-1.5">
-          <Building2 className="h-4 w-4" aria-hidden="true" />
-          {t("detail.correctDonor")}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("detail.correctDonor")}</DialogTitle>
-          <DialogDescription>{t("detail.donorCorrectionDescription", { projectCode })}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-1">
-          <div className="space-y-1.5">
-            <Label htmlFor="donor-correction-donor">{t("detail.replacementDonor")}</Label>
-            <Select value={donorChoice} onValueChange={setDonorChoice}>
-              <SelectTrigger id="donor-correction-donor">
-                <SelectValue placeholder={t("detail.selectReplacementDonor")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unknown">{t("detail.markDonorUnknown")}</SelectItem>
-                {donors.map((donor) => (
-                  <SelectItem key={donor.id} value={String(donor.id)}>{donor.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">{t("detail.donorCorrectionNoFreeText")}</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="donor-correction-reason">{t("detail.donorCorrectionReason")}</Label>
-            <Textarea
-              id="donor-correction-reason"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder={t("detail.donorCorrectionReasonPlaceholder")}
-              maxLength={1000}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={close} disabled={correctDonor.isPending}>{tCommon("cancel")}</Button>
-          <Button onClick={submit} disabled={correctDonor.isPending || !donorChoice || !reason.trim()}>
-            {correctDonor.isPending ? t("detail.saving") : t("detail.confirmDonorCorrection")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <HButton size="sm" variant="outline" onPress={() => setOpen(true)}>
+        <Building2 className="size-4" aria-hidden="true" />
+        {t("detail.correctDonor")}
+      </HButton>
+      <Modal isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) close(); }}>
+        <Modal.Backdrop>
+          <Modal.Container size="md">
+            <Modal.Dialog>
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{t("detail.correctDonor")}</Modal.Heading>
+                <p className="text-sm text-[var(--muted)]">{t("detail.donorCorrectionDescription", { projectCode })}</p>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <SelectField
+                    label={t("detail.replacementDonor")}
+                    value={donorChoice}
+                    onChange={setDonorChoice}
+                    placeholder={t("detail.selectReplacementDonor")}
+                    options={[{ value: "unknown", label: t("detail.markDonorUnknown") }, ...donors.map(d => ({ value: String(d.id), label: d.name }))]}
+                  />
+                  <p className="text-xs text-[var(--muted)]">{t("detail.donorCorrectionNoFreeText")}</p>
+                </div>
+                <TextField value={reason} onChange={setReason} maxLength={1000} fullWidth>
+                  <HLabel>{t("detail.donorCorrectionReason")}</HLabel>
+                  <HTextArea rows={3} placeholder={t("detail.donorCorrectionReasonPlaceholder")} />
+                </TextField>
+              </Modal.Body>
+              <Modal.Footer>
+                <HButton variant="secondary" onPress={close} isDisabled={correctDonor.isPending}>{tCommon("cancel")}</HButton>
+                <HButton onPress={submit} isDisabled={correctDonor.isPending || !donorChoice || !reason.trim()}>
+                  {correctDonor.isPending ? t("detail.saving") : t("detail.confirmDonorCorrection")}
+                </HButton>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+    </>
   );
 }
 
@@ -318,56 +330,49 @@ function DevelopmentTestRetirementDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) close(); else setOpen(true); }}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="h-9 gap-1.5 text-amber-700 border-amber-400 hover:bg-amber-50 hover:text-amber-800">
-          <Archive className="h-4 w-4" aria-hidden="true" />
-          {t("detail.retireDevelopmentFixture")}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("detail.retireDevelopmentFixture")}</DialogTitle>
-          <DialogDescription>{t("detail.developmentFixtureRetirementDescription", { projectCode })}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-1">
-          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            {t("detail.developmentFixtureRetirementWarning")}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="development-fixture-retirement-reason">{t("detail.developmentFixtureRetirementReason")}</Label>
-            <Textarea
-              id="development-fixture-retirement-reason"
-              rows={3}
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder={t("detail.developmentFixtureRetirementReasonPlaceholder")}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="development-fixture-retirement-confirmation">
-              {t("detail.developmentFixtureRetirementConfirm", { projectCode })}
-            </Label>
-            <Input
-              id="development-fixture-retirement-confirmation"
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-              autoComplete="off"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={close}>{t("detail.cancel")}</Button>
-          <Button
-            type="button"
-            onClick={submit}
-            disabled={retire.isPending || reason.trim().length < 5 || confirmation.trim() !== projectCode}
-          >
-            {retire.isPending ? t("detail.saving") : t("detail.confirmDevelopmentFixtureRetirement")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <HButton size="sm" variant="outline" className="text-[var(--warning)]" onPress={() => setOpen(true)}>
+        <Archive className="size-4" aria-hidden="true" />
+        {t("detail.retireDevelopmentFixture")}
+      </HButton>
+      <Modal isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) close(); }}>
+        <Modal.Backdrop>
+          <Modal.Container size="md">
+            <Modal.Dialog>
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{t("detail.retireDevelopmentFixture")}</Modal.Heading>
+                <p className="text-sm text-[var(--muted)]">{t("detail.developmentFixtureRetirementDescription", { projectCode })}</p>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-4">
+                <Alert status="warning">
+                  <Alert.Indicator />
+                  <Alert.Content><Alert.Description>{t("detail.developmentFixtureRetirementWarning")}</Alert.Description></Alert.Content>
+                </Alert>
+                <TextField value={reason} onChange={setReason} fullWidth>
+                  <HLabel>{t("detail.developmentFixtureRetirementReason")}</HLabel>
+                  <HTextArea rows={3} placeholder={t("detail.developmentFixtureRetirementReasonPlaceholder")} />
+                </TextField>
+                <TextField value={confirmation} onChange={setConfirmation} autoComplete="off" fullWidth>
+                  <HLabel>{t("detail.developmentFixtureRetirementConfirm", { projectCode })}</HLabel>
+                  <HInput />
+                </TextField>
+              </Modal.Body>
+              <Modal.Footer>
+                <HButton variant="secondary" onPress={close}>{t("detail.cancel")}</HButton>
+                <HButton
+                  variant="danger"
+                  onPress={submit}
+                  isDisabled={retire.isPending || reason.trim().length < 5 || confirmation.trim() !== projectCode}
+                >
+                  {retire.isPending ? t("detail.saving") : t("detail.confirmDevelopmentFixtureRetirement")}
+                </HButton>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+    </>
   );
 }
 
@@ -534,6 +539,33 @@ function useProjectReportKpis(projectId: number) {
     },
     staleTime: 60_000,
   });
+}
+
+/* Project KPI — Pro KPI "With Footer"; value is a pre-formatted string. */
+function DetailKpi({ icon: Icon, status, label, value, sub, href }: {
+  icon: React.ElementType;
+  status?: "success" | "warning" | "danger";
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  href?: string;
+}) {
+  const { t } = useTranslation("common");
+  return (
+    <KPI className="h-full justify-start">
+      <KPI.Header>
+        <KPI.Icon status={status}><Icon aria-hidden="true" /></KPI.Icon>
+        <KPI.Title>{label}</KPI.Title>
+      </KPI.Header>
+      <KPI.Content><dd className="kpi__value tabular-nums">{value}</dd></KPI.Content>
+      {(sub || href) && (
+        <KPI.Footer className="mt-auto flex flex-col items-start gap-1">
+          {sub && <span className="text-sm text-[var(--muted)]">{sub}</span>}
+          {href && <HLink href={href} className="text-sm">{t("view")}</HLink>}
+        </KPI.Footer>
+      )}
+    </KPI>
+  );
 }
 
 export default function ProjectDetailPage({
@@ -868,13 +900,10 @@ export default function ProjectDetailPage({
 
       {/* ── Breadcrumb ── */}
       {!embedded && <nav aria-label={tCommon("breadcrumb")}>
-        <Link
-          href="/projects"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-        >
+        <HLink href="/projects" className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] no-underline hover:text-foreground">
           <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
           {t("title")}
-        </Link>
+        </HLink>
       </nav>}
 
       {/* ── Project identity + actions ── */}
@@ -890,25 +919,25 @@ export default function ProjectDetailPage({
           </div>
 
           {/* Metadata row — code, donor, sector, dates */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-[var(--muted)]">
             <span className="flex items-center gap-1.5 shrink-0">
               <Hash className="h-4 w-4" aria-hidden="true" />
               <code className="font-mono text-xs"><bdi dir="ltr">{project.code}</bdi></code>
             </span>
             <span className="flex items-center gap-1.5">
               <Building2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="truncate max-w-[200px]">{project.donor}</span>
+              <span dir="auto" className="max-w-[240px] break-words">{project.donor}</span>
             </span>
             <span className="flex items-center gap-1.5 shrink-0">
               <Tag className="h-4 w-4" aria-hidden="true" />
               {project.sector}
               {project.assistanceModality && (
-                <Badge variant="outline" className="text-xs ms-1">{project.assistanceModality}</Badge>
+                <Chip size="sm" variant="soft" className="ms-1">{project.assistanceModality}</Chip>
               )}
             </span>
             <span className="flex items-center gap-1.5 shrink-0">
               <CalendarDays className="h-4 w-4" aria-hidden="true" />
-              {formatDate(project.startDate)} – {formatDate(project.endDate)}
+              <bdi dir="ltr">{formatDate(project.startDate)} – {formatDate(project.endDate)}</bdi>
             </span>
           </div>
 
@@ -919,18 +948,18 @@ export default function ProjectDetailPage({
             return (
               <div className="flex flex-wrap items-center gap-1.5">
                 {totalLocs === 0 && (
-                  <Badge variant="outline" className="text-xs text-muted-foreground">{t("coverage.stateNotAssigned")}</Badge>
+                  <Chip size="sm" variant="soft">{t("coverage.stateNotAssigned")}</Chip>
                 )}
                 {totalLocs === 1 && !hasHq && (
-                  <Badge variant="submitted" className="text-xs cursor-default">{t("coverage.singleState")}</Badge>
+                  <Chip size="sm" variant="soft" color="accent">{t("coverage.singleState")}</Chip>
                 )}
                 {totalLocs > 1 && (
-                  <Badge variant="completed" className="text-xs cursor-default">{t("coverage.multiState")}</Badge>
+                  <Chip size="sm" variant="soft" color="success">{t("coverage.multiState")}</Chip>
                 )}
                 {hasHq && (
-                  <Badge variant="outline" className="text-xs font-medium">HQ</Badge>
+                  <Chip size="sm" variant="soft" className="font-medium">HQ</Chip>
                 )}
-                {states.map(s => <Badge key={s.id} variant="outline" className="text-xs"><StateLabel state={s} /></Badge>)}
+                {states.map(s => <Chip key={s.id} size="sm" variant="soft"><StateLabel state={s} /></Chip>)}
               </div>
             );
           })()}
@@ -946,53 +975,41 @@ export default function ProjectDetailPage({
                 onClick={() => onContinueEdit?.()}
               />
             ) : (
-              <Button
-                size="sm"
-                variant="default"
-                className="h-9 gap-1.5"
-                onClick={() => setEditOpen(true)}
-                aria-label={t("editProject")}
-              >
-                <Pencil className="h-4 w-4" aria-hidden="true" />
+              <HButton size="sm" onPress={() => setEditOpen(true)} aria-label={t("editProject")}>
+                <Pencil className="size-4" aria-hidden="true" />
                 {tCommon("edit")}
-              </Button>
+              </HButton>
             )
           )}
           {availableActions.map(a => {
               const blocked = a.action === "final_approve" && unresolvedRC > 0;
+              const actionLabel = t(`detail.actions.${a.action}`, { defaultValue: a.label });
               const btn = (
-                <Button
+                <HButton
                   key={a.action}
-                  variant={a.variant || "default"}
+                  variant={actionVariant(a.variant)}
                   size="sm"
-                  className="h-9 gap-1.5"
-                  disabled={blocked}
-                  onClick={() => setActiveAction({ action: a.action, label: a.label })}
+                  isDisabled={blocked}
+                  onPress={() => setActiveAction({ action: a.action, label: actionLabel })}
                 >
-                  {blocked && <AlertCircle className="h-4 w-4" aria-hidden="true" />}
-                  {a.label}
-                </Button>
+                  {blocked && <AlertCircle className="size-4" aria-hidden="true" />}
+                  {actionLabel}
+                </HButton>
               );
               if (!blocked) return btn;
               return (
                 <Tooltip key={a.action}>
                   <TooltipTrigger asChild><span>{btn}</span></TooltipTrigger>
-                  <TooltipContent>{unresolvedRC} {t("detail.unresolvedCorrections")}{unresolvedRC === 1 ? "" : "s"} {t("detail.unresolvedCorrectionsMust")}</TooltipContent>
+                  <TooltipContent>{t("detail.errors.unresolvedCorrections", { count: unresolvedRC })}</TooltipContent>
                 </Tooltip>
               );
             })}
           {/* Delete Project — visible to users with projects.delete permission */}
           {hasPerm(me?.permissions, "projects.delete") && !isReviewedDevelopmentFixture && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
-              onClick={() => setDeleteDialogOpen(true)}
-              aria-label={t("detail.deleteProjectAria")}
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              Delete
-            </Button>
+            <HButton size="sm" variant="danger-soft" onPress={() => setDeleteDialogOpen(true)} aria-label={t("detail.deleteProjectAria")}>
+              <Trash2 className="size-4" aria-hidden="true" />
+              {tCommon("delete")}
+            </HButton>
           )}
           {canRetireDevelopmentFixture && (
             <DevelopmentTestRetirementDialog
@@ -1036,34 +1053,37 @@ export default function ProjectDetailPage({
         onClose={() => setEditOpen(false)}
       />
 
-      <Dialog open={coverageOpen} onOpenChange={setCoverageOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("detail.editReportingConfiguration")}</DialogTitle>
-            <DialogDescription>{t("detail.reportingConfigurationDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="reporting-coverage-start">{t("detail.reportingStartDate")}</Label>
-              <Input id="reporting-coverage-start" type="date" value={coverageDraft.start}
-                onChange={(event) => setCoverageDraft((current) => ({ ...current, start: event.target.value }))} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="reporting-coverage-end">{t("detail.reportingEndDate")}</Label>
-              <Input id="reporting-coverage-end" type="date" value={coverageDraft.end}
-                onChange={(event) => setCoverageDraft((current) => ({ ...current, end: event.target.value }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCoverageOpen(false)} disabled={coverageSaving}>
-              {tCommon("cancel")}
-            </Button>
-            <Button onClick={() => void saveReportingCoverage()} disabled={coverageSaving}>
-              {coverageSaving ? tCommon("savingData") : t("form.buttons.saveChanges")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <Modal isOpen={coverageOpen} onOpenChange={setCoverageOpen}>
+        <Modal.Backdrop>
+          <Modal.Container size="sm">
+            <Modal.Dialog>
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{t("detail.editReportingConfiguration")}</Modal.Heading>
+                <p className="text-sm text-[var(--muted)]">{t("detail.reportingConfigurationDescription")}</p>
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-4">
+                <TextField value={coverageDraft.start} onChange={(v) => setCoverageDraft((current) => ({ ...current, start: v }))} fullWidth>
+                  <HLabel>{t("detail.reportingStartDate")}</HLabel>
+                  <HInput type="date" />
+                </TextField>
+                <TextField value={coverageDraft.end} onChange={(v) => setCoverageDraft((current) => ({ ...current, end: v }))} fullWidth>
+                  <HLabel>{t("detail.reportingEndDate")}</HLabel>
+                  <HInput type="date" />
+                </TextField>
+              </Modal.Body>
+              <Modal.Footer>
+                <HButton variant="secondary" onPress={() => setCoverageOpen(false)} isDisabled={coverageSaving}>
+                  {tCommon("cancel")}
+                </HButton>
+                <HButton onPress={() => void saveReportingCoverage()} isDisabled={coverageSaving}>
+                  {coverageSaving ? tCommon("savingData") : t("form.buttons.saveChanges")}
+                </HButton>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
       <DeleteProjectDialog
         projectId={projectId}
@@ -1076,38 +1096,38 @@ export default function ProjectDetailPage({
       {/* KPI strip — sourced from submitted/approved Project Reports */}
       {kpis && kpis.reportCount > 0 ? (
         <>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground -mb-2">
+          <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
             <FileText className="h-3.5 w-3.5" aria-hidden="true" />
             {t("detail.kpisFrom")} {kpis.reportCount} {kpis.reportCount !== 1 ? t("detail.kpisReports") : t("detail.kpisReport")}
             {kpis.latestPeriod && <> · {t("detail.latestPeriod")}: <strong>{kpis.latestPeriod}</strong></>}
           </div>
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-            <StatCard
-              icon={TrendingUp} iconBg="bg-blue-500"
+            <DetailKpi
+              icon={TrendingUp}
               label={t("detail.progress")}
               value={`${kpis.avgActivityProgressPct}%`}
               sub={t("detail.avgProgress")}
             />
-            <StatCard
-              icon={DollarSign} iconBg="bg-amber-500"
+            <DetailKpi
+              icon={DollarSign} status="warning"
               label={t("detail.burnRate")}
               value={budgetUtilizationPct !== null ? `${budgetUtilizationPct}%` : "—"}
               sub={`${formatCurrency(budgetSpent, projectCurrency)} ${t("detail.spentLabel").toLowerCase()}`}
             />
-            <StatCard
-              icon={Users} iconBg="bg-emerald-500"
+            <DetailKpi
+              icon={Users} status="success"
               label={t("detail.beneficiaries")}
               value={kpis.beneficiariesReached.toLocaleString()}
               sub={`${t("detail.of")} ${beneficiariesTarget.toLocaleString()} ${t("detail.target")}`}
             />
-            <StatCard
-              icon={ActivityIcon} iconBg="bg-violet-500"
+            <DetailKpi
+              icon={ActivityIcon}
               label={t("detail.activityCompletion")}
               value={`${kpis.activityCompletionPct}%`}
               sub={`${kpis.completedActivities} ${t("detail.of")} ${kpis.totalActivities} ${t("detail.completed")}`}
             />
-            <StatCard
-              icon={Target} iconBg="bg-teal-500"
+            <DetailKpi
+              icon={Target}
               label={t("detail.indicatorProgress")}
               value={`${indicatorAvg}%`}
               sub={`${t("detail.avgAcross")} ${indicators.length} ${indicators.length !== 1 ? t("detail.indicators_plural") : t("detail.indicator")}`}
@@ -1116,26 +1136,26 @@ export default function ProjectDetailPage({
         </>
       ) : (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-          <StatCard
-            icon={DollarSign} iconBg="bg-amber-500"
+          <DetailKpi
+            icon={DollarSign} status="warning"
             label={t("detail.budget")}
             value={formatCurrency(budgetSpent, projectCurrency)}
             sub={`${t("detail.of")} ${formatCurrency(budgetTotal, projectCurrency)}`}
           />
-          <StatCard
-            icon={Users} iconBg="bg-emerald-500"
+          <DetailKpi
+            icon={Users} status="success"
             label={t("detail.beneficiaries")}
             value={beneficiariesReached.toLocaleString()}
             sub={`${t("detail.of")} ${beneficiariesTarget.toLocaleString()} ${t("detail.target")}`}
           />
-          <StatCard
-            icon={Target} iconBg="bg-teal-500"
+          <DetailKpi
+            icon={Target}
             label={t("detail.indicatorAchievement")}
             value={`${indicatorAvg}%`}
             sub={`${t("detail.avgAcross")} ${indicators.length} ${indicators.length !== 1 ? t("detail.indicators_plural") : t("detail.indicator")}`}
           />
-          <StatCard
-            icon={ActivityIcon} iconBg="bg-violet-500"
+          <DetailKpi
+            icon={ActivityIcon}
             label={t("detail.activities")}
             value={`${activitiesCompletion}%`}
             sub={`${activities.length} ${t("detail.totalPlanned")}`}
@@ -1143,79 +1163,73 @@ export default function ProjectDetailPage({
         </div>
       )}
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs defaultSelectedKey="overview" className="w-full">
         {/* Horizontally scrollable tab bar — no wrapping rows */}
-        <div className="overflow-x-auto pb-px -mx-px px-px">
-          <TabsList className="inline-flex h-10 w-max min-w-full gap-0 rounded-lg">
-            <TabsTrigger value="overview">{t("detail.overview")}</TabsTrigger>
-            <TabsTrigger value="activities" className="gap-1.5">
+        <Tabs.ListContainer className="overflow-x-auto">
+          <Tabs.List aria-label={t("detail.sectionsAria")}>
+            <Tabs.Tab id="overview" className="gap-1.5 whitespace-nowrap">
+              {t("detail.overview")}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="activities" className="gap-1.5 whitespace-nowrap">
               {t("detail.activities")}
-              {activities.length > 0 && (
-                <span className="text-xs font-medium bg-muted-foreground/15 rounded-full px-1.5 py-px tabular-nums leading-none">
-                  {activities.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="indicators" className="gap-1.5">
+              {activities.length > 0 && <Chip size="sm" variant="soft" className="tabular-nums">{activities.length}</Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="indicators" className="gap-1.5 whitespace-nowrap">
               {t("detail.indicators")}
-              {indicators.length > 0 && (
-                <span className="text-xs font-medium bg-muted-foreground/15 rounded-full px-1.5 py-px tabular-nums leading-none">
-                  {indicators.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="budget">{t("detail.budget_tab")}</TabsTrigger>
-            <TabsTrigger value="risks" className="gap-1.5">
+              {indicators.length > 0 && <Chip size="sm" variant="soft" className="tabular-nums">{indicators.length}</Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="budget" className="gap-1.5 whitespace-nowrap">
+              {t("detail.budget_tab")}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="risks" className="gap-1.5 whitespace-nowrap">
               {t("detail.risks")}
-              {risks.length > 0 && (
-                <span className="text-xs font-medium bg-muted-foreground/15 rounded-full px-1.5 py-px tabular-nums leading-none">
-                  {risks.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="gap-1.5">
+              {risks.length > 0 && <Chip size="sm" variant="soft" className="tabular-nums">{risks.length}</Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="reports" className="gap-1.5 whitespace-nowrap">
               {t("detail.reports")}
-              {reports.length > 0 && (
-                <span className="text-xs font-medium bg-muted-foreground/15 rounded-full px-1.5 py-px tabular-nums leading-none">
-                  {reports.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="beneficiaries">{t("detail.beneficiaries")}</TabsTrigger>
-            <TabsTrigger value="state-allocations" className="gap-1.5">
+              {reports.length > 0 && <Chip size="sm" variant="soft" className="tabular-nums">{reports.length}</Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="beneficiaries" className="gap-1.5 whitespace-nowrap">
+              {t("detail.beneficiaries")}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="state-allocations" className="gap-1.5 whitespace-nowrap">
               {t("detail.stateAllocations")}
-              {stateAllocations && stateAllocations.length > 0 && (
-                <span className="text-xs font-medium bg-muted-foreground/15 rounded-full px-1.5 py-px tabular-nums leading-none">
-                  {stateAllocations.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="history">{t("detail.approvalHistory")}</TabsTrigger>
-            <TabsTrigger value="voice-notes">{t("detail.voiceNotes")}</TabsTrigger>
+              {(stateAllocations?.length ?? 0) > 0 && <Chip size="sm" variant="soft" className="tabular-nums">{(stateAllocations?.length ?? 0)}</Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="history" className="gap-1.5 whitespace-nowrap">
+              {t("detail.approvalHistory")}
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="voice-notes" className="gap-1.5 whitespace-nowrap">
+              {t("detail.voiceNotes")}
+              <Tabs.Indicator />
+            </Tabs.Tab>
             {hasPerm(me?.permissions, "documents.view") && (
-              <TabsTrigger value="documents" className="gap-1.5">
-                Documents
-                {projectDocuments.length > 0 && (
-                  <span className="text-xs font-medium bg-muted-foreground/15 rounded-full px-1.5 py-px tabular-nums leading-none">
-                    {projectDocuments.length}
-                  </span>
-                )}
-              </TabsTrigger>
+            <Tabs.Tab id="documents" className="gap-1.5 whitespace-nowrap">
+              {t("detail.documentsTab")}
+              {projectDocuments.length > 0 && <Chip size="sm" variant="soft" className="tabular-nums">{projectDocuments.length}</Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
             )}
             {hasPerm(me?.permissions, "comments.create") && (
-              <TabsTrigger value="comments" className="gap-1.5">
-                {t("detail.comments")}
-                {unresolvedRC > 0 && (
-                  <span className="text-xs font-medium bg-destructive/15 text-destructive rounded-full px-1.5 py-px tabular-nums leading-none">
-                    {unresolvedRC}
-                  </span>
-                )}
-              </TabsTrigger>
+            <Tabs.Tab id="comments" className="gap-1.5 whitespace-nowrap">
+              {t("detail.comments")}
+              {unresolvedRC > 0 && <Chip size="sm" variant="soft" color="danger" className="tabular-nums">{unresolvedRC}</Chip>}
+              <Tabs.Indicator />
+            </Tabs.Tab>
             )}
-          </TabsList>
-        </div>
+          </Tabs.List>
+        </Tabs.ListContainer>
 
-        <TabsContent value="overview" className="space-y-5">
+        <Tabs.Panel id="overview" className="pt-4 space-y-5">
 
           {/* ── A: Budget & Progress ── */}
           <div className="grid gap-5 md:grid-cols-2">
@@ -1590,9 +1604,9 @@ export default function ProjectDetailPage({
             </Card>
           )}
 
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="activities">
+        <Tabs.Panel id="activities" className="pt-4">
           <Card><CardContent className="p-0">
             <div className="overflow-x-auto">
             <Table>
@@ -1629,9 +1643,9 @@ export default function ProjectDetailPage({
             </Table>
             </div>
           </CardContent></Card>
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="indicators">
+        <Tabs.Panel id="indicators" className="pt-4">
           <Card><CardContent className="p-0">
             <Table>
               <TableHeader>
@@ -1662,9 +1676,9 @@ export default function ProjectDetailPage({
               </TableBody>
             </Table>
           </CardContent></Card>
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="budget">
+        <Tabs.Panel id="budget" className="pt-4">
           {(() => {
             // These are display-only values derived from the canonical project fields.
             // Keep 0, negative remaining balances, and over-100% utilisation visible.
@@ -1737,9 +1751,9 @@ export default function ProjectDetailPage({
               </Card>
             );
           })()}
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="risks">
+        <Tabs.Panel id="risks" className="pt-4">
           <Card>
             <CardHeader className="py-3 px-4 flex flex-row items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -1799,9 +1813,9 @@ export default function ProjectDetailPage({
             </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="reports" className="space-y-4">
+        <Tabs.Panel id="reports" className="pt-4 space-y-4">
           {hasPerm(me?.permissions, "reports.view") && (
             <PmrCompletenessPanel projectId={projectId} projectReportingFrequency={((project as unknown as Record<string, unknown>).reportingFrequency as "monthly" | "quarterly" | "annual" | null) ?? null} />
           )}
@@ -1832,20 +1846,19 @@ export default function ProjectDetailPage({
               </TableBody>
             </Table>
           </CardContent></Card>
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="beneficiaries">
-          <StatCard
-            icon={Users}
-            iconBg="bg-emerald-500"
+        <Tabs.Panel id="beneficiaries" className="pt-4">
+          <DetailKpi
+            icon={Users} status="success"
             label={t("detail.beneficiaries")}
             value={beneficiariesReached.toLocaleString()}
             sub={`${t("detail.of")} ${beneficiariesTarget.toLocaleString()} ${t("detail.target")}`}
             href={`/beneficiaries?projectId=${projectId}`}
           />
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="state-allocations" className="space-y-4">
+        <Tabs.Panel id="state-allocations" className="pt-4 space-y-4">
           {(() => {
             const isStateRole = me?.user?.role === "state_program_officer" || me?.user?.role === "state_office_manager";
             const myStateId = me?.user?.stateId ?? null;
@@ -1893,16 +1906,14 @@ export default function ProjectDetailPage({
                     {/* Project-level donor targets — only for HQ roles */}
                     {!isStateRole && (
                       <div className="grid grid-cols-2 gap-4">
-                        <StatCard
+                        <DetailKpi
                           icon={ActivityIcon}
-                          iconBg="bg-sky-500"
                           label={t("detail.activityTargetDonor")}
                           value={(project as { activityTarget?: number }).activityTarget?.toLocaleString() ?? "—"}
                           sub={t("detail.totalDonorActivities")}
                         />
-                        <StatCard
+                        <DetailKpi
                           icon={Target}
-                          iconBg="bg-indigo-500"
                           label={t("detail.indicatorTargetDonor")}
                           value={(project as { indicatorTarget?: number }).indicatorTarget?.toLocaleString() ?? "—"}
                           sub={t("detail.totalDonorIndicators")}
@@ -2009,9 +2020,9 @@ export default function ProjectDetailPage({
               </>
             );
           })()}
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="history">
+        <Tabs.Panel id="history" className="pt-4">
           <Card>
             <CardHeader><CardTitle>{t("detail.approvalHistory")}</CardTitle></CardHeader>
             <CardContent>
@@ -2040,15 +2051,15 @@ export default function ProjectDetailPage({
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="voice-notes">
+        <Tabs.Panel id="voice-notes" className="pt-4">
           <VoiceNotePanel entityType="project" entityId={projectId} />
-        </TabsContent>
+        </Tabs.Panel>
 
         {/* PRJ-BD-04: Standalone Documents tab — accessible for all project statuses */}
         {hasPerm(me?.permissions, "documents.view") && (
-          <TabsContent value="documents">
+          <Tabs.Panel id="documents" className="pt-4">
             {/* Hidden file input for upload */}
             <input
               ref={uploadInputRef}
@@ -2254,10 +2265,10 @@ export default function ProjectDetailPage({
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </TabsContent>
+          </Tabs.Panel>
         )}
 
-        <TabsContent value="comments">
+        <Tabs.Panel id="comments" className="pt-4">
           <CommentsPanel
             entityType="project"
             entityId={projectId}
@@ -2265,7 +2276,7 @@ export default function ProjectDetailPage({
             currentUserId={me?.user?.id ?? null}
             currentUserRole={me?.user?.role ?? null}
           />
-        </TabsContent>
+        </Tabs.Panel>
       </Tabs>
     </div>
   );

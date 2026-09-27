@@ -979,7 +979,10 @@ describe("PRJ-A11Y-05 — Status badges include text label not colour alone", ()
 describe("BUD-DETAIL — rendered Project Budget and State Allocation states", () => {
   async function renderProjectDetail() {
     const { default: ProjectDetailPage } = await import("@/pages/project-detail");
-    return render(<ProjectDetailPage params={{ projectId: "101" }} />);
+    const view = render(<ProjectDetailPage params={{ projectId: "101" }} />);
+    // HeroUI Tabs render only the selected panel; open State Allocations.
+    fireEvent.click(screen.getByRole("tab", { name: /detail\.stateAllocations/ }));
+    return view;
   }
 
   it("renders the HQ Project Budget and a readable recorded-allocation table", async () => {
@@ -996,7 +999,10 @@ describe("BUD-DETAIL — rendered Project Budget and State Allocation states", (
 
     await renderProjectDetail();
 
+    // The Project Budget lives on the Budget tab; the allocations on their own tab.
+    fireEvent.click(screen.getByRole("tab", { name: /detail\.budget_tab/ }));
     expect(screen.getAllByText("Project Budget").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("tab", { name: /detail\.stateAllocations/ }));
     expect(screen.getByText("Recorded State Allocations")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Recorded State Allocations table" })).toBeInTheDocument();
     expect(screen.getByText(longStateName)).toHaveAttribute("title", longStateName);

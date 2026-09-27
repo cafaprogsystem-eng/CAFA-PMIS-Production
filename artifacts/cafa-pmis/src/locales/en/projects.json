@@ -291,7 +291,27 @@
     "editReportingConfiguration": "Edit reporting configuration",
     "notConfigured": "Not Configured",
     "documentLockedAria": "Document locked",
-    "overrideReasonPlaceholder": "Enter the reason for deleting this document…"
+    "overrideReasonPlaceholder": "Enter the reason for deleting this document…",
+    "actions": {
+      "submit": "Submit",
+      "technical_review": "Technical Coordinator Review",
+      "coordination_review": "Senior Programme Coordinator Review",
+      "final_approve": "Programme Manager Approve",
+      "activate": "Activate Project",
+      "close": "Close Project",
+      "request_revision": "Request Revision",
+      "reject": "Reject"
+    },
+    "actionApplied": "{{action}} applied.",
+    "errors": {
+      "unresolvedCorrections_one": "Cannot approve — {{count}} unresolved Required Correction. Resolve it first.",
+      "unresolvedCorrections_other": "Cannot approve — {{count}} unresolved Required Corrections. Resolve them first.",
+      "budgetBreakdownExceeds": "Detailed costs exceed the approved Budget Total.",
+      "beneficiariesBreakdownExceeds": "Disaggregated beneficiaries exceed the Beneficiaries Target.",
+      "statusConflict": "The project status has changed; please refresh and try again."
+    },
+    "documentsTab": "Documents",
+    "sectionsAria": "Project sections"
   },
   "form": {
     "tabs": {
