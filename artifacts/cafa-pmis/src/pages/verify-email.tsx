@@ -90,7 +90,7 @@ export default function VerifyEmailPage() {
             )}
 
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">{stateTitle[state]}</h1>
+              <h1 className="text-foreground text-xl font-semibold mb-2">{stateTitle[state]}</h1>
               <p className="text-sm text-gray-500 max-w-xs mx-auto">{stateBody[state]}</p>
             </div>
 

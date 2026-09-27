@@ -19,7 +19,7 @@ export default function PasswordResetSentPage() {
             <Mail className="h-8 w-8 text-emerald-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">{t("resetLinkSent")}</h1>
+            <h1 className="text-foreground text-xl font-semibold mb-2">{t("resetLinkSent")}</h1>
             <p className="text-sm text-gray-500 max-w-xs mx-auto">
               {email ? t("resetLinkSentDesc", { email }) : t("resetLinkSentDescNoEmail")}
             </p>

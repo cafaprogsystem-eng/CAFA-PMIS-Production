@@ -885,7 +885,7 @@ export default function ProjectDetailPage({
 
           {/* Title + status badge */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight leading-tight">{project.title}</h1>
+            <h1 className="text-foreground text-xl font-semibold leading-tight">{project.title}</h1>
             <ProjectStatusBadge status={project.status} />
           </div>
 

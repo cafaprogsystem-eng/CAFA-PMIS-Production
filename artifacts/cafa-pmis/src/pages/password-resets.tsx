@@ -130,8 +130,8 @@ export default function PasswordResetsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <ShieldOff className="h-7 w-7 text-primary" /> {t("passwordResets.title")}
+        <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
+          <ShieldOff className="size-5 text-primary" /> {t("passwordResets.title")}
         </h1>
         <p className="text-muted-foreground mt-1">{t("passwordResets.description")}</p>
       </div>

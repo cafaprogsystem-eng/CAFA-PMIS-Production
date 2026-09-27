@@ -1421,7 +1421,7 @@ export default function BudgetPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-medium tracking-tight">{t("page.heading")}</h1>
+          <h1 className="text-foreground text-xl font-semibold">{t("page.heading")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("page.description")}</p>
         </div>
         {/* All Projects selector — hidden when Sector Budgets tab is active (inert on that tab) */}

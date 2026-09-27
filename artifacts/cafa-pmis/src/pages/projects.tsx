@@ -307,7 +307,7 @@ export default function ProjectsPage() {
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
+            <h1 className="text-foreground text-xl font-semibold">{t("title")}</h1>
             {!isLoading && !isError && projects && (
               <span className="text-sm font-medium text-muted-foreground bg-muted rounded-full px-2.5 py-0.5 tabular-nums">
                 {projects.length}

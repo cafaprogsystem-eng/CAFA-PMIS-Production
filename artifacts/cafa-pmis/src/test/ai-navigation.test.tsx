@@ -119,10 +119,12 @@ describe("AI navigation consolidation", () => {
     // HeroUI Pro shell: group labels hide automatically in the icon rail, and
     // one SidebarNavigation renders the entries for both the desktop sidebar
     // and the mobile sheet.
-    expect(layout).toContain('<Sidebar.GroupLabel data-testid="sidebar-group-heading">{entry.group.title}</Sidebar.GroupLabel>');
+    expect(layout).toContain('{entry.kind === "group" && <Sidebar.GroupLabel data-testid="sidebar-group-heading">{entry.group.title}</Sidebar.GroupLabel>}');
+    // Groups are divided by a separator between them, as in the Pro "With Groups" example.
+    expect(layout).toContain('{index > 0 && <Sidebar.Separator />}');
     expect(layout).toContain('href={item.href}');
     expect(layout).toContain('focus-visible:ring-2');
-    expect((layout.match(/entries\.map\(/g) ?? []).length).toBe(1);
+    expect((layout.match(/visibleEntries\.map\(/g) ?? []).length).toBe(1);
     expect((layout.match(/entries=\{navEntries\}/g) ?? []).length).toBe(1);
   });
 

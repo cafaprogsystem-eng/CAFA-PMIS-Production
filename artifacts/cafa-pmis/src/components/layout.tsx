@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -134,52 +134,58 @@ function SidebarNavigation({
   onExpandedChange: (keys: Set<Key>) => void;
   menuLabel: (entry: NavEntry) => string;
 }) {
+  // Groups are divided by a Sidebar.Separator between them, as in the Pro
+  // "With Groups" example; a standalone item (the manual) is a label-less
+  // group after the same divider.
+  const visibleEntries = entries.filter((entry) =>
+    (entry.kind === "group" ? entry.group.items : [entry.item]).some(Boolean));
   return (
     <>
-      {entries.map((entry) => {
+      {visibleEntries.map((entry, index) => {
         const visibleItems = (entry.kind === "group" ? entry.group.items : [entry.item]).filter(Boolean);
-        if (visibleItems.length === 0) return null;
+        const key = entry.kind === "group" ? entry.group.title : entry.item.href;
         return (
-          <Sidebar.Group key={entry.kind === "group" ? entry.group.title : entry.item.href}>
-            {entry.kind === "group"
-              ? <Sidebar.GroupLabel data-testid="sidebar-group-heading">{entry.group.title}</Sidebar.GroupLabel>
-              : <Sidebar.Separator />}
-            <Sidebar.Menu aria-label={menuLabel(entry)} expandedKeys={expandedKeys} onExpandedChange={onExpandedChange}>
-              {visibleItems.map((item) => {
-                const hasChildren = !!item.children?.length;
-                const isDirectlyActive = location === item.href;
-                const isActive = isDirectlyActive || (item.href !== "/" && item.href !== "#" && location.startsWith(item.href));
-                return (
-                  <Sidebar.MenuItem
-                    key={item.href}
-                    id={item.href}
-                    href={item.href}
-                    textValue={item.label}
-                    isCurrent={hasChildren ? isDirectlyActive : isActive}
-                  >
-                    <Sidebar.MenuIcon><item.icon className="size-4" aria-hidden /></Sidebar.MenuIcon>
-                    <Sidebar.MenuLabel>
-                      {item.displayLabel ?? item.label}
+          <Fragment key={key}>
+            {index > 0 && <Sidebar.Separator />}
+            <Sidebar.Group>
+              {entry.kind === "group" && <Sidebar.GroupLabel data-testid="sidebar-group-heading">{entry.group.title}</Sidebar.GroupLabel>}
+              <Sidebar.Menu aria-label={menuLabel(entry)} expandedKeys={expandedKeys} onExpandedChange={onExpandedChange}>
+                {visibleItems.map((item) => {
+                  const hasChildren = !!item.children?.length;
+                  const isDirectlyActive = location === item.href;
+                  const isActive = isDirectlyActive || (item.href !== "/" && item.href !== "#" && location.startsWith(item.href));
+                  return (
+                    <Sidebar.MenuItem
+                      key={item.href}
+                      id={item.href}
+                      href={item.href}
+                      textValue={item.label}
+                      isCurrent={hasChildren ? isDirectlyActive : isActive}
+                    >
+                      <Sidebar.MenuIcon><item.icon className="size-4" aria-hidden /></Sidebar.MenuIcon>
+                      <Sidebar.MenuLabel>
+                        {item.displayLabel ?? item.label}
+                        {hasChildren && (
+                          <Sidebar.MenuTrigger>
+                            <Sidebar.MenuIndicator />
+                          </Sidebar.MenuTrigger>
+                        )}
+                      </Sidebar.MenuLabel>
                       {hasChildren && (
-                        <Sidebar.MenuTrigger>
-                          <Sidebar.MenuIndicator />
-                        </Sidebar.MenuTrigger>
+                        <Sidebar.Submenu>
+                          {item.children!.map((c) => (
+                            <Sidebar.MenuItem key={c.href} id={c.href} href={c.href} textValue={c.label} isCurrent={location === c.href}>
+                              <Sidebar.MenuLabel>{c.label}</Sidebar.MenuLabel>
+                            </Sidebar.MenuItem>
+                          ))}
+                        </Sidebar.Submenu>
                       )}
-                    </Sidebar.MenuLabel>
-                    {hasChildren && (
-                      <Sidebar.Submenu>
-                        {item.children!.map((c) => (
-                          <Sidebar.MenuItem key={c.href} id={c.href} href={c.href} textValue={c.label} isCurrent={location === c.href}>
-                            <Sidebar.MenuLabel>{c.label}</Sidebar.MenuLabel>
-                          </Sidebar.MenuItem>
-                        ))}
-                      </Sidebar.Submenu>
-                    )}
-                  </Sidebar.MenuItem>
-                );
-              })}
-            </Sidebar.Menu>
-          </Sidebar.Group>
+                    </Sidebar.MenuItem>
+                  );
+                })}
+              </Sidebar.Menu>
+            </Sidebar.Group>
+          </Fragment>
         );
       })}
     </>

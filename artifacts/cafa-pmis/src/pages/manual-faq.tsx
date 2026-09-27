@@ -115,7 +115,7 @@ export default function ManualFaqPage() {
             <div className="p-2 rounded-lg bg-amber-400/20" aria-hidden="true">
               <HelpCircle className="h-6 w-6 text-amber-300" />
             </div>
-            <h1 className="text-3xl font-bold">{t("faq.title")}</h1>
+            <h1 className="text-foreground text-xl font-semibold">{t("faq.title")}</h1>
           </div>
           <p className="text-white/70 text-sm max-w-xl mb-7">
             {t("faq.subtitle")}

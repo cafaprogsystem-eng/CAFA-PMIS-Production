@@ -29,7 +29,7 @@ export default function StateDetailPage({ params }: { params: { stateId: string 
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <MapPin className="h-6 w-6 text-primary" aria-hidden />
-              <h1 className="text-3xl font-medium tracking-tight">{i18n.language === "ar" ? data.nameAr || data.name : data.name}</h1>
+              <h1 className="text-foreground text-xl font-semibold">{i18n.language === "ar" ? data.nameAr || data.name : data.name}</h1>
               <span className="rounded border border-border px-2 py-0.5 font-mono text-sm">{data.code}</span>
             </div>
             <p className="text-sm text-muted-foreground">{t("stateDetailPage.registrySubtitle")}</p>

@@ -299,7 +299,7 @@ export default function NotificationPreferencesPage() {
         <span className="text-foreground font-medium">{t("preferences.title")}</span>
       </div>
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+        <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
           <Bell className="h-[18px] w-[18px]" aria-hidden="true" /> {t("preferences.title")}
         </h1>
         <p className="text-muted-foreground text-sm mt-1">

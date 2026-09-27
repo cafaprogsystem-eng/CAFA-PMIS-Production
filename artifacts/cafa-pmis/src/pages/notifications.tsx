@@ -138,7 +138,7 @@ export default function NotificationsPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-2.5">
         <div className="min-w-0">
-          <h1 className="text-2xl font-medium tracking-tight">{t("title")}</h1>
+          <h1 className="text-foreground text-xl font-semibold">{t("title")}</h1>
           <div className="mt-1 min-h-4 text-sm text-muted-foreground" aria-live="polite">
             {isLoading ? (
               <Skeleton className="h-3.5 w-24" />

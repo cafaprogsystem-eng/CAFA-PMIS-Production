@@ -1072,8 +1072,8 @@ export default function RisksPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <AlertTriangle className="h-6 w-6 text-warning" />
+          <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
+            <AlertTriangle className="size-5 text-warning" />
             {t("title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">

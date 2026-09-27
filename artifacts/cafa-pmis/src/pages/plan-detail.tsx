@@ -991,7 +991,7 @@ export default function PlanDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
           {/* Left: Title + metadata */}
           <div className="flex flex-col gap-1 min-w-0 flex-1">
-            <h1 className="text-2xl font-bold tracking-tight leading-snug break-words">
+            <h1 className="text-foreground text-xl font-semibold leading-snug break-words">
               {isNew ? t("detail.newPlan") : existing?.title ?? t("detail.plan")}
             </h1>
             {existing && (

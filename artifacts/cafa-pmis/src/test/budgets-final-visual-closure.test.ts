@@ -23,7 +23,7 @@ const detailSource = readFileSync(here("../pages/project-detail.tsx"), "utf8");
 
 describe("BUD-FINAL-VIS — Budgets final visual closure", () => {
   it("BUD-FINAL-VIS-01: preserves the compact landing, labelled filters, and local table overflow from Phase 1", () => {
-    expect(budgetSource).toContain('className="text-2xl font-medium tracking-tight"');
+    expect(budgetSource).toContain('className="text-foreground text-xl font-semibold"');
     expect(dashboardSource).toContain('aria-label={t("budgetWorkspace.donorToolbar")}');
     expect(budgetSource).toContain('aria-label={t("filters.clear")}');
     expect(dashboardSource).toContain('aria-label={t("budgetWorkspace.donorTable")}');

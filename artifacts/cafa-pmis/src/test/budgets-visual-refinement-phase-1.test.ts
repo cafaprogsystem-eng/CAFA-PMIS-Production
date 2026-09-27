@@ -18,7 +18,7 @@ describe("BUD-VIS — Budget visual refinement phase 1", () => {
   it("BUD-VIS-01: keeps the landing hierarchy compact and grouped", () => {
     const pageBody = budgetSource.slice(budgetSource.indexOf("export default function BudgetPage"));
     expect(pageBody).toContain('<div className="space-y-4">');
-    expect(pageBody).toContain('className="text-2xl font-medium tracking-tight"');
+    expect(pageBody).toContain('className="text-foreground text-xl font-semibold"');
   });
 
   it("BUD-VIS-02: preserves genuine zero while unavailable currency remains a neutral marker", () => {

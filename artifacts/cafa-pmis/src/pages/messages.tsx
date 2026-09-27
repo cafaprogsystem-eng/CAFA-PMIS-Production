@@ -1953,7 +1953,7 @@ export default function Messages() {
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
                 <MessageSquare className="h-3.5 w-3.5 text-primary-foreground" />
               </div>
-              <h1 className="font-semibold tracking-tight text-foreground text-xl">{t("title")}</h1>
+              <h1 className="text-foreground text-xl font-semibold">{t("title")}</h1>
             </div>
             <Button onClick={() => setNewChatOpen(true)} size="sm" className="h-8 text-xs gap-1 shrink-0">
               <Plus className="h-3.5 w-3.5" /> {t("newChat")}

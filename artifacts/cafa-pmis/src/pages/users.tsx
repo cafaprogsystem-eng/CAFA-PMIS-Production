@@ -621,7 +621,7 @@ export default function UsersPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
+          <h1 className="text-foreground text-xl font-semibold">{t("title")}</h1>
           <p className="text-muted-foreground mt-1">
             {t("subtitle")} {canManage ? "" : t("subtitleReadOnly")}
           </p>

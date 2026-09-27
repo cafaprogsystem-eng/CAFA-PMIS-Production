@@ -864,8 +864,8 @@ describe("PRJ-FINAL-VIS-03 — no workflow enum is user-visible as snake_case", 
 });
 
 describe("PRJ-FINAL-VIS-04 — project title primary, code secondary/muted", () => {
-  it("title is an h1 with bold prominence", () => {
-    expect(detailSrc).toMatch(/<h1 className="text-2xl font-bold[^"]*">\{project\.title\}<\/h1>/);
+  it("title is an h1 at the Pro page-title scale (20px / 600)", () => {
+    expect(detailSrc).toMatch(/<h1 className="text-foreground text-xl font-semibold[^"]*">\{project\.title\}<\/h1>/);
   });
   it("code renders as muted mono metadata", () => {
     expect(detailSrc).toContain('<code className="font-mono text-xs"><bdi dir="ltr">{project.code}</bdi></code>');

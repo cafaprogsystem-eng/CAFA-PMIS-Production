@@ -242,8 +242,8 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="flex items-center gap-3 text-3xl font-medium tracking-tight">
-          <User className="h-7 w-7 text-primary" /> {t("profile.pageTitle")}
+        <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
+          <User className="size-5 text-primary" /> {t("profile.pageTitle")}
         </h1>
         <p className="mt-1 text-muted-foreground">{t("profile.pageSubtitle")}</p>
       </div>

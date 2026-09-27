@@ -872,7 +872,7 @@ export default function FilesPage() {
   return (
     <div className="flex min-h-full flex-col gap-4">
       <header className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between shrink-0">
-        <div className="min-w-0"><h1 className="flex items-center gap-2 text-xl font-medium tracking-tight sm:text-2xl"><FileArchive className="h-5 w-5 shrink-0 text-primary sm:h-6 sm:w-6" />{t("fileArchive.title")}</h1><p className="mt-1 text-sm text-muted-foreground">{t("fileArchive.description")}</p></div>
+        <div className="min-w-0"><h1 className="text-foreground text-xl font-semibold flex items-center gap-2"><FileArchive className="size-5 shrink-0 text-primary" />{t("fileArchive.title")}</h1><p className="mt-1 text-sm text-muted-foreground">{t("fileArchive.description")}</p></div>
         {canUpload && <Button className="shrink-0" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" />{t("fileArchive.uploadDocument")}</Button>}
       </header>
 

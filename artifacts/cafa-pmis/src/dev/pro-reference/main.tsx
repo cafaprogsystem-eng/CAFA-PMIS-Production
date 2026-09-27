@@ -7,7 +7,7 @@
  * from the docs is the icon set: Gravity icons are swapped for their lucide
  * equivalents at the same size, since lucide is the app's icon library.
  *
- *   /pro-reference.html?c=app|segment|stepper[&dir=rtl]
+ *   /pro-reference.html?c=app|groups|segment|stepper[&dir=rtl]
  */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -19,7 +19,7 @@ import { Sidebar } from "@heroui-pro/react/sidebar";
 import { Segment } from "@heroui-pro/react/segment";
 import { Stepper } from "@heroui-pro/react/stepper";
 import {
-  Bell, ChartColumn, CircleHelp, House, LayoutList, ListChecks, LogOut, Search, Settings, User,
+  Bell, ChartColumn, CircleHelp, House, LayoutList, ListChecks, LogOut, Receipt, Search, Settings, User, Users,
 } from "lucide-react";
 import "./ref.css";
 
@@ -167,6 +167,43 @@ function AppLayoutDefault() {
   );
 }
 
+/* ── Sidebar › With Groups ───────────────────────────────────────────── */
+function SidebarWithGroups() {
+  const item = (id: string, label: string, Icon: typeof House) => (
+    <Sidebar.MenuItem id={id} textValue={label}>
+      <Sidebar.MenuIcon><Icon className="size-4" /></Sidebar.MenuIcon>
+      <Sidebar.MenuLabel>{label}</Sidebar.MenuLabel>
+    </Sidebar.MenuItem>
+  );
+  return (
+    <Sidebar.Provider side={rtl ? "right" : "left"}>
+      <Sidebar>
+        <Sidebar.Header><Brand /></Sidebar.Header>
+        <Sidebar.Content>
+          <Sidebar.Group>
+            <Sidebar.GroupLabel>Platform</Sidebar.GroupLabel>
+            <Sidebar.Menu aria-label="Platform">
+              {item("dashboard", "Dashboard", House)}
+              {item("analytics", "Analytics", ChartColumn)}
+              {item("orders", "Orders", Receipt)}
+            </Sidebar.Menu>
+          </Sidebar.Group>
+          <Sidebar.Separator />
+          <Sidebar.Group>
+            <Sidebar.GroupLabel>Settings</Sidebar.GroupLabel>
+            <Sidebar.Menu aria-label="Settings">
+              {item("general", "General", Settings)}
+              {item("team", "Team", Users)}
+              {item("notifications", "Notifications", Bell)}
+            </Sidebar.Menu>
+          </Sidebar.Group>
+        </Sidebar.Content>
+      </Sidebar>
+      <Sidebar.Main><div className="p-6"><p className="text-muted">Main content area</p></div></Sidebar.Main>
+    </Sidebar.Provider>
+  );
+}
+
 /* ── Segment › Usage, With Icons, Sizes ──────────────────────────────── */
 const tabs = [
   { id: "dashboard", label: "Dashboard" }, { id: "analytics", label: "Analytics" },
@@ -247,7 +284,7 @@ function StepperExamples() {
   );
 }
 
-const View = which === "segment" ? SegmentExamples : which === "stepper" ? StepperExamples : AppLayoutDefault;
+const View = which === "groups" ? SidebarWithGroups : which === "segment" ? SegmentExamples : which === "stepper" ? StepperExamples : AppLayoutDefault;
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider locale={rtl ? "ar-u-nu-latn" : "en-US"}>

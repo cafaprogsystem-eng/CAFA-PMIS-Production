@@ -656,7 +656,7 @@ export default function ManualChapter({ slug }: { slug: string }) {
                   <ChapterIcon name={chapter.icon} className="h-5 w-5" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-slate-900">{chapter.title}</h1>
+                  <h1 className="text-foreground text-xl font-semibold">{chapter.title}</h1>
                   {chapter.description && (
                     <p className="text-xs text-muted-foreground mt-0.5">{chapter.description}</p>
                   )}

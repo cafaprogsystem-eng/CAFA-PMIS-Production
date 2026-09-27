@@ -927,8 +927,8 @@ export function ReportsLanding() {
     <div className="space-y-4">
       {/* ── Page header ───────────────────────────────────────────────── */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <FileText className="h-7 w-7 text-primary" aria-hidden /> {t("dashboard")}
+        <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
+          <FileText className="size-5 text-primary" aria-hidden /> {t("dashboard")}
         </h1>
         <p className="text-muted-foreground mt-2">{t("dashboardDesc")}</p>
       </div>
@@ -3681,8 +3681,8 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     <div className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <meta.icon className="h-7 w-7 text-primary" /> {meta.label}
+          <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
+            <meta.icon className="size-5 text-primary" /> {meta.label}
           </h1>
           <p className="text-muted-foreground mt-2">{meta.description}</p>
           {/* §2: Compact structured approval paths — dual paths shown inline with separator */}

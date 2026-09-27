@@ -11,7 +11,7 @@ export default function NotFound() {
         <Card.Content>
           <div className="flex mb-4 gap-2">
             <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-gray-900">{t("404")}</h1>
+            <h1 className="text-foreground text-xl font-semibold">{t("404")}</h1>
           </div>
 
           <p className="mt-4 text-sm text-gray-600">

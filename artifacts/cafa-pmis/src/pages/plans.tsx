@@ -871,7 +871,7 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
       {/* ── Page header ────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-foreground text-xl font-semibold">
             {isActionPlans ? t("headings.actionPlans") : t("plansPage.heading")}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

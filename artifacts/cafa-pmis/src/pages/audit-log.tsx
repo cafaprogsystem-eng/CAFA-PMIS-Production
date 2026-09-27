@@ -199,7 +199,7 @@ export default function AuditLogPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-medium tracking-tight"><ShieldAlert className="h-6 w-6 text-primary" /> {t("auditLog.title")}</h1>
+          <h1 className="text-foreground text-xl font-semibold flex items-center gap-2"><ShieldAlert className="size-5 text-primary" /> {t("auditLog.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("auditLog.subtitle")}</p>
         </div>
         <Button variant="outline" size="sm" onPress={() => audit.refetch()} isPending={audit.isFetching} aria-label={t("auditLog.refresh")}>

@@ -25,7 +25,7 @@ export default function AIPage() {
           <Bot className="h-5 w-5" aria-hidden="true" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t("title")}</h1>
+          <h1 className="text-foreground text-xl font-semibold">{t("title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
       </div>

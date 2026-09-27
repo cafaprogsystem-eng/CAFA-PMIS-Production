@@ -375,7 +375,7 @@ export default function ManualHome() {
         <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="flex items-start justify-between gap-4 mb-5">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">{t("manual.title")}</h1>
+              <h1 className="text-foreground text-xl font-semibold">{t("manual.title")}</h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {t("manual.description")}
               </p>

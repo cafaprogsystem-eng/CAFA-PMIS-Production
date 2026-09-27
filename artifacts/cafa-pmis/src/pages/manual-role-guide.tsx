@@ -275,7 +275,7 @@ export default function ManualRoleGuide({ role }: { role: string }) {
               <Users className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">{guide.label}</h1>
+              <h1 className="text-foreground text-xl font-semibold">{guide.label}</h1>
               <p className="text-white/70 text-sm mt-0.5">{guide.subtitle}</p>
             </div>
           </div>

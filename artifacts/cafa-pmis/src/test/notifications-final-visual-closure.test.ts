@@ -22,7 +22,7 @@ describe("Notifications final visual closure", () => {
   });
 
   it("NOTIF-FINAL-VIS-02 keeps the page hierarchy compact", () => {
-    expect(page).toContain('className="text-2xl font-medium tracking-tight"');
+    expect(page).toContain('className="text-foreground text-xl font-semibold"');
     expect(page).not.toContain('className="text-3xl font-bold tracking-tight"');
     expect(page).toContain("rounded-lg border border-border/60 bg-card/60 p-2");
   });

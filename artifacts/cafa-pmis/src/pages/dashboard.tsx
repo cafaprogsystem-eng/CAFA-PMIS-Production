@@ -3981,7 +3981,7 @@ export default function Dashboard() {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-[22px] font-semibold tracking-tight leading-tight text-foreground">
+            <h1 className="text-foreground text-xl font-semibold leading-tight">
               {t("header.title")}
             </h1>
             <span className="hidden sm:inline-flex items-center rounded-full border border-border/60 bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">

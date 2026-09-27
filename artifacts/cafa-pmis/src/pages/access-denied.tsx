@@ -17,7 +17,7 @@ export default function AccessDeniedPage() {
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-2xl font-bold text-foreground">{t("accessDenied")}</h1>
+          <h1 className="text-foreground text-xl font-semibold">{t("accessDenied")}</h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
             {t("accessDeniedDesc")}
           </p>

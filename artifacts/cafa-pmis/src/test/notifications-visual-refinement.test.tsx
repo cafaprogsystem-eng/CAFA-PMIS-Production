@@ -83,7 +83,7 @@ describe("Notifications visual refinement — Phase 1", () => {
     renderWithQuery(<NotificationsPage />);
 
     const heading = await screen.findByRole("heading", { name: "Notifications" });
-    expect(heading).toHaveClass("text-2xl", "font-medium", "tracking-tight");
+    expect(heading).toHaveClass("text-foreground", "text-xl", "font-semibold");
     expect(heading).not.toHaveClass("text-3xl", "font-bold");
     expect(source("src/pages/notifications.tsx")).toContain('!isLoading && !isError && unreadCount > 0');
   });
@@ -161,7 +161,7 @@ describe("Notifications visual refinement — Phase 1", () => {
   it("NOTIF-VIS-09 keeps preference rows compact and scannable", () => {
     const { container } = renderWithQuery(<NotificationPreferencesPage />);
 
-    expect(screen.getByRole("heading", { name: "Notification Preferences" })).toHaveClass("text-2xl", "font-semibold");
+    expect(screen.getByRole("heading", { name: "Notification Preferences" })).toHaveClass("text-foreground", "text-xl", "font-semibold");
     expect(container.querySelector('[data-slot="card"], .card')).toBeInTheDocument();
     expect(source("src/pages/notification-preferences.tsx")).toContain("gap-4 py-2.5");
   });
