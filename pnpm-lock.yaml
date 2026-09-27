@@ -327,6 +327,9 @@ importers:
       '@workspace/plan-transitions':
         specifier: workspace:*
         version: link:../../lib/plan-transitions
+      '@workspace/report-transitions':
+        specifier: workspace:*
+        version: link:../../lib/report-transitions
       '@xmldom/xmldom':
         specifier: ^0.9.12
         version: 0.9.12
