@@ -687,7 +687,8 @@
     "unresolvedSector": "Sector unavailable",
     "sectorAriaExpand": "Expand {{sector}}, achievement {{rate}}",
     "sectorAriaCollapse": "Collapse {{sector}}, achievement {{rate}}",
-    "onTarget": "On target"
+    "onTarget": "On target",
+    "achievementNote": "Achievement rate is the equal-weight average of project rates, where each project rate is the average of its valid indicator rates."
   },
   "benView": {
     "gender": "By Gender",

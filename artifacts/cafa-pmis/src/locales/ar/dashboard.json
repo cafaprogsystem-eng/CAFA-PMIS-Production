@@ -687,7 +687,8 @@
     "unresolvedSector": "القطاع غير متاح",
     "sectorAriaExpand": "توسيع {{sector}}، الإنجاز {{rate}}",
     "sectorAriaCollapse": "طيّ {{sector}}، الإنجاز {{rate}}",
-    "onTarget": "ضمن الهدف"
+    "onTarget": "ضمن الهدف",
+    "achievementNote": "نسبة الإنجاز هي المتوسط المتساوي الأوزان لنسب المشروعات، ونسبة كل مشروع هي متوسط نسب مؤشراته الصالحة."
   },
   "benView": {
     "gender": "حسب الجنس",

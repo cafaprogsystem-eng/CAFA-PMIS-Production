@@ -49,8 +49,11 @@ import {
   useHierarchicalPerformance,
 } from "@/hooks/use-hierarchical-performance";
 import { useLocationContext } from "@/contexts/location-context";
-import { Button as HButton, Card as UICard, Chip, Link as HLink, Tabs } from "@heroui/react";
+import { Button as HButton, Card as UICard, Chip, Label as HLabel, Link as HLink, ProgressBar, Skeleton as HSkeleton, Tabs } from "@heroui/react";
 import { KPI } from "@heroui-pro/react/kpi";
+import { BarChart as ProBarChart } from "@heroui-pro/react/bar-chart";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
+import { Segment } from "@heroui-pro/react/segment";
 import { AreaChart as ProAreaChart } from "@heroui-pro/react/area-chart";
 import { PieChart as ProPieChart } from "@heroui-pro/react/pie-chart";
 import { ChartTooltip } from "@heroui-pro/react/chart-tooltip";
@@ -1664,6 +1667,71 @@ const fmtCompact = (n: number): string => {
   return String(Math.round(n));
 };
 
+/* ── HeroUI ProgressBar row: label, "count (pct%)", track ─────────────── */
+type ProgressColor = "default" | "accent" | "success" | "warning" | "danger";
+function StatusProgressRow({ label, value, total, color, fill }: {
+  label: string; value: number; total: number; color?: ProgressColor; fill?: string;
+}) {
+  const pctVal = total > 0 ? Math.round((value / total) * 100) : null;
+  return (
+    <ProgressBar
+      size="sm"
+      color={color ?? "accent"}
+      value={pctVal ?? 0}
+      valueLabel={pctVal != null ? `${fmt(value)} (${pctVal}%)` : fmt(value)}
+      className="w-full gap-1.5"
+    >
+      <HLabel className="text-sm font-medium text-foreground">{label}</HLabel>
+      <ProgressBar.Output className="text-sm tabular-nums text-[var(--muted)]" />
+      <ProgressBar.Track>
+        <ProgressBar.Fill style={fill ? { backgroundColor: fill } : undefined} />
+      </ProgressBar.Track>
+    </ProgressBar>
+  );
+}
+
+/* ── HeroUI Pro horizontal bar chart (the "Horizontal" example) ───────── *
+ * Mirrors for RTL: values grow from the inline start and the category    *
+ * axis sits on the start side.                                           */
+function HorizontalBars<T extends Record<string, unknown>>({
+  data, categoryKey, bars, height = 260, categoryWidth = 90, isRtl, valueFormatter = fmt, categoryFormatter, stacked = false,
+}: {
+  data: T[];
+  categoryKey: string;
+  bars: { dataKey: string; name: string; fill: string }[];
+  height?: number;
+  categoryWidth?: number;
+  isRtl: boolean;
+  valueFormatter?: (v: number) => string;
+  categoryFormatter?: (v: string) => string;
+  stacked?: boolean;
+}) {
+  const round = (end: boolean): [number, number, number, number] =>
+    !end ? [0, 0, 0, 0] : isRtl ? [24, 0, 0, 24] : [0, 24, 24, 0];
+  return (
+    <ProBarChart className="[&_svg]:[direction:ltr]" data={data as Record<string, number | string>[]} height={height} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 8 }}>
+      <ProBarChart.Grid horizontal={false} />
+      <ProBarChart.XAxis type="number" tickMargin={4} reversed={isRtl} tickFormatter={fmtCompact} allowDecimals={false} />
+      <ProBarChart.YAxis
+        dataKey={categoryKey} type="category" tickMargin={4} width={categoryWidth}
+        orientation={isRtl ? "right" : "left"} tickFormatter={categoryFormatter}
+      />
+      {bars.map((b, i) => (
+        <ProBarChart.Bar
+          key={b.dataKey}
+          dataKey={b.dataKey}
+          name={b.name}
+          fill={b.fill}
+          barSize={stacked ? 14 : bars.length > 1 ? 8 : 14}
+          radius={round(!stacked || i === bars.length - 1)}
+          stackId={stacked ? "stack" : undefined}
+        />
+      ))}
+      <ProBarChart.Tooltip content={<ProBarChart.TooltipContent valueFormatter={(v) => valueFormatter(Number(v))} />} />
+    </ProBarChart>
+  );
+}
+
 /* ── Project status → display label and semantic colour ─────────────── */
 function toTitleCase(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -1695,7 +1763,17 @@ const CC = {
   totalProj:   "#94a3b8",               // slate-400 — neutral "total" count bars
 } as const;
 
-/* ── Compact Overview KPI card (4-up executive row) ─────────────────── */
+/* ── KPI card — HeroUI Pro KPI ("With Footer" pattern) ─────────────── *
+ * Used by the Performance and Projects & States tabs, whose values are
+ * already formatted strings (percent, "138 / 155", "Insufficient data"),
+ * so the value renders in KPI's value slot rather than KPI.Value.          */
+function kpiStatus(iconColor: string, alert: boolean): "success" | "warning" | "danger" | undefined {
+  if (alert || /red/.test(iconColor)) return "danger";
+  if (/amber|orange/.test(iconColor)) return "warning";
+  if (/emerald|teal|green/.test(iconColor)) return "success";
+  return undefined;
+}
+
 function OvKpiCard({
   icon: Icon, iconColor = "text-primary",
   label, value, sub, href, onClick, alert = false,
@@ -1704,61 +1782,35 @@ function OvKpiCard({
   label: string; value: React.ReactNode; sub?: React.ReactNode;
   href?: string; onClick?: () => void; alert?: boolean;
 }) {
-  const inner = (
-    <div
-      className={[
-        "flex flex-col gap-2 rounded-xl border p-4 h-full min-h-[112px]",
-        "shadow-[0_1px_3px_0_rgb(0,0,0,0.04)] transition-all duration-150",
-        alert
-          ? "bg-red-50/50 dark:bg-red-950/15 border-red-300/60 dark:border-red-800/40"
-          : "bg-card border-border/60",
-        (href || onClick) ? "cursor-pointer hover:-translate-y-px hover:shadow-[0_4px_12px_0_rgb(0,0,0,0.07)]" : "",
-        alert && (href || onClick) ? "hover:border-red-400/60 dark:hover:border-red-700/50" : (!alert && (href || onClick)) ? "hover:border-border" : "",
-      ].filter(Boolean).join(" ")}
-    >
-      <Icon className={`h-[18px] w-[18px] shrink-0 ${alert ? "text-red-500 dark:text-red-400" : iconColor}`} aria-hidden="true" />
-      <div>
-        <p className={`text-[26px] font-semibold tabular-nums leading-none ${alert ? "text-red-700 dark:text-red-400" : "text-foreground"}`}>
-          {value ?? "—"}
-        </p>
-        <p className={`text-[13px] font-medium mt-1.5 leading-tight ${alert ? "text-red-600/80 dark:text-red-500/70" : "text-foreground/80"}`}>
-          {label}
-        </p>
-      </div>
-      {sub && <p className="text-[12px] text-muted-foreground leading-tight mt-auto">{sub}</p>}
-    </div>
+  const { t } = useTranslation("common");
+  return (
+    <KPI className="h-full">
+      <KPI.Header>
+        <KPI.Icon status={kpiStatus(iconColor, alert)}><Icon aria-hidden="true" /></KPI.Icon>
+        <KPI.Title>{label}</KPI.Title>
+      </KPI.Header>
+      <KPI.Content>
+        <dd className="kpi__value tabular-nums">{value ?? "—"}</dd>
+      </KPI.Content>
+      {(sub || href || onClick) && (
+        <KPI.Footer className="mt-auto flex flex-col items-start gap-1">
+          {sub && <span className="text-sm text-muted-foreground">{sub}</span>}
+          {href && <HLink href={href} className="inline-flex items-center gap-1 text-sm" aria-label={`${t("view")} — ${label}`}>{t("view")} <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden="true" /></HLink>}
+          {!href && onClick && <HLink onPress={onClick} className="inline-flex items-center gap-1 text-sm" aria-label={`${t("view")} — ${label}`}>{t("view")} <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden="true" /></HLink>}
+        </KPI.Footer>
+      )}
+    </KPI>
   );
-  if (href) {
-    return (
-      <Link href={href} className="block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={label}>
-        {inner}
-      </Link>
-    );
-  }
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className="text-start w-full h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={label}>
-        {inner}
-      </button>
-    );
-  }
-  return <div className="h-full">{inner}</div>;
 }
 
 /* ── Projects & States tab — KPI card skeleton ───────────────────────── */
 function PsKpiSkeleton() {
   return (
-    <div
-      className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card p-4 min-h-[112px] shadow-[0_1px_3px_0_rgb(0,0,0,0.04)] animate-pulse"
-      aria-hidden="true"
-    >
-      <div className="h-[18px] w-[18px] rounded bg-muted/50" />
-      <div className="space-y-1.5">
-        <div className="h-[26px] w-14 rounded bg-muted/50" />
-        <div className="h-3.5 w-28 rounded bg-muted/40" />
-      </div>
-      <div className="h-3 w-36 rounded bg-muted/30 mt-auto" />
-    </div>
+    <UICard className="min-h-[150px] gap-3" aria-hidden="true">
+      <div className="flex items-center gap-2"><HSkeleton className="size-8 rounded-lg" /><HSkeleton className="h-4 w-28 rounded" /></div>
+      <HSkeleton className="h-7 w-16 rounded" />
+      <HSkeleton className="mt-auto h-3 w-36 rounded" />
+    </UICard>
   );
 }
 
@@ -3629,8 +3681,56 @@ function canViewBudgetAndDonors(role: string): boolean {
 }
 
 /* ── Main Dashboard ──────────────────────────────────────────────────── */
+/* ── Project Performance — HeroUI Pro DataGrid ───────────────────────── */
+type HierarchicalProject = NonNullable<ReturnType<typeof useHierarchicalPerformance>["data"]>["sectors"][number]["projects"][number];
+
+function ProjectPerformanceGrid({ projects }: { projects: HierarchicalProject[] }) {
+  const { t, i18n } = useTranslation("dashboard");
+  const columns = useMemo<DataGridColumn<HierarchicalProject>[]>(() => [
+    { id: "code", header: t("projectPerfTable.code"), width: 150, allowsSorting: true,
+      sortFn: (a, b) => a.projectCode.localeCompare(b.projectCode),
+      cell: (p) => <span className="whitespace-nowrap font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{p.projectCode}</bdi></span> },
+    { id: "title", header: t("projectPerfTable.projectTitle"), isRowHeader: true, minWidth: 220, allowsSorting: true,
+      sortFn: (a, b) => a.projectTitle.localeCompare(b.projectTitle, i18n.language),
+      cell: (p) => <span className="block truncate font-medium text-foreground" title={p.projectTitle}>{p.projectTitle}</span> },
+    { id: "sector", header: t("projectPerfTable.sector"), minWidth: 140,
+      cell: (p) => <span className="text-[var(--muted)]">{displayHierarchicalSectorLabel(p.sector, t("hierarchical.unresolvedSector"))}</span> },
+    { id: "state", header: t("projectPerfTable.state"), minWidth: 140,
+      cell: (p) => <span className="block max-w-[180px] truncate text-[var(--muted)]"><LocalizedStateNames names={p.stateNames} namesAr={(p as unknown as { stateNamesAr?: string[] }).stateNamesAr} /></span> },
+    { id: "valid", header: t("projectPerfTable.validIndicators"), align: "end", width: 120, allowsSorting: true,
+      sortFn: (a, b) => a.validIndicatorCount - b.validIndicatorCount,
+      cell: (p) => <span className="tabular-nums text-[var(--muted)]">{p.validIndicatorCount}</span> },
+    { id: "missing", header: t("projectPerfTable.missingData"), align: "end", width: 110, allowsSorting: true,
+      sortFn: (a, b) => a.missingIndicatorCount - b.missingIndicatorCount,
+      cell: (p) => p.missingIndicatorCount > 0
+        ? <Chip size="sm" variant="soft" color="warning" className="tabular-nums">{p.missingIndicatorCount}</Chip>
+        : <span className="text-[var(--muted)]">—</span> },
+    { id: "rate", header: t("projectPerfTable.achievementRate"), align: "end", width: 130, allowsSorting: true,
+      sortFn: (a, b) => (a.projectAchievementRate ?? -1) - (b.projectAchievementRate ?? -1),
+      cell: (p) => p.projectAchievementRate != null
+        ? <span className="font-semibold tabular-nums text-foreground"><bdi dir="ltr">{p.projectAchievementRate}%</bdi></span>
+        : <span className="text-xs text-[var(--muted)]">{t("performance.insufficientData")}</span> },
+    { id: "open", header: <span className="sr-only">{t("projectPerfTable.viewProject")}</span>, width: 90,
+      cell: (p) => (
+        <HLink href={`/projects/${p.projectId}`} className="text-sm no-underline whitespace-nowrap">
+          {t("projectPerfTable.viewProject")}
+        </HLink>
+      ) },
+  ], [t, i18n.language]);
+  return (
+    <DataGrid
+      aria-label={t("performanceTab.projectPerformance")}
+      data={projects}
+      columns={columns}
+      getRowId={(p) => p.projectId}
+      defaultSortDescriptor={{ column: "rate", direction: "descending" }}
+    />
+  );
+}
+
 export default function Dashboard() {
   const { t, i18n } = useTranslation("dashboard");
+  const isRtl = i18n.language?.startsWith("ar") ?? false;
   const { data: me } = useGetMe();
   const role = me?.user.role ?? "state_program_officer";
   const userSectors = useMemo(() => {
@@ -4257,7 +4357,7 @@ export default function Dashboard() {
               {/* ── 1. Performance KPI Summary ───────────────────────────── */}
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 {isHierarchicalLoading || isSummaryLoading ? (
-                  [1, 2, 3, 4].map(i => <div key={i} className="h-[112px] rounded-xl bg-muted/50 animate-pulse" />)
+                  [1, 2, 3, 4].map(i => <PsKpiSkeleton key={i} />)
                 ) : (
                   <>
                     {/* Average Sector Achievement Rate — indicator→project→sector hierarchy */}
@@ -4291,7 +4391,7 @@ export default function Dashboard() {
                         ? fmt(summary.activitiesCompleted)
                         : t("performanceTab.insufficientData")}
                       sub={summary?.activitiesCompleted != null && (summary?.activitiesPlanned ?? 0) > 0
-                        ? t("performanceTab.activitiesCompletedSub", { pct: Math.round((summary.activitiesCompleted / (summary.activitiesPlanned ?? 1)) * 100), planned: fmt(summary.activitiesPlanned ?? 0) })
+                        ? t("performanceTab.activitiesCompletedSub", { completed: fmt(summary.activitiesCompleted), total: fmt(summary.activitiesPlanned ?? 0) })
                         : summary?.activitiesCompleted != null
                           ? t("performanceTab.activitiesCompletedNoPlanned")
                           : t("performanceTab.activitiesCompletedNoData")}
@@ -4361,7 +4461,7 @@ export default function Dashboard() {
                               <button
                                 type="button"
                                 onClick={() => setExpandedSector(isExpanded ? null : sectorKey)}
-                                className="w-full grid items-center gap-x-2 px-2 py-1.5 rounded-lg hover:bg-muted/40 transition-colors text-start"
+                                className="w-full grid items-center gap-x-2 px-2 py-1.5 rounded-lg hover:bg-[var(--default)] transition-colors text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
                                 style={{ gridTemplateColumns: "1.5rem 1fr 64px 36px" }}
                                 aria-expanded={isExpanded}
                                 aria-label={t(isExpanded ? "hierarchical.sectorAriaCollapse" : "hierarchical.sectorAriaExpand", { sector: sectorLabel, rate: rate != null ? `${rate}%` : t("performanceTab.insufficientData") })}
@@ -4374,12 +4474,9 @@ export default function Dashboard() {
                                 <span className="text-xs text-muted-foreground text-center tabular-nums">{s.projectCount}</span>
                               </button>
                               {rate != null && (
-                                <div className="h-[3px] mx-7 mb-0.5 rounded-full bg-muted/50 overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full transition-all duration-300"
-                                    style={{ width: `${Math.min(rate, 100)}%`, backgroundColor: CC.achievement }}
-                                  />
-                                </div>
+                                <ProgressBar size="sm" value={Math.min(rate, 100)} aria-label={`${sectorLabel}: ${rate}%`} className="mx-7 mb-1 w-auto">
+                                  <ProgressBar.Track><ProgressBar.Fill /></ProgressBar.Track>
+                                </ProgressBar>
                               )}
                               {/* Drill-down panel */}
                               {isExpanded && (
@@ -4476,16 +4573,14 @@ export default function Dashboard() {
                                   <bdi dir="ltr">{gapLabel}</bdi>
                                 </span>
                               </div>
-                              <div className="relative h-1.5 rounded-full bg-muted/50 overflow-hidden mx-1" role="progressbar" aria-valuenow={achieved ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label={`${sectorLabel}: ${achieved != null ? `${achieved}%` : t("aria.noData")}`}>
-                                {achieved != null && (
-                                  <div className="absolute inset-y-0 start-0 rounded-full transition-all duration-300" style={{ width: `${barWidth}%`, backgroundColor: CC.achievement }} />
-                                )}
-                              </div>
+                              <ProgressBar size="sm" value={barWidth} aria-label={`${sectorLabel}: ${achieved != null ? `${achieved}%` : t("aria.noData")}`} className="mx-1 w-auto">
+                                <ProgressBar.Track><ProgressBar.Fill /></ProgressBar.Track>
+                              </ProgressBar>
                             </div>
                           );
                         })}
-                        <p className="text-[11px] text-muted-foreground/60 px-1 pt-1 leading-relaxed">
-                          Achievement rate is the equal-weight average of project rates, where each project rate is the average of its valid indicator rates.
+                        <p className="text-xs text-[var(--muted)] px-1 pt-1 leading-relaxed">
+                          {t("hierarchical.achievementNote")}
                         </p>
                       </div>
                     )}
@@ -4494,33 +4589,27 @@ export default function Dashboard() {
 
                 {/* Beneficiary Performance — 5/12 */}
                 <div className="col-span-12 lg:col-span-5">
-                  <Card className="rounded-xl border-border shadow-sm">
-                    <CardHeader className="pb-2">
-                      <div>
-                        <CardTitle className="text-[15px] font-semibold leading-snug">{t("performanceTab.beneficiaryPerformance")}</CardTitle>
-                        <CardDescription className="text-xs mt-0.5">{t("performanceTab.reviewBeneficiary")}</CardDescription>
+                  <UICard>
+                    <UICard.Header className="gap-3">
+                      <div className="flex flex-col gap-0.5">
+                        <UICard.Title className="text-base">{t("performanceTab.beneficiaryPerformance")}</UICard.Title>
+                        <UICard.Description>{t("performanceTab.reviewBeneficiary")}</UICard.Description>
                       </div>
-                      {/* Segmented view control */}
-                      <div className="flex items-center gap-1 mt-2.5 bg-muted/40 rounded-lg p-0.5 w-fit" role="group" aria-label={t("aria.beneficiaryView")}>
+                      <Segment
+                        size="sm"
+                        aria-label={t("aria.beneficiaryView")}
+                        selectedKey={perfBenView}
+                        onSelectionChange={(key) => setPerfBenView(key as "sector" | "state" | "gender")}
+                        className="w-fit"
+                      >
                         {(["sector", "state", "gender"] as const).map(view => (
-                          <button
-                            key={view}
-                            onClick={() => setPerfBenView(view)}
-                            aria-pressed={perfBenView === view}
-                            className={[
-                              "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                              perfBenView === view
-                                ? "bg-card text-foreground shadow-sm"
-                                : "text-muted-foreground hover:text-foreground",
-                            ].join(" ")}
-                          >
+                          <Segment.Item key={view} id={view}>
                             {view === "gender" ? t("benView.gender") : view === "state" ? t("benView.byState") : t("benView.bySector")}
-                          </button>
+                          </Segment.Item>
                         ))}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-1 pb-5">
+                      </Segment>
+                    </UICard.Header>
+                    <UICard.Content>
                       {isBenLoading ? (
                         <div className="space-y-2 animate-pulse pt-1">
                           {[1, 2, 3, 4].map(i => <div key={i} className="h-7 rounded bg-muted/40" />)}
@@ -4531,28 +4620,14 @@ export default function Dashboard() {
                         /* Gender breakdown */
                         <div className="space-y-3 pt-1">
                           {[
-                            { label: t("beneficiaries.women"), value: benBreakdown.summary.female, color: "#ec4899" },
-                            { label: t("beneficiaries.men"),   value: benBreakdown.summary.male,   color: CC.achievement },
-                            { label: t("beneficiaries.girls"), value: benBreakdown.summary.girls,  color: "#f472b6" },
-                            { label: t("beneficiaries.boys"),  value: benBreakdown.summary.boys,   color: "#60a5fa" },
-                          ].map(({ label, value, color }) => {
-                            const total = benBreakdown.summary.total || 1;
-                            const pctVal = Math.round((value / total) * 100);
-                            return (
-                              <div key={label} className="space-y-1">
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className="font-medium text-foreground">{label}</span>
-                                  <span className="text-muted-foreground tabular-nums">
-                                    {fmt(value)} <span className="text-muted-foreground/60">({pctVal}%)</span>
-                                  </span>
-                                </div>
-                                <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden" role="progressbar" aria-valuenow={pctVal} aria-valuemin={0} aria-valuemax={100} aria-label={`${label}: ${pctVal}%`}>
-                                  <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pctVal}%`, backgroundColor: color }} />
-                                </div>
-                              </div>
-                            );
-                          })}
-                          <p className="text-[11px] text-muted-foreground/60 pt-1">
+                            { label: t("beneficiaries.women"), value: benBreakdown.summary.female, fill: "var(--chart-5)" },
+                            { label: t("beneficiaries.men"),   value: benBreakdown.summary.male,   fill: "var(--chart-3)" },
+                            { label: t("beneficiaries.girls"), value: benBreakdown.summary.girls,  fill: "var(--chart-4)" },
+                            { label: t("beneficiaries.boys"),  value: benBreakdown.summary.boys,   fill: "var(--chart-2)" },
+                          ].map(({ label, value, fill }) => (
+                            <StatusProgressRow key={label} label={label} value={value} total={benBreakdown.summary.total || 1} fill={fill} />
+                          ))}
+                          <p className="text-xs text-[var(--muted)] pt-1">
                             {t("benView.totalPrefix")} <span className="tabular-nums font-medium">{fmt(benBreakdown.summary.total)}</span> {t("benView.totalSuffix")}
                           </p>
                         </div>
@@ -4561,38 +4636,31 @@ export default function Dashboard() {
                         (benBreakdown.byState ?? []).length === 0 ? (
                           <div className="py-6"><ChartEmptyState message={t("chartEmpty.stateBeneficiary")} icon={MapPin} /></div>
                         ) : (
-                          <div style={{ height: 260 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={(benBreakdown.byState ?? []).slice(0, 10)} layout="vertical" margin={{ top: 2, right: 16, left: 0, bottom: 2 }} barCategoryGap="30%">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.4} />
-                                <XAxis type="number" stroke="hsl(var(--cafa-muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={fmtCompact} />
-                                <YAxis dataKey="stateName" type="category" stroke="hsl(var(--cafa-muted-foreground))" fontSize={10} tickLine={false} axisLine={false} width={82} />
-                                <Tooltip contentStyle={TT.contentStyle} labelStyle={TT.labelStyle} itemStyle={TT.itemStyle} cursor={TT.cursor} formatter={(v: number) => [fmt(v), t("chartSeries.beneficiaries")]} />
-                                <Bar dataKey="total" name={t("chartSeries.beneficiaries")} fill={CC.achievement} radius={[0, 3, 3, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
+                          <HorizontalBars
+                            data={(benBreakdown.byState ?? []).slice(0, 10)}
+                            categoryKey="stateName"
+                            categoryWidth={82}
+                            isRtl={isRtl}
+                            bars={[{ dataKey: "total", name: t("chartSeries.beneficiaries"), fill: "var(--chart-3)" }]}
+                          />
                         )
                       ) : (
                         /* By Sector */
                         (benBreakdown.bySector ?? []).length === 0 ? (
                           <div className="py-6"><ChartEmptyState message={t("chartEmpty.sectorBeneficiary")} icon={BarChart3} /></div>
                         ) : (
-                          <div style={{ height: 260 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={(benBreakdown.bySector ?? []).slice(0, 10)} layout="vertical" margin={{ top: 2, right: 16, left: 0, bottom: 2 }} barCategoryGap="30%">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--cafa-border))" strokeOpacity={0.4} />
-                                <XAxis type="number" stroke="hsl(var(--cafa-muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={fmtCompact} />
-                                <YAxis dataKey="sector" type="category" stroke="hsl(var(--cafa-muted-foreground))" fontSize={10} tickLine={false} axisLine={false} width={92} tickFormatter={(v: string) => v.length > 13 ? `${v.slice(0, 12)}…` : v} />
-                                <Tooltip contentStyle={TT.contentStyle} labelStyle={TT.labelStyle} itemStyle={TT.itemStyle} cursor={TT.cursor} formatter={(v: number) => [fmt(v), t("chartSeries.beneficiaries")]} />
-                                <Bar dataKey="total" name={t("chartSeries.beneficiaries")} fill={CC.achievement} radius={[0, 3, 3, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
+                          <HorizontalBars
+                            data={(benBreakdown.bySector ?? []).slice(0, 10)}
+                            categoryKey="sector"
+                            categoryWidth={92}
+                            isRtl={isRtl}
+                            categoryFormatter={(v: string) => v.length > 13 ? `${v.slice(0, 12)}…` : v}
+                            bars={[{ dataKey: "total", name: t("chartSeries.beneficiaries"), fill: "var(--chart-3)" }]}
+                          />
                         )
                       )}
-                    </CardContent>
-                  </Card>
+                    </UICard.Content>
+                  </UICard>
                 </div>
               </div>
 
@@ -4605,9 +4673,9 @@ export default function Dashboard() {
                     title={t("performanceTab.activityCompletion")}
                     description={t("performanceTab.monitorActivity")}
                     action={
-                      <Link href="/projects" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1 shrink-0">
-                        {t("viewAll")} <ArrowRight className="h-3 w-3 rtl:rotate-180" />
-                      </Link>
+                      <HLink href="/projects" className="inline-flex shrink-0 items-center gap-1 text-sm no-underline">
+                        {t("viewAll")} <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden="true" />
+                      </HLink>
                     }
                   >
                     {isSummaryLoading ? (
@@ -4623,34 +4691,17 @@ export default function Dashboard() {
                       const completed = summary.activitiesCompleted ?? 0;
                       const delayed   = summary.delayedActivities   ?? 0;
                       const inProg    = Math.max(0, total - completed - delayed);
-                      const rows: { label: string; value: number; color: string; dotCls: string }[] = [
-                        { label: t("activityStatus.completed"),  value: completed, color: CC.target,      dotCls: "bg-emerald-500" },
-                        { label: t("activityStatus.inProgress"), value: inProg,    color: CC.achievement, dotCls: "bg-primary"     },
-                        { label: t("activityStatus.delayed"),    value: delayed,   color: CC.budgetPct,   dotCls: "bg-amber-400"   },
+                      const rows: { label: string; value: number; color: ProgressColor }[] = [
+                        { label: t("activityStatus.completed"),  value: completed, color: "success" },
+                        { label: t("activityStatus.inProgress"), value: inProg,    color: "accent"  },
+                        { label: t("activityStatus.delayed"),    value: delayed,   color: "warning" },
                       ];
                       return (
                         <div className="space-y-3">
-                          {rows.map(({ label, value, color, dotCls }) => {
-                            // Only show percentage when denominator is valid
-                            const pctVal = total > 0 ? Math.round((value / total) * 100) : null;
-                            return (
-                              <div key={label} className="space-y-1.5">
-                                <div className="flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotCls}`} aria-hidden="true" />
-                                    <span className="font-medium text-foreground">{label}</span>
-                                  </div>
-                                  <span className="tabular-nums text-muted-foreground">
-                                    {fmt(value)}{pctVal != null && <span className="text-muted-foreground/60"> ({pctVal}%)</span>}
-                                  </span>
-                                </div>
-                                <div className="h-2 rounded-full bg-muted/50 overflow-hidden" role="progressbar" aria-valuenow={pctVal ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label={`${label}: ${pctVal != null ? `${pctVal}%` : t("aria.noData")}`}>
-                                  <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pctVal ?? 0}%`, backgroundColor: color }} />
-                                </div>
-                              </div>
-                            );
-                          })}
-                          <p className="text-[11px] text-muted-foreground/60 pt-0.5">
+                          {rows.map(({ label, value, color }) => (
+                            <StatusProgressRow key={label} label={label} value={value} total={total} color={color} />
+                          ))}
+                          <p className="text-xs text-[var(--muted)] pt-0.5">
                             <span className="tabular-nums font-medium">{fmt(total)}</span> {t("activityStatus.totalPlannedSuffix")}
                           </p>
                         </div>
@@ -4665,9 +4716,9 @@ export default function Dashboard() {
                     title={t("performanceTab.reportingPerformance")}
                     description={t("performanceTab.monitorReporting")}
                     action={
-                      <Link href="/reports/project" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1 shrink-0">
-                        {t("viewAll")} <ArrowRight className="h-3 w-3 rtl:rotate-180" />
-                      </Link>
+                      <HLink href="/reports/project" className="inline-flex shrink-0 items-center gap-1 text-sm no-underline">
+                        {t("viewAll")} <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden="true" />
+                      </HLink>
                     }
                   >
                     {!reportsSummary ? (
@@ -4675,39 +4726,22 @@ export default function Dashboard() {
                     ) : (
                       <div className="space-y-3">
                         {/* Submitted count — context header, not a progress row */}
-                        <div className="flex items-center justify-between pb-2 border-b border-border/40">
-                          <span className="text-xs text-muted-foreground">{t("reportingPerf.totalSubmitted")}</span>
-                          <span className="text-xs font-semibold tabular-nums text-foreground">{fmt(reportsSummary.total)}</span>
+                        <div className="flex items-center justify-between pb-2 border-b border-[var(--separator)]">
+                          <span className="text-sm text-[var(--muted)]">{t("reportingPerf.totalSubmitted")}</span>
+                          <span className="text-sm font-semibold tabular-nums text-foreground">{fmt(reportsSummary.total)}</span>
                         </div>
                         {/* Approved / Pending / Overdue as proportions of total */}
                         {[
-                          { label: t("reportingPerf.approved"),         value: reportsSummary.approved,                   color: CC.target,    dotCls: "bg-emerald-500" },
-                          { label: t("reportingPerf.awaitingApproval"), value: reportsSummary.awaitingApproval,            color: CC.budgetPct, dotCls: "bg-amber-400"   },
-                          { label: t("reportingPerf.overdue"),          value: reportsSummary.awaitingApprovalOver14Days, color: CC.riskHigh,  dotCls: "bg-red-500"     },
-                        ].map(({ label, value, color, dotCls }) => {
-                          const total  = reportsSummary.total;
-                          const pctVal = total > 0 ? Math.round((value / total) * 100) : null;
-                          return (
-                            <div key={label} className="space-y-1.5">
-                              <div className="flex items-center justify-between text-xs">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotCls}`} aria-hidden="true" />
-                                  <span className="font-medium text-foreground">{label}</span>
-                                </div>
-                                <span className="tabular-nums text-muted-foreground">
-                                  {fmt(value)}{pctVal != null && <span className="text-muted-foreground/60"> ({pctVal}%)</span>}
-                                </span>
-                              </div>
-                              <div className="h-2 rounded-full bg-muted/50 overflow-hidden" role="progressbar" aria-valuenow={pctVal ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label={`${label}: ${pctVal != null ? `${pctVal}%` : t("aria.noData")}`}>
-                                <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pctVal ?? 0}%`, backgroundColor: color }} />
-                              </div>
-                            </div>
-                          );
-                        })}
+                          { label: t("reportingPerf.approved"),         value: reportsSummary.approved,                   color: "success" as const },
+                          { label: t("reportingPerf.awaitingApproval"), value: reportsSummary.awaitingApproval,            color: "warning" as const },
+                          { label: t("reportingPerf.overdue"),          value: reportsSummary.awaitingApprovalOver14Days, color: "danger"  as const },
+                        ].map(({ label, value, color }) => (
+                          <StatusProgressRow key={label} label={label} value={value} total={reportsSummary.total} color={color} />
+                        ))}
                         {/* Compliance rate — neutral, no threshold colours */}
-                        <div className="flex items-center justify-between pt-1 border-t border-border/40">
-                          <span className="text-xs text-muted-foreground">{t("complianceRate")}</span>
-                          <span className="text-xs font-semibold tabular-nums text-foreground">
+                        <div className="flex items-center justify-between pt-2 border-t border-[var(--separator)]">
+                          <span className="text-sm text-[var(--muted)]">{t("complianceRate")}</span>
+                          <span className="text-sm font-semibold tabular-nums text-foreground">
                             {reportsSummary.total > 0 ? `${Math.round((reportsSummary.approved / reportsSummary.total) * 100)}%` : "—"}
                           </span>
                         </div>
@@ -4718,84 +4752,24 @@ export default function Dashboard() {
               </div>
 
               {/* ── 5. Project Performance ───────────────────────────────── */}
-              <Card className="rounded-xl border-border shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-[15px] font-semibold">{t("performanceTab.projectPerformance")}</CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
-                    {t("performanceTab.projectPerformanceDesc")}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0 pb-4">
-                  {isHierarchicalLoading ? (
-                    <div className="space-y-2 animate-pulse">
-                      {[1,2,3,4,5].map(i => <div key={i} className="h-10 rounded-lg bg-muted/40" />)}
-                    </div>
-                  ) : (() => {
-                    const allProjects = (hierarchicalData?.sectors ?? []).flatMap(s => s.projects);
-                    if (allProjects.length === 0) {
-                      return (
-                        <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-                          <BarChart3 className="h-6 w-6 text-muted-foreground/30" />
-                          <p className="text-sm text-muted-foreground/60">{t("projectPerfTable.noProjects")}</p>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-border/50">
-                              <th className="text-start font-medium text-muted-foreground py-2 px-2 whitespace-nowrap">{t("projectPerfTable.code")}</th>
-                              <th className="text-start font-medium text-muted-foreground py-2 px-2">{t("projectPerfTable.projectTitle")}</th>
-                              <th className="text-start font-medium text-muted-foreground py-2 px-2 whitespace-nowrap hidden sm:table-cell">{t("projectPerfTable.sector")}</th>
-                              <th className="text-start font-medium text-muted-foreground py-2 px-2 whitespace-nowrap hidden lg:table-cell">{t("projectPerfTable.state")}</th>
-                              <th className="text-end font-medium text-muted-foreground py-2 px-2 whitespace-nowrap">{t("projectPerfTable.validIndicators")}</th>
-                              <th className="text-end font-medium text-muted-foreground py-2 px-2 whitespace-nowrap">{t("projectPerfTable.missingData")}</th>
-                              <th className="text-end font-medium text-muted-foreground py-2 px-2 whitespace-nowrap">{t("projectPerfTable.achievementRate")}</th>
-                              <th className="py-2 px-2 w-[1%]" />
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {allProjects.map(p => (
-                              <tr key={p.projectId} className="border-b last:border-0 border-border/30 hover:bg-muted/30 transition-colors">
-                                <td className="py-2 px-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap align-middle">{p.projectCode}</td>
-                                <td className="py-2 px-2 font-medium text-foreground align-middle max-w-[200px]">
-                                  <span className="truncate block" title={p.projectTitle}>{p.projectTitle}</span>
-                                </td>
-                                <td className="py-2 px-2 text-muted-foreground whitespace-nowrap hidden sm:table-cell align-middle">
-                                  {displayHierarchicalSectorLabel(
-                                    p.sector,
-                                    t("hierarchical.unresolvedSector"),
-                                  )}
-                                </td>
-                                <td className="py-2 px-2 text-muted-foreground hidden lg:table-cell align-middle">
-                                  <span className="truncate block max-w-[140px]"><LocalizedStateNames names={p.stateNames} namesAr={(p as unknown as { stateNamesAr?: string[] }).stateNamesAr} /></span>
-                                </td>
-                                <td className="py-2 px-2 text-end tabular-nums text-muted-foreground align-middle">{p.validIndicatorCount}</td>
-                                <td className={`py-2 px-2 text-end tabular-nums align-middle ${p.missingIndicatorCount > 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground"}`}>
-                                  {p.missingIndicatorCount > 0 ? p.missingIndicatorCount : "—"}
-                                </td>
-                                <td className="py-2 px-2 text-end align-middle">
-                                  {p.projectAchievementRate != null ? (
-                                    <span className="font-semibold tabular-nums text-foreground">{p.projectAchievementRate}%</span>
-                                  ) : (
-                                    <span className="text-muted-foreground/60 italic">{t("performance.insufficientData")}</span>
-                                  )}
-                                </td>
-                                <td className="py-2 px-2 align-middle whitespace-nowrap">
-                                  <Link href={`/projects/${p.projectId}`} className="text-primary hover:text-primary/80 font-medium transition-colors text-[11px]">
-                                    {t("projectPerfTable.viewProject")}
-                                  </Link>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
+              <ChartCard
+                title={t("performanceTab.projectPerformance")}
+                description={t("performanceTab.projectPerformanceDesc")}
+              >
+                {isHierarchicalLoading ? (
+                  <div className="space-y-2">
+                    {[1,2,3,4,5].map(i => <HSkeleton key={i} className="h-10 rounded-lg" />)}
+                  </div>
+                ) : (() => {
+                  const allProjects = (hierarchicalData?.sectors ?? []).flatMap(s => s.projects);
+                  if (allProjects.length === 0) {
+                    return <ChartEmptyState message={t("projectPerfTable.noProjects")} icon={BarChart3} />;
+                  }
+                  return (
+                    <ProjectPerformanceGrid projects={allProjects} />
+                  );
+                })()}
+              </ChartCard>
 
               {/* ── 6. Performance Attention ─────────────────────────────── */}
               {(() => {
