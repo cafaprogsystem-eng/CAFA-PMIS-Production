@@ -95,7 +95,8 @@ describe("Dashboard HQ location filter safety", () => {
     // Shown in the status donut's centre and in its legend (HeroUI Pro pattern).
     expect(screen.getAllByText("987").length).toBeGreaterThan(0);
 
-    await userEvent.click(screen.getByRole("combobox", { name: "filters.allSectors" }));
+    // HeroUI Select: the trigger is a button whose name includes the field label.
+    await userEvent.click(screen.getByRole("button", { name: /filters\.allSectors/ }));
     await userEvent.click(await screen.findByRole("option", { name: "Education" }));
 
     expect(screen.getByText("This metric does not support the current filters.")).toBeInTheDocument();

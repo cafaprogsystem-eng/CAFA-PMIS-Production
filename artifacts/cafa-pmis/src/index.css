@@ -288,24 +288,25 @@
   :lang(ar) :is(h1, h2, h3, h4, h5, h6) { letter-spacing: normal; }
 
   /* ── Tables ──────────────────────────────────────────────────── */
-  table { @apply w-full text-sm; }
+  /* HeroUI calendar grids are tables too; they keep their own styles. */
+  table:not(:where(.calendar__grid, .range-calendar__grid)) { @apply w-full text-sm; }
 
-  thead tr {
+  :where(table:not(.calendar__grid, .range-calendar__grid)) thead tr {
     @apply border-b bg-muted/50;
   }
-  thead th {
+  :where(table:not(.calendar__grid, .range-calendar__grid)) thead th {
     @apply py-3 px-4 text-start text-[11px] font-semibold uppercase tracking-widest text-muted-foreground;
   }
-  tbody tr {
+  :where(table:not(.calendar__grid, .range-calendar__grid)) tbody tr {
     @apply border-b transition-colors duration-100;
   }
-  tbody tr:last-child {
+  :where(table:not(.calendar__grid, .range-calendar__grid)) tbody tr:last-child {
     @apply border-b-0;
   }
-  tbody tr:hover {
+  :where(table:not(.calendar__grid, .range-calendar__grid)) tbody tr:hover {
     @apply bg-muted/40;
   }
-  tbody td {
+  :where(table:not(.calendar__grid, .range-calendar__grid)) tbody td {
     @apply py-3 px-4 align-middle;
   }
 

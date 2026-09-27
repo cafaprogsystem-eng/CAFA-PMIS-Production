@@ -49,8 +49,9 @@ import {
   useHierarchicalPerformance,
 } from "@/hooks/use-hierarchical-performance";
 import { useLocationContext } from "@/contexts/location-context";
-import { Alert, Button as HButton, Card as UICard, Chip, Label as HLabel, Link as HLink, ProgressBar, SearchField, Separator as HSeparator, Skeleton as HSkeleton, Tabs, ToggleButton } from "@heroui/react";
+import { Alert, Button as HButton, Calendar, DateField, DatePicker, Card as UICard, Chip, Label as HLabel, Link as HLink, ProgressBar, SearchField, Separator as HSeparator, Skeleton as HSkeleton, Tabs, ToggleButton } from "@heroui/react";
 import { KPI } from "@heroui-pro/react/kpi";
+import { parseDate, type CalendarDate } from "@internationalized/date";
 import { Sheet } from "@heroui-pro/react/sheet";
 import { KPIGroup } from "@heroui-pro/react/kpi-group";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -62,7 +63,6 @@ import { AreaChart as ProAreaChart } from "@heroui-pro/react/area-chart";
 import { PieChart as ProPieChart } from "@heroui-pro/react/pie-chart";
 import { ChartTooltip } from "@heroui-pro/react/chart-tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
   FolderKanban, Users, DollarSign, AlertTriangle, ArrowRight,
@@ -216,6 +216,42 @@ function ChartEmptyState({ message, icon: Icon = BarChart3 }: { message?: string
 /* ── Filter bar ──────────────────────────────────────────────────────── */
 interface DashFilters { sector?: string; donor?: string; dateFrom?: string; dateTo?: string }
 
+function safeParseDate(value?: string): CalendarDate | null {
+  if (!value) return null;
+  try { return parseDate(value); } catch { return null; }
+}
+
+/* One end of the dashboard date filter — HeroUI DatePicker bound to a
+   YYYY-MM-DD string, so either end can be set on its own. */
+function FilterDate({ value, onChange, label }: { value?: string; onChange: (v?: string) => void; label: string }) {
+  const parsed = safeParseDate(value);
+  return (
+    <DatePicker aria-label={label} value={parsed} onChange={(d) => onChange(d ? d.toString() : undefined)} className="w-40">
+      <DateField.Group fullWidth className="h-10">
+        <DateField.Input>{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
+        <DateField.Suffix>
+          <DatePicker.Trigger>
+            <DatePicker.TriggerIndicator />
+          </DatePicker.Trigger>
+        </DateField.Suffix>
+      </DateField.Group>
+      <DatePicker.Popover className="w-[22rem] max-w-[calc(100vw-2rem)]">
+        <Calendar aria-label={label} className="w-full">
+          <Calendar.Header>
+            <Calendar.Heading />
+            <Calendar.NavButton slot="previous" />
+            <Calendar.NavButton slot="next" />
+          </Calendar.Header>
+          <Calendar.Grid>
+            <Calendar.GridHeader>{(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}</Calendar.GridHeader>
+            <Calendar.GridBody>{(date) => <Calendar.Cell date={date} />}</Calendar.GridBody>
+          </Calendar.Grid>
+        </Calendar>
+      </DatePicker.Popover>
+    </DatePicker>
+  );
+}
+
 function FilterBar({
   filters, onChange, restrictedSectors,
 }: {
@@ -235,73 +271,43 @@ function FilterBar({
   const donorList = donorsData ?? [];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-card px-4 py-2.5 shadow-[0_1px_3px_0_rgb(0,0,0,0.03)]">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/70 me-1">
-        <Filter className="h-3.5 w-3.5" />
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+      <div className="me-1 flex items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
+        <Filter className="size-4" aria-hidden="true" />
         {t("filters.filters")}
       </div>
-      <Separator orientation="vertical" className="h-4 hidden sm:block" />
+      <HSeparator orientation="vertical" className="hidden h-5 sm:block" />
 
-      <Select
+      <SelectField
+        aria-label={t("filters.allSectors")}
         value={filters.sector ?? "all"}
-        onValueChange={v => onChange({ ...filters, sector: v === "all" ? undefined : v })}
-      >
-        <SelectTrigger aria-label={t("filters.allSectors")} className="h-10 w-40 text-xs border-border/60 bg-muted/30 hover:bg-muted/50 transition-colors">
-          <SelectValue placeholder={t("filters.allSectors")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t("filters.allSectors")}</SelectItem>
-          {sectorList.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-        </SelectContent>
-      </Select>
+        onChange={v => onChange({ ...filters, sector: v === "all" ? undefined : v })}
+        triggerClassName="h-10 w-44"
+        options={[{ value: "all", label: t("filters.allSectors") }, ...sectorList.map(sec => ({ value: sec, label: sec }))]}
+      />
 
-      <Select
+      <SelectField
+        aria-label={t("filters.allDonors")}
         value={filters.donor ?? "all"}
-        onValueChange={v => onChange({ ...filters, donor: v === "all" ? undefined : v })}
-      >
-        <SelectTrigger aria-label={t("filters.allDonors")} className="h-10 w-40 text-xs border-border/60 bg-muted/30 hover:bg-muted/50 transition-colors">
-          <SelectValue placeholder={t("filters.allDonors")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t("filters.allDonors")}</SelectItem>
-          {donorList.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-        </SelectContent>
-      </Select>
+        onChange={v => onChange({ ...filters, donor: v === "all" ? undefined : v })}
+        triggerClassName="h-10 w-44"
+        options={[{ value: "all", label: t("filters.allDonors") }, ...donorList.map(d => ({ value: d.name, label: d.name }))]}
+      />
 
       <div className="flex items-center gap-1.5">
-        <input
-          type="date"
-          value={filters.dateFrom ?? ""}
-          onChange={e => onChange({ ...filters, dateFrom: e.target.value || undefined })}
-          className="h-10 rounded-md border border-border/60 bg-muted/30 px-2 text-xs hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-ring focus:bg-background transition-colors"
-          placeholder={t("filters.dateFrom")}
-          aria-label={t("filters.dateFrom")}
-        />
-        <span className="text-xs text-muted-foreground/60">—</span>
-        <input
-          type="date"
-          value={filters.dateTo ?? ""}
-          onChange={e => onChange({ ...filters, dateTo: e.target.value || undefined })}
-          className="h-10 rounded-md border border-border/60 bg-muted/30 px-2 text-xs hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-ring focus:bg-background transition-colors"
-          placeholder={t("filters.dateTo")}
-          aria-label={t("filters.dateTo")}
-        />
+        <FilterDate label={t("filters.dateFrom")} value={filters.dateFrom} onChange={v => onChange({ ...filters, dateFrom: v })} />
+        <span className="text-sm text-[var(--muted)]" aria-hidden="true">—</span>
+        <FilterDate label={t("filters.dateTo")} value={filters.dateTo} onChange={v => onChange({ ...filters, dateTo: v })} />
       </div>
 
       {active && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-10 px-2.5 text-xs text-muted-foreground hover:text-foreground gap-1 ms-1"
-          onClick={() => onChange({})}
-        >
-          <X className="h-3 w-3" />
-          {t("filters.clear")}
-        </Button>
-      )}
-
-      {active && (
-        <span className="inline-flex items-center h-5 rounded-full bg-primary/10 text-primary text-xs font-medium px-2.5">{t("filters.active")}</span>
+        <>
+          <HButton variant="ghost" size="sm" className="ms-1" onPress={() => onChange({})}>
+            <X className="size-3.5" aria-hidden="true" />
+            {t("filters.clear")}
+          </HButton>
+          <Chip size="sm" variant="soft" color="accent">{t("filters.active")}</Chip>
+        </>
       )}
     </div>
   );
