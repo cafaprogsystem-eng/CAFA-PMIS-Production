@@ -614,7 +614,7 @@ export default function ProjectDetailPage({
     if (!data?.project) return;
     onRecordLoaded?.({
       title: data.project.title,
-      description: [data.project.code, formatStatusLabel(data.project.status)].filter(Boolean).join(" · "),
+      description: [data.project.code, t(`status.${data.project.status}`, { defaultValue: formatStatusLabel(data.project.status) })].filter(Boolean).join(" · "),
     });
   }, [data, onRecordLoaded]);
 
@@ -783,9 +783,9 @@ export default function ProjectDetailPage({
         return;
       }
       await refetchProjectDocs();
-      toast({ title: "Document uploaded successfully." });
+      toast({ title: t("detail.docs.uploaded") });
     } catch {
-      toast({ title: "Upload failed. Please try again.", variant: "destructive" });
+      toast({ title: t("detail.docs.uploadFailed"), variant: "destructive" });
     } finally {
       setIsUploading(false);
     }
@@ -800,8 +800,8 @@ export default function ProjectDetailPage({
       });
       if (!response.ok) {
         toast({
-          title: "Document download unavailable.",
-          description: "The file could not be retrieved. It may no longer be available.",
+          title: t("detail.docs.downloadUnavailable"),
+          description: t("detail.docs.downloadMissing"),
           variant: "destructive",
         });
         return;
@@ -817,8 +817,8 @@ export default function ProjectDetailPage({
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
     } catch {
       toast({
-        title: "Document download unavailable.",
-        description: "Please try again when the connection is restored.",
+        title: t("detail.docs.downloadUnavailable"),
+        description: t("detail.docs.downloadOffline"),
         variant: "destructive",
       });
     }
@@ -834,9 +834,9 @@ export default function ProjectDetailPage({
         return;
       }
       await refetchProjectDocs();
-      toast({ title: "Document deleted." });
+      toast({ title: t("detail.docs.deleted") });
     } catch {
-      toast({ title: "Delete failed. Please try again.", variant: "destructive" });
+      toast({ title: t("detail.docs.deleteFailed"), variant: "destructive" });
     }
   }
 
@@ -858,12 +858,12 @@ export default function ProjectDetailPage({
         return;
       }
       await refetchProjectDocs();
-      toast({ title: "Document deleted with override. This action has been recorded in the audit history." });
+      toast({ title: t("detail.docs.overrideDeleted") });
       setOverrideDeleteDialog(null);
       setOverrideReason("");
       setOverrideReasonError("");
     } catch {
-      toast({ title: "Override delete failed. Please try again.", variant: "destructive" });
+      toast({ title: t("detail.docs.overrideDeleteFailed"), variant: "destructive" });
     } finally {
       setIsOverrideDeleting(false);
     }
@@ -1433,7 +1433,7 @@ export default function ProjectDetailPage({
               <HCard.Title className="text-base">{t("detail.descriptionObjectives")}</HCard.Title>
             </HCard.Header>
             <HCard.Content className="space-y-4">
-              <p className="text-sm whitespace-pre-wrap text-foreground/80">
+              <p dir="auto" className="text-sm whitespace-pre-wrap text-foreground/80">
                 {project.description || <span className="text-muted-foreground">{t("detail.noDescription")}</span>}
               </p>
               <HSeparator />
@@ -1448,8 +1448,8 @@ export default function ProjectDetailPage({
                     {outputs.map(o => (
                       <li key={o.id} className="border-s-2 border-primary ps-3">
                         <div className="text-xs font-mono text-muted-foreground"><bdi dir="ltr">{o.code}</bdi></div>
-                        <div className="text-sm font-medium">{o.title}</div>
-                        {o.description && <div className="text-sm text-muted-foreground mt-0.5">{o.description}</div>}
+                        <div dir="auto" className="text-sm font-medium">{o.title}</div>
+                        {o.description && <div dir="auto" className="mt-0.5 text-sm text-[var(--muted)]">{o.description}</div>}
                       </li>
                     ))}
                   </ul>

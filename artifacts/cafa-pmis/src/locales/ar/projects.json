@@ -341,7 +341,16 @@
       "overrideReasonLabel": "سبب الاستثناء (مطلوب)",
       "overrideReasonRequired": "سبب الاستثناء مطلوب.",
       "deleting": "جارٍ الحذف…",
-      "deleteDocument": "حذف المستند"
+      "deleteDocument": "حذف المستند",
+      "uploaded": "تم رفع المستند بنجاح.",
+      "uploadFailed": "فشل الرفع. يرجى المحاولة مرة أخرى.",
+      "downloadUnavailable": "تنزيل المستند غير متاح.",
+      "downloadMissing": "تعذّر جلب الملف. ربما لم يعد متاحًا.",
+      "downloadOffline": "يرجى المحاولة مرة أخرى عند استعادة الاتصال.",
+      "deleted": "تم حذف المستند.",
+      "deleteFailed": "فشل الحذف. يرجى المحاولة مرة أخرى.",
+      "overrideDeleted": "تم حذف المستند باستثناء، وسُجّل هذا الإجراء في سجل المراجعة.",
+      "overrideDeleteFailed": "فشل الحذف بالاستثناء. يرجى المحاولة مرة أخرى."
     }
   },
   "form": {

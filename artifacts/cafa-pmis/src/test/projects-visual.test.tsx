@@ -913,7 +913,8 @@ describe("PRJ-FINAL-VIS-08 — document lifecycle banners/badges present, no sto
   it("downloads go through the API proxy and reports missing objects in-app", () => {
     expect(detailSrc).toContain("/documents/${doc.id}/download");
     expect(detailSrc).toContain("handleDocumentDownload");
-    expect(detailSrc).toContain("Document download unavailable.");
+    expect(detailSrc).toContain('t("detail.docs.downloadUnavailable")');
+    expect(enProjects.detail.docs.downloadUnavailable).toBe("Document download unavailable.");
     expect(detailSrc).toContain("URL.createObjectURL(await response.blob())");
     expect(detailSrc).not.toMatch(/storage\.googleapis|drive\.google\.com|filePath\}/);
   });

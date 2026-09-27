@@ -333,7 +333,16 @@
       "overrideReasonLabel": "Override Reason (required)",
       "overrideReasonRequired": "An override reason is required.",
       "deleting": "Deleting…",
-      "deleteDocument": "Delete Document"
+      "deleteDocument": "Delete Document",
+      "uploaded": "Document uploaded successfully.",
+      "uploadFailed": "Upload failed. Please try again.",
+      "downloadUnavailable": "Document download unavailable.",
+      "downloadMissing": "The file could not be retrieved. It may no longer be available.",
+      "downloadOffline": "Please try again when the connection is restored.",
+      "deleted": "Document deleted.",
+      "deleteFailed": "Delete failed. Please try again.",
+      "overrideDeleted": "Document deleted with override. This action has been recorded in the audit history.",
+      "overrideDeleteFailed": "Override delete failed. Please try again."
     }
   },
   "form": {

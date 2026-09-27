@@ -532,14 +532,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     const crumbs: { label: string; href?: string }[] = [{ label: tNav("home"), href: "/" }];
     let built = "";
     for (const seg of segments) {
+      const parent = built;
       built += "/" + seg;
+      // A record id (/projects/31) is named by its record type, not its number.
+      const recordLabel = /^\d+$/.test(seg)
+        ? parent === "/projects" ? tCommon("recordDetails.projectTitle")
+          : parent === "/plans" ? tCommon("recordDetails.planTitle")
+          : tCommon("recordDetails.title")
+        : undefined;
       const label = routeTitleMap[built]
+        ?? recordLabel
         ?? (seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "));
       crumbs.push({ label, href: built });
     }
     if (crumbs.length > 1) crumbs[crumbs.length - 1].href = undefined;
     return crumbs;
-  }, [location, routeTitleMap, tNav]);
+  }, [location, routeTitleMap, tNav, tCommon]);
 
   // Icon of the navigation entry the current page belongs to (longest match),
   // shown on the last breadcrumb as in the Pro "With Breadcrumbs" example.
@@ -650,7 +658,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     >
                       <span className="flex min-w-0 items-center gap-2 overflow-hidden">
                         {isLast && CurrentIcon ? <CurrentIcon className="size-4 shrink-0" aria-hidden /> : null}
-                        <span className="truncate" {...(isLast ? { "data-testid": "shell-page-title" } : {})}>{isLast ? pageTitle : crumb.label}</span>
+                        <span className="truncate" {...(isLast ? { "data-testid": "shell-page-title" } : {})}>{isLast && !/\/\d+$/.test(location) ? pageTitle : crumb.label}</span>
                       </span>
                     </Breadcrumbs.Item>
                   );
