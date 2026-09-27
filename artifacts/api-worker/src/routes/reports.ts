@@ -356,6 +356,25 @@ const requireReportsCreateOrProgramStateCreate: MiddlewareHandler<{ Bindings: Bi
   return requirePerm("reports.create")(c, next);
 };
 
+/**
+ * Outer gate for draft edits / workflow transitions: reports.update OR the
+ * narrow SOM fallback permission. SOM may only reach the handlers to work on
+ * their own fallback-authored program_state reports — the in-handler guards
+ * (SOM defence in PATCH; scoped submit allowance in transitions) enforce
+ * that. All other roles keep exactly the requirePerm("reports.update") gate.
+ */
+const requireReportsUpdateOrSomSprAuthor: MiddlewareHandler<{ Bindings: Bindings; Variables: Variables }> = async (c, next) => {
+  const user = c.get("currentUser");
+  if (
+    user &&
+    user.role === "state_office_manager" &&
+    hasPerm(permissionsFor(user), "reports.program_state.create")
+  ) {
+    return next();
+  }
+  return requirePerm("reports.update")(c, next);
+};
+
 // ---------------------------------------------------------------------------
 // GET /reports — List reports
 // ---------------------------------------------------------------------------
@@ -2500,3 +2519,402 @@ reportsRoutes.post("/reports", requireReportsCreateOrProgramStateCreate, async (
     close();
   }
 });
+
+// ---------------------------------------------------------------------------
+// PATCH /reports/:reportId — Update a draft report
+// ---------------------------------------------------------------------------
+
+reportsRoutes.patch("/reports/:reportId", requireReportsUpdateOrSomSprAuthor, async (c) => {
+  const user = c.get("currentUser");
+  const { db, close } = openDb(c);
+  try {
+    if (!user) return c.json({ error: "no current user" }, 401);
+    const reportId = Number(c.req.param("reportId"));
+    const cur = await db.query<{
+      status: string;
+      sector: string | null;
+      projectId: number | null;
+      reportType: string | null;
+      authorId: number | null;
+      stateId: number | null;
+      sections: Record<string, unknown> | null;
+    }>(
+      `SELECT status, sector, project_id AS "projectId", report_type AS "reportType",
+              author_id AS "authorId", state_id AS "stateId", sections
+       FROM reports WHERE id = $1`,
+      [reportId],
+    );
+    if (cur.rows.length === 0) {
+      return c.json({ error: "report not found" }, 404);
+    }
+    if (cur.rows[0].status !== "draft") {
+      return c.json({ error: "only_draft_reports_can_be_updated" }, 409);
+    }
+
+    // Author ownership: only the original report author may edit a draft.
+    // Super-admin may bypass for administrative corrections.
+    // Program Manager may bypass via Full Operational Access (Task #373) —
+    // identity/integrity fields are still protected (super_admin bypass only).
+    const authorId = cur.rows[0].authorId;
+    const isSuperAdmin = user.role === "super_admin";
+    const isDraftEditFullAccess = hasFullOperationalAccess(user);
+
+    // ── SOM fallback defence (SPR-003/004) ────────────────────────────────
+    // SOM reaches this handler only via the narrow fallback permission and
+    // may edit exclusively their own program_state drafts in their OWN
+    // current state. Fail closed when either state id is null (reassigned or
+    // unassigned SOM loses access to old drafts). This also closes the
+    // authorId=null historical-draft loophole for SOM.
+    if (user.role === "state_office_manager") {
+      const somStateId = user.stateId ?? null;
+      const reportStateId = cur.rows[0].stateId ?? null;
+      if (
+        cur.rows[0].reportType !== "program_state" ||
+        authorId !== user.id ||
+        somStateId === null ||
+        reportStateId === null ||
+        reportStateId !== somStateId
+      ) {
+        return c.json({
+          error: "som_program_state_author_only",
+          message: "State Office Managers can only edit State Programme Report drafts they authored for their own state.",
+        }, 403);
+      }
+    }
+
+    // Full Operational Access (PM/super_admin) bypasses author ownership.
+    // author_id is preserved unchanged — the original creator is never mutated.
+    if (!isDraftEditFullAccess && authorId !== null && authorId !== user.id) {
+      return c.json({
+        error: "draft_edit_forbidden",
+        message: "Only the original report author can edit this draft.",
+      }, 403);
+    }
+
+    const sector = await getReportSectorForAuth(db, reportId);
+    const guard = assertSectorAllowed(user, sector ?? null);
+    if (!guard.ok) {
+      return c.json(guard.body, guard.status as 403);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    // ── Activity Report identity immutability ─────────────────────────────────
+    // activityId / projectId / stateId / locationType form the immutable identity of an
+    // Activity Report. Even in draft, these fields cannot be changed: doing so would allow
+    // period-duplicate bypass and break workflow_path / author traceability.
+    // super_admin may bypass for administrative corrections.
+    if (cur.rows[0].reportType === "activity" && !isSuperAdmin) {
+      const identityFields = ["activityId", "projectId", "stateId", "locationType"];
+      const attempted = identityFields.filter((f) => body[f] !== undefined);
+      if (attempted.length > 0) {
+        return c.json({
+          error: "activity_identity_immutable",
+          message: `Activity Report identity fields cannot be changed after creation: ${attempted.join(", ")}.`,
+        }, 409);
+      }
+    }
+
+    // ── Project Report identity immutability ──────────────────────────────────
+    // projectId / stateId / locationType / period / reportingMonth / reportingYear / quarter
+    // form the immutable identity triple (project + location + period) of a PMR.
+    // super_admin may bypass for administrative corrections.
+    if (cur.rows[0].reportType === "project" && !isSuperAdmin) {
+      const pmrIdentityFields = ["projectId", "stateId", "locationType", "period", "reportingMonth", "reportingYear", "quarter"];
+      const attempted = pmrIdentityFields.filter((f) => body[f] !== undefined);
+      if (attempted.length > 0) {
+        return c.json({
+          error: "project_report_identity_immutable",
+          message: `Project Report identity fields cannot be changed after creation: ${attempted.join(", ")}.`,
+        }, 409);
+      }
+    }
+
+    // ── State Programme Report identity immutability ──────────────────────────
+    // stateId / kind / period / reportingMonth / reportingYear / quarter /
+    // periodStart / periodEnd form the immutable business identity of an SPR.
+    // super_admin may bypass for administrative corrections.
+    if (cur.rows[0].reportType === "program_state" && !isSuperAdmin) {
+      const sprIdentityFields = [
+        "stateId", "kind", "period", "reportingMonth", "reportingYear",
+        "quarter", "periodStart", "periodEnd", "reportType",
+      ];
+      const attempted = sprIdentityFields.filter((f) => body[f] !== undefined);
+      if (attempted.length > 0) {
+        return c.json({
+          error: "program_state_report_identity_immutable",
+          message: `State Programme Report identity fields cannot be changed after creation: ${attempted.join(", ")}.`,
+        }, 409);
+      }
+    }
+
+    // ── HQ Sector Report identity immutability (HQSR-002) ─────────────────────
+    // Actor-independent: no role (including PM and super_admin) may mutate
+    // HQSR identity via the generic PATCH.
+    if (cur.rows[0].reportType === "hq_sector") {
+      const hqIdentityFields = [
+        "reportType", "report_type",
+        "sector",
+        "kind",
+        "period",
+        "reportingMonth", "reporting_month",
+        "reportingYear", "reporting_year",
+        "quarter",
+        "periodStart", "period_start",
+        "periodEnd", "period_end",
+        "stateId", "state_id",
+        "projectId", "project_id",
+      ];
+      const attempted = hqIdentityFields.filter((f) => f in body);
+      if (attempted.length > 0) {
+        return c.json({
+          error: "hq_sector_report_identity_immutable",
+          message: `HQ Sector Report identity fields cannot be changed after creation: ${attempted.join(", ")}.`,
+        }, 409);
+      }
+    }
+
+    // ── FIX-08: _schemaVersion immutability guard ─────────────────────────────
+    // Once an Activity Report has been marked as modern (_schemaVersion:"modern" in sections),
+    // that marker cannot be removed or cleared via PATCH.
+    // super_admin is exempt (administrative corrections only).
+    if (cur.rows[0].reportType === "activity" && !isSuperAdmin) {
+      const existingSections = cur.rows[0].sections ?? {};
+      if (existingSections["_schemaVersion"] === "modern" && body["sections"] !== undefined) {
+        if (body["sections"] === null) {
+          return c.json({
+            error: "modern_schema_version_immutable",
+            message:
+              "Cannot clear sections of a modern Activity Report. " +
+              "Send an empty object {} to clear content fields while preserving the schema version.",
+          }, 409);
+        }
+        const incoming = body["sections"] as Record<string, unknown>;
+        if (incoming["_schemaVersion"] !== "modern") {
+          body["sections"] = { ...incoming, _schemaVersion: "modern" };
+        }
+      }
+    }
+
+    // ── Validate beneficiary counts and activity fields for PATCH ─────────────
+    {
+      const benFields = ["beneficiariesMale", "beneficiariesFemale", "beneficiariesBoys", "beneficiariesGirls"];
+      for (const f of benFields) {
+        const v = body[f];
+        if (v !== undefined && v !== null) {
+          const num = Number(v);
+          if (!Number.isFinite(num) || !Number.isInteger(num) || num < 0) {
+            return c.json({ error: "validation_error", message: `${f} must be a non-negative whole number` }, 400);
+          }
+        }
+      }
+      const acts = body["activities"];
+      if (Array.isArray(acts)) {
+        for (const act of acts as Record<string, unknown>[]) {
+          const pct = act["percent"] !== undefined ? Number(act["percent"]) : undefined;
+          if (pct !== undefined && (!Number.isFinite(pct) || !Number.isInteger(pct) || pct < 0 || pct > 100)) {
+            return c.json({ error: "validation_error", message: "Activity implementation % must be a whole number between 0 and 100" }, 400);
+          }
+          for (const bf of ["beneficiariesMen", "beneficiariesWomen", "beneficiariesBoys", "beneficiariesGirls"]) {
+            const bv = act[bf];
+            if (bv !== undefined && bv !== null) {
+              const num = Number(bv);
+              if (!Number.isFinite(num) || !Number.isInteger(num) || num < 0) {
+                return c.json({ error: "validation_error", message: `Activity ${bf} must be a non-negative whole number` }, 400);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Validate kind if provided (all report types — no special exemptions).
+    if (body.kind !== undefined && !isCanonicalFrequency(body.kind)) {
+      return c.json({
+        error: "invalid_frequency",
+        message: `kind must be one of: ${CANONICAL_FREQUENCIES.join(", ")}`,
+      }, 400);
+    }
+
+    const setCols: unknown[] = [];
+    const sets: string[] = [];
+    const set = (col: string, val: unknown) =>
+      `${col} = $${(setCols.push(val), setCols.length + 1)}`;
+
+    const maybeSet = (key: string, col: string) => {
+      if (body[key] !== undefined) sets.push(set(col, body[key]));
+    };
+    // jsonb columns must be passed as JSON.stringify() strings — pg does not
+    // auto-serialize JS objects/arrays for jsonb and falls back to PostgreSQL
+    // array syntax which causes "invalid input syntax for type json" errors.
+    const maybeSetJson = (key: string, col: string) => {
+      if (body[key] !== undefined) {
+        const v = body[key];
+        sets.push(set(col, v != null ? JSON.stringify(v) : null));
+      }
+    };
+    maybeSet("title", "title");
+    maybeSet("kind", "kind");
+    maybeSet("sector", "sector");
+    maybeSet("reportingMonth", "reporting_month");
+    maybeSet("reportingYear", "reporting_year");
+    maybeSet("period", "period");
+    maybeSet("periodStart", "period_start");
+    maybeSet("periodEnd", "period_end");
+    maybeSet("narrative", "narrative");
+    maybeSet("executiveSummary", "executive_summary");
+    maybeSet("challenges", "challenges");
+    maybeSet("recommendations", "recommendations");
+    maybeSetJson("sections", "sections");
+    maybeSet("beneficiariesMale", "beneficiaries_male");
+    maybeSet("beneficiariesFemale", "beneficiaries_female");
+    maybeSet("beneficiariesBoys", "beneficiaries_boys");
+    maybeSet("beneficiariesGirls", "beneficiaries_girls");
+    maybeSet("plannedBudget", "planned_budget");
+    maybeSet("actualExpenditure", "actual_expenditure");
+    maybeSetJson("activities", "activities");
+    maybeSet("quarter", "quarter");
+    maybeSet("onDemandReason", "on_demand_reason");
+    maybeSetJson("indicatorProgress", "indicator_progress");
+    maybeSet("submittedTo", "submitted_to");
+    maybeSet("activityName", "activity_name");
+    maybeSet("activityId", "activity_id");
+    maybeSet("projectId", "project_id");
+    maybeSet("stateId", "state_id");
+
+    if (sets.length === 0) {
+      return c.json({ error: "no_fields_to_update" }, 400);
+    }
+    sets.push(`updated_at = NOW()`);
+
+    const baseRevision = c.req.header("x-base-revision");
+    const update = await db.query(
+      `UPDATE reports SET ${sets.join(", ")} WHERE id = $1${baseRevision ? ` AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $${setCols.length + 2}::timestamptz)` : ""}`,
+      [reportId, ...setCols, ...(baseRevision ? [baseRevision] : [])],
+    );
+    if (baseRevision && update.rowCount === 0) {
+      return c.json({ error: "offline_conflict", code: "revision_mismatch", message: "The report changed while this draft was offline." }, 409);
+    }
+
+    await logAudit(db, {
+      userId: user.id,
+      action: "update",
+      module: "reports",
+      entityId: reportId,
+    });
+    const result = await db.query<Record<string, unknown>>(`${reportSelect} WHERE r.id = $1`, [reportId]);
+    const enriched = await withHistory(db, result.rows);
+    return c.json(enriched[0]);
+  } finally {
+    close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /reports/:reportId — Hard-delete draft (creator or super_admin)
+// ---------------------------------------------------------------------------
+
+reportsRoutes.delete(
+  "/reports/:reportId",
+  requirePerm("reports.delete"), // PERM-03: dedicated delete permission, consistent with projects.delete and plans.delete.
+  async (c) => {
+    const user = c.get("currentUser");
+    const { db, pool, close } = openDb(c);
+    try {
+      if (!user) return c.json({ error: "no current user" }, 401);
+      const reportId = Number(c.req.param("reportId"));
+      const cur = await db.query<{ status: string; authorId: number | null }>(
+        `SELECT status, author_id AS "authorId" FROM reports WHERE id = $1`,
+        [reportId],
+      );
+      if (cur.rows.length === 0) {
+        return c.json({ error: "report not found" }, 404);
+      }
+      if (cur.rows[0].status !== "draft") {
+        return c.json({ error: "only_draft_reports_can_be_deleted" }, 409);
+      }
+      // Fail closed if author_id is null (legacy record without backfill) to prevent
+      // a permissive delete for normal roles. PM and super_admin (Full Operational Access)
+      // bypass author-ownership and may delete any draft — including null-author legacy rows —
+      // as an operational action. Both roles are trusted; the deletion is audit-logged.
+      const authorId = cur.rows[0].authorId;
+      const isDeleteFullAccess = hasFullOperationalAccess(user);
+      if (!isDeleteFullAccess && (authorId === null || authorId !== user.id)) {
+        return c.json({ error: "only_creator_or_admin_can_delete" }, 403);
+      }
+
+      // Collect all evidence object paths BEFORE any DB delete
+      const attachmentPathsResult = await db.query<{ object_path: string }>(
+        `SELECT object_path FROM report_attachments WHERE report_id = $1 AND object_path <> ''`,
+        [reportId],
+      );
+      const voicePathsResult = await db.query<{ object_path: string }>(
+        `SELECT object_path FROM voice_notes WHERE entity_type = 'report' AND entity_id = $1 AND object_path IS NOT NULL AND object_path <> ''`,
+        [reportId],
+      );
+      const rawAttachmentPaths = attachmentPathsResult.rows.map((r) => r.object_path);
+      const rawVoicePaths = voicePathsResult.rows.map((r) => r.object_path);
+
+      // Deduplicate: a path shared between an attachment and a voice note for the
+      // same report should only be deleted once.
+      const allUniquePaths = [...new Set([...rawAttachmentPaths, ...rawVoicePaths])];
+
+      // Cross-table ownership check: a path is safe to delete when no record
+      // OUTSIDE this report's deletion set references it.
+      const partition = await partitionSafeStoragePathsForReport(db, reportId, allUniquePaths);
+      if (partition.skipped.length > 0) {
+        console.warn(`[ATT-05] report_delete skipping ${partition.skipped.length} path(s) with external refs reportId=${reportId}`);
+      }
+
+      const safeObjectPaths = partition.safe;
+
+      // Delete all safe storage objects OUTSIDE any DB transaction
+      for (const objectPath of safeObjectPaths) {
+        try {
+          await deleteObjectSafely(c.env, objectPath);
+        } catch (_storErr) {
+          console.error(`[ATT-05] report_delete storage_error reportId=${reportId} objectPath=${objectPath}`);
+          return c.json({ error: "report_evidence_storage_delete_failed" }, 500);
+        }
+      }
+
+      // All storage objects cleaned — now delete DB rows in a single transaction
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        // Hold the report lock before proceeding, so an identity/scope PATCH
+        // cannot race the deletion.
+        await client.query(`SELECT id FROM reports WHERE id = $1 FOR UPDATE`, [reportId]);
+        await client.query(
+          `DELETE FROM document_registry_entries dre
+           USING report_attachments ra
+           WHERE dre.source_kind = 'report_attachment'
+             AND dre.source_id = ra.id
+             AND ra.report_id = $1`,
+          [reportId],
+        );
+        await client.query(`DELETE FROM report_attachments WHERE report_id = $1`, [reportId]);
+        await client.query(
+          `DELETE FROM voice_notes WHERE entity_type = 'report' AND entity_id = $1`,
+          [reportId],
+        );
+        await client.query(`DELETE FROM reports WHERE id = $1`, [reportId]);
+        await client.query("COMMIT");
+      } catch (dbErr) {
+        await client.query("ROLLBACK");
+        throw dbErr;
+      } finally {
+        client.release();
+      }
+
+      await logAudit(db, {
+        userId: user.id,
+        action: "delete",
+        module: "reports",
+        entityId: reportId,
+      });
+      return c.json({ ok: true });
+    } finally {
+      close();
+    }
+  },
+);
