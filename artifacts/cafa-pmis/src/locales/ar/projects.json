@@ -697,7 +697,8 @@
         "count": "عدد",
         "percent": "نسبة مئوية (%)"
       }
-    }
+    },
+    "stepHasErrors": "تحتاج تصحيح"
   },
   "projectActionsAria": "إجراءات المشروع",
   "activityStatus": {

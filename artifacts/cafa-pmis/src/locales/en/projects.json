@@ -689,7 +689,8 @@
         "count": "Count",
         "percent": "Percentage (%)"
       }
-    }
+    },
+    "stepHasErrors": "Needs fixing"
   },
   "projectActionsAria": "Project actions",
   "activityStatus": {

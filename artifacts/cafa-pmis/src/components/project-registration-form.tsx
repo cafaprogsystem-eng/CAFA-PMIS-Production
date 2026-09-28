@@ -32,6 +32,7 @@ import {
   FormLabel,
   useFormField,
 } from "@/components/ui/form";
+import { Stepper } from "@heroui-pro/react/stepper";
 import { CheckItem, FormDate, FormInput, FormSelect, FormTextArea, RemovableTags } from "@/components/form-controls";
 import { SelectField } from "@/components/select-field";
 import { useToast } from "@/hooks/use-toast";
@@ -1768,9 +1769,16 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
 
   // ── Tab navigation ─────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>("basic");
-  // On narrow screens the step bar scrolls; keep the current step in view.
+  // On narrow screens the stepper scrolls sideways; keep the current step in
+  // view by scrolling only the stepper strip (not the dialog), as the report form does.
   useEffect(() => {
-    document.getElementById(`prj-tab-${activeTab}`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    const el = document.querySelector<HTMLElement>(`[data-stepper-scroll] [id="prj-tab-${activeTab}"]`);
+    const strip = el?.closest<HTMLElement>("[data-stepper-scroll]");
+    if (!el || !strip) return;
+    const stripBox = strip.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    if (box.left < stripBox.left) strip.scrollBy?.({ left: box.left - stripBox.left - 16, behavior: "smooth" });
+    else if (box.right > stripBox.right) strip.scrollBy?.({ left: box.right - stripBox.right + 16, behavior: "smooth" });
   }, [activeTab]);
   const activeTabIndex = TABS.findIndex(t => t.id === activeTab);
   const goToNextTab = () => {
@@ -1798,12 +1806,13 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
       <div aria-busy="true" aria-label={t("form.loadingAriaLabel")}>
         <span className="sr-only">{t("form.loadingAriaLabel")}</span>
         {/* Tab nav skeleton */}
-        <div className="mb-6 rounded-3xl bg-[var(--default)] p-1">
-          <div className="flex gap-1 overflow-x-auto">
-            {Array.from({ length: 7 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-24 shrink-0 rounded-3xl" />
-            ))}
-          </div>
+        <div className="mb-6 flex items-center gap-3 overflow-hidden border-b border-[var(--border)] pb-3">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="flex shrink-0 items-center gap-2">
+              <Skeleton className="size-7 rounded-full" />
+              <Skeleton className="h-3.5 w-20 rounded" />
+            </div>
+          ))}
         </div>
         {/* Panel body skeleton */}
         <div className="space-y-4">
@@ -2305,71 +2314,38 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
     <>
     <Form {...form}>
       <form onSubmit={handleFormSubmit} noValidate className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* ── Step navigation — HeroUI Pro Stepper, as in the report form. Every
+            step stays clickable; a step with validation errors says so under its
+            title. All panels stay mounted (hidden) so react-hook-form can focus
+            and validate fields on any step. ── */}
+        <div className="shrink-0 border-b border-[var(--border)]">
+          <div data-stepper-scroll className="overflow-x-auto px-6 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Stepper
+              aria-label={t("form.navAriaLabel")}
+              className="min-w-[760px]"
+              currentStep={activeTabIndex}
+              onStepChange={(index) => { const next = TABS[index]; if (next) setActiveTab(next.id); }}
+            >
+              {TABS.map((tab, idx) => (
+                <Stepper.Step key={tab.id} id={`prj-tab-${tab.id}`} data-section={tab.id}>
+                  <Stepper.Indicator />
+                  <Stepper.Content>
+                    <Stepper.Title>{t(tab.labelKey)}</Stepper.Title>
+                    {tabsWithErrors[idx]?.hasError && (
+                      <Stepper.Description className="text-[var(--danger)]">{t("form.stepHasErrors")}</Stepper.Description>
+                    )}
+                  </Stepper.Content>
+                  <Stepper.Separator />
+                </Stepper.Step>
+              ))}
+            </Stepper>
+          </div>
+        </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
             <OfflineDraftNotice status={projectDraft.status} error={projectDraft.error} />
 
-            {/* ── Tab navigation bar ── */}
-            {/* Step bar: HeroUI Tabs styling on an always-mounted tablist — every
-                panel stays in the DOM (hidden) so react-hook-form can focus and
-                validate fields on any step. */}
-            <div className="tabs mb-6" data-orientation="horizontal">
-              <div className="tabs__list-container overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <nav
-                  role="tablist"
-                  aria-label={t("form.navAriaLabel")}
-                  aria-orientation="horizontal"
-                  data-orientation="horizontal"
-                  className="tabs__list"
-                >
-                  {TABS.map((tab, idx) => {
-                    const isActive = activeTab === tab.id;
-                    const hasError = tabsWithErrors[idx]?.hasError;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        id={`prj-tab-${tab.id}`}
-                        aria-selected={isActive}
-                        aria-controls={`prj-panel-${tab.id}`}
-                        tabIndex={isActive ? 0 : -1}
-                        data-selected={isActive || undefined}
-                        onClick={() => setActiveTab(tab.id)}
-                        onKeyDown={(e) => {
-                          // Arrow keys follow the visual order, which flips in RTL.
-                          const rtl = document.documentElement.dir === "rtl";
-                          const next = rtl ? "ArrowLeft" : "ArrowRight";
-                          const prev = rtl ? "ArrowRight" : "ArrowLeft";
-                          let target: number | null = null;
-                          if (e.key === next) target = Math.min(idx + 1, TABS.length - 1);
-                          if (e.key === prev) target = Math.max(idx - 1, 0);
-                          if (e.key === "Home") target = 0;
-                          if (e.key === "End") target = TABS.length - 1;
-                          if (target === null) return;
-                          e.preventDefault();
-                          setActiveTab(TABS[target].id);
-                          document.getElementById(`prj-tab-${TABS[target].id}`)?.focus();
-                        }}
-                        className="tabs__tab w-auto flex-1 shrink-0 whitespace-nowrap px-2"
-                      >
-                        {isActive && <span className="tabs__indicator" aria-hidden="true" />}
-                        {t(tab.labelKey)}
-                        {hasError && (
-                          <span
-                            className="absolute top-1 end-1.5 h-2 w-2 rounded-full bg-[var(--danger)]"
-                            role="img"
-                            aria-label={t("form.tabErrorAriaLabel")}
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </nav>
-              </div>
-            </div>
-
             {/* ── Panel 1: Basic Information ── */}
-            <section id="prj-panel-basic" role="tabpanel" aria-labelledby="prj-tab-basic" hidden={activeTab !== "basic"} className="space-y-4">
+            <section id="prj-panel-basic" role="region" aria-labelledby="prj-tab-basic" hidden={activeTab !== "basic"} className="space-y-4">
               <SectionHeading title={t("form.basic.projectDetailsSection")} />
               <FormField control={control} name="title" render={({ field }) => (
                 <FormItem>
@@ -2501,7 +2477,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             </section>
 
             {/* ── Panel 2: Location & Coverage ── */}
-            <section id="prj-panel-location" role="tabpanel" aria-labelledby="prj-tab-location" hidden={activeTab !== "location"} className="space-y-4">
+            <section id="prj-panel-location" role="region" aria-labelledby="prj-tab-location" hidden={activeTab !== "location"} className="space-y-4">
               <SectionHeading title={t("form.location.operationalLocationsSection")} />
               <FormField control={control} name="stateIds" render={() => (
                 <FormItem>
@@ -2627,7 +2603,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             </section>
 
             {/* ── Panel 3: Donor & Agreement ── */}
-            <section id="prj-panel-donor" role="tabpanel" aria-labelledby="prj-tab-donor" hidden={activeTab !== "donor"} className="space-y-4">
+            <section id="prj-panel-donor" role="region" aria-labelledby="prj-tab-donor" hidden={activeTab !== "donor"} className="space-y-4">
               <SectionHeading title={t("form.donor.donorInfoSection")} />
               {!showNewDonor ? (
                 <div className="space-y-2">
@@ -2737,7 +2713,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             </section>
 
             {/* ── Panel 4: Timeline & Budget ── */}
-            <section id="prj-panel-timeline" role="tabpanel" aria-labelledby="prj-tab-timeline" hidden={activeTab !== "timeline"} className="space-y-5">
+            <section id="prj-panel-timeline" role="region" aria-labelledby="prj-tab-timeline" hidden={activeTab !== "timeline"} className="space-y-5">
               <div>
                 <SectionHeading title={t("form.timeline.implementationPeriod")} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-sm">
@@ -2880,7 +2856,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             </section>
 
             {/* ── Panel 5: Project Team ── */}
-            <section id="prj-panel-team" role="tabpanel" aria-labelledby="prj-tab-team" hidden={activeTab !== "team"} className="space-y-3">
+            <section id="prj-panel-team" role="region" aria-labelledby="prj-tab-team" hidden={activeTab !== "team"} className="space-y-3">
               <SectionHeading title={t("form.team.projectTeamSection")} />
               {assignments.fields.map((asgn, idx) => (
                 <div key={asgn.id} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 border rounded-md">
@@ -2940,7 +2916,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             </section>
 
             {/* ── Panel 6: Documents ── */}
-            <section id="prj-panel-documents" role="tabpanel" aria-labelledby="prj-tab-documents" hidden={activeTab !== "documents"} className="space-y-4">
+            <section id="prj-panel-documents" role="region" aria-labelledby="prj-tab-documents" hidden={activeTab !== "documents"} className="space-y-4">
               {/* Document gate status messages — shown when not in mutable (draft) mode */}
               {docGate === "operational" && (
                 <Alert status="warning" role="note">
@@ -2993,7 +2969,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             </section>
 
             {/* ── Panel 7: Review ── */}
-            <section id="prj-panel-review" role="tabpanel" aria-labelledby="prj-tab-review" hidden={activeTab !== "review"} className="space-y-4">
+            <section id="prj-panel-review" role="region" aria-labelledby="prj-tab-review" hidden={activeTab !== "review"} className="space-y-4">
               <SectionHeading title={t("form.review.reviewSummarySection")} />
               <div className="rounded-lg border bg-muted/20 p-4 space-y-4 text-sm">
                 <div>
@@ -3055,72 +3031,54 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             </section>
 
         </div>
-            {/* ── Persistent footer ── */}
+            {/* ── Persistent footer — one row on every width, as in the report form:
+                Cancel on the first step (Previous afterwards; the dialog's close
+                button still cancels), then Save As Draft and Continue / Create. ── */}
             <div className="shrink-0 border-t border-[var(--border)] bg-[var(--overlay)]">
-              <div className="px-6 py-3">
-                {/* Mobile: stacked (col-reverse keeps primary action at top); Desktop: single row */}
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-
-                  {/* Left: Cancel */}
+              <div className="flex items-center justify-between gap-2 px-6 py-3">
+                {activeTabIndex > 0 ? (
                   <Button
                     variant="secondary"
-                    onPress={onClose}
-                    isDisabled={isActioning}
-                    className="w-full sm:w-auto"
+                    onPress={goToPrevTab}
+                    isDisabled={isActioning || !stateReference.isReady}
                   >
+                    {t("form.buttons.previous")}
+                  </Button>
+                ) : (
+                  <Button variant="secondary" onPress={onClose} isDisabled={isActioning}>
                     {t("form.buttons.cancel")}
                   </Button>
+                )}
 
-                  {/* Right: Save As Draft | Previous | Continue / Create Project */}
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    isDisabled={!isSavingDraft && (isActioning || !stateReference.isReady)}
+                    isPending={isSavingDraft}
+                    onPress={handleSaveAsDraft}
+                    className="whitespace-nowrap"
+                  >
+                    {isSavingDraft && <Spinner size="sm" color="current" />}
+                    {isSavingDraft ? t("form.buttons.saving") : t("form.buttons.saveAsDraft")}
+                  </Button>
 
-                    {/* Save As Draft — always visible, secondary outlined */}
-                    <Button
-                      variant="outline"
-                      isDisabled={!isSavingDraft && (isActioning || !stateReference.isReady)}
-                      isPending={isSavingDraft}
-                      onPress={handleSaveAsDraft}
-                      className="w-full sm:w-auto"
-                    >
-                      {isSavingDraft && <Spinner size="sm" color="current" />}
-                      {isSavingDraft ? t("form.buttons.saving") : t("form.buttons.saveAsDraft")}
+                  {activeTabIndex < TABS.length - 1 ? (
+                    <Button onPress={goToNextTab} isDisabled={isSavingDraft} className="whitespace-nowrap">
+                      {t("form.buttons.continue")}
                     </Button>
-
-                    {/* Previous — only when not on first tab */}
-                    {activeTabIndex > 0 && (
-                      <Button
-                        variant="ghost"
-                        onPress={goToPrevTab}
-                        isDisabled={isActioning || !stateReference.isReady}
-                        className="w-full sm:w-auto"
-                      >
-                        {t("form.buttons.previous")}
-                      </Button>
-                    )}
-
-                    {/* Continue (all tabs except last) or Create Project / Save changes (last tab) */}
-                    {activeTabIndex < TABS.length - 1 ? (
-                      <Button
-                        onPress={goToNextTab}
-                        isDisabled={isSavingDraft}
-                        className="w-full sm:w-auto"
-                      >
-                        {t("form.buttons.continue")}
-                      </Button>
-                    ) : (
-                      <Button
-                        type="submit"
-                        isDisabled={!(createProject.isPending || patchProject.isPending) && (isActioning || !stateReference.isReady)}
-                        isPending={createProject.isPending || patchProject.isPending}
-                        className="w-full sm:w-auto"
-                      >
-                        {(createProject.isPending || patchProject.isPending) && <Spinner size="sm" color="current" />}
-                        {(createProject.isPending || patchProject.isPending)
-                          ? t("form.buttons.saving")
-                          : editProjectId ? t("form.buttons.saveChanges") : t("form.buttons.createProject")}
-                      </Button>
-                    )}
-                  </div>
+                  ) : (
+                    <Button
+                      type="submit"
+                      isDisabled={!(createProject.isPending || patchProject.isPending) && (isActioning || !stateReference.isReady)}
+                      isPending={createProject.isPending || patchProject.isPending}
+                      className="whitespace-nowrap"
+                    >
+                      {(createProject.isPending || patchProject.isPending) && <Spinner size="sm" color="current" />}
+                      {(createProject.isPending || patchProject.isPending)
+                        ? t("form.buttons.saving")
+                        : editProjectId ? t("form.buttons.saveChanges") : t("form.buttons.createProject")}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>

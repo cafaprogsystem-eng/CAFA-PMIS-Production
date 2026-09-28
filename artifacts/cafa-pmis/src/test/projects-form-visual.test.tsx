@@ -488,6 +488,11 @@ function renderCreateForm() {
   return render(<ProjectRegistrationForm open onClose={vi.fn()} />);
 }
 
+/** The form's steps: buttons inside the Pro Stepper list ("Form sections"). */
+function getSteps() {
+  return within(screen.getByRole("list", { name: "Form sections" })).getAllByRole("button");
+}
+
 function renderEditDialog(open = true) {
   return render(<EditProjectDialog projectId={1} open={open} onClose={vi.fn()} />);
 }
@@ -498,10 +503,8 @@ function renderEditDialog(open = true) {
 describe("PRJ-FORM-VIS-01 — Register mode vs Edit mode headings differ", () => {
   it("Create mode page is rendered from projects.tsx with 'Register Project' heading context (form itself shows tab nav)", () => {
     renderCreateForm();
-    // The form renders the tab nav, not a heading inside itself for create mode
-    // The tab nav is present
-    const tablist = screen.getByRole("tablist");
-    expect(tablist).toBeInTheDocument();
+    // The form renders its step navigation (Pro Stepper), not a heading inside itself
+    expect(screen.getByRole("list", { name: "Form sections" })).toBeInTheDocument();
   });
 
   it("Edit dialog has 'Edit Project' as the dialog title", () => {
@@ -525,52 +528,48 @@ describe("PRJ-FORM-VIS-01 — Register mode vs Edit mode headings differ", () =>
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PRJ-FORM-VIS-02: 7 tab buttons with role="tab" and aria-selected; keyboard
+// PRJ-FORM-VIS-02: 7 steps in a HeroUI Pro Stepper (as in the report form)
 // ═════════════════════════════════════════════════════════════════════════════
-describe("PRJ-FORM-VIS-02 — 7 tab navigation buttons accessible", () => {
-  it("renders exactly 7 tab buttons", () => {
-    renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
-    expect(tabs).toHaveLength(7);
+describe("PRJ-FORM-VIS-02 — 7 step navigation buttons accessible", () => {
+  it("renders exactly 7 step buttons in one stepper", () => {
+    const { container } = renderCreateForm();
+    expect(getSteps()).toHaveLength(7);
+    expect(container.querySelectorAll(".stepper")).toHaveLength(1);
   });
 
-  it("all tabs have aria-selected attribute", () => {
+  it("exactly one step is marked as the current step", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
-    tabs.forEach(tab => {
-      expect(tab).toHaveAttribute("aria-selected");
+    const list = screen.getByRole("list", { name: "Form sections" });
+    expect(list.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
+  });
+
+  it("first step (Basic) is current by default", () => {
+    renderCreateForm();
+    const steps = getSteps();
+    expect(steps[0]).toHaveAttribute("aria-current", "step");
+    expect(steps[1]).not.toHaveAttribute("aria-current");
+  });
+
+  it("clicking the second step makes it current and shows its section", () => {
+    renderCreateForm();
+    fireEvent.click(getSteps()[1]);
+    const steps = getSteps();
+    expect(steps[1]).toHaveAttribute("aria-current", "step");
+    expect(steps[0]).not.toHaveAttribute("aria-current");
+    expect(document.getElementById("prj-panel-location")).not.toHaveAttribute("hidden");
+    expect(document.getElementById("prj-panel-basic")).toHaveAttribute("hidden");
+  });
+
+  it("all step buttons have type='button' (never submit the form)", () => {
+    renderCreateForm();
+    getSteps().forEach(step => {
+      expect(step).toHaveAttribute("type", "button");
     });
   });
 
-  it("first tab (Basic) is selected by default", () => {
+  it("stepper has an accessible name", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
-    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-    // Others are not selected
-    expect(tabs[1]).toHaveAttribute("aria-selected", "false");
-  });
-
-  it("pressing ArrowRight on the first tab advances to the second tab", () => {
-    renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
-    fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
-    // After ArrowRight, second tab should be active (aria-selected=true)
-    const updatedTabs = screen.getAllByRole("tab");
-    expect(updatedTabs[1]).toHaveAttribute("aria-selected", "true");
-  });
-
-  it("all tab buttons have type='button'", () => {
-    renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
-    tabs.forEach(tab => {
-      expect(tab).toHaveAttribute("type", "button");
-    });
-  });
-
-  it("tablist has aria-label", () => {
-    renderCreateForm();
-    const tablist = screen.getByRole("tablist");
-    expect(tablist).toHaveAttribute("aria-label");
+    expect(screen.getByRole("list", { name: "Form sections" })).toHaveAttribute("aria-label");
   });
 });
 
@@ -632,7 +631,7 @@ describe("PRJ-FORM-VIS-05 — Submit/final action button is primary and accessib
   it("on the last tab (Review), Create Project button appears as submit", () => {
     renderCreateForm();
     // Navigate to last tab (Review)
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[6]); // Review tab
     // Create Project button should be present (type=submit)
     const createBtn = screen.getByRole("button", { name: /create project/i });
@@ -641,7 +640,7 @@ describe("PRJ-FORM-VIS-05 — Submit/final action button is primary and accessib
 
   it("Create Project button is not pending while idle", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[6]);
     const createBtn = screen.getByRole("button", { name: /create project/i });
     // Pending would show data-pending and swap type=submit to type=button.
@@ -664,7 +663,7 @@ describe("PRJ-FORM-VIS-06 — Activity Recorded Expenditure is read-only text", 
   it("in edit mode with spend data, the recorded expenditure text is visible", () => {
     renderEditDialog();
     // Navigate to Timeline tab
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]); // Timeline tab
     // Recorded expenditure is shown as a read-only notice
     expect(screen.getByText(/recorded expenditure/i)).toBeInTheDocument();
@@ -672,7 +671,7 @@ describe("PRJ-FORM-VIS-06 — Activity Recorded Expenditure is read-only text", 
 
   it("recorded expenditure value is not in an editable input", () => {
     renderEditDialog();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]);
     // The spend value is rendered as text, not as an editable input
     const readOnlySpend = screen.getByText(/recorded expenditure/i);
@@ -682,7 +681,7 @@ describe("PRJ-FORM-VIS-06 — Activity Recorded Expenditure is read-only text", 
 
   it("recorded expenditure note says it cannot be edited", () => {
     renderEditDialog();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]);
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
   });
@@ -700,7 +699,7 @@ describe("PRJ-FORM-VIS-07 — Financed activity removal dialog has correct butto
   it("clicking Remove on an activity with recorded expenditure opens the confirmation dialog", () => {
     renderEditDialog();
     // Navigate to Timeline tab where the activity with budgetSpent=12500 lives
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]); // Timeline tab
 
     // The activity card is expanded by default; find the remove-activity button
@@ -716,7 +715,7 @@ describe("PRJ-FORM-VIS-07 — Financed activity removal dialog has correct butto
 
   it("dialog shows 'Keep Activity' (safe) and 'Remove Activity' (destructive) buttons", () => {
     renderEditDialog();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]);
     const removeBtns = screen.getAllByRole("button", { name: /remove activity/i });
     fireEvent.click(removeBtns[0]);
@@ -733,7 +732,7 @@ describe("PRJ-FORM-VIS-07 — Financed activity removal dialog has correct butto
 
   it("dialog title warns about recorded expenditure (not a generic delete prompt)", () => {
     renderEditDialog();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]);
     const removeBtns = screen.getAllByRole("button", { name: /remove activity/i });
     fireEvent.click(removeBtns[0]);
@@ -752,7 +751,7 @@ describe("PRJ-FORM-VIS-07 — Financed activity removal dialog has correct butto
 describe("PRJ-FORM-VIS-08 — Documents tab three upload areas and lock notice", () => {
   it("Documents tab is reachable via tab navigation (7th tab = index 5)", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     // Documents tab is the 6th tab (index 5)
     expect(tabs[5]).toHaveTextContent(/documents/i);
   });
@@ -762,12 +761,13 @@ describe("PRJ-FORM-VIS-08 — Documents tab three upload areas and lock notice",
     // The Documents panel exists in the DOM (hidden when not active)
     const panel = document.getElementById("prj-panel-documents");
     expect(panel).not.toBeNull();
-    expect(panel?.getAttribute("role")).toBe("tabpanel");
+    expect(panel?.getAttribute("role")).toBe("region");
+    expect(panel?.getAttribute("aria-labelledby")).toBe("prj-tab-documents");
   });
 
   it("Three document category Cards render in the Documents panel", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[5]); // Navigate to Documents tab
     // i18n mock returns: "Agreement document", "Budget document", "Supporting documents"
     expect(screen.getByText("Agreement document")).toBeInTheDocument();
@@ -777,7 +777,7 @@ describe("PRJ-FORM-VIS-08 — Documents tab three upload areas and lock notice",
 
   it("documents required note renders in Documents panel", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[5]);
     // i18n mock returns "Agreement and budget documents are required."
     expect(screen.getByText("Agreement and budget documents are required.")).toBeInTheDocument();
@@ -785,14 +785,14 @@ describe("PRJ-FORM-VIS-08 — Documents tab three upload areas and lock notice",
 
   it("voice recorder renders in Documents panel", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[5]);
     expect(screen.getByTestId("voice-recorder")).toBeInTheDocument();
   });
 
   it("in create mode (draft/mutable), no document lock notice appears", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[5]);
     // Lock notices contain "Documents are locked" — should not appear in create mode
     expect(screen.queryByText(/documents are locked/i)).not.toBeInTheDocument();
@@ -811,12 +811,9 @@ describe("PRJ-FORM-VIS-09 — Sector/state checkbox grid scroll containment", ()
   });
 
   it("state checkbox grid has max-h-60 overflow-y-auto for scroll containment", () => {
-    renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
-    fireEvent.click(tabs[1]); // Location tab
-    // Find the scrollable state grid
     const { container } = renderCreateForm();
-    fireEvent.click(screen.getAllByRole("tab")[1]);
+    fireEvent.click(getSteps()[1]); // Location step
+    // Find the scrollable state grid
     const stateGrid = container.querySelector(".max-h-60.overflow-y-auto");
     expect(stateGrid).toBeTruthy();
   });
@@ -849,77 +846,77 @@ describe("Section headings — each tab panel renders its SectionHeading", () =>
 
   it("Location tab: 'Operational locations' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[1]);
     expect(screen.getByRole("heading", { name: "Operational locations" })).toBeInTheDocument();
   });
 
   it("Location tab: 'Target beneficiaries' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[1]);
     expect(screen.getByRole("heading", { name: "Target beneficiaries" })).toBeInTheDocument();
   });
 
   it("Donor tab: 'Donor information' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[2]);
     expect(screen.getByRole("heading", { name: "Donor information" })).toBeInTheDocument();
   });
 
   it("Donor tab: 'Agreement details' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[2]);
     expect(screen.getByRole("heading", { name: "Agreement details" })).toBeInTheDocument();
   });
 
   it("Timeline tab: 'Implementation period' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]);
     expect(screen.getByRole("heading", { name: "Implementation period" })).toBeInTheDocument();
   });
 
   it("Timeline tab: 'Funding' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]);
     expect(screen.getByRole("heading", { name: "Funding" })).toBeInTheDocument();
   });
 
   it("Timeline tab: 'Results framework' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[3]);
     expect(screen.getByRole("heading", { name: "Results framework" })).toBeInTheDocument();
   });
 
   it("Team tab: 'Project team' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[4]);
     expect(screen.getByRole("heading", { name: "Project team" })).toBeInTheDocument();
   });
 
   it("Documents tab: 'Project documents' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[5]);
     expect(screen.getByRole("heading", { name: "Project documents" })).toBeInTheDocument();
   });
 
   it("Documents tab: 'Voice note' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[5]);
     expect(screen.getByRole("heading", { name: "Voice note" })).toBeInTheDocument();
   });
 
   it("Review tab: 'Review & submit' h3 section heading", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     fireEvent.click(tabs[6]);
     expect(screen.getByRole("heading", { name: "Review & submit" })).toBeInTheDocument();
   });
@@ -939,7 +936,7 @@ describe("PRJ-FORM-VIS-10 — Zero-residual functional contract unchanged", () =
 
   it("tab navigation still works after visual changes", () => {
     renderCreateForm();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = getSteps();
     // Click through all tabs
     tabs.forEach(tab => {
       expect(() => fireEvent.click(tab)).not.toThrow();
@@ -974,8 +971,8 @@ describe("PRJ-FORM-VIS-10 — Zero-residual functional contract unchanged", () =
     const srText = container.querySelector(".sr-only");
     expect(srText).not.toBeNull();
     expect(srText?.textContent).toContain("Loading project data");
-    // The tab nav shows skeleton placeholders, not real tab buttons
-    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    // The step nav shows skeleton placeholders, not the real stepper
+    expect(screen.queryByRole("list", { name: "Form sections" })).not.toBeInTheDocument();
     // Skeleton elements are present
     const skeletons = container.querySelectorAll(".skeleton");
     expect(skeletons.length).toBeGreaterThan(0);
