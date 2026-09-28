@@ -552,6 +552,9 @@ export default function PlanDetailPage({
   // Approval lock: derived from current plan status — backend is the authoritative gate.
   const isApprovalLocked = !isNew && !!existing && POST_APPROVAL_LOCKED_STATUSES.has(existing.status ?? "");
   const isReopenable = !isNew && !!existing && REOPENABLE_STATUSES.has(existing.status ?? "");
+  // HQ (national-level) plans have no State and may have no Localities; their
+  // activities may have no Locality either (the API applies the same rules).
+  const isHqPlan = !!existing && existing.locationType === "hq";
 
   // Existing plans start in view mode. Edit mode is requested via ?edit=1 param (spec §23).
   // isNew always redirects to /plans, so we never initialise edit mode from it.
@@ -726,7 +729,7 @@ export default function PlanDetailPage({
     const errs: Record<string, string> = {};
     if (!form.title.trim()) errs.title = t("detail.planTitleRequired");
     if (!form.planType) errs.planType = t("detail.planTypeRequired");
-    if (!form.stateId) errs.stateId = t("detail.stateRequired");
+    if (!form.stateId && !isHqPlan) errs.stateId = t("detail.stateRequired");
     if (form.sectors.length === 0) errs.sectors = t("detail.sectorsRequired");
     if (!form.responsibleName.trim()) errs.responsibleName = t("detail.responsibleRequired");
     if (!form.startDate) errs.startDate = t("detail.startDateRequired");
@@ -740,7 +743,7 @@ export default function PlanDetailPage({
   function validate(forSubmit = false): string | null {
     if (!form.title.trim()) return t("validation.titleRequired");
     if (!form.planType) return t("validation.typeRequired");
-    if (!form.stateId) return t("validation.stateRequired");
+    if (!form.stateId && !isHqPlan) return t("validation.stateRequired");
     if (form.sectors.length === 0) return t("validation.sectorRequired");
     if (!form.responsibleName.trim()) return t("validation.responsibleRequired");
     if (!form.startDate || !form.endDate) return t("validation.datesRequired");
@@ -749,7 +752,7 @@ export default function PlanDetailPage({
       const a = form.activities[i];
       const n = i + 1;
       if (!a.title.trim()) return t("validation.activityTitleRequired", { num: n });
-      if (!a.localityName.trim()) return t("validation.activityLocalityRequired", { num: n });
+      if (!a.localityName.trim() && !isHqPlan) return t("validation.activityLocalityRequired", { num: n });
       if (!a.plannedDate) return t("validation.activityDateRequired", { num: n });
       if (form.startDate && a.plannedDate < form.startDate) return t("validation.activityDateOutside", { num: n });
       if (form.endDate && a.plannedDate > form.endDate) return t("validation.activityDateOutside", { num: n });
@@ -768,8 +771,11 @@ export default function PlanDetailPage({
     setEditFieldErrors(fieldErrs);
     const err = validate(false);
     if (err) { toast.error(err); return; }
+    const { stateId, ...formRest } = form;
     const payload = {
-      ...form,
+      ...formRest,
+      // HQ plans have no State; sending stateId: null would be rejected as invalid_state.
+      ...(isHqPlan ? {} : { stateId }),
       // map activities back to API shape
       activities: form.activities.map((a) => ({
         ...a,
@@ -1257,6 +1263,12 @@ export default function PlanDetailPage({
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-4">
+                    {isHqPlan ? (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-medium">{t("fields.state")}</span>
+                        <p className="py-2 text-sm">{formatLocation({ locationType: "hq" }, i18n?.language)}</p>
+                      </div>
+                    ) : (
                     <div>
                       <SelectField
                         label={<>{t("fields.state")} <span className="text-[var(--danger)]">*</span></>}
@@ -1267,6 +1279,7 @@ export default function PlanDetailPage({
                       />
                       {editFieldErrors.stateId && <p id="edit-err-state" role="alert" className="text-xs text-destructive mt-1">{editFieldErrors.stateId}</p>}
                     </div>
+                    )}
                     <div>
                       <Label htmlFor="pf-7">{t("detail.responsiblePerson")} <span className="text-destructive">*</span></Label>
                       <Input id="pf-7" fullWidth dir="auto"
@@ -1515,7 +1528,7 @@ export default function PlanDetailPage({
                         />
                       </div>
                       <div>
-                        <Label className="text-sm">{t("activity.locality")} <span className="text-destructive">*</span></Label>
+                        <Label className="text-sm" isRequired={!isHqPlan}>{t("activity.locality")}</Label>
                         <ActivityLocalityInput
                           value={a.localityName}
                           onChange={(v) => updateActivity(idx, { localityName: v })}

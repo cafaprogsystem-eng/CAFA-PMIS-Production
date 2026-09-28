@@ -610,7 +610,9 @@
     "suggestionsHint": "Suggestions must be explicitly added before they count as Plan coverage.",
     "duplicateHardHint": "Please continue editing the existing Plan rather than creating a duplicate.",
     "duplicateSoftHint": "Review the existing Plan before creating another one. You may continue if this is intentional.",
-    "planRef": "(Plan #{{id}})"
+    "planRef": "(Plan #{{id}})",
+    "geoCoverageHqOptional": "Optional for HQ plans, which cover the whole country. Add localities only if the plan targets specific ones.",
+    "localityHqOptional": "Optional for HQ plans. To pick a locality, add it under Geographical Coverage first."
   },
   "statesPage": {
     "heading": "States",

@@ -214,16 +214,23 @@ function validateFinishFields(form: PlanDetailsForm): DetailsErrors {
  * Returns true when an Activity satisfies all fields required for a completed
  * Plan Registration.  Responsible person is intentionally optional.
  * State is inherited from the Plan and is NOT a per-activity required field.
+ * HQ (national-level) Plans: the Locality is optional; one that is given must
+ * still belong to the Plan's coverage when the Plan lists any (mirrors the API).
  */
 function isActivityComplete(
   a: ActivityForm,
   planStartDate: string,
   planEndDate: string,
   planLocalities: string[],
+  isHqPlan = false,
 ): boolean {
   if (!a.title.trim()) return false;
   // Locality must be non-empty and belong to the Plan's approved coverage
-  if (!a.localityName || !planLocalities.includes(a.localityName)) return false;
+  if (!a.localityName) {
+    if (!isHqPlan) return false;
+  } else if ((!isHqPlan || planLocalities.length > 0) && !planLocalities.includes(a.localityName)) {
+    return false;
+  }
   if (!a.plannedDate) return false;
   if (planStartDate && a.plannedDate < planStartDate) return false;
   if (planEndDate && a.plannedDate > planEndDate) return false;
@@ -266,8 +273,10 @@ function findSimilar(input: string, suggestions: string[]): string | null {
 
 /** Free-text locality tag input with smart-match suggestions. */
 function LocalityTagInput({
-  localities, onChange, onAttemptRemove, suggestions = [],
+  localities, onChange, onAttemptRemove, suggestions = [], isOptional = false,
 }: {
+  /** HQ Plans: coverage is optional, so the empty state doesn't ask for a Locality. */
+  isOptional?: boolean;
   localities: string[];
   onChange: (v: string[]) => void;
   /** Called when user clicks the X on a chip — parent handles confirmation */
@@ -345,7 +354,7 @@ function LocalityTagInput({
       ) : (
         <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-4 text-center">
           <p className="text-sm font-medium text-[var(--foreground)]">{t("createDialog.noLocalitiesTitle")}</p>
-          <p className="mt-0.5 text-xs text-[var(--muted)]">{t("createDialog.noLocalitiesDesc")}</p>
+          {!isOptional && <p className="mt-0.5 text-xs text-[var(--muted)]">{t("createDialog.noLocalitiesDesc")}</p>}
         </div>
       )}
     </div>
@@ -358,9 +367,11 @@ function LocalityTagInput({
  * message with a shortcut to Tab 3 instead of a broken empty select.
  */
 function ActivityLocalitySelect({
-  id, value, onChange, localities, onGoToGeography,
+  id, value, onChange, localities, onGoToGeography, isOptional = false,
 }: {
   id: string;
+  /** HQ Plans: the Locality is optional. */
+  isOptional?: boolean;
   value: string;
   onChange: (v: string) => void;
   /** The Plan's approved locality list from Tab 3 */
@@ -371,9 +382,11 @@ function ActivityLocalitySelect({
   if (localities.length === 0) {
     return (
       <div className="space-y-1.5">
-        <Label isRequired className="text-sm">{t("createDialog.localityLabel")}</Label>
+        <Label isRequired={!isOptional} className="text-sm">{t("createDialog.localityLabel")}</Label>
         <div className="space-y-1.5 rounded-xl border border-dashed border-[var(--border)] px-3 py-2">
-          <p className="text-xs leading-snug text-[var(--muted)]">{t("createDialog.localityDepMessage")}</p>
+          <p className="text-xs leading-snug text-[var(--muted)]">
+            {isOptional ? t("createDialog.localityHqOptional") : t("createDialog.localityDepMessage")}
+          </p>
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onPress={onGoToGeography}>
             {t("createDialog.goToGeoCoverage")}
           </Button>
@@ -385,7 +398,7 @@ function ActivityLocalitySelect({
     <SelectField
       id={id}
       label={t("createDialog.localityLabel")}
-      isRequired
+      isRequired={!isOptional}
       value={value || "__none__"}
       onChange={(v) => onChange(v === "__none__" ? "" : v)}
       placeholder={t("createDialog.selectLocality")}
@@ -922,14 +935,17 @@ export function CreatePlanRegistrationDialog({
     : (attemptedSave ? validateDraftFields(planDetails) : {});
   const hasDetailErrors = Object.keys(detailErrors).length > 0;
 
+  // HQ (national-level) Plans cover the whole country: Geographical Coverage
+  // and Activity Localities are optional for them (the API applies the same rule).
+  const isHqPlan = planDetails.stateId === "__HQ__";
   // Geographical Coverage error — only flagged after a Save & Finish attempt.
   // Save As Draft is explicitly excluded from this requirement.
-  const hasGeographyError = saveFinishAttempted && localities.length === 0;
+  const hasGeographyError = saveFinishAttempted && localities.length === 0 && !isHqPlan;
   // Activities error — only flagged after Save & Finish attempt.
   const hasActivityError = saveFinishAttempted && (
     activities.length === 0 ||
     !activities.some((a) =>
-      isActivityComplete(a, planDetails.startDate, planDetails.endDate, localities)
+      isActivityComplete(a, planDetails.startDate, planDetails.endDate, localities, isHqPlan)
     )
   );
   // Budget derived values — always kept in sync with the live activities state.
@@ -1232,15 +1248,15 @@ export function CreatePlanRegistrationDialog({
       ? validateFinishFields(planDetails)
       : validateDraftFields(planDetails);
     if (Object.keys(errors).length > 0) return false;
-    // Save & Finish also requires at least one Locality in Geographical Coverage.
-    // Save As Draft does NOT require any Localities.
-    if (requireDescription && localities.length === 0) return false;
+    // Save & Finish also requires at least one Locality in Geographical Coverage,
+    // except for HQ Plans. Save As Draft does NOT require any Localities.
+    if (requireDescription && localities.length === 0 && !isHqPlan) return false;
     // Save & Finish requires at least one complete Activity.
     // Save As Draft is permissive — zero or incomplete Activities are fine.
     if (requireDescription) {
       if (activities.length === 0) return false;
       const hasComplete = activities.some((a) =>
-        isActivityComplete(a, planDetails.startDate, planDetails.endDate, localities)
+        isActivityComplete(a, planDetails.startDate, planDetails.endDate, localities, isHqPlan)
       );
       if (!hasComplete) return false;
     }
@@ -1423,7 +1439,6 @@ export function CreatePlanRegistrationDialog({
 
   const isPending = createMutation.isPending || updateMutation.isPending;
   const activeTab = TABS[activeTabIndex];
-  const isHqPlan = planDetails.stateId === "__HQ__";
   const currentState = states?.find((s) => String(s.id) === planDetails.stateId);
   // HQ plans have no State but still record the localities they cover, so the
   // coverage step must open for them too (it used to ask for a State forever).
@@ -1889,11 +1904,13 @@ export function CreatePlanRegistrationDialog({
                     <div>
                       <h3 className="mb-0.5 text-sm font-semibold">
                         {t("createDialog.geoCoverageHeading")}{" "}
-                        <span className="text-[var(--danger)]" aria-label={t("createDialog.geoCoverageRequired")}>*</span>
+                        {!isHqPlan && <span className="text-[var(--danger)]" aria-label={t("createDialog.geoCoverageRequired")}>*</span>}
                       </h3>
                       {currentStateName ? (
                         <>
-                          <p className="mb-3 text-xs text-[var(--muted)]">{t("createDialog.addAtLeastOneLocality")}</p>
+                          <p className="mb-3 text-xs text-[var(--muted)]">
+                            {isHqPlan ? t("createDialog.geoCoverageHqOptional") : t("createDialog.addAtLeastOneLocality")}
+                          </p>
                           <div className="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--default)] px-2.5 py-1">
                             <span className="text-xs text-[var(--muted)]">{t("createDialog.stateContextLabel")}</span>
                             <span className="text-xs font-medium">{currentStateName}</span>
@@ -1909,6 +1926,7 @@ export function CreatePlanRegistrationDialog({
                           )}
 
                           <LocalityTagInput
+                            isOptional={isHqPlan}
                             localities={localities}
                             onChange={(v) => { markDirty(); setLocalities(v); }}
                             onAttemptRemove={handleAttemptRemoveLocality}
@@ -2054,6 +2072,7 @@ export function CreatePlanRegistrationDialog({
                               </div>
                               <ActivityLocalitySelect
                                 id={`activity-locality-${idx}`}
+                                isOptional={isHqPlan}
                                 value={a.localityName}
                                 onChange={(v) => updateActivity(idx, { localityName: v })}
                                 localities={localities}

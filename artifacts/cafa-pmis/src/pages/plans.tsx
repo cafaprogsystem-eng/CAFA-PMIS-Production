@@ -666,6 +666,7 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
           actions:
             (canEditDrafts && p.status === "draft") || canDelete ? (
               <div className="flex items-center gap-1">
+                {/* Continue Editing — draft plans in the card / kanban / calendar views */}
                 {canEditDrafts && p.status === "draft" && (
                   <ContinueEditingAction
                     recordTitle={p.title}
@@ -760,6 +761,7 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
             <span className="truncate font-mono text-xs text-[var(--muted)]" title={p.code ?? undefined}><bdi dir="ltr">{p.code ?? "—"}</bdi></span>
             <AttachmentCountBadge module="plans" recordId={p.id} />
           </div>
+          {/* Continue Editing — draft plans in the table */}
           {canEditDrafts && p.status === "draft" && (
             <div className="mt-1"><ContinueEditingAction recordTitle={p.title} onClick={() => continueEdit(p.id)} /></div>
           )}
