@@ -26,6 +26,7 @@ import {
   Alert, Button, Card, Chip, ComboBox, Input, Label, ListBox, Modal, Radio, RadioGroup, Spinner, TextArea, Tooltip,
 } from "@heroui/react";
 import { Stepper } from "@heroui-pro/react/stepper";
+import { FormStepIndicator } from "@/components/form-step-indicator";
 import { SelectField } from "@/components/select-field";
 import { CheckItem, DateInput, RemovableTags } from "@/components/form-controls";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -1473,7 +1474,7 @@ export function CreatePlanRegistrationDialog({
                   >
                     {TABS.map((tab, i) => (
                       <Stepper.Step key={tab.id} id={`plan-tab-${tab.id}`}>
-                        <Stepper.Indicator />
+                        <FormStepIndicator hasError={stepErrors[i]} />
                         <Stepper.Content>
                           <Stepper.Title>{t(`createDialog.tab_${tab.id}`)}</Stepper.Title>
                           {stepErrors[i] && (

@@ -33,6 +33,7 @@ import {
   useFormField,
 } from "@/components/ui/form";
 import { Stepper } from "@heroui-pro/react/stepper";
+import { FormStepIndicator } from "@/components/form-step-indicator";
 import { CheckItem, FormDate, FormInput, FormSelect, FormTextArea, RemovableTags } from "@/components/form-controls";
 import { SelectField } from "@/components/select-field";
 import { useToast } from "@/hooks/use-toast";
@@ -2328,7 +2329,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             >
               {TABS.map((tab, idx) => (
                 <Stepper.Step key={tab.id} id={`prj-tab-${tab.id}`} data-section={tab.id}>
-                  <Stepper.Indicator />
+                  <FormStepIndicator hasError={tabsWithErrors[idx]?.hasError} />
                   <Stepper.Content>
                     <Stepper.Title>{t(tab.labelKey)}</Stepper.Title>
                     {tabsWithErrors[idx]?.hasError && (

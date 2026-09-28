@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Segment } from "@heroui-pro/react/segment";
 import { Stepper } from "@heroui-pro/react/stepper";
+import { FormStepIndicator } from "@/components/form-step-indicator";
 import { useLocationContext } from "@/contexts/location-context";
 import {
   validateActivityForSubmission,
@@ -3824,7 +3825,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         const errCount = tabErrors[id] ?? 0;
                         return (
                           <Stepper.Step key={id} id={`tab-${id}`} data-section={id}>
-                            <Stepper.Indicator />
+                            <FormStepIndicator hasError={errCount > 0} />
                             <Stepper.Content>
                               <Stepper.Title>{t(labelKey)}</Stepper.Title>
                               {errCount > 0 && (
