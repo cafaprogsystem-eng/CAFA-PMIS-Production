@@ -589,7 +589,9 @@
     "progressPlannedDelayed": "يجب أن يكون تقدم الأنشطة المخططة أو المتأخرة بين 0% و99%.",
     "progressCancelled": "يجب أن يكون التقدم بين 0% و100%.",
     "activityProgressError": "النشاط {{num}} (\"{{title}}\"): {{message}}",
-    "untitledActivity": "بدون عنوان"
+    "untitledActivity": "بدون عنوان",
+    "geoCoverageHqOptional": "اختياري لخطط المقر الرئيسي لأنها تغطي الدولة كلها. أضف محليات فقط إذا كانت الخطة تستهدف محليات بعينها.",
+    "localityHqOptional": "اختياري لخطط المقر الرئيسي. لاختيار محلية، أضفها أولًا في النطاق الجغرافي."
   },
   "statesPage": {
     "heading": "الولايات",

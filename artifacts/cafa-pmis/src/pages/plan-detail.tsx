@@ -544,6 +544,9 @@ export default function PlanDetailPage({
   // Approval lock: derived from current plan status — backend is the authoritative gate.
   const isApprovalLocked = !isNew && !!existing && POST_APPROVAL_LOCKED_STATUSES.has(existing.status ?? "");
   const isReopenable = !isNew && !!existing && REOPENABLE_STATUSES.has(existing.status ?? "");
+  // HQ (national-level) plans have no State and may have no Localities; their
+  // activities may have no Locality either (the API applies the same rules).
+  const isHqPlan = !!existing && existing.locationType === "hq";
 
   // Existing plans start in view mode. Edit mode is requested via ?edit=1 param (spec §23).
   // isNew always redirects to /plans, so we never initialise edit mode from it.
@@ -714,7 +717,7 @@ export default function PlanDetailPage({
     const errs: Record<string, string> = {};
     if (!form.title.trim()) errs.title = t("detail.planTitleRequired");
     if (!form.planType) errs.planType = t("detail.planTypeRequired");
-    if (!form.stateId) errs.stateId = t("detail.stateRequired");
+    if (!form.stateId && !isHqPlan) errs.stateId = t("detail.stateRequired");
     if (form.sectors.length === 0) errs.sectors = t("detail.sectorsRequired");
     if (!form.responsibleName.trim()) errs.responsibleName = t("detail.responsibleRequired");
     if (!form.startDate) errs.startDate = t("detail.startDateRequired");
@@ -728,7 +731,7 @@ export default function PlanDetailPage({
   function validate(forSubmit = false): string | null {
     if (!form.title.trim()) return "Plan Title is required";
     if (!form.planType) return "Plan Type is required";
-    if (!form.stateId) return "State is required";
+    if (!form.stateId && !isHqPlan) return "State is required";
     if (form.sectors.length === 0) return "At least one Sector is required";
     if (!form.responsibleName.trim()) return "Responsible Person is required";
     if (!form.startDate || !form.endDate) return "Start and End Dates are required";
@@ -736,7 +739,7 @@ export default function PlanDetailPage({
     for (let i = 0; i < form.activities.length; i++) {
       const a = form.activities[i];
       if (!a.title.trim()) return `Activity #${i + 1}: Title is required`;
-      if (!a.localityName.trim()) return `Activity #${i + 1}: Locality is required`;
+      if (!a.localityName.trim() && !isHqPlan) return `Activity #${i + 1}: Locality is required`;
       if (!a.plannedDate) return `Activity #${i + 1}: Planned Date is required`;
       if (form.startDate && a.plannedDate < form.startDate) return `Activity #${i + 1}: Planned Date must be within the plan schedule`;
       if (form.endDate && a.plannedDate > form.endDate) return `Activity #${i + 1}: Planned Date must be within the plan schedule`;
@@ -755,8 +758,11 @@ export default function PlanDetailPage({
     setEditFieldErrors(fieldErrs);
     const err = validate(false);
     if (err) { toast.error(err); return; }
+    const { stateId, ...formRest } = form;
     const payload = {
-      ...form,
+      ...formRest,
+      // HQ plans have no State; sending stateId: null would be rejected as invalid_state.
+      ...(isHqPlan ? {} : { stateId }),
       // map activities back to API shape
       activities: form.activities.map((a) => ({
         ...a,
@@ -1250,6 +1256,12 @@ export default function PlanDetailPage({
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-4">
+                    {isHqPlan ? (
+                      <div>
+                        <Label>{t("fields.state")}</Label>
+                        <p className="py-2 text-sm">{formatLocation({ locationType: "hq" }, i18n?.language)}</p>
+                      </div>
+                    ) : (
                     <div>
                       <Label>{t("fields.state")} <span className="text-destructive">*</span></Label>
                       <Select value={form.stateId ? String(form.stateId) : ""} onValueChange={(v) => { setField("stateId", Number(v)); if (editFieldErrors.stateId) setEditFieldErrors((p) => ({ ...p, stateId: "" })); }}>
@@ -1260,6 +1272,7 @@ export default function PlanDetailPage({
                       </Select>
                       {editFieldErrors.stateId && <p id="edit-err-state" role="alert" className="text-xs text-destructive mt-1">{editFieldErrors.stateId}</p>}
                     </div>
+                    )}
                     <div>
                       <Label>{t("detail.responsiblePerson")} <span className="text-destructive">*</span></Label>
                       <Input
@@ -1499,7 +1512,7 @@ export default function PlanDetailPage({
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-sm">{t("activity.locality")} <span className="text-destructive">*</span></Label>
+                        <Label className="text-sm">{t("activity.locality")} {!isHqPlan && <span className="text-destructive">*</span>}</Label>
                         <ActivityLocalityInput
                           value={a.localityName}
                           onChange={(v) => updateActivity(idx, { localityName: v })}
