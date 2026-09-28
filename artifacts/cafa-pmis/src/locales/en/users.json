@@ -152,7 +152,11 @@
   "pagination": {
     "showing": "Showing {{from}}–{{to}} of {{total}} users",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "first": "First page",
+    "last": "Last page",
+    "pageOf": "Page {{page}} of {{totalPages}}",
+    "region": "Pagination"
   },
   "deactivateDialog": {
     "title": "Deactivate {{name}}?",
@@ -341,18 +345,18 @@
     "required": "*"
   },
   "userForm": {
-    "fullName": "Full Name *",
-    "username": "Username *",
-    "email": "Email *",
+    "fullName": "Full Name",
+    "username": "Username",
+    "email": "Email",
     "phone": "Phone",
-    "role": "Role *",
+    "role": "Role",
     "assignedState": "Assigned State",
-    "assignedStateRequired": "Assigned State *",
-    "assignedSector": "Assigned Sector *",
+    "assignedSector": "Assigned Sector",
     "language": "Language",
-    "accountStatus": "Account Status *",
-    "passwordLabel": "Password *",
-    "confirmPasswordLabel": "Confirm Password *",
+    "accountStatus": "Account Status",
+    "passwordLabel": "Password",
+    "confirmPasswordLabel": "Confirm Password",
+    "usernamePlaceholder": "e.g. fatima.osman",
     "passwordMin": "Min 8 characters",
     "noneHQ": "— None (HQ) —",
     "selectState": "Select a State…",
@@ -482,5 +486,10 @@
     "days14": "14 days",
     "days30": "30 days"
   },
-  "english": "English"
+  "english": "English",
+  "arabic": "Arabic",
+  "verifiedOn": "Verified on {{date}}",
+  "deleteDialog": {
+    "title": "Delete {{name}}?"
+  }
 }

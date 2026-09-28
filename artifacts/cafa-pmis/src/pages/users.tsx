@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -23,72 +24,14 @@ import {
   getGetUsersSummaryQueryKey,
 } from "@workspace/api-client-react";
 import type { ListUserInvitationsParams } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
+  Alert, Button, Card, Chip, Drawer, Dropdown, Header, Input, Label, Modal, SearchField, Separator, Skeleton, Spinner,
+  Tabs, TextArea, Tooltip,
+} from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import { ErrorState } from "@/components/ui/error-state";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
   Plus,
-  Search,
   MoreHorizontal,
   Copy,
   KeyRound,
@@ -107,8 +50,6 @@ import {
   CheckCheck,
   Send,
   FilterX,
-  Filter,
-  Loader2,
   Globe,
   MapPin,
   Building2,
@@ -116,6 +57,7 @@ import {
   CircleOff,
   CircleFill,
 } from "@/components/icons";
+import type { IconComponent } from "@/components/icons";
 import { formatDate, formatDateTime, hasPerm } from "@/lib/format";
 import { SECTORS } from "@/lib/sectors";
 import { localizeUserApiError } from "@/lib/user-error-localization";
@@ -123,6 +65,10 @@ import { StateLabel } from "@/components/state-label";
 import { StateReferenceStatus } from "@/components/state-reference-status";
 import { deriveStateReferenceData, type StateReferenceData } from "@/lib/state-reference-data";
 import { useSocket } from "@/lib/socket";
+import { SelectField } from "@/components/select-field";
+import { FilterKpi } from "@/components/filter-kpi";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { RegistryPagination } from "@/components/registry-pagination";
 
 // ─── API error helpers ────────────────────────────────────────────────────────
 
@@ -182,33 +128,33 @@ function CreateDiagnostics({
   if (mode === "idle") return null;
   const steps = buildDiagSteps(mode, failedStep, inviteMode);
   return (
-    <div className="mt-3 rounded-lg border bg-muted/30 p-3 space-y-1 text-sm">
-      <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-2">{t("diagnostics.title")}</p>
+    <div className="mt-4 space-y-1.5 rounded-xl border border-[var(--border)] bg-[var(--default)] p-3 text-sm" aria-live="polite">
+      <p className="mb-2 text-xs font-medium text-[var(--muted)]">{t("diagnostics.title")}</p>
       {steps.map((s) => (
         <div key={s.key} className="flex items-center gap-2">
-          {s.status === "loading" && <RefreshCw className="h-3.5 w-3.5 text-info animate-spin flex-shrink-0" />}
-          {s.status === "pass"    && <CheckCheck className="h-3.5 w-3.5 text-success flex-shrink-0" />}
-          {s.status === "fail"    && <XCircle    className="h-3.5 w-3.5 text-destructive flex-shrink-0" />}
-          {s.status === "idle"    && <div className="h-3.5 w-3.5 rounded-full border border-muted-foreground/30 flex-shrink-0" />}
+          {s.status === "loading" && <Spinner size="sm" className="size-3.5 shrink-0" aria-hidden="true" />}
+          {s.status === "pass"    && <CheckCheck className="size-3.5 shrink-0 text-[var(--success)]" aria-hidden="true" />}
+          {s.status === "fail"    && <XCircle    className="size-3.5 shrink-0 text-[var(--danger)]" aria-hidden="true" />}
+          {s.status === "idle"    && <span className="size-3.5 shrink-0 rounded-full border border-[var(--border)]" aria-hidden="true" />}
           <span className={
-            s.status === "pass" ? "text-success" :
-            s.status === "fail" ? "text-destructive font-medium" :
-            s.status === "loading" ? "text-info" :
-            "text-muted-foreground"
+            s.status === "pass" ? "text-[var(--success)]" :
+            s.status === "fail" ? "font-medium text-[var(--danger)]" :
+            s.status === "loading" ? "text-[var(--accent)]" :
+            "text-[var(--muted)]"
           }>{t(s.labelKey)}</span>
         </div>
       ))}
       {mode === "error" && errorMessage && (
-        <p className="mt-2 text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded px-2 py-1.5 flex items-start gap-1.5">
-          <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-          {errorMessage}
-        </p>
+        <Alert status="danger" className="mt-2">
+          <Alert.Indicator />
+          <Alert.Content><Alert.Description>{errorMessage}</Alert.Description></Alert.Content>
+        </Alert>
       )}
       {mode === "success" && (
-        <p className="mt-2 text-xs text-success bg-success/5 border border-success/20 rounded px-2 py-1.5 flex items-center gap-1.5">
-          <CheckCheck className="h-3.5 w-3.5 flex-shrink-0" />
-          {t("diagnostics.allPassed")}
-        </p>
+        <Alert status="success" className="mt-2">
+          <Alert.Indicator />
+          <Alert.Content><Alert.Description>{t("diagnostics.allPassed")}</Alert.Description></Alert.Content>
+        </Alert>
       )}
     </div>
   );
@@ -227,30 +173,35 @@ const ROLES = [
 
 const STATUSES = ["active", "invited", "suspended", "inactive", "deactivated"] as const;
 type Status = (typeof STATUSES)[number];
+type ChipColor = "default" | "accent" | "success" | "warning" | "danger";
 
-import type { BadgeVariant } from "@/components/ui/badge";
-const STATUS_VARIANT: Record<Status, BadgeVariant> = {
-  active:      "active",
-  invited:     "invited",
-  suspended:   "pending",
-  inactive:    "inactive",
-  deactivated: "rejected",
+const STATUS_COLOR: Record<Status, ChipColor> = {
+  active:      "success",
+  invited:     "accent",
+  suspended:   "warning",
+  inactive:    "default",
+  deactivated: "danger",
 };
+
+const PAGE_SIZE = 25;
+
+/** Sectors are stored comma-separated; show them as a readable list. */
+const sectorList = (sector?: string | null) => (sector ?? "").split(",").map((s) => s.trim()).filter(Boolean).join(", ");
 
 function StatusBadge({ status }: { status: string }) {
   const { t } = useTranslation("users");
   const s = (STATUSES as readonly string[]).includes(status) ? (status as Status) : "inactive";
-  return <Badge variant={STATUS_VARIANT[s]}>{t(`status.${s}`)}</Badge>;
+  return <Chip size="sm" variant="soft" color={STATUS_COLOR[s]}>{t(`status.${s}`)}</Chip>;
 }
 
 function RoleBadge({ role, label }: { role: string; label?: string | null }) {
   const { t } = useTranslation("users");
   const def = ROLES.find((r) => r.value === role);
-  const isHq = def?.scope === "hq";
+  // The API's roleLabel is English; the translated role always wins.
   return (
-    <Badge variant={isHq ? "completed" : "submitted"}>
-      {label ?? (def ? t(`roles.${def.value}`) : role)}
-    </Badge>
+    <Chip size="sm" variant="soft" color={def?.scope === "state" ? "success" : "accent"} className="max-w-full">
+      <span className="truncate">{t(`roles.${role}`, { defaultValue: label ?? role })}</span>
+    </Chip>
   );
 }
 
@@ -285,12 +236,116 @@ function PresenceValue({
       : t("presence.offline");
 
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs" aria-label={label}>
+    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-xs" aria-label={label}>
       {isOnline
-        ? <CircleFill className="h-3 w-3 text-success" aria-hidden="true" />
-        : <CircleOff className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
-      <span className={isOnline ? "text-success" : "text-muted-foreground"}>{label}</span>
+        ? <CircleFill className="size-2.5 shrink-0 text-[var(--success)]" aria-hidden="true" />
+        : <CircleOff className="size-3.5 shrink-0 text-[var(--muted)]" aria-hidden="true" />}
+      <span className={`truncate ${isOnline ? "text-[var(--success)]" : "text-[var(--muted)]"}`} title={label}>{label}</span>
     </span>
+  );
+}
+
+/** Icon + label row for a Dropdown item. */
+function MenuLabel({ icon: Icon, label, tone }: { icon: IconComponent; label: string; tone?: string }) {
+  return (
+    <>
+      <Icon className={`size-4 shrink-0 ${tone ?? "text-[var(--muted)]"}`} aria-hidden="true" />
+      <Label>{label}</Label>
+    </>
+  );
+}
+
+type MenuEntry = { id: string; label: string; icon: IconComponent; tone?: string; danger?: boolean; run: () => void };
+
+/** Row action menu: groups are separated; the header names the menu. */
+function RowMenu({ label, header, groups }: { label: string; header: string; groups: MenuEntry[][] }) {
+  const visible = groups.filter((group) => group.length > 0);
+  const all = visible.flat();
+  return (
+    <Dropdown>
+      <Button isIconOnly size="sm" variant="ghost" aria-label={label}>
+        <MoreHorizontal className="size-4" aria-hidden="true" />
+      </Button>
+      <Dropdown.Popover placement="bottom end" className="min-w-52">
+        <Dropdown.Menu onAction={(key) => all.find((entry) => entry.id === key)?.run()}>
+          {visible.map((group, index) => (
+            <Dropdown.Section key={group[0].id}>
+              {index === 0 && <Header>{header}</Header>}
+              {index > 0 && <Separator />}
+              {group.map((entry) => (
+                <Dropdown.Item key={entry.id} id={entry.id} textValue={entry.label} variant={entry.danger ? "danger" : undefined}>
+                  <MenuLabel icon={entry.icon} label={entry.label} tone={entry.danger ? "text-[var(--danger)]" : entry.tone} />
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Section>
+          ))}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
+  );
+}
+
+/** Offset-paged footer shared by the three registries. */
+function OffsetPagination({
+  offset, total, onOffsetChange, summary,
+}: { offset: number; total: number; onOffsetChange: (offset: number) => void; summary: string }) {
+  const { t } = useTranslation("users");
+  const page = Math.floor(offset / PAGE_SIZE) + 1;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  return (
+    <RegistryPagination
+      className="px-4 py-3"
+      page={page}
+      totalPages={totalPages}
+      onPageChange={(next) => onOffsetChange((next - 1) * PAGE_SIZE)}
+      summary={summary}
+      labels={{
+        region: t("pagination.region"),
+        first: t("pagination.first"),
+        previous: t("pagination.previous"),
+        next: t("pagination.next"),
+        last: t("pagination.last"),
+        pageOf: t("pagination.pageOf", { page, totalPages }),
+      }}
+    />
+  );
+}
+
+function EmptyRegistry({ icon: Icon, message, hint, action }: { icon: IconComponent; message: string; hint?: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-[var(--muted)]">
+      <Icon className="size-8 opacity-40" aria-hidden="true" />
+      <p className="text-sm font-medium">{message}</p>
+      {hint && <p className="text-xs">{hint}</p>}
+      {action}
+    </div>
+  );
+}
+
+function RegistrySkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="space-y-3 p-4" aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
+    </div>
+  );
+}
+
+/** A pressable count chip used by the "by role" and "by State" breakdowns. */
+function CountToggle({ label, count, pressed, onPress }: { label: string; count: number; pressed: boolean; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onPress}
+      className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${
+        pressed
+          ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-foreground)]"
+          : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--default)]"
+      }`}
+    >
+      <span className="min-w-0 truncate" title={label}>{label}</span>
+      <span className={`shrink-0 rounded-full px-1.5 font-medium tabular-nums ${pressed ? "bg-white/20" : "bg-[var(--default)]"}`}>{count}</span>
+    </button>
   );
 }
 
@@ -317,6 +372,7 @@ type UserRow = {
 };
 
 type EditingUser = Partial<UserRow> & { password?: string; confirmPassword?: string };
+type UsersTab = "all" | "resets" | "invitations";
 
 export default function UsersPage() {
   const { t, i18n } = useTranslation(["users", "common"]);
@@ -333,7 +389,7 @@ export default function UsersPage() {
   const [stateId, setStateId] = useState<string>("");
   const [sector, setSector] = useState<string>("");
   const [offset, setOffset] = useState(0);
-  const pageSize = 25;
+  const pageSize = PAGE_SIZE;
 
   const queryParams = useMemo(() => {
     const p: Record<string, string | number> = {};
@@ -345,7 +401,7 @@ export default function UsersPage() {
     p.limit = pageSize;
     p.offset = offset;
     return p;
-  }, [q, role, status, stateId, sector, offset]);
+  }, [q, role, status, stateId, sector, offset, pageSize]);
 
   const { data: usersPage, isLoading, isError, refetch } = useListUsers(queryParams);
   const users = useMemo(() => usersPage?.items ?? [], [usersPage]);
@@ -353,7 +409,7 @@ export default function UsersPage() {
   const { data: summary } = useGetUsersSummary();
   const statesQuery = useListStates();
   const stateReference = deriveStateReferenceData(statesQuery);
-  const [activeTab, setActiveTab] = useState<"all" | "resets" | "invitations">("all");
+  const [activeTab, setActiveTab] = useState<UsersTab>("all");
 
   useEffect(() => {
     if (!socket) return;
@@ -426,7 +482,7 @@ export default function UsersPage() {
       stateId: null,
       sector: "",
       status: "invited",
-      languagePreference: "en",
+      languagePreference: i18n.language?.startsWith("ar") ? "ar" : "en",
       password: "",
       confirmPassword: "",
     });
@@ -436,6 +492,14 @@ export default function UsersPage() {
   const openEdit = (u: UserRow) => {
     setEditing({ ...u });
     setFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditing(null);
+    setDiagMode("idle");
+    setDiagStep(undefined);
+    setDiagError(undefined);
   };
 
   const submitForm = async () => {
@@ -489,11 +553,7 @@ export default function UsersPage() {
         if (created.inviteToken) {
           setInviteLink(`${window.location.origin}/invite/${created.inviteToken}`);
         }
-        setTimeout(() => {
-          setFormOpen(false);
-          setEditing(null);
-          setDiagMode("idle");
-        }, 1200);
+        setTimeout(closeForm, 1200);
       } catch (e) {
         const { code, step } = extractApiError(e);
         const message = localizeUserApiError(t, code);
@@ -519,8 +579,7 @@ export default function UsersPage() {
           },
         });
         toast.success(t("messages.updateSuccess"));
-        setFormOpen(false);
-        setEditing(null);
+        closeForm();
       } catch (e) {
         const { code } = extractApiError(e);
         toast.error(localizeUserApiError(t, code));
@@ -611,415 +670,281 @@ export default function UsersPage() {
     }
   };
 
+  const clearFilters = () => { setQ(""); setRole(""); setStatus(""); setStateId(""); setSector(""); setOffset(0); };
+  const toggleStatus = (next: Status) => { setStatus(status === next ? "" : next); setOffset(0); };
+
   // Dashboard cards
   const total = summary?.total ?? 0;
   const active = summary?.byStatus.find((s) => s.status === "active")?.n ?? 0;
   const invited = summary?.byStatus.find((s) => s.status === "invited")?.n ?? 0;
   const suspended = summary?.byStatus.find((s) => s.status === "suspended")?.n ?? 0;
 
+  const userMenu = (u: UserRow): MenuEntry[][] => [
+    [
+      { id: "edit", label: t("actions.edit"), icon: Pencil, run: () => openEdit(u) },
+      { id: "access", label: t("inspector.menuItem"), icon: ShieldCheck, tone: "text-[var(--accent)]", run: () => setInspectorFor(u) },
+      { id: "reset", label: t("actions.resetPassword"), icon: KeyRound, run: () => setResetFor(u) },
+      ...(u.status === "invited" ? [
+        { id: "resend-invite", label: t("actions.resendInvite"), icon: Mail, tone: "text-[var(--accent)]", run: () => { void resendInvite(u); } },
+        { id: "cancel-invite", label: t("actions.cancelInvite"), icon: XCircle, tone: "text-[var(--warning)]", run: () => { void cancelInvite(u); } },
+      ] : []),
+      ...(!u.emailVerified && u.status === "active" ? [
+        { id: "resend-verification", label: t("actions.resendVerification"), icon: ShieldCheck, tone: "text-[var(--success)]", run: () => { void resendVerification(u); } },
+      ] : []),
+    ],
+    [
+      ...(u.status !== "active" ? [{ id: "activate", label: t("actions.activate"), icon: CheckCircle2, tone: "text-[var(--success)]", run: () => { void changeStatus(u, "active"); } }] : []),
+      ...(u.status !== "suspended" ? [{ id: "suspend", label: t("actions.suspend"), icon: PauseCircle, tone: "text-[var(--warning)]", run: () => { void changeStatus(u, "suspended"); } }] : []),
+      ...(u.status !== "deactivated" ? [{ id: "deactivate", label: t("actions.deactivate"), icon: XCircle, tone: "text-[var(--danger)]", run: () => setDeactivateFor(u) }] : []),
+    ],
+    [{ id: "delete", label: t("actions.delete"), icon: Trash2, danger: true, run: () => setDeleteFor(u) }],
+  ];
+
+  // The registry fits a laptop screen: username and email sit under the name,
+  // the sector under the State, verification under the account status, and
+  // the last login under presence.
+  const columns: DataGridColumn<UserRow>[] = [
+    { id: "name", header: t("fields.name"), isRowHeader: true, width: 250, pinned: "start", headerClassName: "w-[250px]",
+      cell: (u) => (
+        <div className="min-w-0">
+          <p dir="auto" className="truncate text-sm font-medium text-page-start" title={u.name}>{u.name}</p>
+          <p className="mt-0.5 truncate text-xs text-[var(--muted)]" title={u.email ?? undefined}>
+            <bdi dir="ltr">{u.email ?? "—"}</bdi>
+          </p>
+          {u.username && <p className="truncate font-mono text-[11px] text-[var(--muted)]"><bdi dir="ltr">@{u.username}</bdi></p>}
+        </div>
+      ) },
+    { id: "role", header: t("table.role"), width: 176, headerClassName: "w-[176px]",
+      cell: (u) => <RoleBadge role={u.role} label={u.roleLabel} /> },
+    { id: "scope", header: t("table.state"), width: 150, headerClassName: "w-[150px]",
+      cell: (u) => (
+        <div className="min-w-0 text-sm">
+          <p className="truncate">{u.stateId ? getLinkedStateLabel(u, i18n.language) : "—"}</p>
+          {u.sector && <p className="mt-0.5 truncate text-xs text-[var(--muted)]" title={sectorList(u.sector)}>{sectorList(u.sector)}</p>}
+        </div>
+      ) },
+    { id: "status", header: t("statusHeader"), width: 124, headerClassName: "w-[124px]",
+      cell: (u) => (
+        <div className="flex flex-col items-start gap-1">
+          <StatusBadge status={u.status ?? "active"} />
+          {u.emailVerified ? (
+            <span className="inline-flex items-center gap-1 text-[11px] text-[var(--success)]"
+              title={u.emailVerifiedAt ? t("verifiedOn", { date: formatDate(u.emailVerifiedAt) }) : t("verified")}>
+              <ShieldCheck className="size-3" aria-hidden="true" />{t("verified")}
+            </span>
+          ) : (
+            <span className="text-[11px] text-[var(--muted)]">{t("unverified")}</span>
+          )}
+        </div>
+      ) },
+    { id: "presence", header: t("presence.header"), width: 170, headerClassName: "w-[170px]",
+      cell: (u) => (
+        <div className="min-w-0">
+          <PresenceValue isOnline={u.isOnline === true} lastSeenAt={u.lastSeenAt} />
+          <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]" title={u.lastLoginAt ? formatDateTime(u.lastLoginAt) : undefined}>
+            {t("fields.lastLogin")}: {u.lastLoginAt ? <bdi dir="ltr">{formatDate(u.lastLoginAt)}</bdi> : t("table.never")}
+          </p>
+        </div>
+      ) },
+    { id: "created", header: t("fields.createdAt"), width: 100, headerClassName: "w-[100px]",
+      cell: (u) => <span className="whitespace-nowrap text-xs text-[var(--muted)]"><bdi dir="ltr">{formatDate(u.createdAt)}</bdi></span> },
+    { id: "actions", header: <span className="sr-only">{t("actionsLabel")}</span>, width: 56, pinned: "end", headerClassName: "w-[56px]",
+      cell: (u) => canManage ? (
+        <RowMenu label={t("ariaLabel.actionsFor", { name: u.name })} header={t("actionsLabel")} groups={userMenu(u)} />
+      ) : null },
+  ];
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-foreground text-xl font-semibold">{t("title")}</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="flex items-center gap-2 text-xl font-semibold"><UsersIcon className="size-5 shrink-0 text-[var(--accent)]" aria-hidden="true" />{t("title")}</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
             {t("subtitle")} {canManage ? "" : t("subtitleReadOnly")}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {canManage && activeTab === "all" && (
-            <Button onClick={openCreate} className="w-full sm:w-auto">
-              <Plus className="h-4 w-4" />
-              {t("newUser")}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "all" | "resets" | "invitations")}>
-        <TabsList className="grid w-full grid-cols-3 max-w-xl">
-          <TabsTrigger value="all">
-            <UsersIcon className="h-3.5 w-3.5 me-1.5" />
-            {t("tabs.allUsers")}
-          </TabsTrigger>
-          <TabsTrigger value="resets">
-            <KeyRound className="h-3.5 w-3.5 me-1.5" />
-            {t("tabs.passwordResets")}
-          </TabsTrigger>
-          <TabsTrigger value="invitations">
-            <Mail className="h-3.5 w-3.5 me-1.5" />
-            {t("tabs.invitations")}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="mt-3 space-y-4">
-
-      {/* Summary cards */}
-      <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t("stats.totalUsers")}>
-        <SummaryCard
-          icon={<UsersIcon className="h-4 w-4 text-muted-foreground" />}
-          label={t("stats.totalUsers")}
-          value={total}
-          active={!hasFilters}
-          onClick={() => {
-            setStatus("");
-            setRole("");
-            setStateId("");
-            setSector("");
-            setQ("");
-            setOffset(0);
-          }}
-        />
-        <SummaryCard
-          icon={<CheckCircle2 className="h-4 w-4 text-success" />}
-          label={t("stats.active")}
-          value={active}
-          active={status === "active"}
-          onClick={() => { setStatus("active"); setOffset(0); }}
-        />
-        <SummaryCard
-          icon={<Mail className="h-4 w-4 text-info" />}
-          label={t("stats.invited")}
-          value={invited}
-          active={status === "invited"}
-          onClick={() => { setStatus("invited"); setOffset(0); }}
-        />
-        <SummaryCard
-          icon={<PauseCircle className="h-4 w-4 text-warning" />}
-          label={t("stats.suspended")}
-          value={suspended}
-          active={status === "suspended"}
-          onClick={() => { setStatus("suspended"); setOffset(0); }}
-        />
-      </div>
-
-      {summary && (summary.byRole.length > 0 || summary.byState.length > 0) && (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <Card className="min-w-0">
-            <CardHeader className="px-4 pb-2 pt-4">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4" /> {t("usersByRole")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="flex min-w-0 flex-wrap gap-1.5">
-                {summary.byRole.map((r) => (
-                  <button
-                    key={r.role}
-                    type="button"
-                    aria-pressed={role === r.role}
-                    onClick={() => { setRole(r.role); setOffset(0); }}
-                    className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
-                      role === r.role
-                        ? "border-primary/60 bg-accent text-accent-foreground"
-                        : "border-border/70 bg-card hover:bg-accent"
-                    }`}
-                  >
-                    <span className="min-w-0 truncate" title={t(`roles.${r.role}`)}>{t(`roles.${r.role}`)}</span>
-                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-medium tabular-nums">{r.n}</span>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0">
-            <CardHeader className="px-4 pb-2 pt-4">
-              <CardTitle className="text-sm">{t("usersByState")}</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="flex min-w-0 flex-wrap gap-1.5">
-                {summary.byState.map((s) => (
-                  <button
-                    key={s.stateId}
-                    type="button"
-                    aria-pressed={stateId === String(s.stateId)}
-                    onClick={() => { setStateId(String(s.stateId)); setOffset(0); }}
-                    className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
-                      stateId === String(s.stateId)
-                        ? "border-primary/60 bg-accent text-accent-foreground"
-                        : "border-border/70 bg-card hover:bg-accent"
-                    }`}
-                  >
-                    <span className="min-w-0 truncate" title={getLinkedStateLabel(s, i18n.language)}>{getLinkedStateLabel(s, i18n.language)}</span>
-                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-medium tabular-nums">{s.n}</span>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
-        <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-        <Separator orientation="vertical" className="h-5" />
-        <div className="relative">
-          <Search className="absolute start-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder={t("searchPlaceholder")}
-            className="ps-7 h-9 w-full sm:w-52 text-sm"
-            value={q}
-            onChange={(e) => { setQ(e.target.value); setOffset(0); }}
-          />
-        </div>
-        <Select value={role || "all"} onValueChange={(v) => { setRole(v === "all" ? "" : v); setOffset(0); }}>
-          <SelectTrigger className="h-9 w-full sm:w-48 text-sm"><SelectValue placeholder={t("allRoles")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("allRoles")}</SelectItem>
-            {ROLES.map((r) => (
-              <SelectItem key={r.value} value={r.value}>{t(`roles.${r.value}`)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={status || "all"} onValueChange={(v) => { setStatus(v === "all" ? "" : v); setOffset(0); }}>
-          <SelectTrigger className="h-9 w-full sm:w-40 text-sm"><SelectValue placeholder={t("allStatuses")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("allStatuses")}</SelectItem>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>{t(`status.${s}`)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={stateId || "all"} onValueChange={(v) => { setStateId(v === "all" ? "" : v); setOffset(0); }}>
-          <SelectTrigger className="h-9 w-full sm:w-40 text-sm"><SelectValue placeholder={t("allStates")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("allStates")}</SelectItem>
-            {stateReference.states.map((s) => (
-              <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={sector || "all"} onValueChange={(v) => { setSector(v === "all" ? "" : v); setOffset(0); }}>
-          <SelectTrigger className="h-9 w-full sm:w-44 text-sm"><SelectValue placeholder={t("allSectors")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("allSectors")}</SelectItem>
-            {SECTORS.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {hasFilters && (
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => { setQ(""); setRole(""); setStatus(""); setStateId(""); setSector(""); setOffset(0); }}>
-            <FilterX className="h-3.5 w-3.5" /> {t("clear")}
+        {canManage && activeTab === "all" && (
+          <Button onPress={openCreate} className="w-full sm:w-auto">
+            <Plus className="size-4" aria-hidden="true" />
+            {t("newUser")}
           </Button>
         )}
-      </div>
+      </header>
 
-      <Card>
-          <CardContent className="p-0">
-            <div className="table-scroll" role="region" aria-label={t("ariaLabel.usersTable")} tabIndex={0}>
-            <Table className="min-w-[1190px]">
-              <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
-                <TableRow>
-                  <TableHead>{t("fields.name")}</TableHead>
-                  <TableHead>{t("table.username")}</TableHead>
-                  <TableHead>{t("fields.email")}</TableHead>
-                  <TableHead>{t("verified")}</TableHead>
-                  <TableHead>{t("table.role")}</TableHead>
-                  <TableHead>{t("table.state")}</TableHead>
-                  <TableHead>{t("table.sector")}</TableHead>
-                  <TableHead>{t("statusHeader")}</TableHead>
-                  <TableHead>{t("presence.header")}</TableHead>
-                  <TableHead className="whitespace-nowrap">{t("fields.lastLogin")}</TableHead>
-                  <TableHead>{t("fields.createdAt")}</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="py-3"><Skeleton className="h-4 w-28" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-36" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-28 rounded-full" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
-                  ))
-                ) : isError ? (
-                  <TableRow>
-                    <TableCell colSpan={12} className="py-4">
-                      <ErrorState compact variant="server" title={t("couldNotLoadUsers")} onRetry={() => refetch()} />
-                    </TableCell>
-                  </TableRow>
-                ) : users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={12} className="text-center py-14">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <UsersIcon className="h-8 w-8 opacity-30" />
-                        <p className="text-sm font-medium">{hasFilters ? t("noUsersFilters") : t("noUsers")}</p>
-                        {!hasFilters && canManage && <p className="text-xs">{t("clickNewUser")}</p>}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  users.map((u) => (
-                    <TableRow key={u.id} className="hover:bg-muted/50 transition-colors">
-                      <TableCell className="font-medium">{u.name}</TableCell>
-                      <TableCell className="font-mono text-xs">{u.username ?? "—"}</TableCell>
-                      <TableCell className="text-sm"><bdi dir="ltr">{u.email ?? "—"}</bdi></TableCell>
-                      <TableCell>
-                        {u.emailVerified ? (
-                          <span title={`${t("verified")}${u.emailVerifiedAt ? ` on ${formatDate(u.emailVerifiedAt)}` : ""}`}>
-                            <ShieldCheck className="h-4 w-4 text-success" />
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">{t("unverified")}</span>
-                        )}
-                      </TableCell>
-                      <TableCell><RoleBadge role={u.role} label={u.roleLabel} /></TableCell>
-                      <TableCell className="text-sm">{getLinkedStateLabel(u, i18n.language)}</TableCell>
-                      <TableCell className="text-sm">{u.sector ?? "—"}</TableCell>
-                      <TableCell><StatusBadge status={u.status ?? "active"} /></TableCell>
-                      <TableCell><PresenceValue isOnline={u.isOnline === true} lastSeenAt={u.lastSeenAt} /></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : t("table.never")}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{formatDate(u.createdAt)}</TableCell>
-                      <TableCell>
-                        {canManage && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("ariaLabel.actionsFor", { name: u.name })}>
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                              <DropdownMenuLabel>{t("actionsLabel")}</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => openEdit(u)}>
-                                <Pencil className="h-3.5 w-3.5 me-2" /> {t("actions.edit")}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setInspectorFor(u)}>
-                                <ShieldCheck className="h-3.5 w-3.5 me-2 text-info" /> {t("inspector.menuItem")}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setResetFor(u)}>
-                                <KeyRound className="h-3.5 w-3.5 me-2" /> {t("actions.resetPassword")}
-                              </DropdownMenuItem>
-                              {u.status === "invited" && (
-                                <>
-                                  <DropdownMenuItem onClick={() => resendInvite(u)}>
-                                    <Mail className="h-3.5 w-3.5 me-2 text-info" /> {t("actions.resendInvite")}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => cancelInvite(u)}>
-                                    <XCircle className="h-3.5 w-3.5 me-2 text-warning" /> {t("actions.cancelInvite")}
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {!u.emailVerified && u.status === "active" && (
-                                <DropdownMenuItem onClick={() => resendVerification(u)}>
-                                  <ShieldCheck className="h-3.5 w-3.5 me-2 text-success" /> {t("actions.resendVerification")}
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              {u.status !== "active" && (
-                                <DropdownMenuItem onClick={() => changeStatus(u, "active")}>
-                                  <CheckCircle2 className="h-3.5 w-3.5 me-2 text-success" /> {t("actions.activate")}
-                                </DropdownMenuItem>
-                              )}
-                              {u.status !== "suspended" && (
-                                <DropdownMenuItem onClick={() => changeStatus(u, "suspended")}>
-                                  <PauseCircle className="h-3.5 w-3.5 me-2 text-warning" /> {t("actions.suspend")}
-                                </DropdownMenuItem>
-                              )}
-                              {u.status !== "deactivated" && (
-                                  <DropdownMenuItem onClick={() => setDeactivateFor(u)}>
-                                  <XCircle className="h-3.5 w-3.5 me-2 text-destructive" /> {t("actions.deactivate")}
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => setDeleteFor(u)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5 me-2" /> {t("actions.delete")}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+      <Tabs selectedKey={activeTab} onSelectionChange={(key) => setActiveTab(key as UsersTab)}>
+        <Tabs.ListContainer className="w-fit max-w-full">
+          <Tabs.List aria-label={t("title")}>
+            <Tabs.Tab id="all" className="gap-1.5 whitespace-nowrap"><UsersIcon className="size-4" aria-hidden="true" />{t("tabs.allUsers")}<Tabs.Indicator /></Tabs.Tab>
+            <Tabs.Tab id="resets" className="gap-1.5 whitespace-nowrap"><KeyRound className="size-4" aria-hidden="true" />{t("tabs.passwordResets")}<Tabs.Indicator /></Tabs.Tab>
+            <Tabs.Tab id="invitations" className="gap-1.5 whitespace-nowrap"><Mail className="size-4" aria-hidden="true" />{t("tabs.invitations")}<Tabs.Indicator /></Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
+
+        <Tabs.Panel id="all" className="space-y-4 pt-4">
+          {/* Summary: each KPI filters the registry and clears on a second press. */}
+          <section className="grid grid-cols-2 items-stretch gap-3 lg:grid-cols-4" aria-label={t("stats.totalUsers")}>
+            <FilterKpi icon={UsersIcon} label={t("stats.totalUsers")} value={total} pressed={!hasFilters} onToggle={clearFilters} />
+            <FilterKpi icon={CheckCircle2} status="success" label={t("stats.active")} value={active} pressed={status === "active"} onToggle={() => toggleStatus("active")} />
+            <FilterKpi icon={Mail} label={t("stats.invited")} value={invited} pressed={status === "invited"} onToggle={() => toggleStatus("invited")} />
+            <FilterKpi icon={PauseCircle} status="warning" label={t("stats.suspended")} value={suspended} pressed={status === "suspended"} onToggle={() => toggleStatus("suspended")} />
+          </section>
+
+          {summary && (summary.byRole.length > 0 || summary.byState.length > 0) && (
+            <div className="grid gap-3 lg:grid-cols-2">
+              <Card className="min-w-0">
+                <Card.Header>
+                  <Card.Title className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="size-4 text-[var(--muted)]" aria-hidden="true" />{t("usersByRole")}</Card.Title>
+                </Card.Header>
+                <Card.Content className="flex min-w-0 flex-row flex-wrap items-start gap-1.5">
+                  {summary.byRole.map((r) => (
+                    <CountToggle key={r.role} label={t(`roles.${r.role}`, { defaultValue: r.label })} count={r.n}
+                      pressed={role === r.role} onPress={() => { setRole(role === r.role ? "" : r.role); setOffset(0); }} />
+                  ))}
+                </Card.Content>
+              </Card>
+              <Card className="min-w-0">
+                <Card.Header>
+                  <Card.Title className="flex items-center gap-2 text-sm font-medium"><MapPin className="size-4 text-[var(--muted)]" aria-hidden="true" />{t("usersByState")}</Card.Title>
+                </Card.Header>
+                <Card.Content className="flex min-w-0 flex-row flex-wrap items-start gap-1.5">
+                  {summary.byState.map((s) => (
+                    <CountToggle key={s.stateId} label={getLinkedStateLabel(s, i18n.language)} count={s.n}
+                      pressed={stateId === String(s.stateId)} onPress={() => { setStateId(stateId === String(s.stateId) ? "" : String(s.stateId)); setOffset(0); }} />
+                  ))}
+                </Card.Content>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
-      {!isLoading && !isError && usersPage && (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground" aria-live="polite">
-          <span>{t("pagination.showing", { from: usersPage.total ? usersPage.offset + 1 : 0, to: usersPage.offset + users.length, total: usersPage.total })}</span>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={offset === 0}>
-              {t("pagination.previous")}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setOffset(usersPage.nextOffset ?? offset)} disabled={!usersPage.hasMore}>
-              {t("pagination.next")}
-            </Button>
-          </div>
-        </div>
-      )}
+          )}
 
-        </TabsContent>
+          <Card className="gap-0 overflow-hidden p-0">
+            <div className="flex flex-col gap-3 border-b border-[var(--border)] p-4 lg:flex-row lg:items-center">
+              <SearchField aria-label={t("searchPlaceholder")} value={q} onChange={(value) => { setQ(value); setOffset(0); }} className="w-full lg:max-w-xs">
+                <SearchField.Group>
+                  <SearchField.SearchIcon />
+                  <SearchField.Input placeholder={t("searchPlaceholder")} />
+                  <SearchField.ClearButton />
+                </SearchField.Group>
+              </SearchField>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <SelectField
+                  aria-label={t("table.role")}
+                  value={role || "all"}
+                  onChange={(v) => { setRole(v === "all" ? "" : v); setOffset(0); }}
+                  triggerClassName="whitespace-nowrap sm:w-48"
+                  options={[{ value: "all", label: t("allRoles") }, ...ROLES.map((r) => ({ value: r.value, label: t(`roles.${r.value}`) }))]}
+                />
+                <SelectField
+                  aria-label={t("statusHeader")}
+                  value={status || "all"}
+                  onChange={(v) => { setStatus(v === "all" ? "" : v); setOffset(0); }}
+                  triggerClassName="whitespace-nowrap sm:w-36"
+                  options={[{ value: "all", label: t("allStatuses") }, ...STATUSES.map((s) => ({ value: s, label: t(`status.${s}`) }))]}
+                />
+                <SelectField
+                  aria-label={t("table.state")}
+                  value={stateId || "all"}
+                  onChange={(v) => { setStateId(v === "all" ? "" : v); setOffset(0); }}
+                  triggerClassName="whitespace-nowrap sm:w-40"
+                  options={[{ value: "all", label: t("allStates") }, ...stateReference.states.map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }))]}
+                />
+                <SelectField
+                  aria-label={t("table.sector")}
+                  value={sector || "all"}
+                  onChange={(v) => { setSector(v === "all" ? "" : v); setOffset(0); }}
+                  triggerClassName="whitespace-nowrap sm:w-44"
+                  options={[{ value: "all", label: t("allSectors") }, ...SECTORS.map((item) => ({ value: item, label: item }))]}
+                />
+                {hasFilters && (
+                  <Button variant="ghost" size="sm" onPress={clearFilters}>
+                    <FilterX className="size-4" aria-hidden="true" /> {t("clear")}
+                  </Button>
+                )}
+              </div>
+            </div>
+            {isLoading ? (
+              <RegistrySkeleton />
+            ) : isError ? (
+              <div className="p-4"><ErrorState compact variant="server" title={t("couldNotLoadUsers")} onRetry={() => refetch()} /></div>
+            ) : (
+              <div role="region" aria-label={t("ariaLabel.usersTable")}>
+                <DataGrid
+                  aria-label={t("ariaLabel.usersTable")}
+                  data={users as UserRow[]}
+                  columns={columns}
+                  getRowId={(u) => u.id}
+                  contentClassName="min-w-[1026px] table-fixed"
+                  verticalAlign="middle"
+                  renderEmptyState={() => (
+                    <EmptyRegistry icon={UsersIcon} message={hasFilters ? t("noUsersFilters") : t("noUsers")}
+                      hint={!hasFilters && canManage ? t("clickNewUser") : undefined} />
+                  )}
+                />
+              </div>
+            )}
+            {!isLoading && !isError && usersPage && (
+              <div className="border-t border-[var(--border)]">
+                <OffsetPagination
+                  offset={offset}
+                  total={usersPage.total}
+                  onOffsetChange={setOffset}
+                  summary={t("pagination.showing", { from: usersPage.total ? usersPage.offset + 1 : 0, to: usersPage.offset + users.length, total: usersPage.total })}
+                />
+              </div>
+            )}
+          </Card>
+        </Tabs.Panel>
 
-        <TabsContent value="resets" className="mt-4">
+        <Tabs.Panel id="resets" className="pt-4">
           <PasswordResetRequestsTab
             canManage={["super_admin", "executive_director", "program_manager"].includes(me?.user?.role ?? "")}
           />
-        </TabsContent>
+        </Tabs.Panel>
 
-        <TabsContent value="invitations" className="mt-4">
+        <Tabs.Panel id="invitations" className="pt-4">
           <InvitationsTab canManage={canManage} />
-        </TabsContent>
+        </Tabs.Panel>
       </Tabs>
 
       {/* Create / Edit dialog */}
-      <Dialog open={formOpen} onOpenChange={(o) => { if (!o) { setFormOpen(false); setEditing(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
-          <div className="shrink-0 border-b px-6 pb-4 pt-6">
-            <DialogHeader>
-              <DialogTitle>{editing?.id ? t("form.editTitle") : t("form.createTitle")}</DialogTitle>
-              <DialogDescription>
-                {editing?.id
-                  ? t("dialog.editDesc")
-                  : t("dialog.createDesc")}
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-            {editing && (
-              <UserForm editing={editing} setEditing={setEditing} stateReference={stateReference} />
-            )}
-            {!editing?.id && (
-              <CreateDiagnostics
-                mode={diagMode}
-                failedStep={diagStep}
-                errorMessage={diagError}
-                inviteMode={editing?.status === "invited" || !(editing?.password ?? "")}
-              />
-            )}
-          </div>
-          <DialogFooter className="shrink-0 border-t px-6 py-4">
-            <Button variant="outline" onClick={() => { setFormOpen(false); setEditing(null); setDiagMode("idle"); setDiagStep(undefined); setDiagError(undefined); }}>{t("common:cancel")}</Button>
-            <Button
-              onClick={submitForm}
-              disabled={
-                createMut.isPending
-                || updateMut.isPending
-                || (!!editing && ["state_office_manager", "state_program_officer"].includes(editing.role ?? "")
-                  && (!stateReference.isReady || !editing.stateId))
-              }
-            >
-              {editing?.id ? t("form.saveChanges") : t("form.createUser")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <Modal isOpen={formOpen} onOpenChange={(open) => { if (!open) closeForm(); }}>
+        <Modal.Backdrop isDismissable={!createMut.isPending && !updateMut.isPending}>
+          <Modal.Container size="lg" scroll="inside">
+            <Modal.Dialog className="max-h-[calc(100dvh-2rem)] sm:max-w-2xl">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{editing?.id ? t("form.editTitle") : t("form.createTitle")}</Modal.Heading>
+                <p className="text-sm text-[var(--muted)]">{editing?.id ? t("dialog.editDesc") : t("dialog.createDesc")}</p>
+              </Modal.Header>
+              <Modal.Body>
+                {editing && (
+                  <UserForm editing={editing} setEditing={setEditing} stateReference={stateReference} />
+                )}
+                {!editing?.id && (
+                  <CreateDiagnostics
+                    mode={diagMode}
+                    failedStep={diagStep}
+                    errorMessage={diagError}
+                    inviteMode={editing?.status === "invited" || !(editing?.password ?? "")}
+                  />
+                )}
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="tertiary" onPress={closeForm}>{t("common:cancel")}</Button>
+                <Button
+                  onPress={() => { void submitForm(); }}
+                  isPending={createMut.isPending || updateMut.isPending}
+                  isDisabled={
+                    !!editing && ["state_office_manager", "state_program_officer"].includes(editing.role ?? "")
+                      && (!stateReference.isReady || !editing.stateId)
+                  }
+                >
+                  {editing?.id ? t("form.saveChanges") : t("form.createUser")}
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
       {/* Reset password dialog */}
       <ResetPasswordDialog
@@ -1030,84 +955,109 @@ export default function UsersPage() {
       />
 
       {/* Invite link dialog */}
-      <Dialog open={!!inviteLink} onOpenChange={(o) => { if (!o) setInviteLink(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("dialog.inviteLinkTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("dialog.inviteLinkDesc")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2">
-            <Input value={inviteLink ?? ""} readOnly className="font-mono text-xs" />
-            <Button
-              size="icon"
-              variant="outline"
-              onClick={async () => {
-                if (inviteLink) {
-                  try {
-                    await navigator.clipboard.writeText(inviteLink);
-                    toast.success(t("messages.inviteLinkCopied"));
-                  } catch {
-                    toast.info(t("messages.inviteLinkCopyManual"));
-                  }
-                }
-              }}
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setInviteLink(null)}>{t("done")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <InviteLinkModal
+        link={inviteLink}
+        onClose={() => setInviteLink(null)}
+        title={t("dialog.inviteLinkTitle")}
+        description={<p>{t("dialog.inviteLinkDesc")}</p>}
+        copiedMessage={t("messages.inviteLinkCopied")}
+        manualMessage={t("messages.inviteLinkCopyManual")}
+        closeLabel={t("done")}
+      />
 
       {/* Delete confirmation */}
-      <AlertDialog open={!!deleteFor} onOpenChange={(o) => { if (!o) setDeleteFor(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("deleteUser")} {deleteFor?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("dialog.deleteDesc")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("common:cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90"
-              onClick={performDelete}
-            >
-              {t("actions.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={!!deleteFor}
+        title={t("deleteDialog.title", { name: deleteFor?.name ?? "" })}
+        message={t("dialog.deleteDesc")}
+        cancelLabel={t("common:cancel")}
+        confirmLabel={t("actions.delete")}
+        isPending={deleteMut.isPending}
+        onCancel={() => setDeleteFor(null)}
+        onConfirm={() => { void performDelete(); }}
+      />
 
-      <AlertDialog open={!!deactivateFor} onOpenChange={(o) => { if (!o) setDeactivateFor(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("deactivateDialog.title", { name: deactivateFor?.name })}</AlertDialogTitle>
-            <AlertDialogDescription>{t("deactivateDialog.description")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("common:cancel")}</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => {
-              if (deactivateFor) void changeStatus(deactivateFor, "deactivated");
-              setDeactivateFor(null);
-            }}>
-              {t("actions.deactivate")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={!!deactivateFor}
+        title={t("deactivateDialog.title", { name: deactivateFor?.name })}
+        message={t("deactivateDialog.description")}
+        cancelLabel={t("common:cancel")}
+        confirmLabel={t("actions.deactivate")}
+        onCancel={() => setDeactivateFor(null)}
+        onConfirm={() => {
+          if (deactivateFor) void changeStatus(deactivateFor, "deactivated");
+          setDeactivateFor(null);
+        }}
+      />
 
       {/* Access & Permissions Inspector */}
-      <AccessInspectorSheet
+      <AccessInspectorDrawer
         user={inspectorFor}
         onClose={() => setInspectorFor(null)}
       />
     </div>
+  );
+}
+
+/** Shows a one-time invite or reset link with a copy action. */
+function InviteLinkModal({
+  link, onClose, title, description, copiedMessage, manualMessage, closeLabel, copyLabel,
+}: {
+  link: string | null;
+  onClose: () => void;
+  title: string;
+  description: ReactNode;
+  copiedMessage: string;
+  manualMessage: string;
+  closeLabel: string;
+  copyLabel?: string;
+}) {
+  const { t } = useTranslation("users");
+  const copy = async () => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success(copiedMessage);
+    } catch {
+      // clipboard blocked — the field stays selectable for a manual copy
+      toast.info(manualMessage);
+    }
+  };
+  return (
+    <Modal isOpen={!!link} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Modal.Backdrop isDismissable>
+        <Modal.Container size="md">
+          <Modal.Dialog>
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{title}</Modal.Heading>
+              <div className="space-y-2 text-sm text-[var(--muted)]">{description}</div>
+            </Modal.Header>
+            <Modal.Body>
+              <div className="flex items-center gap-2">
+                <Input aria-label={title} value={link ?? ""} readOnly fullWidth dir="ltr" className="font-mono text-xs" onFocus={(event) => event.currentTarget.select()} />
+                {!copyLabel && (
+                  <Tooltip delay={300}>
+                    <Button isIconOnly variant="tertiary" aria-label={t("invites.linkDialog.copyLink")} onPress={() => { void copy(); }}>
+                      <Copy className="size-4" aria-hidden="true" />
+                    </Button>
+                    <Tooltip.Content>{t("invites.linkDialog.copyLink")}</Tooltip.Content>
+                  </Tooltip>
+                )}
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              {copyLabel && (
+                <Button variant="tertiary" onPress={() => { void copy(); }}>
+                  <Copy className="size-4" aria-hidden="true" /> {copyLabel}
+                </Button>
+              )}
+              <Button onPress={onClose}>{closeLabel}</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -1150,12 +1100,12 @@ function resetStatusLabel(status: ResetToken["status"], t: (key: string) => stri
   }
 }
 
-function resetStatusVariant(status: ResetToken["status"]): "default" | "secondary" | "destructive" | "outline" {
+function resetStatusColor(status: ResetToken["status"]): ChipColor {
   switch (status) {
-    case "active": return "default";
-    case "used": return "secondary";
-    case "expired": return "destructive";
-    case "revoked": return "outline";
+    case "active": return "accent";
+    case "used": return "success";
+    case "expired": return "danger";
+    case "revoked": return "default";
   }
 }
 
@@ -1172,13 +1122,24 @@ function resetLifecycleValue(token: ResetToken): string | null | undefined {
     case "expired": return token.expiresAt;
   }
 }
+
+/** Person cell shared by the reset and invitation registries. */
+function PersonCell({ name, email }: { name: string; email: string }) {
+  return (
+    <div className="min-w-0">
+      <p dir="auto" className="truncate text-sm font-medium text-page-start" title={name}>{name}</p>
+      <p className="truncate text-xs text-[var(--muted)]" title={email}><bdi dir="ltr">{email}</bdi></p>
+    </div>
+  );
+}
+
 function PasswordResetRequestsTab({ canManage }: { canManage: boolean }) {
   const { t } = useTranslation("users");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
   const [offset, setOffset] = useState(0);
-  const pageSize = 25;
+  const pageSize = PAGE_SIZE;
 
   const params = useMemo(() => {
     const p: Record<string, string> = {};
@@ -1188,7 +1149,7 @@ function PasswordResetRequestsTab({ canManage }: { canManage: boolean }) {
     p.limit = String(pageSize);
     p.offset = String(offset);
     return p;
-  }, [search, filterStatus, filterSource, offset]);
+  }, [search, filterStatus, filterSource, offset, pageSize]);
 
   const qs = new URLSearchParams(params).toString();
 
@@ -1211,8 +1172,9 @@ function PasswordResetRequestsTab({ canManage }: { canManage: boolean }) {
 
   const doAction = useCallback(async (tokenId: number, action: "cancel" | "resend" | "resolve") => {
     const res = await fetch(`/api/password-reset-tokens/${tokenId}/${action}`, { method: "POST" });
-    const body = await res.json();
-    if (!res.ok) { toast.error(body.error ?? t("passwordReset.actionFailed")); return; }
+    const body = await res.json().catch(() => ({}));
+    // Server error codes go through the same localisation as the rest of the page.
+    if (!res.ok) { toast.error(body.error ? localizeUserApiError(t, body.error) : t("passwordReset.actionFailed")); return; }
     if (action === "resend" && body.resetLink) {
       await navigator.clipboard.writeText(body.resetLink).catch(() => {});
       toast.success(t("passwordReset.linkCopied"));
@@ -1227,197 +1189,122 @@ function PasswordResetRequestsTab({ canManage }: { canManage: boolean }) {
   const tokens = data?.tokens ?? [];
   const summary = data?.summary;
   const hasFilters = Boolean(search.trim() || filterStatus !== "all" || filterSource !== "all");
-  const columns = canManage ? 7 : 6;
 
   const resetPage = () => setOffset(0);
 
+  const columns: DataGridColumn<ResetToken>[] = [
+    { id: "user", header: t("passwordReset.tableHeaders.user"), isRowHeader: true, width: 240, headerClassName: "w-[240px]",
+      cell: (tok) => <PersonCell name={tok.userName} email={tok.userEmail} /> },
+    { id: "source", header: t("passwordReset.tableHeaders.source"), width: 150, headerClassName: "w-[150px]",
+      cell: (tok) => (
+        <Chip size="sm" variant="tertiary">
+          {tok.source === "forgot_password" ? t("passwordReset.source.selfService") : t("passwordReset.source.adminReset")}
+        </Chip>
+      ) },
+    { id: "requested", header: t("passwordReset.tableHeaders.requestedAt"), width: 150, headerClassName: "w-[150px]",
+      cell: (tok) => <span className="whitespace-nowrap text-xs text-[var(--muted)]"><bdi dir="ltr">{formatDateTime(tok.requestedAt)}</bdi></span> },
+    { id: "lifecycle", header: t("passwordReset.tableHeaders.expiryResolution"), width: 150, headerClassName: "w-[150px]",
+      cell: (tok) => resetLifecycleValue(tok) ? (
+        <span className={`whitespace-nowrap text-xs ${tok.status === "expired" ? "font-medium text-[var(--danger)]" : "text-[var(--muted)]"}`}>
+          <bdi dir="ltr">{formatDateTime(resetLifecycleValue(tok)!)}</bdi>
+        </span>
+      ) : <span className="text-[var(--muted)]">—</span> },
+    { id: "status", header: t("passwordReset.tableHeaders.status"), width: 110, headerClassName: "w-[110px]",
+      cell: (tok) => <Chip size="sm" variant="soft" color={resetStatusColor(tok.status)}>{resetStatusLabel(tok.status, t)}</Chip> },
+    { id: "email", header: t("passwordReset.tableHeaders.emailDelivery"), width: 130, headerClassName: "w-[130px]",
+      cell: (tok) => <EmailDeliveryBadge status={tok.emailStatus} t={t} /> },
+    ...(canManage ? [{
+      id: "actions", header: <span className="sr-only">{t("passwordReset.actions.label")}</span>, width: 56, pinned: "end" as const, headerClassName: "w-[56px]",
+      cell: (tok: ResetToken) => (
+        <RowMenu label={t("ariaLabel.actionsForReset")} header={t("passwordReset.actions.label")} groups={[[
+          { id: "resend", label: t("passwordReset.actions.resend"), icon: Send, tone: "text-[var(--accent)]", run: () => { void doAction(tok.id, "resend"); } },
+          ...(tok.status === "active" ? [{ id: "cancel", label: t("passwordReset.actions.cancel"), icon: Ban, tone: "text-[var(--warning)]", run: () => { void doAction(tok.id, "cancel"); } }] : []),
+          ...(!tok.resolvedAt ? [{ id: "resolve", label: t("passwordReset.actions.resolve"), icon: CheckCheck, tone: "text-[var(--success)]", run: () => { void doAction(tok.id, "resolve"); } }] : []),
+        ]]} />
+      ),
+    }] : []),
+  ];
+
   return (
-    <div className="space-y-3">
-      {/* Summary strip */}
+    <div className="space-y-4">
       {summary && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-          {[
-            { label: t("passwordReset.statLabels.total"), value: summary.total, icon: <KeyRound className="h-4 w-4 text-muted-foreground" /> },
-            { label: t("passwordReset.statLabels.pending"), value: summary.active, icon: <Clock className="h-4 w-4 text-info" /> },
-            { label: t("passwordReset.statLabels.used"), value: summary.used, icon: <CheckCheck className="h-4 w-4 text-success" /> },
-            { label: t("passwordReset.statLabels.expired"), value: summary.expired, icon: <AlertCircle className="h-4 w-4 text-destructive" /> },
-            { label: t("passwordReset.statLabels.cancelled"), value: summary.revoked, icon: <Ban className="h-4 w-4 text-warning" /> },
-          ].map((c) => (
-            <Card key={c.label}>
-              <CardContent className="px-3 py-2.5">
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">{c.label}</span>
-                  {c.icon}
-                </div>
-                <div className="text-xl font-medium">{c.value}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-5" aria-label={t("passwordReset.statLabels.total")}>
+          <FilterKpi icon={KeyRound} label={t("passwordReset.statLabels.total")} value={summary.total} />
+          <FilterKpi icon={Clock} label={t("passwordReset.statLabels.pending")} value={summary.active} />
+          <FilterKpi icon={CheckCheck} status="success" label={t("passwordReset.statLabels.used")} value={summary.used} />
+          <FilterKpi icon={AlertCircle} status="danger" label={t("passwordReset.statLabels.expired")} value={summary.expired} />
+          <FilterKpi icon={Ban} status="warning" label={t("passwordReset.statLabels.cancelled")} value={summary.revoked} />
+        </section>
       )}
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-3">
-          <div className="grid gap-2.5 md:grid-cols-[minmax(0,2fr)_minmax(11rem,1fr)_minmax(11rem,1fr)]">
-            <div className="relative">
-              <Search className="absolute start-2.5 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                aria-label={t("passwordReset.searchPlaceholder")}
-                placeholder={t("passwordReset.searchPlaceholder")}
-                className="ps-8"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); resetPage(); }}
-              />
-            </div>
-            <Select value={filterStatus} onValueChange={(value) => { setFilterStatus(value); resetPage(); }}>
-              <SelectTrigger aria-label={t("passwordReset.filterStatus.label")}><SelectValue placeholder={t("passwordReset.filterStatus.allStatuses")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("passwordReset.filterStatus.allStatuses")}</SelectItem>
-                <SelectItem value="active">{t("passwordReset.filterStatus.pending")}</SelectItem>
-                <SelectItem value="used">{t("passwordReset.filterStatus.used")}</SelectItem>
-                <SelectItem value="expired">{t("passwordReset.filterStatus.expired")}</SelectItem>
-                <SelectItem value="revoked">{t("passwordReset.filterStatus.cancelled")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterSource} onValueChange={(value) => { setFilterSource(value); resetPage(); }}>
-              <SelectTrigger aria-label={t("passwordReset.filterSource.label")}><SelectValue placeholder={t("passwordReset.filterSource.allSources")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("passwordReset.filterSource.allSources")}</SelectItem>
-                <SelectItem value="forgot_password">{t("passwordReset.filterSource.forgotPassword")}</SelectItem>
-                <SelectItem value="admin_reset">{t("passwordReset.filterSource.adminReset")}</SelectItem>
-              </SelectContent>
-            </Select>
+      <Card className="gap-0 overflow-hidden p-0">
+        <div className="grid gap-2.5 border-b border-[var(--border)] p-4 md:grid-cols-[minmax(0,2fr)_minmax(11rem,1fr)_minmax(11rem,1fr)]">
+          <SearchField aria-label={t("passwordReset.searchPlaceholder")} value={search} onChange={(value) => { setSearch(value); resetPage(); }}>
+            <SearchField.Group>
+              <SearchField.SearchIcon />
+              <SearchField.Input placeholder={t("passwordReset.searchPlaceholder")} />
+              <SearchField.ClearButton />
+            </SearchField.Group>
+          </SearchField>
+          <SelectField
+            aria-label={t("passwordReset.filterStatus.label")}
+            value={filterStatus}
+            onChange={(value) => { setFilterStatus(value); resetPage(); }}
+            options={[
+              { value: "all", label: t("passwordReset.filterStatus.allStatuses") },
+              { value: "active", label: t("passwordReset.filterStatus.pending") },
+              { value: "used", label: t("passwordReset.filterStatus.used") },
+              { value: "expired", label: t("passwordReset.filterStatus.expired") },
+              { value: "revoked", label: t("passwordReset.filterStatus.cancelled") },
+            ]}
+          />
+          <SelectField
+            aria-label={t("passwordReset.filterSource.label")}
+            value={filterSource}
+            onChange={(value) => { setFilterSource(value); resetPage(); }}
+            options={[
+              { value: "all", label: t("passwordReset.filterSource.allSources") },
+              { value: "forgot_password", label: t("passwordReset.filterSource.forgotPassword") },
+              { value: "admin_reset", label: t("passwordReset.filterSource.adminReset") },
+            ]}
+          />
+        </div>
+        {isLoading ? (
+          <RegistrySkeleton rows={5} />
+        ) : isError ? (
+          <div className="p-4">
+            <ErrorState
+              compact
+              variant="server"
+              title={t("passwordReset.loadFailed.title")}
+              description={t("passwordReset.loadFailed.description")}
+              retryLabel={t("passwordReset.loadFailed.retry")}
+              onRetry={() => refetch()}
+            />
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto" role="region" tabIndex={0} aria-label={t("ariaLabel.passwordResetsTable")}>
-            <Table className="min-w-[760px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("passwordReset.tableHeaders.user")}</TableHead>
-                  <TableHead>{t("passwordReset.tableHeaders.source")}</TableHead>
-                  <TableHead>{t("passwordReset.tableHeaders.requestedAt")}</TableHead>
-                  <TableHead>{t("passwordReset.tableHeaders.expiryResolution")}</TableHead>
-                  <TableHead>{t("passwordReset.tableHeaders.status")}</TableHead>
-                  <TableHead>{t("passwordReset.tableHeaders.emailDelivery")}</TableHead>
-                  {canManage && <TableHead className="w-10" />}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: columns }).map((__, j) => (
-                        <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : isError ? (
-                  <TableRow>
-                    <TableCell colSpan={columns}>
-                      <ErrorState
-                        compact
-                        variant="server"
-                        title={t("passwordReset.loadFailed.title")}
-                        description={t("passwordReset.loadFailed.description")}
-                        retryLabel={t("passwordReset.loadFailed.retry")}
-                        onRetry={() => refetch()}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ) : tokens.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columns} className="py-10 text-center text-muted-foreground">
-                      <FilterX className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                      {hasFilters ? t("passwordReset.noResults") : t("passwordReset.noRecords")}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  tokens.map((tok) => (
-                    <TableRow key={tok.id} className={tok.resolvedAt ? "opacity-60" : ""}>
-                      <TableCell>
-                        <div className="font-medium text-sm">{tok.userName}</div>
-                        <div className="text-xs text-muted-foreground">{tok.userEmail}</div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {tok.source === "forgot_password" ? t("passwordReset.source.selfService") : t("passwordReset.source.adminReset")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDateTime(tok.requestedAt)}
-                      </TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">
-                         {resetLifecycleValue(tok) ? (
-                           <span className={tok.status === "expired" ? "font-medium text-destructive" : "text-muted-foreground"}>
-                             {formatDateTime(resetLifecycleValue(tok)!)}
-                           </span>
-                         ) : (
-                           <span className="text-muted-foreground">—</span>
-                         )}
-                       </TableCell>
-                       <TableCell>
-                         <Badge variant={resetStatusVariant(tok.status)} aria-label={resetStatusLabel(tok.status, t)}>
-                           {resetStatusLabel(tok.status, t)}
-                         </Badge>
-                       </TableCell>
-                       <TableCell>
-                         <EmailDeliveryBadge status={tok.emailStatus} t={t} />
-                       </TableCell>
-                       {canManage && (
-                         <TableCell>
-                           <DropdownMenu>
-                             <DropdownMenuTrigger asChild>
-                               <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("ariaLabel.actionsForReset")}>
-                                 <MoreHorizontal className="h-4 w-4" />
-                               </Button>
-                             </DropdownMenuTrigger>
-                             <DropdownMenuContent align="end" className="w-48">
-                               <DropdownMenuLabel>{t("passwordReset.actions.label")}</DropdownMenuLabel>
-                               <DropdownMenuItem onClick={() => doAction(tok.id, "resend")}>
-                                 <Send className="me-2 h-3.5 w-3.5 text-info" /> {t("passwordReset.actions.resend")}
-                               </DropdownMenuItem>
-                               {tok.status === "active" && (
-                                 <DropdownMenuItem onClick={() => doAction(tok.id, "cancel")}>
-                                   <Ban className="me-2 h-3.5 w-3.5 text-warning" /> {t("passwordReset.actions.cancel")}
-                                 </DropdownMenuItem>
-                               )}
-                               {!tok.resolvedAt && (
-                                 <DropdownMenuItem onClick={() => doAction(tok.id, "resolve")}>
-                                   <CheckCheck className="me-2 h-3.5 w-3.5 text-success" /> {t("passwordReset.actions.resolve")}
-                                 </DropdownMenuItem>
-                               )}
-                             </DropdownMenuContent>
-                           </DropdownMenu>
-                         </TableCell>
-                       )}
-                     </TableRow>
-                   ))
-                 )}
-              </TableBody>
-            </Table>
+        ) : (
+          <div role="region" tabIndex={0} aria-label={t("ariaLabel.passwordResetsTable")}>
+            <DataGrid
+              aria-label={t("ariaLabel.passwordResetsTable")}
+              data={tokens}
+              columns={columns}
+              getRowId={(tok) => tok.id}
+              contentClassName={`${canManage ? "min-w-[986px]" : "min-w-[930px]"} table-fixed`}
+              verticalAlign="middle"
+              renderEmptyState={() => <EmptyRegistry icon={FilterX} message={hasFilters ? t("passwordReset.noResults") : t("passwordReset.noRecords")} />}
+            />
           </div>
-          {data && !isError && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-2 text-xs text-muted-foreground" aria-live="polite">
-              <span>{t("passwordReset.showing", { count: tokens.length, total: data.total })}</span>
-              {data.total > pageSize && (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={offset === 0}>
-                    {t("pagination.previous")}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setOffset(data.nextOffset ?? offset)} disabled={!data.hasMore}>
-                    {t("pagination.next")}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
+        )}
+        {data && !isError && (
+          <div className="border-t border-[var(--border)]">
+            <OffsetPagination
+              offset={offset}
+              total={data.total}
+              onOffsetChange={setOffset}
+              summary={t("passwordReset.showing", { count: tokens.length, total: data.total })}
+            />
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -1449,24 +1336,30 @@ function inviteStatus(row: InvitationRow): "pending" | "expired" | "cancelled" |
   return "pending";
 }
 
+const INVITE_STATUS_COLOR: Record<ReturnType<typeof inviteStatus>, ChipColor> = {
+  accepted: "success", cancelled: "default", expired: "danger", pending: "accent",
+};
+
 function InviteStatusBadge({ row }: { row: InvitationRow }) {
   const { t } = useTranslation("users");
   const s = inviteStatus(row);
-  if (s === "accepted") return <Badge variant="approved">{t("invites.statusBadge.accepted")}</Badge>;
-  if (s === "cancelled") return <Badge variant="inactive">{t("invites.statusBadge.cancelled")}</Badge>;
-  if (s === "expired") return <Badge variant="rejected">{t("invites.statusBadge.expired")}</Badge>;
-  return <Badge variant="submitted">{t("invites.statusBadge.pending")}</Badge>;
+  return <Chip size="sm" variant="soft" color={INVITE_STATUS_COLOR[s]}>{t(`invites.statusBadge.${s}`)}</Chip>;
+}
+
+function DeliveryChip({ status, label }: { status: "pending" | "sent" | "failed"; label: string }) {
+  const Icon = status === "sent" ? CheckCheck : status === "failed" ? AlertCircle : Clock;
+  return (
+    <Chip size="sm" variant="soft" color={status === "sent" ? "success" : status === "failed" ? "danger" : "warning"} className="whitespace-nowrap">
+      <Icon className="size-3" aria-hidden="true" />{label}
+    </Chip>
+  );
 }
 
 function InviteEmailStatusBadge({ status }: { status: InvitationRow["inviteEmailStatus"] }) {
   const { t } = useTranslation("users");
-  if (status === "sent") {
-    return <Badge variant="approved" className="text-xs gap-1"><CheckCheck className="h-3 w-3" />{t("invites.emailStatusBadge.sent")}</Badge>;
-  }
-  if (status === "failed") {
-    return <Badge variant="rejected" className="text-xs gap-1"><AlertCircle className="h-3 w-3" />{t("invites.emailStatusBadge.failed")}</Badge>;
-  }
-  return <Badge variant="returned" className="text-xs gap-1"><Clock className="h-3 w-3" />{t("invites.emailStatusBadge.pending")}</Badge>;
+  if (status === "sent") return <DeliveryChip status="sent" label={t("invites.emailStatusBadge.sent")} />;
+  if (status === "failed") return <DeliveryChip status="failed" label={t("invites.emailStatusBadge.failed")} />;
+  return <DeliveryChip status="pending" label={t("invites.emailStatusBadge.pending")} />;
 }
 
 function InvitationsTab({ canManage }: { canManage: boolean }) {
@@ -1542,7 +1435,7 @@ function InvitationsTab({ canManage }: { canManage: boolean }) {
     }
   }, [refetch, qc, cancelInviteMut, t]);
 
-  const invitations = data?.invitations ?? [];
+  const invitations = (data?.invitations ?? []) as InvitationRow[];
 
   // Build invite link — standardised on /invite/:token (also registered as /accept-invitation)
   const buildInviteLink = useCallback((token: string) =>
@@ -1550,225 +1443,172 @@ function InvitationsTab({ canManage }: { canManage: boolean }) {
 
   const inviteLink = inviteLinkFor ? buildInviteLink(inviteLinkFor.token) : null;
 
+  const columns: DataGridColumn<InvitationRow>[] = [
+    { id: "user", header: t("invites.tableHeaders.user"), isRowHeader: true, width: 230, pinned: "start", headerClassName: "w-[230px]",
+      cell: (row) => <PersonCell name={row.name} email={row.email} /> },
+    { id: "role", header: t("invites.tableHeaders.role"), width: 170, headerClassName: "w-[170px]",
+      cell: (row) => (
+        <div className="min-w-0 text-sm">
+          <p className="truncate">{t(`roles.${row.role}`, { defaultValue: row.role })}</p>
+          <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+            {row.stateName ? getLinkedStateLabel(row, i18n.language) : sectorList(row.sector) || "—"}
+          </p>
+        </div>
+      ) },
+    { id: "invited", header: t("invites.tableHeaders.invitedAt"), width: 150, headerClassName: "w-[150px]",
+      cell: (row) => (
+        <div className="min-w-0 text-xs text-[var(--muted)]">
+          <p className="whitespace-nowrap"><bdi dir="ltr">{formatDateTime(row.invitedAt)}</bdi></p>
+          {row.invitedByName && <p dir="auto" className="mt-0.5 truncate text-page-start" title={row.invitedByName}>{row.invitedByName}</p>}
+        </div>
+      ) },
+    { id: "expiry", header: t("invites.tableHeaders.tokenExpiry"), width: 190, headerClassName: "w-[190px]",
+      cell: (row) => {
+        const s = inviteStatus(row);
+        return (
+          <span className="text-xs">
+            {s === "accepted" && row.inviteAcceptedAt ? (
+              <span className="font-medium text-[var(--success)]">{t("invites.lifecycle.accepted", { date: `⁦${formatDateTime(row.inviteAcceptedAt)}⁩` })}</span>
+            ) : row.inviteExpiresAt ? (
+              <span className={s === "expired" ? "font-medium text-[var(--danger)]" : "text-[var(--muted)]"}>
+                {t("invites.lifecycle.expires", { date: `⁦${formatDateTime(row.inviteExpiresAt)}⁩` })}
+              </span>
+            ) : <span className="text-[var(--muted)]">{t("invites.lifecycle.unavailable")}</span>}
+          </span>
+        );
+      } },
+    { id: "status", header: t("invites.tableHeaders.status"), width: 160, headerClassName: "w-[160px]",
+      cell: (row) => (
+        <div className="flex flex-col items-start gap-1">
+          <InviteStatusBadge row={row} />
+          <InviteEmailStatusBadge status={row.inviteEmailStatus ?? "pending"} />
+        </div>
+      ) },
+    ...(canManage ? [{
+      id: "actions", header: <span className="sr-only">{t("invites.dropdownActions.label")}</span>, width: 56, pinned: "end" as const, headerClassName: "w-[56px]",
+      cell: (row: InvitationRow) => {
+        const s = inviteStatus(row);
+        if (s === "accepted") return <span className="text-[var(--muted)]" aria-label={t("invites.noActions")}>—</span>;
+        return (
+          <RowMenu label={t("ariaLabel.actionsForInvite")} header={t("invites.dropdownActions.label")} groups={
+            s === "cancelled"
+              ? [[{ id: "reinvite", label: t("invites.dropdownActions.reInvite"), icon: Send, tone: "text-[var(--accent)]", run: () => { void handleResend(row); } }]]
+              : [
+                  [{ id: "resend", label: t("invites.dropdownActions.resend"), icon: RefreshCw, tone: "text-[var(--accent)]", run: () => { void handleResend(row); } }],
+                  [{ id: "cancel", label: t("invites.dropdownActions.cancel"), icon: XCircle, danger: true, run: () => { void handleCancel(row); } }],
+                ]
+          } />
+        );
+      },
+    }] : []),
+  ];
+
   return (
-    <div className="space-y-3">
-      {/* Header with Invite button */}
+    <div className="space-y-4">
       {canManage && (
-        <div className="flex items-center justify-end">
-          <div />
-          <Button size="sm" onClick={() => setShowInviteDialog(true)}>
-            <Plus className="h-4 w-4" /> {t("invites.inviteUser")}
+        <div className="flex justify-end">
+          <Button onPress={() => setShowInviteDialog(true)} className="w-full sm:w-auto">
+            <Plus className="size-4" aria-hidden="true" /> {t("invites.inviteUser")}
           </Button>
         </div>
       )}
 
-      {/* Summary strip */}
       {data && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-          {[
-            { label: t("invites.totalInvites"), value: data.summary.total, icon: <Mail className="h-4 w-4 text-muted-foreground" /> },
-            { label: t("invites.pending"), value: data.summary.pending, icon: <Clock className="h-4 w-4 text-info" /> },
-            { label: t("invites.accepted"), value: data.summary.accepted, icon: <CheckCheck className="h-4 w-4 text-success" /> },
-            { label: t("invites.expired"), value: data.summary.expired, icon: <AlertCircle className="h-4 w-4 text-destructive" /> },
-            { label: t("invites.cancelled"), value: data.summary.cancelled, icon: <Ban className="h-4 w-4 text-muted-foreground" /> },
-          ].map((c) => (
-            <Card key={c.label}>
-              <CardContent className="px-3 py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">{c.label}</span>
-                  {c.icon}
-                </div>
-                <div className="text-xl font-medium">{c.value}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-5" aria-label={t("invites.totalInvites")}>
+          <FilterKpi icon={Mail} label={t("invites.totalInvites")} value={data.summary.total} />
+          <FilterKpi icon={Clock} label={t("invites.pending")} value={data.summary.pending} />
+          <FilterKpi icon={CheckCheck} status="success" label={t("invites.accepted")} value={data.summary.accepted} />
+          <FilterKpi icon={AlertCircle} status="danger" label={t("invites.expired")} value={data.summary.expired} />
+          <FilterKpi icon={Ban} label={t("invites.cancelled")} value={data.summary.cancelled} />
+        </section>
       )}
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-3">
-          <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-5">
-            <div className="relative md:col-span-2 lg:col-span-1">
-              <Search className="absolute start-2.5 top-3 h-4 w-4 text-muted-foreground" />
-              <Input aria-label={t("invites.searchPlaceholder")} placeholder={t("invites.searchPlaceholder")} className="ps-8" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} />
-            </div>
-            <Select value={filterStatus} onValueChange={(value) => { setFilterStatus(value); setOffset(0); }}>
-              <SelectTrigger><SelectValue placeholder={t("allStatuses")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("allStatuses")}</SelectItem>
-                <SelectItem value="pending">{t("invites.pending")}</SelectItem>
-                <SelectItem value="accepted">{t("invites.accepted")}</SelectItem>
-                <SelectItem value="expired">{t("invites.expired")}</SelectItem>
-                <SelectItem value="cancelled">{t("invites.cancelled")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterRole} onValueChange={(value) => { setFilterRole(value); setOffset(0); }}>
-              <SelectTrigger><SelectValue placeholder={t("allRoles")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("allRoles")}</SelectItem>
-                {ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>{t(`roles.${r.value}`)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterState} onValueChange={(value) => { setFilterState(value); setOffset(0); }}>
-              <SelectTrigger><SelectValue placeholder={t("allStates")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("allStates")}</SelectItem>
-                {statesList.map((s) => (
-                  <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterEmailDelivery} onValueChange={(value) => { setFilterEmailDelivery(value); setOffset(0); }}>
-              <SelectTrigger><SelectValue placeholder={t("invites.emailDeliveryFilter")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("invites.emailDeliveryFilter")}</SelectItem>
-                <SelectItem value="sent">{t("invites.emailStatusBadge.sent")}</SelectItem>
-                <SelectItem value="pending">{t("invites.emailStatusBadge.pending")}</SelectItem>
-                <SelectItem value="failed">{t("invites.emailStatusBadge.failed")}</SelectItem>
-              </SelectContent>
-            </Select>
-            {hasFilters && (
-              <Button type="button" variant="ghost" size="sm" className="justify-start lg:col-span-5" onClick={resetFilters}>
-                <FilterX className="h-4 w-4" /> {t("invites.resetFilters")}
+      <Card className="gap-0 overflow-hidden p-0">
+        <div className="grid gap-2 border-b border-[var(--border)] p-4 md:grid-cols-3 lg:grid-cols-5">
+          <SearchField aria-label={t("invites.searchPlaceholder")} value={search} onChange={(value) => { setSearch(value); setOffset(0); }} className="md:col-span-2 lg:col-span-1">
+            <SearchField.Group>
+              <SearchField.SearchIcon />
+              <SearchField.Input placeholder={t("invites.searchPlaceholder")} />
+              <SearchField.ClearButton />
+            </SearchField.Group>
+          </SearchField>
+          <SelectField
+            aria-label={t("invites.tableHeaders.status")}
+            value={filterStatus}
+            onChange={(value) => { setFilterStatus(value); setOffset(0); }}
+            options={[
+              { value: "all", label: t("allStatuses") },
+              { value: "pending", label: t("invites.pending") },
+              { value: "accepted", label: t("invites.accepted") },
+              { value: "expired", label: t("invites.expired") },
+              { value: "cancelled", label: t("invites.cancelled") },
+            ]}
+          />
+          <SelectField
+            aria-label={t("invites.tableHeaders.role")}
+            value={filterRole}
+            onChange={(value) => { setFilterRole(value); setOffset(0); }}
+            options={[{ value: "all", label: t("allRoles") }, ...ROLES.map((r) => ({ value: r.value, label: t(`roles.${r.value}`) }))]}
+          />
+          <SelectField
+            aria-label={t("invites.tableHeaders.state")}
+            value={filterState}
+            onChange={(value) => { setFilterState(value); setOffset(0); }}
+            options={[{ value: "all", label: t("allStates") }, ...statesList.map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }))]}
+          />
+          <SelectField
+            aria-label={t("invites.tableHeaders.emailDelivery")}
+            value={filterEmailDelivery}
+            onChange={(value) => { setFilterEmailDelivery(value); setOffset(0); }}
+            options={[
+              { value: "all", label: t("invites.emailDeliveryFilter") },
+              { value: "sent", label: t("invites.emailStatusBadge.sent") },
+              { value: "pending", label: t("invites.emailStatusBadge.pending") },
+              { value: "failed", label: t("invites.emailStatusBadge.failed") },
+            ]}
+          />
+          {hasFilters && (
+            <div className="lg:col-span-5">
+              <Button type="button" variant="ghost" size="sm" onPress={resetFilters}>
+                <FilterX className="size-4" aria-hidden="true" /> {t("invites.resetFilters")}
               </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto" role="region" aria-label={t("ariaLabel.invitationsTable")} tabIndex={0}>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("invites.tableHeaders.user")}</TableHead>
-                  <TableHead>{t("invites.tableHeaders.role")}</TableHead>
-                  <TableHead>{t("invites.tableHeaders.state")}</TableHead>
-                  <TableHead>{t("invites.tableHeaders.sector")}</TableHead>
-                  <TableHead>{t("invites.tableHeaders.invitedAt")}</TableHead>
-                  <TableHead>{t("invites.tableHeaders.tokenExpiry")}</TableHead>
-                  <TableHead>{t("invites.tableHeaders.status")}</TableHead>
-                  <TableHead>{t("invites.tableHeaders.emailDelivery")}</TableHead>
-                  <TableHead>{t("invites.tableHeaders.invitedBy")}</TableHead>
-                  {canManage && <TableHead className="w-10" />}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: canManage ? 10 : 9 }).map((__, j) => (
-                        <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : isError ? (
-                  <TableRow>
-                    <TableCell colSpan={canManage ? 10 : 9} className="py-4">
-                      <ErrorState compact variant="server" title={t("invites.couldNotLoad")} onRetry={() => refetch()} />
-                    </TableCell>
-                  </TableRow>
-                ) : invitations.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={canManage ? 10 : 9} className="text-center py-10 text-muted-foreground">
-                      <FilterX className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                      <p>{hasFilters ? t("invites.noFilteredInvitations") : t("invites.noInvitations")}</p>
-                      {hasFilters && (
-                        <Button type="button" variant="link" size="sm" className="mt-1" onClick={resetFilters}>
-                          {t("invites.resetFilters")}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  invitations.map((row) => {
-                    const s = inviteStatus(row);
-                    return (
-                      <TableRow key={row.id} className={s === "cancelled" ? "opacity-50" : ""}>
-                        <TableCell>
-                          <div className="font-medium text-sm">{row.name}</div>
-                          <div className="text-xs text-muted-foreground">{row.email}</div>
-                        </TableCell>
-                        <TableCell className="text-sm">{t(`roles.${row.role}`, { defaultValue: row.role })}</TableCell>
-                        <TableCell className="text-sm">{getLinkedStateLabel(row, i18n.language)}</TableCell>
-                        <TableCell className="text-sm">{row.sector ?? "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {formatDateTime(row.invitedAt)}
-                        </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {s === "accepted" && row.inviteAcceptedAt ? (
-                            <span className="text-success font-medium">{t("invites.lifecycle.accepted", { date: formatDateTime(row.inviteAcceptedAt) })}</span>
-                          ) : row.inviteExpiresAt ? (
-                            <span className={s === "expired" ? "text-destructive font-medium" : "text-muted-foreground"}>
-                              {t("invites.lifecycle.expires", { date: formatDateTime(row.inviteExpiresAt) })}
-                            </span>
-                          ) : <span className="text-muted-foreground">{t("invites.lifecycle.unavailable")}</span>}
-                        </TableCell>
-                        <TableCell><InviteStatusBadge row={row} /></TableCell>
-                        <TableCell>
-                          <InviteEmailStatusBadge status={row.inviteEmailStatus ?? "pending"} />
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {row.invitedByName ?? "—"}
-                        </TableCell>
-                        {canManage && (
-                          <TableCell>
-                            {(s === "pending" || s === "expired" || s === "cancelled") ? <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("ariaLabel.actionsForInvite")}>
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-52">
-                                <DropdownMenuLabel>{t("invites.dropdownActions.label")}</DropdownMenuLabel>
-                                {(s === "pending" || s === "expired") && (
-                                  <>
-                                    <DropdownMenuItem onClick={() => handleResend(row)}>
-                                      <RefreshCw className="h-3.5 w-3.5 me-2 text-info" /> {t("invites.dropdownActions.resend")}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => handleCancel(row)} className="text-destructive focus:text-destructive">
-                                      <XCircle className="h-3.5 w-3.5 me-2" /> {t("invites.dropdownActions.cancel")}
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
-                                {s === "cancelled" && (
-                                  <DropdownMenuItem onClick={() => handleResend(row)}>
-                                    <Send className="h-3.5 w-3.5 me-2 text-info" /> {t("invites.dropdownActions.reInvite")}
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu> : <span className="text-muted-foreground" aria-label={t("invites.noActions")}>—</span>}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {data && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          <span>{t("pagination.showing", { from: data.total === 0 ? 0 : data.offset + 1, to: data.offset + invitations.length, total: data.total })}</span>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setOffset(Math.max(0, data.offset - data.limit))} disabled={data.offset === 0}>
-              {t("pagination.previous")}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setOffset(data.nextOffset ?? data.offset)} disabled={!data.hasMore}>
-              {t("pagination.next")}
-            </Button>
-          </div>
+            </div>
+          )}
         </div>
-      )}
+        {isLoading ? (
+          <RegistrySkeleton rows={5} />
+        ) : isError ? (
+          <div className="p-4"><ErrorState compact variant="server" title={t("invites.couldNotLoad")} onRetry={() => refetch()} /></div>
+        ) : (
+          <div role="region" aria-label={t("ariaLabel.invitationsTable")}>
+            <DataGrid
+              aria-label={t("ariaLabel.invitationsTable")}
+              data={invitations}
+              columns={columns}
+              getRowId={(row) => row.id}
+              contentClassName="min-w-[956px] table-fixed"
+              verticalAlign="middle"
+              renderEmptyState={() => (
+                <EmptyRegistry
+                  icon={FilterX}
+                  message={hasFilters ? t("invites.noFilteredInvitations") : t("invites.noInvitations")}
+                  action={hasFilters ? <Button variant="ghost" size="sm" onPress={resetFilters}>{t("invites.resetFilters")}</Button> : undefined}
+                />
+              )}
+            />
+          </div>
+        )}
+        {data && !isError && (
+          <div className="border-t border-[var(--border)]">
+            <OffsetPagination
+              offset={data.offset}
+              total={data.total}
+              onOffsetChange={(next) => setOffset(next)}
+              summary={t("pagination.showing", { from: data.total === 0 ? 0 : data.offset + 1, to: data.offset + invitations.length, total: data.total })}
+            />
+          </div>
+        )}
+      </Card>
 
       {/* Invite User Dialog */}
       <InviteUserDialog
@@ -1790,52 +1630,32 @@ function InvitationsTab({ canManage }: { canManage: boolean }) {
       />
 
       {/* Invite link dialog */}
-      <Dialog open={!!inviteLink} onOpenChange={(o) => { if (!o) setInviteLinkFor(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("invites.linkDialog.title")}</DialogTitle>
-            <DialogDescription asChild>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>{t("invites.linkDialog.shareDesc", { name: inviteLinkFor?.name ?? "" })}</p>
-                {inviteLinkFor?.expiresInDays && (
-                  <p>{t("invites.linkDialog.expiresIn", {
-                    days: inviteLinkFor.expiresInDays,
-                    dayWord: inviteLinkFor.expiresInDays !== 1 ? t("invites.linkDialog.days") : t("invites.linkDialog.day"),
-                  })}</p>
-                )}
-                {inviteLinkFor?.emailDelivery === "pending" && (
-                  <p className="text-warning text-xs">{t("invites.linkDialog.simulationWarning")}</p>
-                )}
-                {inviteLinkFor?.emailDelivery === "failed" && (
-                  <p className="text-destructive text-xs">{t("invites.linkDialog.deliveryFailed")}</p>
-                )}
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2">
-            <Input value={inviteLink ?? ""} readOnly className="font-mono text-xs" />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                if (inviteLink) {
-                  try {
-                    await navigator.clipboard.writeText(inviteLink);
-                    toast.success(t("invites.linkDialog.linkCopied"));
-                  } catch {
-                    // clipboard blocked — user can select and copy the field above manually
-                    toast.info(t("invites.linkDialog.copyManual"));
-                  }
-                }
-              }}
-            >
-              <Copy className="h-4 w-4" /> {t("invites.linkDialog.copyLink")}
-            </Button>
-            <Button onClick={() => setInviteLinkFor(null)}>{t("invites.linkDialog.close")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <InviteLinkModal
+        link={inviteLink}
+        onClose={() => setInviteLinkFor(null)}
+        title={t("invites.linkDialog.title")}
+        description={
+          <>
+            <p>{t("invites.linkDialog.shareDesc", { name: inviteLinkFor?.name ?? "" })}</p>
+            {inviteLinkFor?.expiresInDays && (
+              <p>{t("invites.linkDialog.expiresIn", {
+                days: inviteLinkFor.expiresInDays,
+                dayWord: inviteLinkFor.expiresInDays !== 1 ? t("invites.linkDialog.days") : t("invites.linkDialog.day"),
+              })}</p>
+            )}
+            {inviteLinkFor?.emailDelivery === "pending" && (
+              <p className="text-xs text-[var(--warning)]">{t("invites.linkDialog.simulationWarning")}</p>
+            )}
+            {inviteLinkFor?.emailDelivery === "failed" && (
+              <p className="text-xs text-[var(--danger)]">{t("invites.linkDialog.deliveryFailed")}</p>
+            )}
+          </>
+        }
+        copiedMessage={t("invites.linkDialog.linkCopied")}
+        manualMessage={t("invites.linkDialog.copyManual")}
+        copyLabel={t("invites.linkDialog.copyLink")}
+        closeLabel={t("invites.linkDialog.close")}
+      />
     </div>
   );
 }
@@ -1844,10 +1664,10 @@ function InvitationsTab({ canManage }: { canManage: boolean }) {
 
 const STATE_ROLES_SET = new Set(["state_office_manager", "state_program_officer"]);
 const EXPIRY_OPTIONS = [
-  { label: "3 days", value: 3 },
-  { label: "7 days (default)", value: 7 },
-  { label: "14 days", value: 14 },
-  { label: "30 days", value: 30 },
+  { labelKey: "expiryOptions.days3", value: 3 },
+  { labelKey: "expiryOptions.days7", value: 7 },
+  { labelKey: "expiryOptions.days14", value: 14 },
+  { labelKey: "expiryOptions.days30", value: 30 },
 ];
 
 type InviteForm = {
@@ -1947,143 +1767,115 @@ function InviteUserDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("inviteDialog.title")}</DialogTitle>
-          <DialogDescription>
-            {t("inviteDialog.description")}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="inv-name">{t("inviteDialog.fullName")} <span className="text-destructive">{t("inviteDialog.required")}</span></Label>
-              <Input
-                id="inv-name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder={t("inviteDialog.placeholderName")}
-                required
-              />
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="inv-email">{t("inviteDialog.emailAddress")} <span className="text-destructive">{t("inviteDialog.required")}</span></Label>
-              <Input
-                id="inv-email"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder={t("inviteDialog.placeholderEmail")}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="inv-role">{t("inviteDialog.role")} <span className="text-destructive">{t("inviteDialog.required")}</span></Label>
-              <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v, stateId: "", sector: "" }))}>
-                <SelectTrigger id="inv-role"><SelectValue placeholder={t("inviteDialog.selectRole")} /></SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>{t(`roles.${r.value}`)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="inv-expiry">{t("inviteDialog.linkExpiresAfter")}</Label>
-              <Select value={String(form.expiresInDays)} onValueChange={(v) => setForm((f) => ({ ...f, expiresInDays: Number(v) }))}>
-                <SelectTrigger id="inv-expiry"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EXPIRY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {needsState && (
-              <div className="space-y-1.5 col-span-2">
-                <Label htmlFor="inv-state">{t("inviteDialog.assignedState")} <span className="text-destructive">{t("inviteDialog.required")}</span></Label>
-                <Select value={form.stateId} onValueChange={(v) => setForm((f) => ({ ...f, stateId: v }))}>
-                  <SelectTrigger id="inv-state"><SelectValue placeholder={t("inviteDialog.selectState")} /></SelectTrigger>
-                  <SelectContent>
-                    {statesList.map((s) => (
-                      <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {isTC && (
-              <div className="space-y-1.5 col-span-2">
-                <Label htmlFor="inv-sector">{t("inviteDialog.assignedSector")} <span className="text-destructive">{t("inviteDialog.required")}</span></Label>
-                <Select value={form.sector} onValueChange={(v) => setForm((f) => ({ ...f, sector: v }))}>
-                  <SelectTrigger id="inv-sector"><SelectValue placeholder={t("inviteDialog.selectSector")} /></SelectTrigger>
-                  <SelectContent>
-                    {SECTORS.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">{t("inviteDialog.additionalSectors")}</p>
-              </div>
-            )}
-            <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="inv-message">{t("inviteDialog.personalMessage")} <span className="text-muted-foreground text-xs">{t("inviteDialog.personalMessageHint")}</span></Label>
-              <Textarea
-                id="inv-message"
-                value={form.message}
-                onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
-                placeholder={t("inviteDialog.placeholderMessage")}
-                rows={3}
-                maxLength={500}
-                className="resize-none"
-              />
-              <p className="text-xs text-muted-foreground text-end"><bdi dir="ltr">{form.message.length}/500</bdi></p>
-            </div>
-          </div>
+    <Modal isOpen={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <Modal.Backdrop isDismissable={!busy}>
+        <Modal.Container size="lg" scroll="inside">
+          <Modal.Dialog className="max-h-[calc(100dvh-2rem)] sm:max-w-lg">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{t("inviteDialog.title")}</Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("inviteDialog.description")}</p>
+            </Modal.Header>
+            <form onSubmit={handleSubmit} noValidate className="contents">
+              <Modal.Body className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="inv-name" isRequired>{t("inviteDialog.fullName")}</Label>
+                  <Input id="inv-name" fullWidth dir="auto" value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder={t("inviteDialog.placeholderName")} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="inv-email" isRequired>{t("inviteDialog.emailAddress")}</Label>
+                  <Input id="inv-email" type="email" fullWidth dir="ltr" className="rtl:text-end" value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder={t("inviteDialog.placeholderEmail")} required />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SelectField
+                    id="inv-role"
+                    label={t("inviteDialog.role")}
+                    isRequired
+                    placeholder={t("inviteDialog.selectRole")}
+                    value={form.role}
+                    onChange={(v) => setForm((f) => ({ ...f, role: v, stateId: "", sector: "" }))}
+                    options={ROLES.map((r) => ({ value: r.value, label: t(`roles.${r.value}`) }))}
+                  />
+                  <SelectField
+                    id="inv-expiry"
+                    label={t("inviteDialog.linkExpiresAfter")}
+                    value={String(form.expiresInDays)}
+                    onChange={(v) => setForm((f) => ({ ...f, expiresInDays: Number(v) }))}
+                    options={EXPIRY_OPTIONS.map((o) => ({ value: String(o.value), label: t(o.labelKey) }))}
+                  />
+                </div>
+                {needsState && (
+                  <SelectField
+                    id="inv-state"
+                    label={t("inviteDialog.assignedState")}
+                    isRequired
+                    placeholder={t("inviteDialog.selectState")}
+                    value={form.stateId}
+                    onChange={(v) => setForm((f) => ({ ...f, stateId: v }))}
+                    options={statesList.map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }))}
+                  />
+                )}
+                {isTC && (
+                  <div className="space-y-1.5">
+                    <SelectField
+                      id="inv-sector"
+                      label={t("inviteDialog.assignedSector")}
+                      isRequired
+                      placeholder={t("inviteDialog.selectSector")}
+                      value={form.sector}
+                      onChange={(v) => setForm((f) => ({ ...f, sector: v }))}
+                      aria-describedby="inv-sector-hint"
+                      options={SECTORS.map((s) => ({ value: s, label: s }))}
+                    />
+                    <p id="inv-sector-hint" className="text-xs text-[var(--muted)]">{t("inviteDialog.additionalSectors")}</p>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="inv-message">
+                    {t("inviteDialog.personalMessage")} <span className="text-xs font-normal text-[var(--muted)]">{t("inviteDialog.personalMessageHint")}</span>
+                  </Label>
+                  <TextArea
+                    id="inv-message"
+                    fullWidth
+                    dir="auto"
+                    value={form.message}
+                    onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
+                    placeholder={t("inviteDialog.placeholderMessage")}
+                    rows={3}
+                    maxLength={500}
+                    className="resize-none"
+                    aria-describedby="inv-message-count"
+                  />
+                  <p id="inv-message-count" className="text-end text-xs text-[var(--muted)]"><bdi dir="ltr">{form.message.length}/500</bdi></p>
+                </div>
 
-          {formError && (
-            <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
-              {formError}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose} disabled={busy}>{t("inviteDialog.cancel")}</Button>
-            <Button type="submit" disabled={busy}>
-              {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("inviteDialog.sending")}</> : <><Send className="h-4 w-4" /> {t("inviteDialog.sendInvitation")}</>}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+                {formError && (
+                  <Alert status="danger" role="alert">
+                    <Alert.Indicator />
+                    <Alert.Content><Alert.Description>{formError}</Alert.Description></Alert.Content>
+                  </Alert>
+                )}
+              </Modal.Body>
+              <Modal.Footer>
+                <Button type="button" variant="tertiary" onPress={handleClose} isDisabled={busy}>{t("inviteDialog.cancel")}</Button>
+                <Button type="submit" isPending={busy}>
+                  {busy ? <Spinner size="sm" color="current" /> : <Send className="size-4" aria-hidden="true" />}
+                  {busy ? t("inviteDialog.sending") : t("inviteDialog.sendInvitation")}
+                </Button>
+              </Modal.Footer>
+            </form>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
 // ─── Helper components ─────────────────────────────────────────────────────────
-
-function SummaryCard({
-  icon, label, value, active, onClick,
-}: { icon: React.ReactNode; label: string; value: number; active?: boolean; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`flex min-h-[96px] w-full flex-col rounded-xl border bg-card p-4 text-start shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-        active
-          ? "border-primary/60 bg-accent/50"
-          : "border-card-border hover:border-primary/40 hover:bg-accent/20"
-      }`}
-    >
-        <div className="flex w-full items-center justify-between gap-2">
-          <span className="text-sm text-muted-foreground">{label}</span>
-          {icon}
-        </div>
-        <div className="mt-1 text-2xl font-bold tabular-nums">{value}</div>
-    </button>
-  );
-}
 
 function UserForm({
   editing, setEditing, stateReference,
@@ -2101,73 +1893,73 @@ function UserForm({
   const requiresState = roleDef?.scope === "state";
   const isCreate = !editing.id;
   const showPassword = isCreate && editing.status !== "invited";
+  // An inactive State still assigned to the user stays visible but not selectable.
+  const orphanState = editing.stateId && !states.some((state) => state.id === editing.stateId) && editing.stateName
+    ? [{ value: String(editing.stateId), label: i18n.language.startsWith("ar") ? editing.stateNameAr || editing.stateName : editing.stateName }]
+    : [];
 
   return (
-    <div className="grid gap-4 py-2">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t("userForm.fullName")}>
-          <Input value={editing.name ?? ""} onChange={(e) => set("name", e.target.value)} />
+    <div className="grid gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field id="user-name" label={t("userForm.fullName")} isRequired>
+          <Input id="user-name" fullWidth dir="auto" value={editing.name ?? ""} onChange={(e) => set("name", e.target.value)} />
         </Field>
-        <Field label={t("userForm.username")}>
+        <Field id="user-username" label={t("userForm.username")} isRequired>
           <Input
+            id="user-username"
+            fullWidth
+            dir="ltr"
+            className="rtl:text-end"
             value={editing.username ?? ""}
             onChange={(e) => set("username", e.target.value)}
-            placeholder={t("common:usersPlaceholders.exampleName")}
+            placeholder={t("userForm.usernamePlaceholder")}
           />
         </Field>
-        <Field label={t("userForm.email")}>
+        <Field id="user-email" label={t("userForm.email")} isRequired>
           <Input
+            id="user-email"
             type="email"
+            fullWidth
+            dir="ltr"
+            className="rtl:text-end"
             value={editing.email ?? ""}
             onChange={(e) => set("email", e.target.value)}
           />
         </Field>
-        <Field label={t("userForm.phone")}>
-          <Input value={editing.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
+        <Field id="user-phone" label={t("userForm.phone")}>
+          <Input id="user-phone" type="tel" fullWidth dir="ltr" className="rtl:text-end" value={editing.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
         </Field>
-        <Field label={t("userForm.role")}>
-          <Select
-            value={editing.role}
-            onValueChange={(v) => {
-              const nextRequiresState = ["state_office_manager", "state_program_officer"].includes(v);
-              const wasStateRole = ["state_office_manager", "state_program_officer"].includes(editing.role ?? "");
-              setEditing({
-                ...editing,
-                role: v,
-                stateId: nextRequiresState && wasStateRole ? editing.stateId : null,
-                sector: v === "technical_coordinator" ? editing.sector ?? null : null,
-              });
-            }}
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {ROLES.map((r) => (
-                <SelectItem key={r.value} value={r.value}>{t(`roles.${r.value}`)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <SelectField
+          id="user-role"
+          label={t("userForm.role")}
+          isRequired
+          value={editing.role ?? ""}
+          onChange={(v) => {
+            const nextRequiresState = ["state_office_manager", "state_program_officer"].includes(v);
+            const wasStateRole = ["state_office_manager", "state_program_officer"].includes(editing.role ?? "");
+            setEditing({
+              ...editing,
+              role: v,
+              stateId: nextRequiresState && wasStateRole ? editing.stateId : null,
+              sector: v === "technical_coordinator" ? editing.sector ?? null : null,
+            });
+          }}
+          options={ROLES.map((r) => ({ value: r.value, label: t(`roles.${r.value}`) }))}
+        />
         {requiresState ? (
-          <Field label={t("userForm.assignedStateRequired")}>
-            {stateReference.status === "ready" ? (
-              <Select
-                value={editing.stateId ? String(editing.stateId) : undefined}
-                onValueChange={(v) => set("stateId", Number(v))}
-                required
-              >
-                <SelectTrigger aria-required="true"><SelectValue placeholder={t("userForm.selectState")} /></SelectTrigger>
-                <SelectContent>
-                  {editing.stateId && !states.some((state) => state.id === editing.stateId) && editing.stateName ? (
-                    <SelectItem value={String(editing.stateId)} disabled>
-                      {i18n.language.startsWith("ar") ? editing.stateNameAr || editing.stateName : editing.stateName}
-                    </SelectItem>
-                  ) : null}
-                  {states.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
+          stateReference.status === "ready" ? (
+            <SelectField
+              id="user-state"
+              label={t("userForm.assignedState")}
+              isRequired
+              placeholder={t("userForm.selectState")}
+              value={editing.stateId ? String(editing.stateId) : ""}
+              onChange={(v) => set("stateId", Number(v))}
+              options={[...orphanState, ...states.map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }))]}
+            />
+          ) : (
+            <div className="space-y-1.5">
+              <Label isRequired>{t("userForm.assignedState")}</Label>
               <StateReferenceStatus
                 status={stateReference.status}
                 loadingText={t("userForm.statesLoading")}
@@ -2176,53 +1968,58 @@ function UserForm({
                 retryText={t("userForm.statesRetry")}
                 onRetry={() => { void stateReference.retry(); }}
               />
-            )}
-          </Field>
+            </div>
+          )
         ) : null}
         {editing.role === "technical_coordinator" ? (
-          <Field label={t("userForm.assignedSector")}>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label id="user-sector-label" isRequired>{t("userForm.assignedSector")}</Label>
             <SectorMultiSelect
+              labelledBy="user-sector-label"
               value={editing.sector ?? ""}
               onChange={(v) => set("sector", v)}
             />
-          </Field>
+          </div>
         ) : null}
-        <Field label={t("userForm.language")}>
-          <Select
-            value={editing.languagePreference ?? "en"}
-            onValueChange={(v) => set("languagePreference", v)}
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="en">{t("english")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label={t("userForm.accountStatus")}>
-          <Select value={editing.status ?? "invited"} onValueChange={(v) => set("status", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>{t(`status.${s}`)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <SelectField
+          id="user-language"
+          label={t("userForm.language")}
+          value={editing.languagePreference === "ar" ? "ar" : "en"}
+          onChange={(v) => set("languagePreference", v)}
+          options={[
+            { value: "ar", label: t("arabic") },
+            { value: "en", label: t("english") },
+          ]}
+        />
+        <SelectField
+          id="user-status"
+          label={t("userForm.accountStatus")}
+          isRequired
+          value={editing.status ?? "invited"}
+          onChange={(v) => set("status", v)}
+          options={STATUSES.map((s) => ({ value: s, label: t(`status.${s}`) }))}
+        />
       </div>
 
       {showPassword && (
-        <div className="grid gap-3 sm:grid-cols-2 rounded-md border bg-muted/30 p-3">
-          <Field label={t("userForm.passwordLabel")}>
+        <div className="grid gap-4 rounded-xl border border-[var(--border)] bg-[var(--default)] p-3 sm:grid-cols-2">
+          <Field id="user-password" label={t("userForm.passwordLabel")} isRequired>
             <Input
+              id="user-password"
               type="password"
+              fullWidth
+              autoComplete="new-password"
               value={editing.password ?? ""}
               onChange={(e) => set("password", e.target.value)}
               placeholder={t("userForm.passwordMin")}
             />
           </Field>
-          <Field label={t("userForm.confirmPasswordLabel")}>
+          <Field id="user-password-confirm" label={t("userForm.confirmPasswordLabel")} isRequired>
             <Input
+              id="user-password-confirm"
               type="password"
+              fullWidth
+              autoComplete="new-password"
               value={editing.confirmPassword ?? ""}
               onChange={(e) => set("confirmPassword", e.target.value)}
             />
@@ -2230,9 +2027,10 @@ function UserForm({
         </div>
       )}
       {isCreate && editing.status === "invited" && (
-        <p className="text-xs text-muted-foreground">
-          {t("userForm.inviteNote")}
-        </p>
+        <Alert status="accent">
+          <Alert.Indicator />
+          <Alert.Content><Alert.Description>{t("userForm.inviteNote")}</Alert.Description></Alert.Content>
+        </Alert>
       )}
     </div>
   );
@@ -2243,9 +2041,11 @@ function UserForm({
 function SectorMultiSelect({
   value,
   onChange,
+  labelledBy,
 }: {
   value: string;
   onChange: (v: string) => void;
+  labelledBy?: string;
 }) {
   const selected = useMemo(
     () => new Set(value.split(",").map((s) => s.trim()).filter(Boolean)),
@@ -2258,33 +2058,36 @@ function SectorMultiSelect({
     onChange(SECTORS.filter((x) => next.has(x)).join(","));
   };
   return (
-    <div className="flex flex-wrap gap-1.5 rounded-md border border-input bg-background p-2 min-h-[44px]">
-      {SECTORS.map((s) => {
-        const on = selected.has(s);
-        return (
-          <button
-            key={s}
-            type="button"
-            onClick={() => toggle(s)}
-            className={
-              "rounded-full border px-2.5 py-0.5 text-xs transition " +
-              (on
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-input bg-background text-foreground hover:bg-accent")
-            }
-          >
-            {s}
-          </button>
-        );
-      })}
+    <div role="group" aria-labelledby={labelledBy} className="flex min-h-[44px] flex-wrap gap-1.5 rounded-xl border border-[var(--border)] p-2">
+      {SECTORS.map((s) => (
+        <CountToggleChip key={s} label={s} pressed={selected.has(s)} onPress={() => toggle(s)} />
+      ))}
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function CountToggleChip({ label, pressed, onPress }: { label: string; pressed: boolean; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onPress}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${
+        pressed
+          ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-foreground)]"
+          : "border-[var(--border)] hover:bg-[var(--default)]"
+      }`}
+    >
+      {pressed && <CheckCheck className="size-3" aria-hidden="true" />}
+      {label}
+    </button>
+  );
+}
+
+function Field({ id, label, isRequired, children }: { id: string; label: string; isRequired?: boolean; children: ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium">{label}</Label>
+      <Label htmlFor={id} isRequired={isRequired}>{label}</Label>
       {children}
     </div>
   );
@@ -2301,60 +2104,55 @@ function ResetPasswordDialog({
   const { t } = useTranslation("users");
   const [pwd, setPwd] = useState("");
   const [confirm, setConfirm] = useState("");
+  const cancel = () => { setPwd(""); setConfirm(""); onCancel(); };
   return (
-    <Dialog open={!!user} onOpenChange={(o) => { if (!o) { setPwd(""); setConfirm(""); onCancel(); } }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("resetPasswordDialog.title", { name: user?.name })}</DialogTitle>
-          <DialogDescription>
-            {t("resetPasswordDialog.description")}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <Field label={t("resetPasswordDialog.newPassword")}>
-            <Input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} />
-          </Field>
-          <Field label={t("resetPasswordDialog.confirmPassword")}>
-            <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-          </Field>
-        </div>
-        <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="outline" onClick={onCancel}>{t("resetPasswordDialog.cancel")}</Button>
-          <Button
-            variant="secondary"
-            onClick={() => onSubmit("invite")}
-            disabled={pending}
-          >
-            <Mail className="h-4 w-4" /> {t("resetPasswordDialog.sendInvite")}
-          </Button>
-          <Button
-            onClick={() => {
-              if (pwd.length < 8) { toast.error(t("resetPasswordDialog.passwordTooShort")); return; }
-              if (pwd !== confirm) { toast.error(t("resetPasswordDialog.passwordsDoNotMatch")); return; }
-              onSubmit("password", pwd);
-              setPwd(""); setConfirm("");
-            }}
-            disabled={pending}
-          >
-            {t("resetPasswordDialog.setPassword")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal isOpen={!!user} onOpenChange={(o) => { if (!o) cancel(); }}>
+      <Modal.Backdrop isDismissable={!pending}>
+        <Modal.Container size="md">
+          <Modal.Dialog>
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Icon className="bg-[var(--default)] text-[var(--foreground)]"><KeyRound className="size-5" aria-hidden="true" /></Modal.Icon>
+              <Modal.Heading>{t("resetPasswordDialog.title", { name: user?.name })}</Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("resetPasswordDialog.description")}</p>
+            </Modal.Header>
+            <Modal.Body className="grid gap-4">
+              <Field id="reset-password" label={t("resetPasswordDialog.newPassword")}>
+                <Input id="reset-password" type="password" fullWidth autoComplete="new-password" value={pwd} onChange={(e) => setPwd(e.target.value)} />
+              </Field>
+              <Field id="reset-password-confirm" label={t("resetPasswordDialog.confirmPassword")}>
+                <Input id="reset-password-confirm" type="password" fullWidth autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              </Field>
+            </Modal.Body>
+            <Modal.Footer className="flex-wrap">
+              <Button variant="tertiary" onPress={cancel}>{t("resetPasswordDialog.cancel")}</Button>
+              <Button variant="secondary" onPress={() => onSubmit("invite")} isDisabled={pending}>
+                <Mail className="size-4" aria-hidden="true" /> {t("resetPasswordDialog.sendInvite")}
+              </Button>
+              <Button
+                onPress={() => {
+                  if (pwd.length < 8) { toast.error(t("resetPasswordDialog.passwordTooShort")); return; }
+                  if (pwd !== confirm) { toast.error(t("resetPasswordDialog.passwordsDoNotMatch")); return; }
+                  onSubmit("password", pwd);
+                  setPwd(""); setConfirm("");
+                }}
+                isPending={pending}
+              >
+                {t("resetPasswordDialog.setPassword")}
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
 function EmailDeliveryBadge({ status, t }: { status: ResetToken["emailStatus"]; t: (key: string) => string }) {
-  if (status === "sent") {
-    return <Badge variant="approved" className="gap-1 text-xs"><CheckCheck className="h-3 w-3" />{t("passwordReset.emailStatus.sent")}</Badge>;
-  }
-  if (status === "failed") {
-    return <Badge variant="rejected" className="gap-1 text-xs"><AlertCircle className="h-3 w-3" />{t("passwordReset.emailStatus.failed")}</Badge>;
-  }
-  if (status === "pending") {
-    return <Badge variant="returned" className="gap-1 text-xs"><Clock className="h-3 w-3" />{t("passwordReset.emailStatus.pending")}</Badge>;
-  }
-  return <span className="text-xs text-muted-foreground">—</span>;
+  if (status === "sent") return <DeliveryChip status="sent" label={t("passwordReset.emailStatus.sent")} />;
+  if (status === "failed") return <DeliveryChip status="failed" label={t("passwordReset.emailStatus.failed")} />;
+  if (status === "pending") return <DeliveryChip status="pending" label={t("passwordReset.emailStatus.pending")} />;
+  return <span className="text-xs text-[var(--muted)]">—</span>;
 }
 
 type EffectiveModuleAction = {
@@ -2389,15 +2187,17 @@ function ScopeRow({
   label,
   value,
 }: {
-  icon: React.ElementType;
+  icon: IconComponent;
   label: string;
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-1.5 min-w-0 text-sm">
-      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <span className="text-muted-foreground shrink-0">{label}:</span>
-      <span className="font-medium truncate" title={value}>{value}</span>
+    <div className="flex min-w-0 items-start gap-2 text-sm">
+      <Icon className="mt-0.5 size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-xs text-[var(--muted)]">{label}</p>
+        <p className="font-medium">{value}</p>
+      </div>
     </div>
   );
 }
@@ -2409,31 +2209,16 @@ function ResultBadge({
   result: "allowed" | "denied" | "conditional";
   t: (k: string) => string;
 }) {
-  if (result === "allowed") {
-    return (
-      <Badge variant="approved" className="shrink-0 gap-1 text-[11px] whitespace-nowrap">
-        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-        <span>{t("inspector.allowed")}</span>
-      </Badge>
-    );
-  }
-  if (result === "denied") {
-    return (
-      <Badge variant="rejected" className="shrink-0 gap-1 text-[11px] whitespace-nowrap">
-        <XCircle className="h-3 w-3" aria-hidden="true" />
-        <span>{t("inspector.denied")}</span>
-      </Badge>
-    );
-  }
+  const Icon = result === "allowed" ? CheckCircle2 : result === "denied" ? XCircle : AlertCircle;
   return (
-    <Badge variant="returned" className="shrink-0 gap-1 text-[11px] whitespace-nowrap">
-      <AlertCircle className="h-3 w-3" aria-hidden="true" />
-      <span>{t("inspector.conditional")}</span>
-    </Badge>
+    <Chip size="sm" variant="soft" color={result === "allowed" ? "success" : result === "denied" ? "danger" : "warning"} className="shrink-0 whitespace-nowrap">
+      <Icon className="size-3" aria-hidden="true" />
+      {t(`inspector.${result}`)}
+    </Chip>
   );
 }
 
-function AccessInspectorSheet({
+function AccessInspectorDrawer({
   user,
   onClose,
 }: {
@@ -2443,6 +2228,7 @@ function AccessInspectorSheet({
   const { t, i18n } = useTranslation("users");
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState("all");
+  const isRtl = i18n.dir() === "rtl";
 
   const userId = user?.id ?? 0;
   const { data, isLoading, isError, refetch } = useGetUserEffectiveAccess(userId, {
@@ -2454,20 +2240,25 @@ function AccessInspectorSheet({
   });
 
   const access = data as unknown as EffectiveAccessData | undefined;
+  const moduleLabel = (m: EffectiveModuleAccess) => t(`inspector.modules.${m.module}`, { defaultValue: m.label });
+  const actionLabel = (a: EffectiveModuleAction) => t(`inspector.actions.${a.action}`, { defaultValue: a.label });
+  const reasonLabel = (a: EffectiveModuleAction) => t(`inspector.reasonCodes.${a.reasonCode}`, { defaultValue: a.reason });
 
   const filteredModules = useMemo(() => {
     if (!access?.modules) return [];
-    const lc = search.toLowerCase();
+    const lc = search.trim().toLowerCase();
+    // Search what the reader sees: the translated action and reason text.
     return access.modules
       .filter((m) => moduleFilter === "all" || m.module === moduleFilter)
       .map((m) => ({
         ...m,
         actions: m.actions.filter(
-          (a) => !lc || a.label.toLowerCase().includes(lc) || a.reason.toLowerCase().includes(lc),
+          (a) => !lc || actionLabel(a).toLowerCase().includes(lc) || reasonLabel(a).toLowerCase().includes(lc),
         ),
       }))
       .filter((m) => m.actions.length > 0);
-  }, [access, search, moduleFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [access, search, moduleFilter, t]);
 
   function handleOpenChange(open: boolean) {
     if (!open) {
@@ -2477,177 +2268,142 @@ function AccessInspectorSheet({
     }
   }
 
+  // The access API returns the English State name; the directory row carries both.
+  const stateLabel = access?.scope.stateId != null && user?.stateId === access.scope.stateId
+    ? getLinkedStateLabel(user, i18n.language)
+    : access?.scope.stateName ?? t("inspector.notAssigned");
+
   return (
-    <Sheet open={!!user} onOpenChange={handleOpenChange}>
-      <SheetContent
-        className="w-full sm:max-w-2xl overflow-y-auto flex flex-col"
-        side={i18n.dir() === "rtl" ? "left" : "right"}
-        dir={i18n.dir()}
-      >
-        <SheetHeader className="pb-4 border-b shrink-0">
-          <SheetTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            {t("inspector.title")}
-          </SheetTitle>
-          <SheetDescription>{t("inspector.description")}</SheetDescription>
-        </SheetHeader>
-
-        {/* Loading */}
-        {isLoading && (
-          <div className="mt-6 space-y-3 px-1" aria-busy="true" aria-label={t("inspector.title")}>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
-        )}
-
-        {/* Error */}
-        {isError && !isLoading && (
-          <div className="mt-10 flex flex-col items-center gap-3 text-center px-4">
-            <AlertCircle className="h-8 w-8 text-destructive/60" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{t("inspector.loadError")}</p>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              {t("inspector.retry")}
-            </Button>
-          </div>
-        )}
-
-        {/* Content */}
-        {access && (
-          <div className="mt-4 space-y-4 pb-6 flex-1 overflow-y-auto">
-            {/* Header card */}
-            <div className="rounded-lg border bg-card p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <p className="font-medium text-base truncate">{access.displayName}</p>
-                  <p className="text-sm text-muted-foreground truncate">{access.email}</p>
-                </div>
-                <div className="flex flex-col gap-1 items-end shrink-0">
-                  <RoleBadge
-                    role={access.role}
-                    label={t(`roles.${access.role}`, { defaultValue: access.roleLabel })}
-                  />
-                  <StatusBadge status={access.accountStatus} />
-                </div>
-              </div>
-
-              {!access.runtimeActive && (
-                <div className="flex items-center gap-2 text-sm text-warning rounded-md bg-warning/10 px-3 py-2" role="alert">
-                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>{t("inspector.accountInactive", { status: access.accountStatus })}</span>
+    <Drawer>
+      <Drawer.Backdrop isOpen={!!user} onOpenChange={handleOpenChange}>
+        <Drawer.Content placement={isRtl ? "left" : "right"}>
+          <Drawer.Dialog className="h-full w-screen max-w-full sm:w-[42rem]">
+            <Drawer.CloseTrigger />
+            <Drawer.Header>
+              <Drawer.Heading className="flex items-center gap-2">
+                <ShieldCheck className="size-5 text-[var(--accent)]" aria-hidden="true" />
+                {t("inspector.title")}
+              </Drawer.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("inspector.description")}</p>
+            </Drawer.Header>
+            <Drawer.Body className="space-y-4">
+              {isLoading && (
+                <div className="space-y-3" aria-busy="true" aria-label={t("inspector.title")}>
+                  {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <ScopeRow
-                  icon={Globe}
-                  label={t("inspector.orgScope")}
-                  value={access.scope.orgWide ? t("inspector.orgWide") : t("inspector.stateScoped")}
-                />
-                <ScopeRow
-                  icon={MapPin}
-                  label={t("inspector.stateScope")}
-                  value={access.scope.stateName ?? t("inspector.notAssigned")}
-                />
-                <ScopeRow
-                  icon={Building2}
-                  label={t("inspector.sectorScope")}
-                  value={
-                    access.scope.sectors === null
-                      ? t("inspector.noRestriction")
-                      : access.scope.sectors.length === 0
-                        ? t("inspector.notAssigned")
-                        : access.scope.sectors.join(", ")
-                  }
-                />
-                <ScopeRow
-                  icon={FolderOpen}
-                  label={t("inspector.projectScope")}
-                  value={
-                    access.scope.projectAssignmentsExtendScope
-                      ? t("inspector.projectAssignmentsExtendScope", { count: access.scope.projectCount })
-                      : t("inspector.projectCount", { count: access.scope.projectCount })
-                  }
-                />
-              </div>
-            </div>
+              {isError && !isLoading && (
+                <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
+                  <AlertCircle className="size-8 text-[var(--danger)]" aria-hidden="true" />
+                  <p className="text-sm text-[var(--muted)]">{t("inspector.loadError")}</p>
+                  <Button variant="tertiary" size="sm" onPress={() => refetch()}>{t("inspector.retry")}</Button>
+                </div>
+              )}
 
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative flex-1">
-                <Search
-                  className="absolute start-2.5 top-2 h-3.5 w-3.5 text-muted-foreground pointer-events-none"
-                  aria-hidden="true"
-                />
-                <Input
-                  className="ps-7 h-9 text-sm"
-                  placeholder={t("inspector.searchActions")}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  aria-label={t("inspector.searchActionsLabel")}
-                />
-              </div>
-              <Select value={moduleFilter} onValueChange={setModuleFilter}>
-                <SelectTrigger
-                  className="h-9 sm:w-48 text-sm"
-                  aria-label={t("inspector.filterModuleLabel")}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("inspector.allModules")}</SelectItem>
-                  {access.modules.map((m) => (
-                    <SelectItem key={m.module} value={m.module}>
-                      {t(`inspector.modules.${m.module}`, { defaultValue: m.label })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              {access && (
+                <>
+                  <Card variant="secondary" className="gap-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p dir="auto" className="truncate text-base font-medium text-page-start">{access.displayName}</p>
+                        <p className="truncate text-sm text-[var(--muted)]"><bdi dir="ltr">{access.email}</bdi></p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <RoleBadge role={access.role} label={access.roleLabel} />
+                        <StatusBadge status={access.accountStatus} />
+                      </div>
+                    </div>
 
-            {/* Module sections */}
-            {filteredModules.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                {t("inspector.noResults")}
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {filteredModules.map((mod) => (
-                  <section key={mod.module} aria-labelledby={`inspector-mod-${mod.module}`}>
-                    <h3
-                      id={`inspector-mod-${mod.module}`}
-                      className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground"
-                    >
-                      {t(`inspector.modules.${mod.module}`, { defaultValue: mod.label })}
-                    </h3>
-                    <div className="rounded-md border divide-y overflow-hidden">
-                      {mod.actions.map((act) => (
-                        <div
-                          key={act.action}
-                          className="flex items-start gap-3 px-3 py-2.5 bg-card"
-                        >
-                          <ResultBadge result={act.result} t={t} />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium leading-tight">
-                              {t(`inspector.actions.${act.action}`, { defaultValue: act.label })}
-                            </p>
-                            <p
-                              className="text-xs text-muted-foreground mt-0.5 leading-snug"
-                            >
-                              {t(`inspector.reasonCodes.${act.reasonCode}`, { defaultValue: act.reason })}
-                            </p>
-                          </div>
-                        </div>
+                    {!access.runtimeActive && (
+                      <Alert status="warning">
+                        <Alert.Indicator />
+                        <Alert.Content>
+                          <Alert.Description>
+                            {t("inspector.accountInactive", { status: t(`status.${access.accountStatus}`, { defaultValue: access.accountStatus }) })}
+                          </Alert.Description>
+                        </Alert.Content>
+                      </Alert>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-3 border-t border-[var(--border)] pt-3 sm:grid-cols-2">
+                      <ScopeRow
+                        icon={Globe}
+                        label={t("inspector.orgScope")}
+                        value={access.scope.orgWide ? t("inspector.orgWide") : t("inspector.stateScoped")}
+                      />
+                      <ScopeRow icon={MapPin} label={t("inspector.stateScope")} value={stateLabel} />
+                      <ScopeRow
+                        icon={Building2}
+                        label={t("inspector.sectorScope")}
+                        value={
+                          access.scope.sectors === null
+                            ? t("inspector.noRestriction")
+                            : access.scope.sectors.length === 0
+                              ? t("inspector.notAssigned")
+                              : access.scope.sectors.join(", ")
+                        }
+                      />
+                      <ScopeRow
+                        icon={FolderOpen}
+                        label={t("inspector.projectScope")}
+                        value={
+                          access.scope.projectAssignmentsExtendScope
+                            ? t("inspector.projectAssignmentsExtendScope", { count: access.scope.projectCount })
+                            : t("inspector.projectCount", { count: access.scope.projectCount })
+                        }
+                      />
+                    </div>
+                  </Card>
+
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <SearchField aria-label={t("inspector.searchActionsLabel")} value={search} onChange={setSearch} className="flex-1">
+                      <SearchField.Group>
+                        <SearchField.SearchIcon />
+                        <SearchField.Input placeholder={t("inspector.searchActions")} />
+                        <SearchField.ClearButton />
+                      </SearchField.Group>
+                    </SearchField>
+                    <SelectField
+                      aria-label={t("inspector.filterModuleLabel")}
+                      value={moduleFilter}
+                      onChange={setModuleFilter}
+                      triggerClassName="whitespace-nowrap sm:w-48"
+                      options={[{ value: "all", label: t("inspector.allModules") }, ...access.modules.map((m) => ({ value: m.module, label: moduleLabel(m) }))]}
+                    />
+                  </div>
+
+                  {filteredModules.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-[var(--muted)]">{t("inspector.noResults")}</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {filteredModules.map((mod) => (
+                        <section key={mod.module} aria-labelledby={`inspector-mod-${mod.module}`}>
+                          <h3 id={`inspector-mod-${mod.module}`} className="mb-2 text-xs font-medium text-[var(--muted)]">
+                            {moduleLabel(mod)}
+                          </h3>
+                          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)]">
+                            {mod.actions.map((act) => (
+                              <li key={act.action} className="flex items-start gap-3 px-3 py-2.5">
+                                <ResultBadge result={act.result} t={t} />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium leading-tight">{actionLabel(act)}</p>
+                                  <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">{reasonLabel(act)}</p>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
                       ))}
                     </div>
-                  </section>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
+                  )}
+                </>
+              )}
+            </Drawer.Body>
+          </Drawer.Dialog>
+        </Drawer.Content>
+      </Drawer.Backdrop>
+    </Drawer>
   );
 }
 

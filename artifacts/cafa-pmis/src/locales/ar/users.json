@@ -6,6 +6,7 @@
   "inviteUser": "دعوة مستخدم",
   "editUser": "تعديل المستخدم",
   "deleteUser": "حذف المستخدم",
+  "deleteDialog": { "title": "حذف {{name}}؟" },
   "noUsers": "لا يوجد مستخدمون",
   "stats": { "totalUsers": "إجمالي المستخدمين", "active": "نشط", "invited": "تمت دعوته", "suspended": "موقوف" },
   "status": { "active": "نشط", "invited": "تمت دعوته", "suspended": "موقوف", "inactive": "غير نشط", "deactivated": "معطّل" },
@@ -45,7 +46,7 @@
   "tabs": { "allUsers": "جميع المستخدمين", "passwordResets": "إعادات تعيين كلمة المرور", "invitations": "الدعوات" },
   "usersByRole": "المستخدمون حسب الدور", "usersByState": "المستخدمون حسب الولاية", "searchPlaceholder": "ابحث بالاسم أو البريد أو اسم المستخدم…",
   "allRoles": "كل الأدوار", "allStatuses": "كل الحالات", "allStates": "كل الولايات", "allSectors": "كل القطاعات", "clear": "مسح",
-  "statusHeader": "الحالة", "verified": "تم التحقق", "unverified": "غير متحقق", "noUsersFilters": "لا يوجد مستخدمون يطابقون عوامل التصفية الحالية.",
+  "statusHeader": "الحالة", "verified": "تم التحقق", "verifiedOn": "تم التحقق في {{date}}", "unverified": "غير متحقق", "noUsersFilters": "لا يوجد مستخدمون يطابقون عوامل التصفية الحالية.",
   "presence": { "header": "التواجد", "online": "متصل", "offline": "غير متصل", "offlineLastSeen": "غير متصل · آخر ظهور {{time}}" },
   "clickNewUser": "انقر «مستخدم جديد» لإنشاء مستخدم.", "actionsLabel": "إجراءات", "done": "تم",
   "dialog": {
@@ -91,9 +92,9 @@
     "placeholderName": "مثال: فاطمة الراشد", "placeholderEmail": "مثال: fatima@cafa.org", "placeholderMessage": "مرحباً بك في الفريق! يتيح لك حسابك الوصول إلى…", "required": "*"
   },
   "userForm": {
-    "fullName": "الاسم الكامل *", "username": "اسم المستخدم *", "email": "البريد الإلكتروني *", "phone": "الهاتف", "role": "الدور *",
-    "assignedState": "الولاية المعيّنة", "assignedStateRequired": "الولاية المعيّنة *", "assignedSector": "القطاع المعيّن *", "language": "اللغة", "accountStatus": "حالة الحساب *",
-    "passwordLabel": "كلمة المرور *", "confirmPasswordLabel": "تأكيد كلمة المرور *", "passwordMin": "8 أحرف على الأقل", "noneHQ": "— لا يوجد (المقر) —",
+    "fullName": "الاسم الكامل", "username": "اسم المستخدم", "email": "البريد الإلكتروني", "phone": "الهاتف", "role": "الدور",
+    "assignedState": "الولاية المعيّنة", "assignedSector": "القطاع المعيّن", "language": "اللغة", "accountStatus": "حالة الحساب",
+    "passwordLabel": "كلمة المرور", "confirmPasswordLabel": "تأكيد كلمة المرور", "usernamePlaceholder": "مثال: fatima.osman", "passwordMin": "8 أحرف على الأقل", "noneHQ": "— لا يوجد (المقر) —",
     "selectState": "اختر ولاية…", "stateRequired": "يجب تعيين ولاية لهذا الدور.", "statesUnavailable": "بيانات الولايات المرجعية غير متاحة. أعد المحاولة قبل الإرسال.",
     "statesLoading": "جارٍ تحميل الولايات النشطة…", "statesError": "تعذّر تحميل الولايات النشطة.", "statesEmpty": "لا توجد ولايات نشطة متاحة للتعيين.", "statesRetry": "إعادة المحاولة",
     "inviteNote": "سيتم إنشاء دعوة لهذا المستخدم. يصبح الحساب نشطاً فقط بعد قبول المستخدم للدعوة وتعيين كلمة مرور."
@@ -194,7 +195,8 @@
     }
   },
   "couldNotLoadUsers": "تعذر تحميل المستخدمين", "expiryOptions": { "days3": "3 أيام", "days7": "7 أيام (افتراضي)", "days14": "14 يوماً", "days30": "30 يوماً" },
-  "pagination": { "showing": "عرض {{from}}–{{to}} من {{total}} مستخدم", "previous": "السابق", "next": "التالي" },
+  "pagination": { "showing": "عرض {{from}}–{{to}} من {{total}} مستخدم", "previous": "السابق", "next": "التالي", "first": "الصفحة الأولى", "last": "الصفحة الأخيرة", "pageOf": "صفحة {{page}} من {{totalPages}}", "region": "التنقل بين الصفحات" },
   "deactivateDialog": { "title": "تعطيل {{name}}؟", "description": "لن يستطيع هذا المستخدم الدخول فوراً، مع بقاء سجل التدقيق محفوظاً. يمكنك إعادة تفعيل الحساب لاحقاً." },
-  "english": "الإنجليزية"
+  "english": "الإنجليزية",
+  "arabic": "العربية"
 }

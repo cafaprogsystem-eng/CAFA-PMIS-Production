@@ -40,8 +40,8 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
     expect(page).toContain("p.limit = pageSize");
     expect(page).toContain('t("pagination.next")');
     expect(page).toContain("deactivateDialog.description");
-    expect(page).toContain('aria-label={t("ariaLabel.actionsFor"');
-    expect(page).toContain("start-2.5");
+    expect(page).toContain('label={t("ariaLabel.actionsFor", { name: u.name })}');
+    expect(page).toContain('<SearchField aria-label={t("searchPlaceholder")}');
   });
 
   it("uses the States array and generated invitation paging contract", () => {
@@ -51,7 +51,9 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
     expect(page).not.toContain('<Field label="Office Location">');
     expect(page).toContain("useListUserInvitations(params)");
     expect(page).toContain("limit: 25, offset");
-    expect(page).toContain("data.nextOffset");
+    // Paging derives from the page's offset and total (RegistryPagination).
+    expect(page).toContain("offset={data.offset}");
+    expect(page).toContain("total={data.total}");
     expect(page).toContain("data.summary.total");
     expect(page).toContain("data.summary.pending");
     expect(page).toContain("data.summary.accepted");
@@ -60,16 +62,19 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
   });
 
   it("keeps the actionable table as the only All Users registry presentation", () => {
-    expect(page).toContain('className="table-scroll"');
-    expect(page).toContain('className="min-w-[1190px]"');
+    // A Pro DataGrid that fits a laptop screen: secondary facts sit under
+    // the primary value in each cell instead of in twelve separate columns.
+    expect(page).toContain("<DataGrid");
+    expect(page).toContain('contentClassName="min-w-[1026px] table-fixed"');
     expect(page).toContain('aria-label={t("ariaLabel.usersTable")}');
     expect(page).toContain('t("presence.header")');
     expect(page).toContain("PresenceValue");
     expect(page).toContain('socket.on("presence:update", onPresenceUpdate)');
     expect(page).not.toContain("conversation:presence");
-    expect(page).toContain("aria-pressed={active}");
-    expect(page).toContain("aria-pressed={role === r.role}");
-    expect(page).toContain("aria-pressed={stateId === String(s.stateId)}");
+    expect(page).toContain('pressed={status === "active"} onToggle={() => toggleStatus("active")}');
+    expect(page).toContain("aria-pressed={pressed}");
+    expect(page).toContain("pressed={role === r.role}");
+    expect(page).toContain("pressed={stateId === String(s.stateId)}");
     expect(page).not.toContain("ViewModeSwitcher");
     expect(page).not.toContain("CardGrid");
     expect(page).not.toContain("ListView");
@@ -78,7 +83,7 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
   });
 
   it("uses compact, responsive summary hooks and Title Case English headings", () => {
-    expect(page).toContain("grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4");
+    expect(page).toContain("grid grid-cols-2 items-stretch gap-3 lg:grid-cols-4");
     expect(page).toContain("min-w-0 max-w-full");
     expect(en.usersByState).toBe("Users by State");
     expect(en.subtitle).toContain("CAFA staff accounts");
@@ -93,7 +98,7 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
     expect(page).toContain('t(`roles.${row.role}`, { defaultValue: row.role })');
     expect(page).toContain('title={t("invites.couldNotLoad")}');
     expect(page).toContain('t("invites.noFilteredInvitations")');
-    expect(page).toContain('onClick={resetFilters}');
+    expect(page).toContain('onPress={resetFilters}');
     expect(page).toContain('body.emailDelivery === "failed"');
     expect(page).toContain('t("invites.deliveryFailed")');
     expect(page).toContain('inviteLinkFor?.emailDelivery === "pending"');
@@ -106,7 +111,7 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
     for (const fragment of [
       "p.limit = String(pageSize)",
       "p.offset = String(offset)",
-      "setSearch(e.target.value); resetPage();",
+      "setSearch(value); resetPage();",
       "setFilterStatus(value); resetPage();",
       "setFilterSource(value); resetPage();",
       "resetLifecycleValue(tok)",
@@ -138,5 +143,25 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
     }
     expect((english.tableHeaders as Record<string, string>).expiryResolution).toBe("Expiry / Resolution");
     expect((arabic.tableHeaders as Record<string, string>).expiryResolution).toBe("الانتهاء / الحل");
+  });
+
+  it("offers Arabic as a saved language and keeps every visible label translated", () => {
+    // The API accepts en | ar; the admin form used to offer English only.
+    expect(page).toContain('{ value: "ar", label: t("arabic") }');
+    expect(page).toContain('value={editing.languagePreference === "ar" ? "ar" : "en"}');
+    // Invite expiry options come from the locale, not hard-coded English.
+    expect(page).toContain("t(o.labelKey)");
+    expect(page).not.toContain('"7 days (default)"');
+    // The username placeholder key exists in the users namespace.
+    expect(page).toContain('t("userForm.usernamePlaceholder")');
+    expect(page).not.toContain("usersPlaceholders.exampleName");
+    expect((en.userForm as Record<string, string>).usernamePlaceholder).toEqual(expect.any(String));
+    // The API's English roleLabel is only a fallback for the translated role.
+    expect(page).toContain("t(`roles.${role}`, { defaultValue: label ?? role })");
+    // Labels carry no literal asterisks; Label isRequired adds the marker.
+    for (const value of Object.values(ar.userForm as Record<string, string>)) expect(value).not.toMatch(/ \*$/);
+    // The inspector prefers the directory row's Arabic State name.
+    expect(page).toContain("user?.stateId === access.scope.stateId");
+    expect(page).toContain('t(`status.${access.accountStatus}`, { defaultValue: access.accountStatus })');
   });
 });
