@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 import { CardGrid } from "@/components/view-modes/card-grid";
@@ -12,8 +12,11 @@ import { StateMap } from "@/components/view-modes/state-map";
 import type { ViewRecord } from "@/lib/view-modes";
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) =>
-    options?.count ? `${options.count} scheduled items` : key }),
+  useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => {
+    if (key === "viewModes.openRecord") return `View ${String(options?.title)}`;
+    if (key === "viewModes.moreItems") return `+${String(options?.count)} more`;
+    return options?.count ? `${options.count} scheduled items` : key;
+  }, i18n: { language: "en", resolvedLanguage: "en", dir: () => "ltr" } }),
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({
@@ -36,17 +39,21 @@ function record(onView: ReturnType<typeof vi.fn>, onEdit?: ReturnType<typeof vi.
   };
 }
 
-const views = [
+const buttonViews = [
   ["card", (item: ViewRecord) => <CardGrid items={[item]} />],
+] as const;
+
+/** List, compact and kanban are HeroUI Pro collections: each record is a grid row. */
+const rowViews = [
   ["list", (item: ViewRecord) => <ListView items={[item]} />],
   ["compact", (item: ViewRecord) => <CompactView items={[item]} />],
   ["kanban", (item: ViewRecord) => (
-    <KanbanBoard items={[item]} columns={[{ key: "draft", label: "Draft", color: "bg-muted" }]} />
+    <KanbanBoard items={[item]} columns={[{ key: "draft", label: "Draft" }]} />
   )],
 ] as const;
 
 describe("Project registry record controls", () => {
-  it.each(views)("%s view opens a record by pointer and keyboard without making child edit actions open it", async (_name, View) => {
+  it.each(buttonViews)("%s view opens a record by pointer and keyboard without making child edit actions open it", async (_name, View) => {
     const onView = vi.fn();
     const onEdit = vi.fn();
     const user = userEvent.setup();
@@ -65,6 +72,29 @@ describe("Project registry record controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue Edit" }));
     expect(onEdit).toHaveBeenCalledOnce();
     expect(onView).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(rowViews)("%s view opens a record from its row by pointer and keyboard, passes the row as trigger, and keeps child actions isolated", async (_name, View) => {
+    const onView = vi.fn();
+    const onEdit = vi.fn();
+    const user = userEvent.setup();
+    render(View(record(onView, onEdit)));
+
+    const row = screen.getByRole("row", { name: "View Draft water project" });
+
+    await user.click(within(row).getByText("Draft water project"));
+    expect(onView).toHaveBeenCalledTimes(1);
+
+    row.focus();
+    expect(row).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onView).toHaveBeenCalledTimes(2);
+    // The row itself is handed back so the record viewer can restore focus to it.
+    expect(onView.mock.calls.every(([trigger]) => trigger === row)).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "Continue Edit" }));
+    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onView).toHaveBeenCalledTimes(2);
   });
 
   it("calendar entries are real buttons, retain focusable triggers, and keep Continue Edit isolated", () => {

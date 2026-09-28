@@ -513,7 +513,19 @@
       "pending": "معلّق",
       "completed": "مكتمل",
       "scheduled": "مجدول"
-    }
+    },
+    "openRecord": "عرض {{title}}",
+    "listSeparator": "، ",
+    "progress": "التقدّم",
+    "previousMonth": "الشهر السابق",
+    "nextMonth": "الشهر التالي",
+    "moreItems_zero": "+{{count}} أخرى",
+    "moreItems_one": "+{{count}} أخرى",
+    "moreItems_two": "+{{count}} أخرى",
+    "moreItems_few": "+{{count}} أخرى",
+    "moreItems_many": "+{{count}} أخرى",
+    "moreItems_other": "+{{count}} أخرى",
+    "showLess": "عرض أقل"
   },
   "locationContext": {
     "allLocations": "جميع المواقع (المقر الرئيسي)",

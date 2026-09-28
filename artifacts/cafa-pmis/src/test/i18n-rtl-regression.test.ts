@@ -654,10 +654,10 @@ describe("Business-module RTL production guardrails", () => {
     expect(budget).toContain('<bdi dir="ltr">{fmtMoney(b[field], b.currency)}</bdi>');
     expect(plans).toContain('<bdi dir="ltr">{progressPct}%</bdi>');
     expect(cardGrid).toContain("<BidiIsolate>{item.code}</BidiIsolate>");
-    expect(cardGrid).toContain('<bdi dir="ltr">{budgetPct}%</bdi>');
+    expect(cardGrid).toContain('<bdi dir="ltr">{pct}%</bdi>');
     expect(cardGrid).toContain('<bdi dir="ltr">{item.date}</bdi>');
     expect(listView).toContain('<bdi dir="ltr">{item.date}</bdi>');
-    expect(listView).toContain('<bdi dir="ltr">{Math.round((item.progress.value / item.progress.max) * 100)}%</bdi>');
+    expect(listView).toContain('<bdi dir="ltr">{pct}%</bdi>');
     expect(budget).toContain('<bdi dir="ltr">{formatPercent(burnRate)}</bdi>');
     expect(budget).toContain('<bdi dir="ltr">{fmtMoney(activeCurrEntry.activitySpent, activeCurrEntry.currency)}</bdi>');
     expect(source("pages/dashboard.tsx")).toContain('<bdi dir="ltr">{fmtMoney(row.spent, row.currency)}</bdi>');

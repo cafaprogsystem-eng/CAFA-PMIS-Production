@@ -562,9 +562,10 @@ describe("RISK-VIS-VM: table, card, and board presentations", () => {
     expect(screen.getByText("Open")).toBeInTheDocument();
     expect(screen.getByText("Under Mitigation")).toBeInTheDocument();
     expect(screen.getByText("Mitigated")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: `Open risk: ${MOCK_RISK.title}` })).toBeInTheDocument();
+    // Pro Kanban: each card is a grid row that opens the risk.
+    expect(screen.getByRole("row", { name: `Open risk: ${MOCK_RISK.title}` })).toBeInTheDocument();
     expect(container.querySelector('[draggable="true"]')).toBeNull();
-    expect(container.querySelector(".overflow-x-auto")).toBeInTheDocument();
+    expect(container.querySelector(".kanban")).toBeInTheDocument();
   });
 
   it("switches views through the URL without dropping filters, page, or external context", () => {

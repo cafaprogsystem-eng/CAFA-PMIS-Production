@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { Button, Tooltip } from "@heroui/react";
 import { ChevronLeft, ChevronRight } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { RecordActions, useOpenRecordLabel } from "@/components/view-modes/shared";
 import type { ViewRecord } from "@/lib/view-modes";
 
 interface CalendarGridProps {
@@ -10,13 +10,26 @@ interface CalendarGridProps {
   empty?: React.ReactNode;
 }
 
-const MONTHS = ["January","February","March","April","May","June",
-  "July","August","September","October","November","December"];
-const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+/*
+ * Month calendar of records by date. Kept as a HeroUI-built grid rather than
+ * the Pro Agenda: every record here carries its own actions (Continue Editing,
+ * the actions menu), which Agenda events cannot hold.
+ */
 
 const PENDING_STATUSES = new Set(["draft","submitted","in_progress","pending",
   "technically_approved","coordination_approved","submitted_for_review","under_review"]);
 const DONE_STATUSES    = new Set(["completed","approved","closed","published","active","archived"]);
+
+type Tone = "overdue" | "today" | "pending" | "completed" | "scheduled";
+
+/** Theme token per legend tone (used for the day badge and legend dot). */
+const TONE_BG: Record<Tone, string> = {
+  overdue: "bg-[var(--danger)] text-[var(--danger-foreground)]",
+  today: "bg-[var(--foreground)] text-[var(--background)]",
+  pending: "bg-[var(--warning)] text-[var(--warning-foreground)]",
+  completed: "bg-[var(--success)] text-[var(--success-foreground)]",
+  scheduled: "bg-[var(--accent)] text-[var(--accent-foreground)]",
+};
 
 function parseDate(d: string | null | undefined): Date | null {
   if (!d) return null;
@@ -24,56 +37,39 @@ function parseDate(d: string | null | undefined): Date | null {
   return isNaN(parsed.getTime()) ? null : parsed;
 }
 
-/**
- * Returns Tailwind classes for the date number circle.
- * Priority: past-with-items (overdue) > today-with-items > pending > completed > scheduled
- */
-function getDateNumberClass(
-  cellDate: Date,
-  today: Date,
-  isToday: boolean,
-  items: ViewRecord[],
-): string {
+/** Tone of a day that has records: past (overdue) > today > pending > all done > scheduled. */
+function dayTone(cellDate: Date, today: Date, isToday: boolean, items: ViewRecord[]): Tone {
   const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-  if (!items.length) {
-    if (isToday) return "bg-primary text-primary-foreground";
-    return "text-muted-foreground bg-transparent";
-  }
-
-  // Overdue: past dates (strictly before today) with items
-  if (cellDate < todayMidnight) {
-    return "bg-red-500 text-white ring-2 ring-red-100 shadow-sm";
-  }
-
-  // Today with scheduled items
-  if (isToday) {
-    return "bg-[#1a2744] text-white ring-2 ring-[#1a2744]/20 shadow-md";
-  }
-
-  // Future: check statuses
+  if (cellDate < todayMidnight) return "overdue";
+  if (isToday) return "today";
   const statuses = items.map(i => i.status ?? "").filter(Boolean);
-  if (statuses.some(s => PENDING_STATUSES.has(s))) {
-    return "bg-orange-400 text-white shadow-sm";
-  }
-  if (statuses.length > 0 && statuses.every(s => DONE_STATUSES.has(s))) {
-    return "bg-emerald-500 text-white shadow-sm";
-  }
-  return "bg-violet-500 text-white shadow-sm";
+  if (statuses.some(s => PENDING_STATUSES.has(s))) return "pending";
+  if (statuses.length > 0 && statuses.every(s => DONE_STATUSES.has(s))) return "completed";
+  return "scheduled";
 }
 
-/** Build tooltip text for a day's items */
-function buildTooltip(items: ViewRecord[], t: (key: string, opts?: Record<string, unknown>) => string): string {
-  if (!items.length) return "";
-  return t("viewModes.scheduledItems_other", { count: items.length, defaultValue: `${items.length} scheduled items` });
+function entryClass(status: string) {
+  if (PENDING_STATUSES.has(status)) return "bg-[color-mix(in_oklab,var(--warning)_14%,transparent)] text-[var(--foreground)] border-[color-mix(in_oklab,var(--warning)_35%,transparent)]";
+  if (DONE_STATUSES.has(status)) return "bg-[color-mix(in_oklab,var(--success)_12%,transparent)] text-[var(--foreground)] border-[color-mix(in_oklab,var(--success)_35%,transparent)]";
+  return "bg-[color-mix(in_oklab,var(--accent)_10%,transparent)] text-[var(--foreground)] border-[color-mix(in_oklab,var(--accent)_30%,transparent)]";
 }
 
 export function CalendarGrid({ items, empty }: CalendarGridProps) {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
+  const openLabel = useOpenRecordLabel();
+  const locale = i18n?.resolvedLanguage ?? i18n?.language ?? "en";
   const today = new Date();
   const [year, setYear]   = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [expandedDays, setExpandedDays] = useState<Set<number>>(() => new Set());
+
+  const monthLabel = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(new Date(year, month, 1));
+  const monthName = new Intl.DateTimeFormat(locale, { month: "long" }).format(new Date(year, month, 1));
+  // 2023-01-01 was a Sunday: weekday names Sun → Sat in the active language.
+  const dayNames = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(locale, { weekday: "short" });
+    return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2023, 0, 1 + i)));
+  }, [locale]);
 
   const prevMonth = () => {
     setExpandedDays(new Set());
@@ -84,7 +80,6 @@ export function CalendarGrid({ items, empty }: CalendarGridProps) {
     if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1);
   };
 
-  // Items grouped by day-of-month key for current view
   const itemsByDay = useMemo(() => {
     const map = new Map<number, ViewRecord[]>();
     for (const item of items) {
@@ -106,149 +101,122 @@ export function CalendarGrid({ items, empty }: CalendarGridProps) {
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const hasItems = items.some(item => {
-    const d = parseDate(item.date2 ?? item.date);
-    return d && d.getFullYear() === year && d.getMonth() === month;
-  });
-
-  const legendItems = [
-    { color: "bg-red-500",     labelKey: "viewModes.legend.overdue" },
-    { color: "bg-[#1a2744]",   labelKey: "viewModes.legend.today" },
-    { color: "bg-orange-400",  labelKey: "viewModes.legend.pending" },
-    { color: "bg-emerald-500", labelKey: "viewModes.legend.completed" },
-    { color: "bg-violet-500",  labelKey: "viewModes.legend.scheduled" },
-  ];
+  const hasItems = itemsByDay.size > 0;
+  const legend: Tone[] = ["overdue", "today", "pending", "completed", "scheduled"];
 
   return (
     <div className="space-y-3">
-      {/* Navigation */}
+      {/* Navigation — arrows follow reading direction */}
       <div className="flex items-center justify-between">
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={prevMonth}>
-          <ChevronLeft className="h-4 w-4" />
+        <Button isIconOnly size="sm" variant="secondary" aria-label={t("viewModes.previousMonth")} onPress={prevMonth}>
+          <ChevronLeft className="size-4 rtl:rotate-180" aria-hidden="true" />
         </Button>
-        <h3 className="text-sm font-semibold">{MONTHS[month]} {year}</h3>
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextMonth}>
-          <ChevronRight className="h-4 w-4" />
+        <h3 className="text-sm font-semibold" aria-live="polite">{monthLabel}</h3>
+        <Button isIconOnly size="sm" variant="secondary" aria-label={t("viewModes.nextMonth")} onPress={nextMonth}>
+          <ChevronRight className="size-4 rtl:rotate-180" aria-hidden="true" />
         </Button>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 flex-wrap px-1">
-        {legendItems.map(({ color, labelKey }) => (
-          <span key={labelKey} className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} />
-            {t(labelKey)}
+      <div className="flex flex-wrap items-center gap-4 px-1">
+        {legend.map((tone) => (
+          <span key={tone} className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+            <span className={`inline-block size-2.5 rounded-full ${TONE_BG[tone].split(" ")[0]}`} aria-hidden="true" />
+            {t(`viewModes.legend.${tone}`)}
           </span>
         ))}
       </div>
 
-      {/* Calendar grid */}
-      <div className="border border-border rounded-lg overflow-hidden">
-        {/* Day headers */}
-        <div className="grid grid-cols-7 bg-muted/40 border-b border-border">
-          {DAYS.map(d => (
-            <div key={d} className="text-center text-xs font-semibold text-muted-foreground py-2">{d}</div>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+        <div className="grid grid-cols-7 border-b border-[var(--border)] bg-[var(--default)]">
+          {dayNames.map((d) => (
+            <div key={d} className="py-2 text-center text-xs font-semibold text-[var(--muted)]">{d}</div>
           ))}
         </div>
 
-        {/* Cells */}
         <div className="grid grid-cols-7">
           {cells.map((day, i) => {
             const isToday   = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
             const dayItems  = day ? (itemsByDay.get(day) ?? []) : [];
             const cellDate  = day ? new Date(year, month, day) : null;
-            const numCls    = cellDate
-              ? getDateNumberClass(cellDate, today, isToday, dayItems)
-              : "";
-            const tipText   = buildTooltip(dayItems, t);
-            const expanded = day ? expandedDays.has(day) : false;
+            const tone      = cellDate && dayItems.length ? dayTone(cellDate, today, isToday, dayItems) : null;
+            const expanded  = day ? expandedDays.has(day) : false;
             const visibleItems = expanded ? dayItems : dayItems.slice(0, 3);
             const overflowCount = Math.max(0, dayItems.length - visibleItems.length);
             const recordsId = day ? `calendar-day-${year}-${month}-${day}` : undefined;
+            const numberClass = tone
+              ? TONE_BG[tone]
+              : isToday ? TONE_BG.scheduled : "text-[var(--muted)]";
 
             return (
               <div
                 key={i}
-                className={`min-h-[80px] sm:min-h-[90px] p-1.5 border-b border-r border-border/40 last:border-r-0 ${!day ? "bg-muted/20" : ""}`}
+                className={`min-h-[84px] border-b border-e border-[var(--border)] p-1.5 sm:min-h-[96px] [&:nth-child(7n)]:border-e-0 ${!day ? "bg-[color-mix(in_oklab,var(--default)_50%,transparent)]" : ""}`}
               >
                 {day && (
                   <>
-                    {/* Date number circle */}
-                    <div className="flex items-center justify-start mb-1">
-                      {tipText ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold transition-all cursor-default ${numCls}`}>
-                              {day}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs">
-                            {tipText}
-                          </TooltipContent>
+                    <div className="mb-1 flex items-center justify-start">
+                      {tone ? (
+                        <Tooltip delay={300}>
+                          <Tooltip.Trigger className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold ${numberClass}`}>
+                            {day}
+                          </Tooltip.Trigger>
+                          <Tooltip.Content>{t("viewModes.scheduledItems", { count: dayItems.length })}</Tooltip.Content>
                         </Tooltip>
                       ) : (
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${numCls}`}>
-                          {day}
-                        </span>
+                        <span className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-medium ${numberClass}`}>{day}</span>
                       )}
                     </div>
 
-                    {/* Item chips */}
                     <div id={recordsId} className="space-y-0.5">
                       {visibleItems.map(item => {
-                        // Pick chip color based on status
-                        const s = item.status ?? "";
-                        const chipCls = PENDING_STATUSES.has(s)
-                          ? "bg-orange-50 border-orange-200 text-orange-800"
-                          : DONE_STATUSES.has(s)
-                            ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                            : "bg-primary/10 border-primary/20 text-primary";
-
+                        const cls = entryClass(item.status ?? "");
                         return (
                           <div key={item.id} className="flex items-start gap-0.5">
                             {item.onClick ? (
                               <button
                                 type="button"
-                                className={`min-w-0 flex-1 text-start text-xs leading-tight border rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 transition-opacity ${chipCls}`}
+                                dir="auto"
+                                className={`min-w-0 flex-1 truncate rounded-md border px-1 py-0.5 text-start text-xs leading-tight outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${cls}`}
                                 onClick={(event) => item.onClick?.(event.currentTarget)}
                                 title={item.title}
-                                aria-label={`View ${item.title}`}
+                                aria-label={openLabel(item)}
                               >
                                 {item.title}
                               </button>
                             ) : (
-                              <span className={`min-w-0 flex-1 text-xs leading-tight border rounded px-1 py-0.5 truncate ${chipCls}`} title={item.title}>
+                              <span dir="auto" className={`min-w-0 flex-1 truncate rounded-md border px-1 py-0.5 text-xs leading-tight ${cls}`} title={item.title}>
                                 {item.title}
                               </span>
                             )}
-                            {item.actions && <span className="shrink-0" onClick={(event) => event.stopPropagation()}>{item.actions}</span>}
+                            {item.actions && <RecordActions className="shrink-0">{item.actions}</RecordActions>}
                           </div>
                         );
                       })}
                       {overflowCount > 0 && (
                         <button
                           type="button"
-                          className="w-full text-start text-xs text-primary px-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                          onClick={() => setExpandedDays((current) => new Set(current).add(day!))}
+                          className="w-full rounded px-1 text-start text-xs text-[var(--accent)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+                          onClick={() => setExpandedDays((current) => new Set(current).add(day))}
                           aria-expanded={false}
                           aria-controls={recordsId}
                         >
-                          +{overflowCount} more
+                          {t("viewModes.moreItems", { count: overflowCount })}
                         </button>
                       )}
                       {expanded && dayItems.length > 3 && (
                         <button
                           type="button"
-                          className="w-full text-start text-xs text-primary px-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                          className="w-full rounded px-1 text-start text-xs text-[var(--accent)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
                           onClick={() => setExpandedDays((current) => {
                             const next = new Set(current);
-                            next.delete(day!);
+                            next.delete(day);
                             return next;
                           })}
                           aria-expanded
                           aria-controls={recordsId}
                         >
-                          Show less
+                          {t("viewModes.showLess")}
                         </button>
                       )}
                     </div>
@@ -261,13 +229,13 @@ export function CalendarGrid({ items, empty }: CalendarGridProps) {
       </div>
 
       {!hasItems && (
-        <p className="text-center text-sm text-muted-foreground py-4">
-          {t("viewModes.noItemsInMonth", { month: MONTHS[month], year })}
+        <p className="py-4 text-center text-sm text-[var(--muted)]">
+          {t("viewModes.noItemsInMonth", { month: monthName, year })}
         </p>
       )}
 
       {items.length === 0 && (
-        <div className="py-8 text-center">{empty ?? <p className="text-sm text-muted-foreground">{t("viewModes.noRecordsFound")}</p>}</div>
+        <div className="py-8 text-center">{empty ?? <p className="text-sm text-[var(--muted)]">{t("viewModes.noRecordsFound")}</p>}</div>
       )}
     </div>
   );

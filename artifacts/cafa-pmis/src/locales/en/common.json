@@ -550,7 +550,15 @@
       "pending": "Pending",
       "completed": "Completed",
       "scheduled": "Scheduled"
-    }
+    },
+    "openRecord": "View {{title}}",
+    "listSeparator": ", ",
+    "progress": "Progress",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "moreItems_one": "+{{count}} more",
+    "moreItems_other": "+{{count}} more",
+    "showLess": "Show less"
   },
   "locationContext": {
     "allLocations": "All Locations (HQ)",

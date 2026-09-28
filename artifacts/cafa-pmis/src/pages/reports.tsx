@@ -3560,14 +3560,14 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
   const REPORT_VIEWS = ["table", "card", "list", "compact", "kanban"] as const;
   // Column header colors mirror the semantic badge variants defined in badge.tsx.
   const REPORT_KANBAN_COLS: KanbanColumn[] = [
-    { key: "draft",                  label: "Draft",                   color: "border border-slate-200 bg-slate-50 text-slate-600"   },
-    { key: "submitted",              label: "Submitted",               color: "bg-info/10 text-info border-info/20"                  },
-    { key: "state_reviewed",         label: "State Reviewed",          color: "bg-sky-50 text-sky-700 border-sky-200"                },
-    { key: "technically_approved",   label: "Technically Approved",    color: "bg-indigo-50 text-indigo-700 border-indigo-200"       },
-    { key: "coordination_approved",  label: "Coordination Approved",   color: "border border-violet-200 bg-violet-50 text-violet-700"},
-    { key: "approved",               label: "Approved",                color: "bg-success/10 text-success border-success/20"         },
-    { key: "rejected",               label: "Rejected",                color: "bg-destructive/10 text-destructive border-destructive/20" },
-    { key: "archived",               label: "Archived",                color: "border border-slate-200 bg-slate-100 text-slate-600"  },
+    { key: "draft",                  label: t("status.draft", { defaultValue: "Draft" }),                   color: "border border-slate-200 bg-slate-50 text-slate-600"   },
+    { key: "submitted",              label: t("status.submitted", { defaultValue: "Submitted" }),               color: "bg-info/10 text-info border-info/20"                  },
+    { key: "state_reviewed",         label: t("status.state_reviewed", { defaultValue: "State Reviewed" }),          color: "bg-sky-50 text-sky-700 border-sky-200"                },
+    { key: "technically_approved",   label: t("status.technically_approved", { defaultValue: "Technically Approved" }),    color: "bg-indigo-50 text-indigo-700 border-indigo-200"       },
+    { key: "coordination_approved",  label: t("status.coordination_approved", { defaultValue: "Coordination Approved" }),   color: "border border-violet-200 bg-violet-50 text-violet-700"},
+    { key: "approved",               label: t("status.approved", { defaultValue: "Approved" }),                color: "bg-success/10 text-success border-success/20"         },
+    { key: "rejected",               label: t("status.rejected", { defaultValue: "Rejected" }),                color: "bg-destructive/10 text-destructive border-destructive/20" },
+    { key: "archived",               label: t("status.archived", { defaultValue: "Archived" }),                color: "border border-slate-200 bg-slate-100 text-slate-600"  },
   ];
   const moduleKey = `reports_${lockedType}`;
   const [viewMode, setViewMode] = useViewMode(moduleKey, [...REPORT_VIEWS], "table");

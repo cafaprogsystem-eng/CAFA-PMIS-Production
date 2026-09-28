@@ -1,6 +1,9 @@
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "@/components/ui/badge";
+import { Chip } from "@heroui/react";
+import { ListView as ProListView } from "@heroui-pro/react/list-view";
 import { BidiIsolate } from "@/components/bidi-isolate";
+import { RecordActions, openRow, useOpenRecordLabel } from "@/components/view-modes/shared";
 import type { ViewRecord } from "@/lib/view-modes";
 
 interface CompactViewProps {
@@ -8,54 +11,56 @@ interface CompactViewProps {
   empty?: React.ReactNode;
 }
 
-function CompactRow({ item }: { item: ViewRecord }) {
-  return (
-    <div
-      className={`relative flex items-center gap-2 px-3 py-1.5 border-b last:border-b-0 transition-colors text-sm ${item.onClick ? "cursor-pointer hover:bg-muted/40" : ""}`}
-    >
-      {item.onClick && (
-        <button
-          type="button"
-          className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-          aria-label={`View ${item.title}`}
-          onClick={(event) => item.onClick?.(event.currentTarget)}
-        />
-      )}
-      {item.code && (
-        <span className="relative z-10 pointer-events-none font-mono text-xs text-muted-foreground w-28 shrink-0 truncate"><BidiIsolate>{item.code}</BidiIsolate></span>
-      )}
-      <span className="relative z-10 pointer-events-none flex-1 truncate font-medium">{item.title}</span>
-      {item.tag && (
-        <Badge variant="outline" className="relative z-10 pointer-events-none text-xs px-1.5 py-0 h-4 shrink-0 hidden sm:inline-flex">{item.tag}</Badge>
-      )}
-      {item.meta?.slice(0, 1).map(({ value }) => (
-        <span key={value} className="relative z-10 pointer-events-none text-xs text-muted-foreground shrink-0 hidden md:inline">{value}</span>
-      ))}
-      {item.date && (
-        <span className="relative z-10 pointer-events-none text-xs text-muted-foreground shrink-0 hidden sm:inline">{item.date}</span>
-      )}
-      {item.statusBadge && <span className="relative z-10 pointer-events-none shrink-0">{item.statusBadge}</span>}
-      {item.actions && <span className="relative z-10 pointer-events-auto shrink-0">{item.actions}</span>}
-    </div>
-  );
-}
-
+/** Dense one-line records: HeroUI Pro ListView, secondary variant. */
 export function CompactView({ items, empty }: CompactViewProps) {
   const { t } = useTranslation("common");
+  const openLabel = useOpenRecordLabel();
+  const ref = useRef<HTMLDivElement>(null);
+
   if (items.length === 0) {
-    return <div className="py-12 text-center">{empty ?? <p className="text-sm text-muted-foreground">{t("viewModes.noRecordsFound")}</p>}</div>;
+    return <div className="py-12 text-center">{empty ?? <p className="text-sm text-[var(--muted)]">{t("viewModes.noRecordsFound")}</p>}</div>;
   }
+
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/30 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+    <div ref={ref}>
+      <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs font-medium text-[var(--muted)]" aria-hidden="true">
         <span className="w-28 shrink-0">{t("viewModes.code")}</span>
         <span className="flex-1">{t("viewModes.title")}</span>
-        <span className="hidden sm:inline w-24 text-end">{t("viewModes.status")}</span>
+        <span className="hidden w-24 text-end sm:inline">{t("viewModes.status")}</span>
       </div>
-      {items.map((item) => (
-        <CompactRow key={item.id} item={item} />
-      ))}
+      <ProListView
+        aria-label={t("viewModes.compact")}
+        variant="secondary"
+        items={items}
+        onAction={(key) => openRow(ref.current, items, key)}
+      >
+        {(item) => (
+          <ProListView.Item
+            id={item.id}
+            textValue={item.title}
+            aria-label={item.onClick ? openLabel(item) : item.title}
+            className="py-1.5"
+          >
+            <ProListView.ItemContent className="gap-2 text-sm">
+              {item.code && (
+                <span className="w-28 shrink-0 truncate font-mono text-xs text-[var(--muted)]"><BidiIsolate>{item.code}</BidiIsolate></span>
+              )}
+              <ProListView.Title className="flex-1" dir="auto" title={item.title}>{item.title}</ProListView.Title>
+              {item.tag && <Chip size="sm" variant="secondary" className="hidden shrink-0 sm:inline-flex">{item.tag}</Chip>}
+              {item.meta?.slice(0, 1).map(({ value }) => (
+                <span key={value} dir="auto" className="hidden shrink-0 text-xs text-[var(--muted)] md:inline">{value}</span>
+              ))}
+              {item.date && (
+                <span className="hidden shrink-0 text-xs text-[var(--muted)] sm:inline"><bdi dir="ltr">{item.date}</bdi></span>
+              )}
+            </ProListView.ItemContent>
+            <ProListView.ItemAction className="flex items-center gap-2">
+              {item.statusBadge}
+              {item.actions && <RecordActions>{item.actions}</RecordActions>}
+            </ProListView.ItemAction>
+          </ProListView.Item>
+        )}
+      </ProListView>
     </div>
   );
 }

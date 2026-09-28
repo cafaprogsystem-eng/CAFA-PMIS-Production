@@ -1,9 +1,8 @@
 import { useTranslation } from "react-i18next";
+import { Card, Chip, ProgressBar } from "@heroui/react";
 import { Calendar, MapPin, ArrowRight } from "@/components/icons";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BidiIsolate } from "@/components/bidi-isolate";
+import { RecordActions, useOpenRecordLabel, useStateNames } from "@/components/view-modes/shared";
 import type { ViewRecord } from "@/lib/view-modes";
 
 interface CardGridProps {
@@ -11,158 +10,102 @@ interface CardGridProps {
   empty?: React.ReactNode;
 }
 
-/** Wraps a truncated metadata value in a tooltip showing the full text. */
-function MetaValue({ value }: { value: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <p className="text-[13px] font-medium truncate leading-snug">{value}</p>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[240px] text-xs leading-normal break-words">
-        {value}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function RecordCard({ item }: { item: ViewRecord }) {
-  const { i18n } = useTranslation();
-  const budgetPct =
+  const { t } = useTranslation("common");
+  const openLabel = useOpenRecordLabel();
+  const stateNames = useStateNames();
+  const pct =
     item.progress && item.progress.max > 0
       ? Math.min(100, Math.round((item.progress.value / item.progress.max) * 100))
       : null;
+  const pctColor = pct === null ? "accent" : pct >= 90 ? "danger" : pct >= 70 ? "warning" : "accent";
+  const states = stateNames(item);
 
   return (
-    <Card
-      className={`group relative flex flex-col transition-all duration-150 ${item.onClick ? "cursor-pointer hover:shadow-sm hover:ring-1 hover:ring-border/60 hover:border-primary/20" : ""}`}
-    >
+    <Card className={`group relative gap-0 p-4 transition-shadow ${item.onClick ? "hover:shadow-md" : ""}`}>
+      {/* The whole card opens the record; content sits above this button and
+          lets clicks through, except the record's own actions. */}
       {item.onClick && (
         <button
           type="button"
-          className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label={item.ariaLabel ?? `View ${item.title}`}
+          className="absolute inset-0 z-0 rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          aria-label={openLabel(item)}
           onClick={(event) => item.onClick?.(event.currentTarget)}
         />
       )}
-      {/* 16px internal padding per spec */}
-      <CardContent className="relative z-10 pointer-events-none p-4 flex flex-col flex-1">
-
-        {/* ── 1. Title (primary) · 2. Code (secondary) · 3. Status badge (top-right) ── */}
+      <div className="pointer-events-none relative z-10 flex flex-1 flex-col">
+        {/* Title · code · status */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            {/* Title: 15px medium, max 2 lines, tooltip on truncation */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <h3 className="text-[15px] font-medium leading-snug line-clamp-2 group-hover:text-primary transition-colors duration-150">
-                  {item.title}
-                </h3>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[280px] text-xs leading-normal break-words">
-                {item.title}
-              </TooltipContent>
-            </Tooltip>
+            <h3 dir="auto" className="text-[15px] font-medium leading-snug break-words line-clamp-3 rtl:text-end transition-colors group-hover:text-[var(--accent)]" title={item.title}>
+              {item.title}
+            </h3>
             {item.code && (
-              <p className="text-[11px] font-mono text-muted-foreground truncate tracking-wide mt-1">
+              <p className="mt-1 truncate font-mono text-[11px] tracking-wide text-[var(--muted)]">
                 <BidiIsolate>{item.code}</BidiIsolate>
               </p>
             )}
           </div>
-          {/* Status badge only — actions moved to footer */}
-          <div className="shrink-0 pt-0.5">
-            {item.statusBadge}
-          </div>
+          <div className="shrink-0 pt-0.5">{item.statusBadge}</div>
         </div>
 
-        {/* ── 4. Sector tag — 10–12px gap below title area ── */}
         {item.tag && (
-          <div className="mt-[11px]">
-            <Badge
-              variant="outline"
-              className="text-xs px-2 py-0.5 font-normal text-muted-foreground border-border/60"
-            >
-              {item.tag}
-            </Badge>
+          <div className="mt-3">
+            <Chip size="sm" variant="secondary">{item.tag}</Chip>
           </div>
         )}
 
-        {/* ── 5–8. Metadata grid — 16px gap, 12px between rows ── */}
         {item.meta && item.meta.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
             {item.meta.slice(0, 4).map(({ label, value }) => (
               <div key={label} className="min-w-0">
-                {/* 10px uppercase label with medium tracking */}
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5 leading-none">
-                  {label}
-                </p>
-                <MetaValue value={value} />
+                <dt className="mb-0.5 text-[11px] text-[var(--muted)]">{label}</dt>
+                <dd dir="auto" className="text-[13px] font-medium leading-snug break-words line-clamp-2 rtl:text-end" title={value}>{value}</dd>
               </div>
             ))}
-          </div>
+          </dl>
         )}
 
-        {/* ── 9. Budget Spent progress — 16px gap above ── */}
-        {budgetPct !== null && item.progress && (
-          <div className="mt-4 space-y-1.5">
+        {pct !== null && item.progress && (
+          <ProgressBar
+            aria-label={item.progress.label ?? t("viewModes.progress")}
+            value={pct}
+            color={pctColor}
+            size="sm"
+            className="mt-4 gap-1.5"
+          >
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{item.progress.label ?? "Progress"}</span>
-              <span
-                className={`font-semibold tabular-nums ${
-                  budgetPct >= 90
-                    ? "text-destructive"
-                    : budgetPct >= 70
-                    ? "text-warning"
-                    : "text-foreground"
-                }`}
-              >
-                <bdi dir="ltr">{budgetPct}%</bdi>
-              </span>
+              <span className="text-[var(--muted)]">{item.progress.label ?? t("viewModes.progress")}</span>
+              <span className="font-semibold tabular-nums"><bdi dir="ltr">{pct}%</bdi></span>
             </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  budgetPct >= 90
-                    ? "bg-destructive/80"
-                    : budgetPct >= 70
-                    ? "bg-warning/80"
-                    : "bg-primary/70"
-                }`}
-                style={{ width: `${budgetPct}%` }}
-              />
-            </div>
-          </div>
+            <ProgressBar.Track><ProgressBar.Fill /></ProgressBar.Track>
+          </ProgressBar>
         )}
 
-        {/* ── 10. Footer: Location · End date (left) · Actions or arrow (right) ── */}
-        <div className="mt-auto pt-3 border-t border-border/50 flex items-center justify-between gap-2">
-          {/* Left: location + date */}
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            {item.stateNames && item.stateNames.length > 0 && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
-                <MapPin className="h-3 w-3 shrink-0" />
-                <span className="truncate">
-                  {(i18n.language.startsWith("ar") && item.stateNamesAr?.length === item.stateNames.length
-                    ? item.stateNamesAr
-                    : item.stateNames).slice(0, 2).join(", ")}
-                  {item.stateNames.length > 2 ? ` +${item.stateNames.length - 2}` : ""}
-                </span>
-              </div>
+        {/* Footer: location · date · actions or open arrow */}
+        <div className="min-h-4 flex-1" aria-hidden="true" />
+        <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+            {states && (
+              <span className="flex min-w-0 items-center gap-1">
+                <MapPin className="size-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{states}</span>
+              </span>
             )}
             {item.date && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                <Calendar className="h-3 w-3" />
+              <span className="flex shrink-0 items-center gap-1">
+                <Calendar className="size-3" aria-hidden="true" />
                 <bdi dir="ltr">{item.date}</bdi>
-              </div>
+              </span>
             )}
           </div>
-          {/* Right: draft action button, or arrow affordance for non-draft cards */}
-          {item.actions ? <div className="pointer-events-auto">{item.actions}</div> : (
-            item.onClick ? (
-              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 rtl:rotate-180 transition-all duration-150 shrink-0" />
-            ) : null
-          )}
+          {item.actions ? (
+            <RecordActions className="pointer-events-auto">{item.actions}</RecordActions>
+          ) : item.onClick ? (
+            <ArrowRight className="size-3.5 shrink-0 text-[var(--muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--accent)] rtl:rotate-180 rtl:group-hover:-translate-x-0.5" aria-hidden="true" />
+          ) : null}
         </div>
-
-      </CardContent>
+      </div>
     </Card>
   );
 }
@@ -172,12 +115,12 @@ export function CardGrid({ items, empty }: CardGridProps) {
   if (items.length === 0) {
     return (
       <div className="py-10 text-center">
-        {empty ?? <p className="text-sm text-muted-foreground">{t("viewModes.noRecordsFound")}</p>}
+        {empty ?? <p className="text-sm text-[var(--muted)]">{t("viewModes.noRecordsFound")}</p>}
       </div>
     );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
         <RecordCard key={item.id} item={item} />
       ))}

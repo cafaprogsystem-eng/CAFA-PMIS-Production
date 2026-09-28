@@ -1,14 +1,17 @@
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "@/components/ui/badge";
+import { Chip } from "@heroui/react";
+import { Kanban } from "@heroui-pro/react/kanban";
 import { Calendar, MapPin } from "@/components/icons";
 import { BidiIsolate } from "@/components/bidi-isolate";
-import { getStateLabel } from "@/components/state-label";
+import { RecordActions, openRow, statusTone, useOpenRecordLabel, useStateNames } from "@/components/view-modes/shared";
 import type { ViewRecord } from "@/lib/view-modes";
 
 export interface KanbanColumn {
   key: string;
   label: string;
-  color: string;
+  /** @deprecated Column colour now follows the status (shared tone map); kept so callers still compile. */
+  color?: string;
 }
 
 interface KanbanBoardProps {
@@ -24,56 +27,45 @@ interface KanbanBoardProps {
   showEmptyColumns?: boolean;
 }
 
-function KanbanCard({ item }: { item: ViewRecord }) {
-  const { i18n } = useTranslation();
+const TONE_DOT = {
+  default: "bg-[var(--muted)]",
+  accent: "bg-[var(--accent)]",
+  success: "bg-[var(--success)]",
+  warning: "bg-[var(--warning)]",
+  danger: "bg-[var(--danger)]",
+} as const;
+
+function RecordCardBody({ item }: { item: ViewRecord }) {
+  const stateNames = useStateNames();
+  const states = stateNames(item, 1);
   return (
-    <div
-      className={`relative bg-background rounded-lg border border-border p-3 shadow-sm transition-shadow ${item.onClick ? "cursor-pointer hover:shadow" : ""}`}
-    >
-      {item.onClick && (
-        <button
-          type="button"
-          className="absolute inset-0 z-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label={item.ariaLabel ?? `View ${item.title}`}
-          onClick={(event) => item.onClick?.(event.currentTarget)}
-        />
-      )}
-      <div className="relative z-10 pointer-events-none space-y-2">
-        {item.code && <p className="text-xs font-mono text-muted-foreground truncate"><BidiIsolate>{item.code}</BidiIsolate></p>}
-        <p className="text-xs font-semibold leading-snug line-clamp-2">{item.title}</p>
-        {item.tag && (
-          <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">{item.tag}</Badge>
-        )}
-        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-          {item.meta?.slice(0, 2).map(({ label, value }) => (
-            <span key={label} className="text-xs text-muted-foreground">
-              {label}: <span className="font-medium">{value}</span>
-            </span>
+    <>
+      {item.code && <span className="truncate font-mono text-xs text-[var(--muted)]"><BidiIsolate>{item.code}</BidiIsolate></span>}
+      <span dir="auto" className="font-semibold leading-snug break-words rtl:text-end">{item.title}</span>
+      {item.tag && <span><Chip size="sm" variant="secondary">{item.tag}</Chip></span>}
+      {item.meta && item.meta.length > 0 && (
+        <span className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-[var(--muted)]">
+          {item.meta.slice(0, 2).map(({ label, value }) => (
+            <span key={label}>{label}: <span className="font-medium text-[var(--foreground)]" dir="auto">{value}</span></span>
           ))}
-        </div>
-        {/* Per-item action slot (e.g. Continue Editing for draft plans) */}
-        {item.actions ? <div className="pointer-events-auto">{item.actions}</div> : null}
-        {(item.stateNames?.length || item.date) ? (
-          <div className="flex items-center gap-2 pt-1 border-t border-border/50">
-            {item.stateNames && item.stateNames.length > 0 && (
-              <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                <MapPin className="h-2.5 w-2.5" />
-                {getStateLabel({ name: item.stateNames[0], nameAr: item.stateNamesAr?.[0] }, i18n?.language)}{item.stateNames.length > 1 ? ` +${item.stateNames.length - 1}` : ""}
-              </span>
-            )}
-            {item.date && (
-              <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                <Calendar className="h-2.5 w-2.5" />
-                {item.date}
-              </span>
-            )}
-          </div>
-        ) : null}
-      </div>
-    </div>
+        </span>
+      )}
+      {item.actions && <RecordActions>{item.actions}</RecordActions>}
+      {(states || item.date) && (
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-[var(--border)] pt-2 text-xs text-[var(--muted)]">
+          {states && <span className="flex items-center gap-1"><MapPin className="size-3" aria-hidden="true" />{states}</span>}
+          {item.date && <span className="flex items-center gap-1"><Calendar className="size-3" aria-hidden="true" /><bdi dir="ltr">{item.date}</bdi></span>}
+        </span>
+      )}
+    </>
   );
 }
 
+/**
+ * Read-only status board on the HeroUI Pro Kanban (as in its "Project Board"
+ * example, without drag and drop — status changes go through the workflow).
+ * Pressing a card opens its record.
+ */
 export function KanbanBoard({
   items,
   columns,
@@ -82,8 +74,11 @@ export function KanbanBoard({
   showEmptyColumns = false,
 }: KanbanBoardProps) {
   const { t } = useTranslation("common");
+  const openLabel = useOpenRecordLabel();
+  const ref = useRef<HTMLDivElement>(null);
+
   if (items.length === 0) {
-    return <div className="py-10 text-center">{empty ?? <p className="text-sm text-muted-foreground">{t("viewModes.noRecordsFound")}</p>}</div>;
+    return <div className="py-10 text-center">{empty ?? <p className="text-sm text-[var(--muted)]">{t("viewModes.noRecordsFound")}</p>}</div>;
   }
 
   const grouped = new Map<string, ViewRecord[]>();
@@ -104,25 +99,35 @@ export function KanbanBoard({
     : columns.filter((col) => (grouped.get(col.key)?.length ?? 0) > 0);
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4 min-h-[280px] scroll-smooth" style={{ WebkitOverflowScrolling: "touch" }}>
-      {visibleCols.map((col) => {
-        const colItems = grouped.get(col.key) ?? [];
-        return (
-          <div key={col.key} className="flex-shrink-0 w-[clamp(260px,30vw,340px)] flex flex-col gap-2">
-            {/* Column header */}
-            <div className={`rounded-lg px-3 py-2 flex items-center justify-between ${col.color}`}>
-              <span className="text-xs font-semibold">{col.label}</span>
-              <Badge variant="secondary" className="h-4 text-xs px-1.5">{colItems.length}</Badge>
-            </div>
-            {/* Cards */}
-            <div className="space-y-2 flex-1">
-              {colItems.map((item) => (
-                <KanbanCard key={item.id} item={item} />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+    <div ref={ref} className="min-h-[280px]">
+      <Kanban className="items-start">
+        {visibleCols.map((col) => {
+          const colItems = grouped.get(col.key) ?? [];
+          return (
+            <Kanban.Column key={col.key}>
+              <Kanban.ColumnHeader>
+                <Kanban.ColumnIndicator className={TONE_DOT[statusTone(col.key)]} />
+                <Kanban.ColumnTitle>{col.label}</Kanban.ColumnTitle>
+                <Kanban.ColumnCount>{colItems.length}</Kanban.ColumnCount>
+              </Kanban.ColumnHeader>
+              <Kanban.ColumnBody>
+                <Kanban.CardList
+                  aria-label={col.label}
+                  items={colItems}
+                  onAction={(key) => openRow(ref.current, items, key)}
+                  renderEmptyState={() => t("viewModes.noRecordsFound")}
+                >
+                  {(item) => (
+                    <Kanban.Card id={item.id} textValue={item.title} aria-label={item.onClick ? openLabel(item) : item.title}>
+                      <RecordCardBody item={item} />
+                    </Kanban.Card>
+                  )}
+                </Kanban.CardList>
+              </Kanban.ColumnBody>
+            </Kanban.Column>
+          );
+        })}
+      </Kanban>
     </div>
   );
 }

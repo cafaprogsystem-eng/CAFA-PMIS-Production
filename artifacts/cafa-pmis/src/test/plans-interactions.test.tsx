@@ -33,6 +33,7 @@ vi.mock("react-i18next", () => ({
       "plansPage.awaitingApproval": "Awaiting Approval",
       "plansPage.activePlans": "Active Plans",
       "plansPage.completedPlans": "Completed Plans",
+      "viewModes.openRecord": `View ${options?.title ?? ""}`,
       "viewModes.table": "Table",
       "viewModes.card": "Card",
       "viewModes.list": "List",
@@ -185,8 +186,11 @@ describe("Plans workspace interaction contract", () => {
 
     for (const mode of ["Card", "List", "Compact", "Kanban", "Calendar"]) {
       fireEvent.click(screen.getByRole("radio", { name: mode }));
-      const view = screen.getByRole("button", { name: "View Draft Plan" });
-      fireEvent.click(view);
+      // Card and Calendar open records from a button; List, Compact and Kanban
+      // (HeroUI Pro collections) from the record's row.
+      const view = screen.queryByRole("button", { name: "View Draft Plan" })
+        ?? screen.getByRole("row", { name: "View Draft Plan" });
+      await userEvent.click(within(view).queryByText("Draft Plan") ?? view);
       // The detail page is lazy-loaded inside the shared coordinator.
     expect(await within(screen.getByRole("dialog", { name: "Plan details" })).findByText("Shared Plan Detail 1")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Close record details" }));
