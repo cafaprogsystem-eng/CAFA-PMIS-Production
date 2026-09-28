@@ -61,17 +61,20 @@ export function RecordDetailProvider({ children }: { children: React.ReactNode }
   const [, setLocation] = useLocation();
   const [request, setRequest] = React.useState<RecordDetailRequest | null>(null);
   const [header, setHeader] = React.useState<RecordDetailHeader | null>(null);
+  // The kind shown last. Kept after closing (like the header) so the title
+  // doesn't switch while the dialog animates out.
+  const [shownKind, setShownKind] = React.useState<RecordDetailKind>("project");
   const triggerRef = React.useRef<HTMLElement | null>(null);
 
   const closeRecord = React.useCallback(() => {
     setRequest(null);
-    setHeader(null);
   }, []);
 
   const openRecord = React.useCallback((kind: RecordDetailKind, id: number, trigger?: HTMLElement | null) => {
     if (!Number.isSafeInteger(id) || id <= 0) return;
     triggerRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setHeader(null);
+    setShownKind(kind);
     setRequest({ kind, id, restoreFocusRef: triggerRef });
   }, []);
 
@@ -119,7 +122,7 @@ export function RecordDetailProvider({ children }: { children: React.ReactNode }
   }, [request, setLocation]);
 
   const value = React.useMemo(() => ({ openRecord, openRecordPath, closeRecord }), [openRecord, openRecordPath, closeRecord]);
-  const fallbackTitle = request?.kind === "project" ? t("recordDetails.projectTitle") : t("recordDetails.planTitle");
+  const fallbackTitle = shownKind === "project" ? t("recordDetails.projectTitle") : t("recordDetails.planTitle");
 
   return (
     <RecordDetailContext.Provider value={value}>
