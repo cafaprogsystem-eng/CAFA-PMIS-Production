@@ -407,8 +407,9 @@ export default function ProjectsPage() {
       {/* Enterprise control bar: filters (start) + view switcher (end) */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
 
-        {/* ── Start: filter region ── */}
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        {/* ── Start: filter region (own row on small screens, so the view
+            switcher wraps below it instead of overlapping the filters) ── */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 max-md:basis-full">
           <div className="flex shrink-0 select-none items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
             <Filter className="size-4" aria-hidden="true" />
             {tCommon("filter")}
