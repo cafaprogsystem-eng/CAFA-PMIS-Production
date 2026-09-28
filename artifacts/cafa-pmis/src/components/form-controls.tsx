@@ -101,13 +101,7 @@ function toCalendarDate(value?: string | null): CalendarDate | null {
   try { return parseDate(value.slice(0, 10)); } catch { return null; }
 }
 
-/**
- * HeroUI DatePicker for a FormItem, reading and writing "YYYY-MM-DD" strings
- * (the form's date format). Renders its own Label, like FormSelect.
- */
-export function FormDate({
-  label, value, onChange, min, max, isRequired, isDisabled, className,
-}: {
+type DateFieldProps = {
   label: ReactNode;
   value?: string | null;
   onChange: (value: string) => void;
@@ -116,13 +110,21 @@ export function FormDate({
   isRequired?: boolean;
   isDisabled?: boolean;
   className?: string;
-}) {
-  const a = useFieldA11y();
+};
+
+/**
+ * HeroUI DatePicker reading and writing "YYYY-MM-DD" strings, with its own
+ * Label. Use FormDate inside react-hook-form fields, DateInput elsewhere.
+ */
+export function DateInput({
+  label, value, onChange, min, max, isRequired, isDisabled, className,
+  id, isInvalid, describedBy,
+}: DateFieldProps & { id?: string; isInvalid?: boolean; describedBy?: string }) {
   return (
     <DatePicker
-      id={a.id}
-      aria-describedby={a.describedBy}
-      isInvalid={a.isInvalid}
+      id={id}
+      aria-describedby={describedBy}
+      isInvalid={isInvalid}
       isRequired={isRequired}
       validationBehavior="aria"
       isDisabled={isDisabled}
@@ -164,6 +166,12 @@ export function FormDate({
       </DatePicker.Popover>
     </DatePicker>
   );
+}
+
+/** HeroUI DatePicker for a react-hook-form FormItem ("YYYY-MM-DD" strings). */
+export function FormDate(props: DateFieldProps) {
+  const a = useFieldA11y();
+  return <DateInput {...props} id={a.id} isInvalid={a.isInvalid} describedBy={a.describedBy} />;
 }
 
 /** One labelled HeroUI checkbox (the label text is the clickable content). */

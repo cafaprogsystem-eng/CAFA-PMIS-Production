@@ -142,7 +142,7 @@ vi.mock("react-i18next", () => ({
         "detail.planProgress": "Plan Progress",
         "detail.noActivitiesForProgress": "No Activities available for Progress calculation.",
       };
-      return map[key] ?? key;
+      return map[key] ?? (typeof opts?.defaultValue === "string" ? opts.defaultValue : key);
     },
   }),
 }));
@@ -243,8 +243,10 @@ describe("Plans Final Closure (PLAN-FINAL-VIS)", () => {
       { commentType: "revision_request", authorName: "SPC Reviewer", body: "Please refine the budget.", createdAt: "2026-08-01T10:00:00Z" },
     ];
     const { container } = render(<PlanDetailPage />, { wrapper: Wrapper });
-    const banner = container.querySelector(".border-amber-300\\/60");
+    // HeroUI warning Alert (amber) carrying the reviewer's quoted feedback
+    const banner = container.querySelector('[role="status"].alert--warning, [role="status"][data-status="warning"], [role="status"]');
     expect(banner).not.toBeNull();
+    expect(banner?.className).toMatch(/warning/);
     expect(screen.getByText(/please refine the budget/i)).toBeInTheDocument();
   });
 
@@ -255,10 +257,13 @@ describe("Plans Final Closure (PLAN-FINAL-VIS)", () => {
     const saveButtons = screen.getAllByRole("button", { name: /save changes/i });
     const cancelButtons = screen.getAllByRole("button", { name: /cancel/i });
     expect(saveButtons.length).toBeGreaterThanOrEqual(2);
-    [...saveButtons, ...cancelButtons].forEach((b) => {
-      expect(b).toBeDisabled();
-      expect(b).toHaveAttribute("aria-busy", "true");
+    // HeroUI: Save is pending (aria-disabled + data-pending, announced by React Aria);
+    // Cancel is disabled while the save runs.
+    saveButtons.forEach((b) => {
+      expect(b).toHaveAttribute("data-pending", "true");
+      expect(b).toHaveAttribute("aria-disabled", "true");
     });
+    cancelButtons.forEach((b) => expect(b).toBeDisabled());
   });
 
   it("PLAN-FINAL-VIS-10: no Plans functional contract changed (visual-only closure)", () => {

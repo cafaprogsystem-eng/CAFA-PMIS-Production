@@ -209,7 +209,7 @@ vi.mock("react-i18next", () => ({
         "detail.planProgress": "Plan Progress",
         "detail.noActivitiesForProgress": "No Activities available for Progress calculation.",
       };
-      return map[key] ?? key;
+      return map[key] ?? (typeof opts?.defaultValue === "string" ? opts.defaultValue : key);
     },
   }),
 }));

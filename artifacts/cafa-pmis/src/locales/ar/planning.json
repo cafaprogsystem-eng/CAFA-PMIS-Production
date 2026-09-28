@@ -120,7 +120,8 @@
     "status_in_progress": "قيد التنفيذ",
     "status_completed": "مكتمل",
     "status_delayed": "متأخر",
-    "status_cancelled": "ملغى"
+    "status_cancelled": "ملغى",
+    "removeActivityAria": "إزالة النشاط {{name}}"
   },
   "stateInfo": {
     "governor": "الوالي",
@@ -345,7 +346,12 @@
     "activityLocalityPh": "مثال: كادقلي",
     "revisionRequestedAria": "طُلبت مراجعة",
     "noActivitiesForProgress": "لا توجد أنشطة متاحة لحساب التقدم.",
-    "breadcrumbAria": "مسار التنقل"
+    "breadcrumbAria": "مسار التنقل",
+    "discardConfirm": "تجاهل التغييرات",
+    "discardTitle": "تجاهل التغييرات غير المحفوظة؟",
+    "keepEditing": "متابعة التعديل",
+    "removeLocality": "إزالة {{name}}",
+    "tabsAria": "أقسام الخطة"
   },
   "transitions": {
     "submit": "تقديم",
@@ -683,5 +689,28 @@
     "tableTitle": "العنوان",
     "tableStatus": "الحالة",
     "tableSector": "القطاع"
+  },
+  "validation": {
+    "titleRequired": "عنوان الخطة مطلوب",
+    "typeRequired": "نوع الخطة مطلوب",
+    "stateRequired": "الولاية مطلوبة",
+    "sectorRequired": "مطلوب قطاع واحد على الأقل",
+    "responsibleRequired": "الشخص المسؤول مطلوب",
+    "datesRequired": "تاريخا البداية والنهاية مطلوبان",
+    "endBeforeStart": "يجب أن يكون تاريخ النهاية في يوم البداية أو بعده",
+    "activityTitleRequired": "النشاط رقم {{num}}: العنوان مطلوب",
+    "activityLocalityRequired": "النشاط رقم {{num}}: المحلية مطلوبة",
+    "activityDateRequired": "النشاط رقم {{num}}: التاريخ المخطط مطلوب",
+    "activityDateOutside": "النشاط رقم {{num}}: يجب أن يقع التاريخ المخطط ضمن فترة الخطة",
+    "activityBeneficiariesNegative": "النشاط رقم {{num}}: لا يمكن أن يكون عدد المستفيدين المستهدفين سالباً",
+    "activityBudgetNegative": "النشاط رقم {{num}}: لا يمكن أن تكون الميزانية سالبة",
+    "activityResultRequired": "النشاط رقم {{num}}: النتيجة المتوقعة مطلوبة",
+    "activityPrefix": "النشاط رقم {{num}}: {{message}}",
+    "activityRequiredToSubmit": "مطلوب نشاط واحد على الأقل قبل التقديم",
+    "progressCompleted": "يجب أن يكون تقدّم الأنشطة المكتملة 100%.",
+    "progressInProgress": "يجب أن يكون تقدّم الأنشطة قيد التنفيذ بين 1% و99%.",
+    "progressPlanned": "يجب أن يكون تقدّم الأنشطة المخططة بين 0% و99%.",
+    "progressDelayed": "يجب أن يكون تقدّم الأنشطة المتأخرة بين 0% و99%.",
+    "progressRange": "يجب أن يكون التقدّم بين 0% و100%."
   }
 }

@@ -120,7 +120,8 @@
     "status_in_progress": "In Progress",
     "status_completed": "Completed",
     "status_delayed": "Delayed",
-    "status_cancelled": "Cancelled"
+    "status_cancelled": "Cancelled",
+    "removeActivityAria": "Remove activity {{name}}"
   },
   "stateInfo": {
     "governor": "Governor",
@@ -341,7 +342,12 @@
     "activityLocalityPh": "e.g. Kadugli",
     "revisionRequestedAria": "Revision requested",
     "noActivitiesForProgress": "No Activities available for Progress calculation.",
-    "breadcrumbAria": "Breadcrumb"
+    "breadcrumbAria": "Breadcrumb",
+    "discardConfirm": "Discard changes",
+    "discardTitle": "Discard unsaved changes?",
+    "keepEditing": "Keep editing",
+    "removeLocality": "Remove {{name}}",
+    "tabsAria": "Plan sections"
   },
   "transitions": {
     "submit": "Submit",
@@ -679,5 +685,28 @@
     "tableTitle": "Title",
     "tableStatus": "Status",
     "tableSector": "Sector"
+  },
+  "validation": {
+    "titleRequired": "Plan Title is required",
+    "typeRequired": "Plan Type is required",
+    "stateRequired": "State is required",
+    "sectorRequired": "At least one Sector is required",
+    "responsibleRequired": "Responsible Person is required",
+    "datesRequired": "Start and End Dates are required",
+    "endBeforeStart": "End Date must be on or after Start Date",
+    "activityTitleRequired": "Activity #{{num}}: Title is required",
+    "activityLocalityRequired": "Activity #{{num}}: Locality is required",
+    "activityDateRequired": "Activity #{{num}}: Planned Date is required",
+    "activityDateOutside": "Activity #{{num}}: Planned Date must be within the plan schedule",
+    "activityBeneficiariesNegative": "Activity #{{num}}: Target Beneficiaries cannot be negative",
+    "activityBudgetNegative": "Activity #{{num}}: Budget cannot be negative",
+    "activityResultRequired": "Activity #{{num}}: Expected Result is required",
+    "activityPrefix": "Activity #{{num}}: {{message}}",
+    "activityRequiredToSubmit": "At least one Activity is required before submitting",
+    "progressCompleted": "Completed activities must have 100% progress.",
+    "progressInProgress": "In-progress activities must have progress between 1% and 99%.",
+    "progressPlanned": "Planned activities must have progress between 0% and 99%.",
+    "progressDelayed": "Delayed activities must have progress between 0% and 99%.",
+    "progressRange": "Progress must be between 0% and 100%."
   }
 }

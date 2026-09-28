@@ -14,6 +14,7 @@
 
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { within } from "@testing-library/react";
 import React from "react";
 import "@testing-library/jest-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -51,11 +52,11 @@ afterEach(() => {
 // ── i18n mock ─────────────────────────────────────────────────────────────────
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => ({
+    t: (key: string, opts?: Record<string, unknown>) => ({
       "detail.editPlan": "Edit Plan",
       "detail.cancelEdit": "Cancel",
       "detail.saveChanges": "Save Changes",
-    }[key] ?? key),
+    }[key] ?? (typeof opts?.defaultValue === "string" ? opts.defaultValue : key)),
     i18n: { language: "en", dir: () => "ltr", changeLanguage: vi.fn() },
   }),
   initReactI18next: { type: "3rdParty", init: vi.fn() },
@@ -230,7 +231,7 @@ describe("PLAN-FORM-VIS — Plan Detail edit-mode visual contracts", () => {
    * aria-busy="false" when idle so the attribute can flip to "true" during
    * a save mutation without a DOM re-structure.
    */
-  it("PLAN-FORM-VIS-03: All edit-mode action buttons have aria-busy wired on both surfaces", async () => {
+  it("PLAN-FORM-VIS-03: All edit-mode action buttons share an idle, non-pending state on both surfaces", async () => {
     renderPlanDetail();
 
     const editBtn = await screen.findByRole("button", { name: /edit plan/i });
@@ -244,24 +245,20 @@ describe("PLAN-FORM-VIS — Plan Detail edit-mode visual contracts", () => {
       });
       expect(actionBtns.length).toBeGreaterThanOrEqual(4); // 2 Save + 2 Cancel
 
-      // Every action button must have aria-busy wired
-      const busyWired = actionBtns.filter((b) => b.hasAttribute("aria-busy"));
-      expect(busyWired.length).toBe(actionBtns.length);
-
-      // When idle, aria-busy must be "false" on all wired buttons
-      for (const btn of busyWired) {
-        expect(btn.getAttribute("aria-busy")).toBe("false");
+      // HeroUI buttons expose a save in progress as data-pending/aria-disabled
+      // (announced by React Aria); idle, none of them is pending or disabled.
+      for (const btn of actionBtns) {
+        expect(btn).not.toHaveAttribute("data-pending");
+        expect(btn).not.toBeDisabled();
       }
     });
   });
 
   /**
    * PLAN-FORM-VIS-04: Cancelling edit mode from the sticky footer hides both
-   * action surfaces and restores view mode. window.confirm is accepted.
+   * action surfaces and restores view mode once discarding is confirmed.
    */
   it("PLAN-FORM-VIS-04: Cancelling from sticky footer exits edit mode and removes both action surfaces", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
     renderPlanDetail();
 
     const editBtn = await screen.findByRole("button", { name: /edit plan/i });
@@ -279,6 +276,10 @@ describe("PLAN-FORM-VIS — Plan Detail edit-mode visual contracts", () => {
     );
     expect(cancelBtn).not.toBeNull();
     fireEvent.click(cancelBtn!);
+
+    // Discarding is confirmed in a HeroUI alert dialog (it replaced window.confirm)
+    const confirmDialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: "detail.discardConfirm" }));
 
     // Both action surfaces disappear
     await waitFor(() => {

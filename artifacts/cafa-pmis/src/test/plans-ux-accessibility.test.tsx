@@ -39,7 +39,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 // ── i18n mock ─────────────────────────────────────────────────────────────────
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => ({
+    t: (key: string, opts?: Record<string, unknown>) => ({
       "detail.editPlan": "Edit Plan",
       "detail.planProgress": "Plan Progress",
       "detail.noActivitiesForProgress": "No Activities available for Progress calculation.",
@@ -47,7 +47,7 @@ vi.mock("react-i18next", () => ({
       "detail.revisionRequestedAria": "Revision requested",
       "detail.revisionFeedback": "Please address the feedback above and resubmit.",
       "detail.moreActions": "More actions",
-    }[key] ?? key),
+    }[key] ?? (typeof opts?.defaultValue === "string" ? opts.defaultValue : key)),
     i18n: { language: "en", dir: () => "ltr", changeLanguage: vi.fn() },
   }),
   initReactI18next: { type: "3rdParty", init: vi.fn() },
