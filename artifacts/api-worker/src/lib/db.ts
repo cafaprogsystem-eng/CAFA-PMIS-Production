@@ -17,6 +17,7 @@ export interface Variables {
 
 export interface Bindings {
   HYPERDRIVE: Hyperdrive;
+  REALTIME_HUB: DurableObjectNamespace;
   SESSION_SECRET: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;

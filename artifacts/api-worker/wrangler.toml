@@ -19,6 +19,20 @@ compatibility_flags = ["nodejs_compat"]
 binding = "HYPERDRIVE"
 id = "feceb30510ff449897f114637dc5569e"
 
+# Single global Durable Object holding every live realtime WebSocket
+# connection via the Hibernation API — replaces Socket.IO's cluster-wide
+# Postgres LISTEN/NOTIFY adapter entirely, since one DO instance is itself
+# the single point of coordination. New DO classes on this account require
+# the SQLite storage backend (no legacy KV backend available), which is also
+# exactly what the presence grace-period alarm needs (ctx.storage.sql).
+[[durable_objects.bindings]]
+name = "REALTIME_HUB"
+class_name = "RealtimeHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RealtimeHub"]
+
 [vars]
 # Placeholder for local/dev only — production and staging supply their own
 # value via `wrangler secret put SESSION_SECRET` (never committed).

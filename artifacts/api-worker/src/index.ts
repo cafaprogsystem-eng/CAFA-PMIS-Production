@@ -14,7 +14,7 @@ import {
 } from "./lib/session";
 import { isAccountLocked, recordFailedLogin, clearAccountFailures } from "./lib/rate-limit-store";
 import { getOpenAIClient, buildSystemPrompt } from "./lib/ai";
-import { attachCurrentUser, requireAuth, type Variables } from "./lib/rbac";
+import { attachCurrentUser, requireAuth, isDemoRoleHarnessEnabled, type Variables } from "./lib/rbac";
 import { notificationsRoutes } from "./routes/notifications";
 import { meRoutes } from "./routes/me";
 import { beneficiariesRoutes } from "./routes/beneficiaries";
@@ -36,6 +36,7 @@ import { manualRoutes } from "./routes/manual";
 import { conversationsRoutes } from "./routes/conversations";
 import { auditRoutes } from "./routes/audit";
 import { dashboardRoutes } from "./routes/dashboard";
+import { realtimeLocksRoutes } from "./routes/realtime-locks";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -195,6 +196,67 @@ app.post("/auth/logout", async (c) => {
   }
 });
 
+/**
+ * WebSocket upgrade entrypoint for the realtime hub (Durable Object).
+ * Reuses the normal session-cookie auth every REST route already runs, then
+ * hands the resolved identity to the DO via a header — the DO itself never
+ * parses or unsigns the session cookie. See
+ * src/durable-objects/realtime-hub.ts and src/lib/realtime.ts.
+ */
+app.get("/realtime/connect", attachCurrentUser, requireAuth, async (c) => {
+  if (c.req.header("Upgrade") !== "websocket") {
+    return c.json({ error: "expected_websocket" }, 400);
+  }
+  const user = c.get("currentUser")!;
+  const session = c.get("authSession")!;
+  let identity = {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    stateId: user.stateId,
+    sectors: user.sectors,
+    sessionId: session.id,
+  };
+
+  // Dev-only role-switcher hint (see isDemoRoleHarnessEnabled) — only a
+  // super_admin session may impersonate another active user for testing.
+  const asUserId = c.req.query("asUserId");
+  if (asUserId && isDemoRoleHarnessEnabled(c.env) && user.role === "super_admin") {
+    const targetId = Number(asUserId);
+    if (Number.isSafeInteger(targetId) && targetId !== user.id) {
+      const { db, close } = openDb(c);
+      try {
+        const { rows } = await db.query<{
+          id: number; name: string; role: string; state_id: number | null; sector: string | null; status: string;
+        }>(
+          `SELECT id, name, role, state_id, sector, status FROM users WHERE id = $1 LIMIT 1`,
+          [targetId],
+        );
+        const row = rows[0];
+        if (row && row.status === "active") {
+          identity = {
+            id: row.id,
+            name: row.name,
+            role: row.role,
+            stateId: row.state_id,
+            sectors: row.role === "technical_coordinator" && row.sector
+              ? String(row.sector).split(",").map((s) => s.trim()).filter(Boolean)
+              : null,
+            sessionId: session.id,
+          };
+        }
+      } finally {
+        close();
+      }
+    }
+  }
+
+  const forwarded = new Request(c.req.raw, { headers: new Headers(c.req.raw.headers) });
+  forwarded.headers.set("X-CAFA-Realtime-User", JSON.stringify(identity));
+  const stub = c.env.REALTIME_HUB.get(c.env.REALTIME_HUB.idFromName("global"));
+  return stub.fetch(forwarded);
+});
+
 // ── AI Assistant (ported from routes/ai.ts's /ai/chat only — see lib/ai.ts) ──
 
 app.post("/ai/chat", attachCurrentUser, requireAuth, async (c) => {
@@ -350,6 +412,7 @@ app.route("/", manualRoutes);
 app.route("/", conversationsRoutes);
 app.route("/", auditRoutes);
 app.route("/", dashboardRoutes);
+app.route("/", realtimeLocksRoutes);
 
 /**
  * Ported from artifacts/api-server/src/lib/error-handler.ts's
@@ -395,5 +458,10 @@ app.onError((err, c) => {
   const message = typeof anyErr?.message === "string" ? anyErr.message : "Request failed";
   return c.json({ error: errorCode, detail: message }, status as 400);
 });
+
+// Durable Object classes must be exported from the Worker's main entrypoint
+// module for the wrangler.toml [[durable_objects.bindings]] class_name to
+// resolve.
+export { RealtimeHub } from "./durable-objects/realtime-hub";
 
 export default app;
