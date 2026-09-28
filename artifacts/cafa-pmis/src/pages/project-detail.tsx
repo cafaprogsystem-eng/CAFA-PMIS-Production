@@ -509,7 +509,7 @@ function useProjectReportKpis(projectId: number) {
 /** Long text in a grid cell: wraps (max three lines) in its own direction,
  *  aligned with the column; the full value stays in the tooltip. */
 function WrapText({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <span className="block"><span dir="auto" className={`inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end leading-snug ${className}`} title={typeof children === "string" ? children : undefined}>{children}</span></span>;
+  return <span className="block"><span dir="auto" className={`inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top text-page-start leading-snug ${className}`} title={typeof children === "string" ? children : undefined}>{children}</span></span>;
 }
 
 /** Thin HeroUI ProgressBar with an accessible name. */

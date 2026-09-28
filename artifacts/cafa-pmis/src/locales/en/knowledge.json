@@ -444,6 +444,7 @@
     "noSpecificState": "No specific state",
     "retentionYears": "Retention (Years)",
     "tags": "Tags (comma-separated)",
+    "tagList": "Tags",
     "tagsPlaceholder": "e.g., report, quarterly, finance",
     "source": "Source",
     "sourceContext": "Source context",
@@ -489,7 +490,11 @@
       "restoreDescription": "“{{name}}” will return to active results.",
       "deleteTitle": "Delete resource?",
       "deleteDescription": "“{{name}}” will be permanently deleted. This cannot be undone."
-    }
+    },
+    "previewLoading": "Loading preview…",
+    "paginationLabel": "Document pages",
+    "firstPage": "First page",
+    "lastPage": "Last page"
   },
   "roleGuide": {
     "currentRole": "Your current role",

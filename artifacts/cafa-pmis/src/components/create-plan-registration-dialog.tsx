@@ -1819,7 +1819,7 @@ export function CreatePlanRegistrationDialog({
                                     </Chip>
                                   )}
                                 </div>
-                                <p className="text-sm font-medium leading-snug rtl:text-end" dir="auto">{pd.title}</p>
+                                <p className="text-sm font-medium leading-snug text-page-start" dir="auto">{pd.title}</p>
                                 {(pd.donor || stateNames.length > 0 || sectorList.length > 0) && (
                                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                                     {pd.donor && (

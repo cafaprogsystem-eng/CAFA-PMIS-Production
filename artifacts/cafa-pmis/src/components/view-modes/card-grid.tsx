@@ -37,7 +37,7 @@ function RecordCard({ item }: { item: ViewRecord }) {
         {/* Title · code · status */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h3 dir="auto" className="text-[15px] font-medium leading-snug break-words line-clamp-3 rtl:text-end transition-colors group-hover:text-[var(--accent)]" title={item.title}>
+            <h3 dir="auto" className="text-[15px] font-medium leading-snug break-words line-clamp-3 text-page-start transition-colors group-hover:text-[var(--accent)]" title={item.title}>
               {item.title}
             </h3>
             {item.code && (
@@ -60,7 +60,7 @@ function RecordCard({ item }: { item: ViewRecord }) {
             {item.meta.slice(0, 4).map(({ label, value }) => (
               <div key={label} className="min-w-0">
                 <dt className="mb-0.5 text-[11px] text-[var(--muted)]">{label}</dt>
-                <dd dir="auto" className="text-[13px] font-medium leading-snug break-words line-clamp-2 rtl:text-end" title={value}>{value}</dd>
+                <dd dir="auto" className="text-[13px] font-medium leading-snug break-words line-clamp-2 text-page-start" title={value}>{value}</dd>
               </div>
             ))}
           </dl>

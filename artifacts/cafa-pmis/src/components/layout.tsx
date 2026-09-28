@@ -503,6 +503,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       "/planning": tNav("items.plans"),
       "/planning-dashboard": tNav("items.plans"),
       "/sync-status": tNav("items.syncStatus"),
+      // Parent segment of the File & Archive route (it redirects there); without
+      // a label the breadcrumb fell back to the raw English path "Document management".
+      "/document-management": tNav("groups.dataManagement"),
     };
     for (const entry of navEntries) {
       const items = entry.kind === "group" ? entry.group.items : [entry.item];

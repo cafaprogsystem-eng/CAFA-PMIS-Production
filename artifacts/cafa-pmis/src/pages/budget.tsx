@@ -409,7 +409,7 @@ function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; proj
           <h2 className="text-base font-semibold tracking-tight">
             <bdi dir="ltr">{projectInfo?.code ?? t("project.fallbackName", { id: projectId })}</bdi>
           </h2>
-          {projectInfo?.title && <p dir="auto" className="text-sm text-[var(--muted)] rtl:text-end">{projectInfo.title}</p>}
+          {projectInfo?.title && <p dir="auto" className="text-sm text-[var(--muted)] text-page-start">{projectInfo.title}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onPress={() => exportProjectCsv(pdfData)}>
@@ -455,7 +455,7 @@ function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; proj
                 <Alert.Indicator />
                 <Alert.Content>
                   <Alert.Title className="text-xs">{t(`alertLevels.${a.level}`, { defaultValue: a.level })}</Alert.Title>
-                  <Alert.Description dir="auto" className="rtl:text-end">{a.message}</Alert.Description>
+                  <Alert.Description dir="auto" className="text-page-start">{a.message}</Alert.Description>
                 </Alert.Content>
               </Alert>
             ))}
@@ -683,7 +683,7 @@ function SectorBudgetDetail({
     { id: "project", header: t("sector.tableProject"), isRowHeader: true,
       cell: (p) => (
         <div className="min-w-0">
-          <div dir="auto" className="whitespace-normal text-sm font-medium rtl:text-end">{p.title}</div>
+          <div dir="auto" className="whitespace-normal text-sm font-medium text-page-start">{p.title}</div>
           {p.code && <div className="text-xs text-[var(--muted)]"><bdi dir="ltr">{p.code}</bdi></div>}
         </div>
       ) },

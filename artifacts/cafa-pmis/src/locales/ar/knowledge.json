@@ -162,6 +162,7 @@
     "noSpecificState": "بدون ولاية محددة",
     "retentionYears": "الاحتفاظ (بالسنوات)",
     "tags": "الوسوم (مفصولة بفواصل)",
+    "tagList": "الوسوم",
     "tagsPlaceholder": "مثال: تقرير، ربع سنوي، مالية",
     "source": "المصدر",
     "sourceContext": "سياق المصدر",
@@ -207,7 +208,11 @@
       "restoreDescription": "سيعود «{{name}}» إلى النتائج النشطة.",
       "deleteTitle": "حذف المورد؟",
       "deleteDescription": "سيتم حذف «{{name}}» نهائياً. لا يمكن التراجع عن ذلك."
-    }
+    },
+    "previewLoading": "جارٍ تحميل المعاينة…",
+    "paginationLabel": "صفحات الوثائق",
+    "firstPage": "الصفحة الأولى",
+    "lastPage": "الصفحة الأخيرة"
   },
   "faq": {
     "title": "الأسئلة الشائعة",

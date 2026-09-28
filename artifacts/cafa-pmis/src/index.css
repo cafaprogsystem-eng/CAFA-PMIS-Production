@@ -4,6 +4,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* User-entered text carries dir="auto" so mixed Arabic and English shapes
+   correctly, but it should still line up with the page. text-align: start
+   follows the text's own direction, so an Arabic title would sit on the left
+   of an English page (and an English one on the left of an Arabic page).
+   This aligns to the page's start edge whatever the text's direction is. */
+@utility text-page-start {
+  text-align: left;
+  &:where([dir="rtl"] *) {
+    text-align: right;
+  }
+}
+
 @theme inline {
   --color-background: hsl(var(--cafa-background));
   --color-foreground: hsl(var(--cafa-foreground));

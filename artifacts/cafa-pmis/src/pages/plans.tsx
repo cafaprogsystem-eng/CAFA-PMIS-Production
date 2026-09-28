@@ -373,7 +373,7 @@ function DelayedActivities({
                 <Link
                   href={`/plans/${a.planId}`}
                   dir="auto"
-                  className="inline-block max-w-full break-words text-sm font-medium hover:underline underline-offset-2 rtl:text-end"
+                  className="inline-block max-w-full break-words text-sm font-medium hover:underline underline-offset-2 text-page-start"
                   aria-label={t("followUp.viewPlan", { title: a.planTitle })}
                   title={t("followUp.viewPlan", { title: a.planTitle })}
                 >
@@ -718,7 +718,7 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
           <Link
             href={`/plans/${p.id}`}
             dir="auto"
-            className="block whitespace-normal break-words font-medium leading-snug text-[var(--foreground)] line-clamp-3 rtl:text-end hover:underline underline-offset-2"
+            className="block whitespace-normal break-words font-medium leading-snug text-[var(--foreground)] line-clamp-3 text-page-start hover:underline underline-offset-2"
             title={p.title}
           >
             {p.title}
@@ -740,7 +740,7 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
     { id: "state", header: t("table.state"), allowsSorting: true, width: 104, headerClassName: "w-[104px]",
       cell: (p) => <span className="text-sm text-[var(--muted)]" dir="auto">{formatLocation({ locationType: p.locationType, stateName: p.stateName, stateNameAr: p.stateNameAr }, i18n.language)}</span> },
     { id: "responsible", header: t("table.responsible"), allowsSorting: true, width: 124, headerClassName: "w-[124px]",
-      cell: (p) => <span dir="auto" className="block whitespace-normal break-words text-sm text-[var(--muted)] line-clamp-2 rtl:text-end">{p.responsibleUserName ?? p.responsibleName ?? "—"}</span> },
+      cell: (p) => <span dir="auto" className="block whitespace-normal break-words text-sm text-[var(--muted)] line-clamp-2 text-page-start">{p.responsibleUserName ?? p.responsibleName ?? "—"}</span> },
     { id: "period", header: t("table.period"), allowsSorting: true, width: 116, headerClassName: "w-[116px]",
       cell: (p) => p.startDate || p.endDate ? (
         <span className="text-xs leading-snug text-[var(--muted)]">

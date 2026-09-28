@@ -200,19 +200,25 @@ describe("RISK-DETAIL-VIS-07: accessible attachment names", () => {
   it("keeps the full attachment name accessible when the display name truncates", async () => {
     const source = await readFile("src/components/drive-attachment-panel.tsx", "utf8");
     expect(source).toContain('title={file.fileName}>{file.fileName}</span>');
-    expect(source).toContain("overflow-x-auto");
-    expect(source).toContain('aria-label={t("driveAttachment.downloadFile")}');
-    expect(source).toContain('aria-label={t("driveAttachment.openFile")}');
-    expect(source).toContain('aria-label={t("driveAttachment.removeAttachment")}');
+    // The DataGrid owns horizontal scrolling; icon buttons take their
+    // accessible name from the second iconButton argument.
+    expect(source).toContain("<DataGrid");
+    expect(source).toContain('aria-label={ariaLabel}');
+    expect(source).toContain('iconButton(t("download"), t("driveAttachment.downloadFile")');
+    expect(source).toContain('iconButton(t("driveAttachment.openFile"), t("driveAttachment.openFile")');
+    expect(source).toContain('iconButton(t("remove"), t("driveAttachment.removeAttachment")');
   });
 });
 
 describe("RISK-DETAIL-VIS-08: no attachment storage internals", () => {
   it("excludes storage internals from the rendered attachment row", async () => {
     const source = await readFile("src/components/drive-attachment-panel.tsx", "utf8");
-    const rowStart = source.indexOf("{files.map((file) => <TableRow");
-    const rowEnd = source.indexOf("</TableBody>", rowStart);
-    const row = source.slice(rowStart, rowEnd);
+    // Row actions and the DataGrid column cells render every attachment row.
+    const rowStart = source.indexOf("const actions = (file: CanonicalAttachment");
+    const columnsStart = source.indexOf("const columns: DataGridColumn<CanonicalAttachment>[]");
+    expect(rowStart).toBeGreaterThan(-1);
+    expect(columnsStart).toBeGreaterThan(rowStart);
+    const row = source.slice(rowStart, source.indexOf("];", columnsStart));
     expect(row).not.toMatch(/file\.(?:objectPath|provider|uploadOperationId|driveFileId|driveLink)\b/);
   });
 });

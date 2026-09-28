@@ -121,7 +121,7 @@ describe("Migrated labelled action surfaces", () => {
     expect(plansSource).not.toContain('<Pencil className="h-4 w-4 mr-1.5"');
     expect(usersSource).toContain('className="w-full sm:w-auto"');
     expect(usersSource).not.toContain('<Plus className="h-4 w-4 me-2"');
-    expect(filesSource).toContain('flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row');
+    expect(filesSource).toContain('flex shrink-0 flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row');
     expect(filesSource).not.toContain('<Upload className="me-2 h-4 w-4"');
   });
 
@@ -135,7 +135,7 @@ describe("Migrated labelled action surfaces", () => {
   });
 
   it("keeps upload and verification actions on primitive-owned icon spacing", () => {
-    expect(driveAttachmentSource).toContain('<Upload className="h-3.5 w-3.5" />');
+    expect(driveAttachmentSource).toContain('<Upload className="size-3.5" aria-hidden="true" />');
     expect(driveAttachmentSource).not.toContain('h-3.5 w-3.5 mr-1');
     expect(driveAttachmentSource).not.toContain('animate-spin mr-');
     expect(verificationSource).toContain('<RefreshCw className="h-3.5 w-3.5" />');

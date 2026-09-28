@@ -6,27 +6,16 @@ import { useLocation, useSearch } from "wouter";
 import {
   Archive, BarChart3, BookOpen, BriefcaseBusiness, ClipboardList, Download, Eye,
   File, FileArchive, FileSpreadsheet, FileText, FolderKanban, FolderOpen, Handshake, Image,
-  Landmark, Loader2, Megaphone, MoreHorizontal, Package, RotateCcw, Scale,
+  Landmark, Megaphone, MoreHorizontal, Package, RotateCcw, Scale,
   Search, ShieldCheck, Trash2, Upload, Users, WalletCards, Wrench, X,
 } from "@/components/icons";
 import type { IconComponent } from "@/components/icons";
 import { toast } from "sonner";
 import { useGetMe } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge, type BadgeVariant } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Alert, Button, Card, Chip, Dropdown, Input, Label, Modal, SearchField, Skeleton, TextArea, Tooltip,
+} from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import {
   buildFileArchiveLocation,
   getFileArchiveRouteContext,
@@ -38,7 +27,11 @@ import { canManageArchiveLifecycle } from "@/lib/file-archive-lifecycle";
 import type { ArchiveLifecycleItem } from "@/lib/file-archive-lifecycle";
 import { MAIN_SECTORS } from "@/lib/sectors";
 import { ViewModeSwitcher } from "@/components/view-modes/view-mode-switcher";
-import { getLinkedStateLabel } from "@/components/state-label";
+import { getLinkedStateLabel, getStateLabel } from "@/components/state-label";
+import { SelectField } from "@/components/select-field";
+import { FilterKpi } from "@/components/filter-kpi";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { RegistryPagination } from "@/components/registry-pagination";
 
 export type ArchiveItem = {
   source: "resource" | "project" | "plan" | "report";
@@ -106,12 +99,20 @@ const DOCUMENT_CLASSIFICATIONS = [
 
 const CONFIDENTIALITY_VALUES = ["public", "internal", "confidential", "restricted"] as const;
 
+
 function formatBytes(size: number | null) {
   if (!size) return "—";
   if (size < 1024) return `${size} B`;
   if (size < 1024 ** 2) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / 1024 ** 2).toFixed(1)} MB`;
 }
+
+/**
+ * Left-to-right isolate for technical text inside a joined line (file names,
+ * sizes, references), so "163.1 KB" does not render as "KB 163.1" and a file
+ * name keeps its start visible in Arabic. Plain text, so it also works in titles.
+ */
+const ltr = (text: string) => `⁦${text}⁩`;
 
 function formatDate(value: string | null, locale: string) {
   if (!value) return "—";
@@ -123,11 +124,11 @@ function formatDate(value: string | null, locale: string) {
 
 function fileIcon(contentType: string | null, fileName?: string) {
   const extension = fileName?.split(".").pop()?.toLowerCase();
-  if (contentType?.startsWith("image/")) return <Image className="h-4 w-4 text-sky-600" />;
-  if (contentType?.includes("excel") || contentType?.includes("spreadsheet") || contentType === "text/csv" || ["csv", "xls", "xlsx"].includes(extension ?? "")) return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
-  if (contentType?.includes("pdf") || contentType?.includes("word") || contentType?.includes("document")) return <FileText className="h-4 w-4 text-rose-600" />;
-  if (contentType?.includes("zip") || contentType?.includes("compressed") || ["zip", "7z", "rar", "tar", "gz"].includes(extension ?? "")) return <FileArchive className="h-4 w-4 text-amber-600" />;
-  return <File className="h-4 w-4 text-muted-foreground" />;
+  if (contentType?.startsWith("image/")) return <Image className="size-4 text-sky-600" />;
+  if (contentType?.includes("excel") || contentType?.includes("spreadsheet") || contentType === "text/csv" || ["csv", "xls", "xlsx"].includes(extension ?? "")) return <FileSpreadsheet className="size-4 text-emerald-600" />;
+  if (contentType?.includes("pdf") || contentType?.includes("word") || contentType?.includes("document")) return <FileText className="size-4 text-rose-600" />;
+  if (contentType?.includes("zip") || contentType?.includes("compressed") || ["zip", "7z", "rar", "tar", "gz"].includes(extension ?? "")) return <FileArchive className="size-4 text-amber-600" />;
+  return <File className="size-4 text-[var(--muted)]" />;
 }
 
 function classificationIcon(classification: string) {
@@ -157,13 +158,20 @@ const CLASSIFICATION_PRESENTATION: Record<string, {
 };
 
 function classificationColour(classification: string) {
-  return CLASSIFICATION_PRESENTATION[classification]?.colour ?? "text-muted-foreground";
+  return CLASSIFICATION_PRESENTATION[classification]?.colour ?? "text-[var(--muted)]";
 }
 
-function statusVariant(status: ArchiveItem["status"]) {
+function statusColor(status: ArchiveItem["status"]): "success" | "warning" | "danger" {
   if (status === "active") return "success";
   if (status === "archived") return "warning";
-  return "destructive";
+  return "danger";
+}
+
+function confidentialityColor(confidentiality: ArchiveItem["confidentiality"]): "accent" | "default" | "warning" | "danger" {
+  if (confidentiality === "public") return "accent";
+  if (confidentiality === "confidential") return "warning";
+  if (confidentiality === "restricted") return "danger";
+  return "default";
 }
 
 function fileTypeLabel(item: ArchiveItem, unknownLabel: string) {
@@ -187,11 +195,36 @@ function fileTypeLabel(item: ArchiveItem, unknownLabel: string) {
   return extension && extension !== item.fileName ? extension.toUpperCase() : unknownLabel;
 }
 
-function DocumentMeta({ label, value }: { label: string; value: string }) {
+/** Joined secondary line for a document: file name, related record, uploader, source, size. */
+function metaLine(item: ArchiveItem, title: string, source: string, withReference = false) {
+  return [
+    withReference && item.reference ? ltr(item.reference) : null,
+    item.fileName !== title ? ltr(item.fileName) : null,
+    item.relatedRecordTitle,
+    item.uploadedByName,
+    source,
+    item.size != null ? ltr(formatBytes(item.size)) : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function TagChips({ tags, max, className = "" }: { tags: string[]; max: number; className?: string }) {
+  const { t } = useTranslation("knowledge");
+  if (!tags.length) return null;
+  const visible = tags.slice(0, max);
+  const rest = tags.slice(visible.length);
+  return (
+    <div className={`flex flex-wrap gap-1 ${className}`}>
+      {visible.map((tag) => <Chip key={tag} size="sm" variant="secondary" className="max-w-[140px]"><span className="truncate" title={tag}>{tag}</span></Chip>)}
+      {rest.length > 0 && <Chip size="sm" variant="tertiary"><span title={rest.join(", ")}>{t("fileArchive.moreTags", { count: rest.length })}</span></Chip>}
+    </div>
+  );
+}
+
+function DocumentMeta({ label, value, isCode = false }: { label: string; value: string; isCode?: boolean }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</dt>
-      <dd className="truncate text-sm font-medium" title={value}>{value}</dd>
+      <dt className="text-[11px] font-medium text-[var(--muted)]">{label}</dt>
+      <dd dir={isCode ? "ltr" : undefined} className="truncate text-sm font-medium rtl:text-end" title={value}>{value}</dd>
     </div>
   );
 }
@@ -213,45 +246,38 @@ export function ArchiveDocumentCard({
 }) {
   const { t } = useTranslation("knowledge");
   const title = item.name || item.fileName || "—";
-  const visibleTags = item.tags.slice(0, 2);
-  const remainingTagCount = Math.max(0, item.tags.length - visibleTags.length);
   const sourceContext = [sourceLabel, item.relatedRecordTitle].filter(Boolean).join(" · ");
 
   return (
-    <article data-archive-card className="group flex min-w-0 flex-col rounded-lg border bg-background p-4 transition-colors hover:border-primary/40 hover:shadow-sm">
+    <Card data-archive-card className="group min-w-0 gap-0 p-4">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <button
           type="button"
           onClick={() => onView(item)}
-          className="flex min-w-0 items-start gap-2 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex min-w-0 items-start gap-2 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
           aria-label={t("fileArchive.viewDocument", { name: title })}
         >
           <span className="mt-0.5 shrink-0" aria-hidden="true">{fileIcon(item.contentType, item.fileName)}</span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-medium group-hover:text-primary">{title}</span>
-            {item.fileName && item.fileName !== title && <span className="mt-0.5 block truncate text-xs text-muted-foreground" title={item.fileName}>{item.fileName}</span>}
+            <span dir="auto" className="block truncate text-sm font-medium group-hover:text-[var(--accent)] text-page-start">{title}</span>
+            {item.fileName && item.fileName !== title && <span dir="ltr" className="mt-0.5 block truncate text-xs text-[var(--muted)] rtl:text-end" title={item.fileName}>{item.fileName}</span>}
           </span>
         </button>
         <div className="shrink-0">{actions}</div>
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
         <DocumentMeta label={t("fileArchive.fileType")} value={fileTypeLabel(item, t("fileArchive.unknownFileType"))} />
-        <DocumentMeta label={t("fileArchive.reference")} value={item.reference ?? "—"} />
+        <DocumentMeta label={t("fileArchive.reference")} value={item.reference ?? "—"} isCode />
         <DocumentMeta label={t("fileArchive.classification")} value={classificationLabel} />
         <DocumentMeta label={t("fileArchive.confidentiality")} value={t(`fileArchive.confidentialityValues.${item.confidentiality}`)} />
         <DocumentMeta label={t("fileArchive.sector")} value={item.sector ? t(`fileArchive.sectorValues.${item.sector}`, { defaultValue: item.sector }) : "—"} />
         <DocumentMeta label={t("fileArchive.date")} value={formatDate(item.effectiveDate ?? item.updatedAt, locale)} />
         <DocumentMeta label={t("fileArchive.status")} value={t(`fileArchive.${item.status}`)} />
-        {item.size != null && <DocumentMeta label={t("fileArchive.size")} value={formatBytes(item.size)} />}
+        {item.size != null && <DocumentMeta label={t("fileArchive.size")} value={ltr(formatBytes(item.size))} />}
       </dl>
-      {sourceContext && <p className="mt-4 truncate border-t border-border/60 pt-3 text-xs text-muted-foreground" title={sourceContext}>{t("fileArchive.sourceContext")}: {sourceContext}</p>}
-      {visibleTags.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {visibleTags.map((tag) => <span key={tag} className="max-w-[140px] truncate rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground" title={tag}>{tag}</span>)}
-          {remainingTagCount > 0 && <span className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground" title={item.tags.slice(visibleTags.length).join(", ")}>{t("fileArchive.moreTags", { count: remainingTagCount })}</span>}
-        </div>
-      )}
-    </article>
+      {sourceContext && <p className="mt-4 truncate border-t border-[var(--border)] pt-3 text-xs text-[var(--muted)]" title={sourceContext}>{t("fileArchive.sourceContext")}: {sourceContext}</p>}
+      <TagChips tags={item.tags} max={2} className="mt-3" />
+    </Card>
   );
 }
 
@@ -271,10 +297,11 @@ export function ArchiveCompactList({
   locale: string;
 }) {
   const { t } = useTranslation("knowledge");
+  const cols = "grid-cols-[minmax(92px,1fr)_minmax(190px,2fr)_minmax(150px,1.5fr)_minmax(120px,1.2fr)_minmax(92px,0.9fr)_minmax(112px,1fr)_120px]";
   return (
     <div data-archive-compact-list className="overflow-x-auto">
-      <div className="min-w-[900px]">
-        <div className="grid grid-cols-[minmax(92px,1fr)_minmax(190px,2fr)_minmax(150px,1.5fr)_minmax(120px,1.2fr)_minmax(92px,0.9fr)_minmax(112px,1fr)_144px] items-center gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="min-w-[880px]">
+        <div className={`grid ${cols} items-center gap-3 border-b border-[var(--border)] bg-[var(--default)] px-3 py-2 text-xs font-medium text-[var(--muted)]`}>
           <span>{t("fileArchive.fileType")}</span>
           <span>{t("fileArchive.titleLabel")}</span>
           <span>{t("fileArchive.classification")}</span>
@@ -286,13 +313,13 @@ export function ArchiveCompactList({
         {items.map((item) => {
           const title = item.name || item.fileName || "—";
           return (
-            <div key={`${item.source}-${item.id}`} data-archive-compact-row className="grid grid-cols-[minmax(92px,1fr)_minmax(190px,2fr)_minmax(150px,1.5fr)_minmax(120px,1.2fr)_minmax(92px,0.9fr)_minmax(112px,1fr)_144px] items-center gap-3 border-b border-border/60 px-3 py-2.5 text-sm last:border-b-0 hover:bg-muted/30">
-              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={fileTypeLabel(item, t("fileArchive.unknownFileType"))}><span aria-hidden="true">{fileIcon(item.contentType, item.fileName)}</span><span className="truncate">{fileTypeLabel(item, t("fileArchive.unknownFileType"))}</span></span>
-              <button type="button" onClick={() => onView(item)} className="min-w-0 truncate text-start font-medium hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={t("fileArchive.viewDocument", { name: title })} title={title}>{title}</button>
-              <span className="truncate text-xs text-muted-foreground" title={item.classification}>{classificationLabel(item.classification)}</span>
-              <span className="truncate text-xs text-muted-foreground">{item.sector ? t(`fileArchive.sectorValues.${item.sector}`, { defaultValue: item.sector }) : "—"}</span>
-              <span><Badge variant={statusVariant(item.status)}>{t(`fileArchive.${item.status}`)}</Badge></span>
-              <span className="whitespace-nowrap text-xs text-muted-foreground">{formatDate(item.effectiveDate ?? item.updatedAt, locale)}</span>
+            <div key={`${item.source}-${item.id}`} data-archive-compact-row className={`grid ${cols} items-center gap-3 border-b border-[var(--border)] px-3 py-2 text-sm last:border-b-0 hover:bg-[var(--default)]`}>
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-[var(--muted)]" title={fileTypeLabel(item, t("fileArchive.unknownFileType"))}><span aria-hidden="true">{fileIcon(item.contentType, item.fileName)}</span><span className="truncate">{fileTypeLabel(item, t("fileArchive.unknownFileType"))}</span></span>
+              <button type="button" onClick={() => onView(item)} dir="auto" className="min-w-0 truncate rounded-sm text-start font-medium outline-none hover:text-[var(--accent)] hover:underline focus-visible:ring-2 focus-visible:ring-[var(--focus)] text-page-start" aria-label={t("fileArchive.viewDocument", { name: title })} title={title}>{title}</button>
+              <span className="truncate text-xs text-[var(--muted)]" title={item.classification}>{classificationLabel(item.classification)}</span>
+              <span className="truncate text-xs text-[var(--muted)]">{item.sector ? t(`fileArchive.sectorValues.${item.sector}`, { defaultValue: item.sector }) : "—"}</span>
+              <span><Chip size="sm" variant="soft" color={statusColor(item.status)}>{t(`fileArchive.${item.status}`)}</Chip></span>
+              <span className="whitespace-nowrap text-xs text-[var(--muted)]">{formatDate(item.effectiveDate ?? item.updatedAt, locale)}</span>
               <span className="flex justify-end">{actionsFor(item)}</span>
             </div>
           );
@@ -302,11 +329,48 @@ export function ArchiveCompactList({
   );
 }
 
-function confidentialityVariant(confidentiality: ArchiveItem["confidentiality"]): BadgeVariant {
-  if (confidentiality === "public") return "info";
-  if (confidentiality === "confidential") return "warning";
-  if (confidentiality === "restricted") return "destructive";
-  return "outline";
+/** Dashed drop / pick area for choosing one file. */
+function FilePicker({
+  id, file, onPick, onRemove, disabled, guidance,
+}: {
+  id: string;
+  file: File | null;
+  onPick: () => void;
+  onRemove: () => void;
+  disabled: boolean;
+  guidance?: { id: string; text: string };
+}) {
+  const { t } = useTranslation("knowledge");
+  if (file) {
+    return (
+      <div aria-live="polite" className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--default)] p-4">
+        <FileText aria-hidden="true" className="size-5 shrink-0 text-[var(--accent)]" />
+        <div className="min-w-0 flex-1">
+          <p dir="ltr" className="truncate text-sm font-medium rtl:text-end" title={file.name}>{file.name}</p>
+          <p className="text-xs text-[var(--muted)]">{file.type || t("fileArchive.unknownFileType")} · <bdi dir="ltr">{formatBytes(file.size)}</bdi></p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button size="sm" variant="ghost" isDisabled={disabled} onPress={onPick}>{t("fileArchive.changeFile")}</Button>
+          <Button size="sm" variant="ghost" isIconOnly isDisabled={disabled} onPress={onRemove} aria-label={t("fileArchive.removeFile", { name: file.name })}>
+            <X className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <button
+      id={id}
+      type="button"
+      onClick={onPick}
+      aria-describedby={guidance?.id}
+      className="flex min-h-[11rem] w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] p-8 text-center outline-none transition-colors hover:border-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] group-data-[dragging=true]:border-[var(--accent)] group-data-[dragging=true]:bg-[color-mix(in_oklab,var(--accent)_6%,transparent)]"
+    >
+      <Upload aria-hidden="true" className="mb-3 size-8 text-[var(--accent)]" />
+      <span className="text-sm font-medium">{t("fileArchive.selectFile")}</span>
+      {guidance && <span id={guidance.id} className="mt-1 max-w-md text-xs leading-relaxed text-[var(--muted)]">{guidance.text}</span>}
+    </button>
+  );
 }
 
 function UploadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -410,121 +474,126 @@ function UploadDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl flex flex-col overflow-hidden">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>{t("fileArchive.uploadTitle")}</DialogTitle>
-          <DialogDescription>{t("fileArchive.uploadDescription")}</DialogDescription>
-        </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto pe-1 pb-1">
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="archive-title">{t("fileArchive.titleLabel")} <span aria-hidden="true" className="text-destructive">*</span></Label>
-              <Input id="archive-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("fileArchive.titlePlaceholder")} maxLength={500} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="archive-description">{t("fileArchive.descriptionLabel")}</Label>
-              <Textarea id="archive-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("fileArchive.descriptionPlaceholder")} maxLength={20000} />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="archive-classification">{t("fileArchive.classification")} <span aria-hidden="true" className="text-destructive">*</span></Label>
-                <Select value={classification} onValueChange={setClassification}>
-                  <SelectTrigger id="archive-classification" aria-label={t("fileArchive.classification")} aria-required="true"><SelectValue placeholder={t("fileArchive.selectClassification")} /></SelectTrigger>
-                  <SelectContent>{DOCUMENT_CLASSIFICATIONS.map((item) => <SelectItem key={item} value={item}>{t(`fileArchive.classificationValues.${item}`)}</SelectItem>)}</SelectContent>
-                </Select>
+    <Modal isOpen={open} onOpenChange={handleOpenChange}>
+      <Modal.Backdrop isDismissable={!mutation.isPending}>
+        <Modal.Container size="lg" scroll="inside">
+          <Modal.Dialog className="max-h-[calc(100dvh-2rem)] sm:max-w-2xl">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{t("fileArchive.uploadTitle")}</Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("fileArchive.uploadDescription")}</p>
+            </Modal.Header>
+            <Modal.Body className="space-y-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="archive-title" isRequired>{t("fileArchive.titleLabel")}</Label>
+                <Input id="archive-title" fullWidth dir="auto" value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("fileArchive.titlePlaceholder")} maxLength={500} required />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="archive-confidentiality">{t("fileArchive.confidentiality")}</Label>
-                <Select value={confidentiality} onValueChange={setConfidentiality}>
-                  <SelectTrigger id="archive-confidentiality" aria-label={t("fileArchive.confidentiality")}><SelectValue /></SelectTrigger>
-                  <SelectContent>{CONFIDENTIALITY_VALUES.map((item) => <SelectItem key={item} value={item}>{t(`fileArchive.confidentialityValues.${item}`)}</SelectItem>)}</SelectContent>
-                </Select>
+              <div className="space-y-1.5">
+                <Label htmlFor="archive-description">{t("fileArchive.descriptionLabel")}</Label>
+                <TextArea id="archive-description" fullWidth dir="auto" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("fileArchive.descriptionPlaceholder")} maxLength={20000} />
               </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="archive-sector">{t("fileArchive.sector")}</Label>
-                <Select value={sector} onValueChange={setSector}>
-                  <SelectTrigger id="archive-sector" aria-label={t("fileArchive.sector")}><SelectValue placeholder={t("fileArchive.selectSector")} /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="General / Cross-Cutting">{t("fileArchive.generalSector")}</SelectItem>
-                    {MAIN_SECTORS.map((item) => <SelectItem key={item} value={item}>{t(`fileArchive.sectorValues.${item}`)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField
+                  id="archive-classification"
+                  label={t("fileArchive.classification")}
+                  isRequired
+                  value={classification}
+                  onChange={setClassification}
+                  placeholder={t("fileArchive.selectClassification")}
+                  className="w-full"
+                  options={DOCUMENT_CLASSIFICATIONS.map((item) => ({ value: item, label: t(`fileArchive.classificationValues.${item}`) }))}
+                />
+                <SelectField
+                  id="archive-confidentiality"
+                  label={t("fileArchive.confidentiality")}
+                  value={confidentiality}
+                  onChange={setConfidentiality}
+                  className="w-full"
+                  options={CONFIDENTIALITY_VALUES.map((item) => ({ value: item, label: t(`fileArchive.confidentialityValues.${item}`) }))}
+                />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="archive-retention">{t("fileArchive.retentionYears")}</Label>
-                <Input id="archive-retention" type="number" min="1" max="100" value={retentionYears} onChange={(event) => setRetentionYears(event.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="archive-state">{t("fileArchive.state")}</Label>
-              <Select value={stateId || "none"} onValueChange={(value) => setStateId(value === "none" ? "" : value)}>
-                <SelectTrigger id="archive-state" aria-label={t("fileArchive.state")}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t("fileArchive.noSpecificState")}</SelectItem>
-                  {states.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {i18n.language?.toLowerCase().startsWith("ar") ? (s.nameAr?.trim() || s.name) : s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">{t("fileArchive.stateHint")}</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="archive-tags">{t("fileArchive.tags")}</Label>
-              <Input id="archive-tags" value={tags} onChange={(event) => setTags(event.target.value)} placeholder={t("fileArchive.tagsPlaceholder")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="archive-file-input">{t("fileArchive.fileLabel")} <span aria-hidden="true" className="text-destructive">*</span></Label>
-              {file ? (
-                <div aria-live="polite" className="flex items-center gap-3 rounded-lg border bg-muted/30 p-4">
-                  <FileText aria-hidden="true" className="h-5 w-5 shrink-0 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium" title={file.name}>{file.name}</p>
-                    <p className="text-xs text-muted-foreground">{file.type || t("fileArchive.unknownFileType")} · {formatBytes(file.size)}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button type="button" size="sm" variant="ghost" disabled={mutation.isPending} onClick={() => inputRef.current?.click()}>
-                      {t("fileArchive.changeFile")}
-                    </Button>
-                    <Button type="button" size="icon" variant="ghost" disabled={mutation.isPending} onClick={removeFile} aria-label={t("fileArchive.removeFile", { name: file.name })}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField
+                  id="archive-sector"
+                  label={t("fileArchive.sector")}
+                  isRequired
+                  value={sector}
+                  onChange={setSector}
+                  placeholder={t("fileArchive.selectSector")}
+                  className="w-full"
+                  options={[
+                    { value: "General / Cross-Cutting", label: t("fileArchive.generalSector") },
+                    ...MAIN_SECTORS.map((item) => ({ value: item, label: t(`fileArchive.sectorValues.${item}`) })),
+                  ]}
+                />
+                <div className="space-y-1.5">
+                  <Label htmlFor="archive-retention">{t("fileArchive.retentionYears")}</Label>
+                  <Input id="archive-retention" fullWidth type="number" min="1" max="100" value={retentionYears} onChange={(event) => setRetentionYears(event.target.value)} />
                 </div>
-              ) : (
-                <button
+              </div>
+              <div className="space-y-1.5">
+                <SelectField
+                  id="archive-state"
+                  label={t("fileArchive.state")}
+                  aria-describedby="archive-state-hint"
+                  value={stateId || "none"}
+                  onChange={(value) => setStateId(value === "none" ? "" : value)}
+                  className="w-full"
+                  options={[
+                    { value: "none", label: <>{t("fileArchive.noSpecificState")}</>, textValue: t("fileArchive.noSpecificState") },
+                    ...states.map((s) => ({ value: String(s.id), label: getStateLabel(s, i18n.language) })),
+                  ]}
+                />
+                <p id="archive-state-hint" className="text-xs text-[var(--muted)]">{t("fileArchive.stateHint")}</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="archive-tags">{t("fileArchive.tags")}</Label>
+                <Input id="archive-tags" fullWidth dir="auto" value={tags} onChange={(event) => setTags(event.target.value)} placeholder={t("fileArchive.tagsPlaceholder")} />
+              </div>
+              <div
+                className="group space-y-1.5"
+                data-dragging={isDragging || undefined}
+                onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(event) => { event.preventDefault(); setIsDragging(false); selectFile(event.dataTransfer.files?.[0] ?? null); }}
+              >
+                <Label htmlFor="archive-file-input" isRequired>{t("fileArchive.fileLabel")}</Label>
+                <FilePicker
                   id="archive-file"
-                  type="button"
-                  onClick={() => inputRef.current?.click()}
-                  onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={(event) => { event.preventDefault(); setIsDragging(false); selectFile(event.dataTransfer.files?.[0] ?? null); }}
-                  aria-describedby="archive-file-guidance"
-                  className={`flex min-h-[11rem] w-full flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/60"}`}
-                >
-                  <Upload aria-hidden="true" className="mb-3 h-8 w-8 text-primary" />
-                  <span className="text-sm font-medium text-foreground">{t("fileArchive.selectFile")}</span>
-                  <span id="archive-file-guidance" className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">{t("fileArchive.fileGuidance")}</span>
-                </button>
-              )}
-              <input ref={inputRef} id="archive-file-input" className="sr-only" type="file" required={!file} onChange={(event) => selectFile(event.target.files?.[0] ?? null)} />
-              {error && <p role="alert" aria-live="assertive" className="text-sm text-destructive">{t(`fileArchive.uploadErrors.${error}`)}</p>}
-              {mutation.isPending && <p aria-live="polite" className="text-sm text-muted-foreground">{t("fileArchive.uploading")}</p>}
-            </div>
-          </div>
-        </div>
-        <DialogFooter className="shrink-0 border-t border-border/60 pt-4">
-          <Button variant="outline" disabled={mutation.isPending} onClick={() => handleOpenChange(false)}>{t("fileArchive.cancel")}</Button>
-          <Button disabled={!file || !title.trim() || !classification || !sector || mutation.isPending} onClick={() => mutation.mutate()}>
-            {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}{t("fileArchive.uploadDocument")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+                  file={file}
+                  onPick={() => inputRef.current?.click()}
+                  onRemove={removeFile}
+                  disabled={mutation.isPending}
+                  guidance={{ id: "archive-file-guidance", text: t("fileArchive.fileGuidance") }}
+                />
+                <input ref={inputRef} id="archive-file-input" className="sr-only" type="file" required={!file} onChange={(event) => selectFile(event.target.files?.[0] ?? null)} />
+                {error && <p role="alert" aria-live="assertive" className="text-sm text-[var(--danger)]">{t(`fileArchive.uploadErrors.${error}`)}</p>}
+                {mutation.isPending && <p aria-live="polite" className="text-sm text-[var(--muted)]">{t("fileArchive.uploading")}</p>}
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="outline" isDisabled={mutation.isPending} onPress={() => handleOpenChange(false)}>{t("fileArchive.cancel")}</Button>
+              <Button
+                isDisabled={!file || !title.trim() || !classification || !sector || mutation.isPending}
+                isPending={mutation.isPending}
+                onPress={() => mutation.mutate()}
+              >
+                {t("fileArchive.uploadDocument")}
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
+function DetailRow({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
+  return (
+    <div className={wide ? "col-span-2" : ""}>
+      <dt className="text-xs text-[var(--muted)]">{label}</dt>
+      <dd className="break-words">{children}</dd>
+    </div>
   );
 }
 
@@ -560,51 +629,68 @@ function DetailDialog({ item, onOpenChange }: { item: ArchiveItem | null; onOpen
     };
   }, [canPreview, item]);
   if (!item) return null;
+  const panel = "flex min-h-32 flex-col items-center justify-center gap-2 rounded-xl border p-4 text-center";
   return (
-    <Dialog open={!!item} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">{fileIcon(item.contentType, item.fileName)}<span className="truncate">{item.name}</span></DialogTitle>
-          <DialogDescription>{t("fileArchive.detailDescription")}</DialogDescription>
-        </DialogHeader>
-        {isUnavailable ? (
-          <div role="status" className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-md border border-warning/30 bg-warning/5 text-center">
-            <FileArchive className="h-8 w-8 text-warning" />
-            <p className="text-sm font-medium text-foreground">{t("fileArchive.fileUnavailable")}</p>
-            <p className="text-xs text-muted-foreground">{t("fileArchive.fileUnavailableDesc")}</p>
-          </div>
-        ) : canPreview && previewUrl ? (
-          <iframe title={t("fileArchive.previewTitle", { name: item.name })} src={previewUrl} className="h-[45vh] w-full rounded-md border bg-muted" />
-        ) : canPreview && previewFailed ? (
-          <div role="alert" className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 text-center">
-            <FileArchive className="h-8 w-8 text-destructive" />
-            <p className="text-sm text-destructive">{t("fileArchive.actionFailed")}</p>
-          </div>
-        ) : canPreview ? (
-          <div className="flex min-h-32 items-center justify-center rounded-md border bg-muted/30 text-sm text-muted-foreground">{t("fileArchive.uploading")}</div>
-        ) : (
-          <div className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-md border bg-muted/30 text-center">
-            <FileArchive className="h-8 w-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">{t("fileArchive.previewUnavailable")}</p>
-          </div>
-        )}
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-          <div><dt className="text-muted-foreground">{t("fileArchive.classification")}</dt><dd>{item.classification}</dd></div>
-          <div><dt className="text-muted-foreground">{t("fileArchive.version")}</dt><dd>{item.versionLabel ?? "—"}</dd></div>
-          <div><dt className="text-muted-foreground">{t("fileArchive.size")}</dt><dd>{formatBytes(item.size)}</dd></div>
-          <div><dt className="text-muted-foreground">{t("fileArchive.updated")}</dt><dd>{formatDate(item.updatedAt, i18n.language === "ar" ? "ar" : "en-GB")}</dd></div>
-          <div><dt className="text-muted-foreground">{t("fileArchive.source")}</dt><dd>{t(`fileArchive.sourceValues.${item.sourceKind}`, { defaultValue: item.sourceLabel ?? "—" })}{item.relatedRecordTitle ? ` · ${item.relatedRecordTitle}` : ""}</dd></div>
-          <div><dt className="text-muted-foreground">{t("fileArchive.confidentiality")}</dt><dd>{t(`fileArchive.confidentialityValues.${item.confidentiality}`)}</dd></div>
-          {item.stateId != null && (
-            <div><dt className="text-muted-foreground">{t("fileArchive.state")}</dt><dd>{getLinkedStateLabel(item, i18n.language)}</dd></div>
-          )}
-          <div><dt className="text-muted-foreground">{t("fileArchive.retentionYears")}</dt><dd>{item.retentionYears ?? "—"}</dd></div>
-          <div><dt className="text-muted-foreground">{t("fileArchive.tags")}</dt><dd>{item.tags.length ? item.tags.join(", ") : "—"}</dd></div>
-          <div className="col-span-2"><dt className="text-muted-foreground">{t("fileArchive.versionHistory")}</dt><dd>{item.versionLabel ?? "—"}</dd></div>
-        </dl>
-        <DialogFooter><Button disabled={isUnavailable} onClick={() => { void downloadArchiveItem(item).catch(() => toast.error(t("fileArchive.actionFailed"))); }}><Download className="h-4 w-4" />{t("fileArchive.download")}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal isOpen={!!item} onOpenChange={onOpenChange}>
+      <Modal.Backdrop>
+        <Modal.Container size="lg" scroll="inside">
+          <Modal.Dialog className="sm:max-w-3xl">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading className="flex min-w-0 items-center gap-2">
+                <span aria-hidden="true">{fileIcon(item.contentType, item.fileName)}</span>
+                <span dir="auto" className="truncate">{item.name}</span>
+              </Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("fileArchive.detailDescription")}</p>
+            </Modal.Header>
+            <Modal.Body className="space-y-4">
+              {isUnavailable ? (
+                <div role="status" className={`${panel} border-[color-mix(in_oklab,var(--warning)_35%,transparent)] bg-[color-mix(in_oklab,var(--warning)_6%,transparent)]`}>
+                  <FileArchive className="size-8 text-[var(--warning)]" aria-hidden="true" />
+                  <p className="text-sm font-medium">{t("fileArchive.fileUnavailable")}</p>
+                  <p className="text-xs text-[var(--muted)]">{t("fileArchive.fileUnavailableDesc")}</p>
+                </div>
+              ) : canPreview && previewUrl ? (
+                <iframe title={t("fileArchive.previewTitle", { name: item.name })} src={previewUrl} className="h-[45vh] w-full rounded-xl border border-[var(--border)] bg-[var(--default)]" />
+              ) : canPreview && previewFailed ? (
+                <div role="alert" className={`${panel} border-[color-mix(in_oklab,var(--danger)_30%,transparent)]`}>
+                  <FileArchive className="size-8 text-[var(--danger)]" aria-hidden="true" />
+                  <p className="text-sm text-[var(--danger)]">{t("fileArchive.actionFailed")}</p>
+                </div>
+              ) : canPreview ? (
+                <div className={`${panel} border-[var(--border)] bg-[var(--default)]`}>
+                  <Skeleton className="h-4 w-40 rounded-md" />
+                  <p className="text-sm text-[var(--muted)]">{t("fileArchive.previewLoading", { defaultValue: "Loading preview…" })}</p>
+                </div>
+              ) : (
+                <div className={`${panel} border-[var(--border)] bg-[var(--default)]`}>
+                  <FileArchive className="size-8 text-[var(--muted)]" aria-hidden="true" />
+                  <p className="text-sm text-[var(--muted)]">{t("fileArchive.previewUnavailable")}</p>
+                </div>
+              )}
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                <DetailRow label={t("fileArchive.classification")}>{t(`fileArchive.classificationValues.${item.classification}`, { defaultValue: item.classification })}</DetailRow>
+                <DetailRow label={t("fileArchive.version")}>{item.versionLabel ?? "—"}</DetailRow>
+                <DetailRow label={t("fileArchive.size")}><bdi dir="ltr">{formatBytes(item.size)}</bdi></DetailRow>
+                <DetailRow label={t("fileArchive.updated")}>{formatDate(item.updatedAt, i18n.language === "ar" ? "ar" : "en-GB")}</DetailRow>
+                <DetailRow label={t("fileArchive.source")}>{t(`fileArchive.sourceValues.${item.sourceKind}`, { defaultValue: item.sourceLabel ?? "—" })}{item.relatedRecordTitle ? ` · ${item.relatedRecordTitle}` : ""}</DetailRow>
+                <DetailRow label={t("fileArchive.confidentiality")}>{t(`fileArchive.confidentialityValues.${item.confidentiality}`)}</DetailRow>
+                {item.stateId != null && (
+                  <DetailRow label={t("fileArchive.state")}>{getLinkedStateLabel(item, i18n.language)}</DetailRow>
+                )}
+                <DetailRow label={t("fileArchive.retentionYears")}>{item.retentionYears ?? "—"}</DetailRow>
+                <DetailRow label={t("fileArchive.tagList")} wide>{item.tags.length ? <TagChips tags={item.tags} max={item.tags.length} /> : "—"}</DetailRow>
+              </dl>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button isDisabled={isUnavailable} onPress={() => { void downloadArchiveItem(item).catch(() => toast.error(t("fileArchive.actionFailed"))); }}>
+                <Download className="size-4" aria-hidden="true" />{t("fileArchive.download")}
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -658,16 +744,45 @@ export function ReplaceDialog({ item, onOpenChange }: { item: ArchiveItem | null
     onError: () => toast.error(t("fileArchive.actionFailed")),
   });
   if (!item) return null;
-  return <Dialog open={!!item} onOpenChange={(open) => !mutation.isPending && onOpenChange(open)}>
-    <DialogContent className="max-w-md">
-      <DialogHeader><DialogTitle>{t("fileArchive.replace")}</DialogTitle><DialogDescription>{t("fileArchive.replaceDescription", { name: item.name })}</DialogDescription></DialogHeader>
-      <button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg border-2 border-dashed border-border p-5 text-sm hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        {file ? file.name : t("fileArchive.selectFile")}
-      </button>
-      <input ref={inputRef} className="hidden" type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-      <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>{t("fileArchive.cancel")}</Button><Button disabled={!file || mutation.isPending} onClick={() => mutation.mutate()}>{mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}{t("fileArchive.replace")}</Button></DialogFooter>
-    </DialogContent>
-  </Dialog>;
+  return (
+    <Modal isOpen={!!item} onOpenChange={(open) => { if (!mutation.isPending) onOpenChange(open); }}>
+      <Modal.Backdrop isDismissable={!mutation.isPending}>
+        <Modal.Container size="sm">
+          <Modal.Dialog>
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{t("fileArchive.replace")}</Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("fileArchive.replaceDescription", { name: item.name })}</p>
+            </Modal.Header>
+            <Modal.Body>
+              <FilePicker
+                id="archive-replace-file"
+                file={file}
+                onPick={() => inputRef.current?.click()}
+                onRemove={() => { setFile(null); if (inputRef.current) inputRef.current.value = ""; }}
+                disabled={mutation.isPending}
+              />
+              <input ref={inputRef} className="hidden" type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="outline" isDisabled={mutation.isPending} onPress={() => onOpenChange(false)}>{t("fileArchive.cancel")}</Button>
+              <Button isDisabled={!file || mutation.isPending} isPending={mutation.isPending} onPress={() => mutation.mutate()}>{t("fileArchive.replace")}</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
+/** Icon button with a HeroUI tooltip (the tooltip shows on hover and keyboard focus). */
+function IconAction({ label, tip, onPress, isDisabled, children }: { label: string; tip: string; onPress: () => void; isDisabled?: boolean; children: ReactNode }) {
+  return (
+    <Tooltip delay={300}>
+      <Button isIconOnly size="sm" variant="ghost" aria-label={label} isDisabled={isDisabled} onPress={onPress}>{children}</Button>
+      <Tooltip.Content>{tip}</Tooltip.Content>
+    </Tooltip>
+  );
 }
 
 export default function FilesPage() {
@@ -834,7 +949,7 @@ export default function FilesPage() {
   const emptyMessage = () => {
     if (summary.data?.total === 0) return t("fileArchive.emptyArchive");
     if (isArchivedView) return t("fileArchive.emptyArchived");
-    if (classification !== "all" && !isSearchingOrFiltered) return t("fileArchive.emptyClassification", { classification });
+    if (classification !== "all" && !isSearchingOrFiltered) return t("fileArchive.emptyClassification", { classification: classificationLabel(classification) });
     if (isActiveDocumentsView && !search.trim() && source === "all") return t("fileArchive.emptyActive");
     return t("fileArchive.emptyFiltered");
   };
@@ -846,125 +961,324 @@ export default function FilesPage() {
       (item.source === "resource" && canEditResources) || canManageArchiveItem
     );
     const isUnavailable = item.availabilityStatus === "unavailable";
+    const menu: Array<{ id: string; label: string; icon: ReactNode; danger?: boolean; run: () => void }> = [];
+    if (canReplace) menu.push({ id: "replace", label: t("fileArchive.replace"), icon: <RotateCcw className="size-4" aria-hidden="true" />, run: () => setReplaceItem(item) });
+    if (canManage && item.status === "active") menu.push({ id: "archive", label: t("fileArchive.archive"), icon: <Archive className="size-4" aria-hidden="true" />, run: () => setPendingAction({ item, action: "archive" }) });
+    if (canManage && item.status === "archived") menu.push({ id: "restore", label: t("fileArchive.restore"), icon: <RotateCcw className="size-4" aria-hidden="true" />, run: () => setPendingAction({ item, action: "restore" }) });
+    if (canDelete && item.source === "resource") menu.push({ id: "delete", label: t("fileArchive.delete"), icon: <Trash2 className="size-4" aria-hidden="true" />, danger: true, run: () => setPendingAction({ item, action: "delete" }) });
     return (
       <div data-archive-actions className="flex items-center justify-end gap-0.5 whitespace-nowrap">
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDetail(item)} aria-label={t("fileArchive.viewDocument", { name: item.name })} title={t("fileArchive.view")}>
-          <Eye aria-hidden="true" className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isUnavailable} onClick={() => { void downloadArchiveItem(item).catch(() => toast.error(t("fileArchive.actionFailed"))); }} aria-label={t("fileArchive.downloadDocument", { name: item.name })} title={t("fileArchive.download")}>
-          <Download aria-hidden="true" className="h-4 w-4" />
-        </Button>
-        {(canManage || (canManageArchiveItem && item.status === "active") || (canDelete && item.source === "resource")) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger aria-label={t("fileArchive.actionsFor", { name: item.name })} title={t("fileArchive.actionsFor", { name: item.name })} className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><MoreHorizontal aria-hidden="true" className="h-4 w-4" /></DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {canReplace && <DropdownMenuItem onClick={() => setReplaceItem(item)}><RotateCcw className="me-2 h-4 w-4" />{t("fileArchive.replace")}</DropdownMenuItem>}
-              {canManage && item.status === "active" && <DropdownMenuItem onClick={() => setPendingAction({ item, action: "archive" })}><Archive className="me-2 h-4 w-4" />{t("fileArchive.archive")}</DropdownMenuItem>}
-              {canManage && item.status === "archived" && <DropdownMenuItem onClick={() => setPendingAction({ item, action: "restore" })}><RotateCcw className="me-2 h-4 w-4" />{t("fileArchive.restore")}</DropdownMenuItem>}
-              {canDelete && item.source === "resource" && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setPendingAction({ item, action: "delete" })}><Trash2 className="me-2 h-4 w-4" />{t("fileArchive.delete")}</DropdownMenuItem>}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <IconAction label={t("fileArchive.viewDocument", { name: item.name })} tip={t("fileArchive.view")} onPress={() => setDetail(item)}>
+          <Eye aria-hidden="true" className="size-4" />
+        </IconAction>
+        <IconAction
+          label={t("fileArchive.downloadDocument", { name: item.name })}
+          tip={isUnavailable ? t("fileArchive.fileUnavailable") : t("fileArchive.download")}
+          isDisabled={isUnavailable}
+          onPress={() => { void downloadArchiveItem(item).catch(() => toast.error(t("fileArchive.actionFailed"))); }}
+        >
+          <Download aria-hidden="true" className="size-4" />
+        </IconAction>
+        {menu.length > 0 ? (
+          <Dropdown>
+            <Button isIconOnly size="sm" variant="ghost" aria-label={t("fileArchive.actionsFor", { name: item.name })}>
+              <MoreHorizontal aria-hidden="true" className="size-4" />
+            </Button>
+            <Dropdown.Popover placement="bottom end">
+              <Dropdown.Menu onAction={(key) => menu.find((m) => m.id === key)?.run()}>
+                {menu.map((m) => (
+                  <Dropdown.Item key={m.id} id={m.id} textValue={m.label} variant={m.danger ? "danger" : undefined}>
+                    {m.icon}{m.label}
+                  </Dropdown.Item>
+                ))}
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
+        ) : <span aria-hidden="true" className="size-8 shrink-0" />}
       </div>
     );
   };
 
+  const columns = useMemo<DataGridColumn<ArchiveItem>[]>(() => [
+    { id: "title", header: t("fileArchive.titleLabel"), isRowHeader: true, width: 290, pinned: "start", headerClassName: "w-[290px]",
+      cell: (item) => {
+        const title = item.name || item.fileName || "—";
+        // The file name sits in the title's tooltip: an LTR name at the end of an
+        // RTL line would be truncated from its start and read as noise.
+        const meta = metaLine(item, item.fileName, sourceLabel(item), true);
+        return (
+          <div className="min-w-0">
+            <button type="button" onClick={() => setDetail(item)} className="flex min-w-0 max-w-full items-center gap-2 rounded-sm text-start text-sm font-medium outline-none hover:text-[var(--accent)] hover:underline focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+              <span aria-hidden="true" className="shrink-0">{fileIcon(item.contentType, item.fileName)}</span>
+              <span dir="auto" className="line-clamp-2 whitespace-normal break-words text-page-start" title={item.fileName && item.fileName !== title ? `${title}\n${item.fileName}` : title}>{title}</span>
+            </button>
+            <p className="ms-6 mt-1 truncate text-xs text-[var(--muted)]" title={meta}>{meta || "—"}</p>
+            <TagChips tags={item.tags} max={2} className="ms-6 mt-1" />
+          </div>
+        );
+      } },
+    // Classification with the sector beneath it, and confidentiality with the
+    // lifecycle status, keep the register inside the workspace without scrolling.
+    { id: "classification", header: t("fileArchive.classification"), width: 176, headerClassName: "w-[176px]",
+      cell: (item) => {
+        const Icon = classificationIcon(item.classification);
+        return (
+          <div className="min-w-0 whitespace-normal">
+            <span className="flex items-start gap-1.5 text-sm">
+              <Icon aria-hidden="true" className={`mt-0.5 size-3.5 shrink-0 ${classificationColour(item.classification)}`} />
+              {classificationLabel(item.classification)}
+            </span>
+            <span className="mt-0.5 block ps-5 text-xs text-[var(--muted)]">{item.sector ? t(`fileArchive.sectorValues.${item.sector}`, { defaultValue: item.sector }) : "—"}</span>
+          </div>
+        );
+      } },
+    { id: "status", header: t("fileArchive.status"), width: 120, headerClassName: "w-[120px]",
+      cell: (item) => (
+        <div className="flex flex-col items-start gap-1">
+          <Chip size="sm" variant="soft" color={confidentialityColor(item.confidentiality)}>{t(`fileArchive.confidentialityValues.${item.confidentiality}`)}</Chip>
+          <Chip size="sm" variant="soft" color={statusColor(item.status)}>{t(`fileArchive.${item.status}`)}</Chip>
+        </div>
+      ) },
+    { id: "date", header: t("fileArchive.date"), width: 104, headerClassName: "w-[104px]",
+      cell: (item) => <span className="whitespace-nowrap text-sm text-[var(--muted)]">{formatDate(item.effectiveDate ?? item.updatedAt, locale)}</span> },
+    { id: "actions", header: <span className="sr-only">{t("fileArchive.actions")}</span>, width: 120, pinned: "end", headerClassName: "w-[120px]",
+      cell: (item) => actionsFor(item) },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [t, locale, canEditResources, canDeleteResources, canManageArchive]);
+
+  const railButton = (selected: boolean) =>
+    `flex min-h-9 w-full items-center gap-2 rounded-xl px-2 py-1.5 text-start text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${selected ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "hover:bg-[var(--default)]"}`;
+  const railCount = (selected: boolean) => `w-9 shrink-0 text-end text-xs tabular-nums ${selected ? "opacity-80" : "text-[var(--muted)]"}`;
+
   return (
     <div className="flex min-h-full flex-col gap-4">
-      <header className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between shrink-0">
-        <div className="min-w-0"><h1 className="text-foreground text-xl font-semibold flex items-center gap-2"><FileArchive className="size-5 shrink-0 text-primary" />{t("fileArchive.title")}</h1><p className="mt-1 text-sm text-muted-foreground">{t("fileArchive.description")}</p></div>
-        {canUpload && <Button className="shrink-0" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" />{t("fileArchive.uploadDocument")}</Button>}
+      <header className="flex shrink-0 flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-xl font-semibold"><FileArchive className="size-5 shrink-0 text-[var(--accent)]" aria-hidden="true" />{t("fileArchive.title")}</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">{t("fileArchive.description")}</p>
+        </div>
+        {canUpload && <Button className="shrink-0" onPress={() => setUploadOpen(true)}><Upload className="size-4" aria-hidden="true" />{t("fileArchive.uploadDocument")}</Button>}
       </header>
 
-      <section aria-label={t("fileArchive.summaryLabel")} className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
-        {(["total", "active", "archived"] as const).map((key) => {
-          const MetricIcon = key === "archived" ? Archive : key === "active" ? File : FileText;
-          return <Card key={key} className="shadow-none"><CardContent className="flex items-start justify-between p-3.5"><div><p className="text-xs text-muted-foreground">{t(`fileArchive.summary.${key}`)}</p><div className="mt-1 text-2xl font-medium tabular-nums" aria-live="polite">{summary.isLoading ? <Skeleton className="h-7 w-12" /> : summary.isError ? "—" : summary.data?.[key] ?? "—"}</div></div><MetricIcon aria-hidden="true" className="mt-0.5 h-4 w-4 text-muted-foreground/60" /></CardContent></Card>;
-        })}
+      <section aria-label={t("fileArchive.summaryLabel")} className="grid shrink-0 grid-cols-3 gap-3">
+        {(["total", "active", "archived"] as const).map((key) => (
+          <FilterKpi
+            key={key}
+            icon={key === "archived" ? Archive : key === "active" ? File : FileText}
+            status={key === "active" ? "success" : key === "archived" ? "warning" : undefined}
+            label={t(`fileArchive.summary.${key}`)}
+            value={<span aria-live="polite">{summary.isLoading ? <Skeleton className="h-7 w-12 rounded-md" /> : summary.isError ? "—" : summary.data?.[key] ?? "—"}</span>}
+          />
+        ))}
       </section>
 
       <div data-file-archive-workspace className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[272px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch">
         <aside data-classification-rail className="hidden min-h-0 flex-col overflow-hidden rounded-lg border bg-card p-3.5 lg:flex lg:h-full" aria-label={t("fileArchive.classificationsLabel")}>
-          <p className="mb-2 shrink-0 px-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{t("fileArchive.classifications")}</p>
+          <p className="mb-2 shrink-0 px-1 text-xs font-medium text-[var(--muted)]">{t("fileArchive.classifications")}</p>
           <div className="shrink-0 space-y-1">
-            <button type="button" aria-pressed={isAllDocumentsView} onClick={() => selectLifecycle("all")} className={`flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isAllDocumentsView ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}><FolderOpen aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /><span className="min-w-0 flex-1 leading-4">{t("fileArchive.allDocuments")}</span><span aria-hidden="true" className={`w-9 shrink-0 text-end text-xs tabular-nums ${isAllDocumentsView ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{classifications.isLoading ? "—" : classifications.data?.total ?? "—"}</span></button>
-            <button type="button" aria-pressed={isArchivedView} onClick={() => selectLifecycle("archived")} className={`flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isArchivedView ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}><Archive aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /><span className="min-w-0 flex-1 leading-4">{t("fileArchive.archivedDocuments")}</span><span aria-hidden="true" className={`w-9 shrink-0 text-end text-xs tabular-nums ${isArchivedView ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{classifications.isLoading ? "—" : classifications.data?.archived ?? "—"}</span></button>
+            <button type="button" aria-pressed={isAllDocumentsView} onClick={() => selectLifecycle("all")} className={railButton(isAllDocumentsView)}><FolderOpen aria-hidden="true" className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 leading-4">{t("fileArchive.allDocuments")}</span><span aria-hidden="true" className={railCount(isAllDocumentsView)}>{classifications.isLoading ? "—" : classifications.data?.total ?? "—"}</span></button>
+            <button type="button" aria-pressed={isArchivedView} onClick={() => selectLifecycle("archived")} className={railButton(isArchivedView)}><Archive aria-hidden="true" className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 leading-4">{t("fileArchive.archivedDocuments")}</span><span aria-hidden="true" className={railCount(isArchivedView)}>{classifications.isLoading ? "—" : classifications.data?.archived ?? "—"}</span></button>
           </div>
-          <div className="shrink-0 border-t border-border/70 pt-1" />
-          <div ref={classificationRailRef} role="region" tabIndex={0} aria-label={t("fileArchive.allClassifications")} data-classification-taxonomy className="min-h-0 flex-1 space-y-1 overflow-y-auto pe-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            {classifications.isLoading ? [0, 1, 2].map((value) => <Skeleton key={value} className="h-9 w-full" />) : groupedClassifications.map((option) => {
+          <div className="my-2 shrink-0 border-t border-[var(--border)]" />
+          <div ref={classificationRailRef} role="region" tabIndex={0} aria-label={t("fileArchive.allClassifications")} data-classification-taxonomy className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-md pe-1 outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+            {classifications.isLoading ? [0, 1, 2].map((value) => <Skeleton key={value} className="h-9 w-full rounded-xl" />) : groupedClassifications.map((option) => {
               const Icon = classificationIcon(option.name);
               const selected = classification === option.name;
-              return <button type="button" key={option.name} data-selected-classification={selected ? "true" : undefined} aria-pressed={selected} onClick={() => selectClassification(option.name)} className={`flex min-h-9 w-full items-start gap-2 rounded-md px-2 py-1.5 text-start text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}><Icon aria-hidden="true" className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${selected ? "text-primary-foreground" : classificationColour(option.name)}`} /><span className="min-w-0 flex-1 break-words leading-4 line-clamp-2">{classificationLabel(option.name)}</span><span aria-hidden="true" className={`w-9 shrink-0 pt-0.5 text-end text-xs tabular-nums ${selected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{option.count}</span></button>;
+              return (
+                <button type="button" key={option.name} data-selected-classification={selected ? "true" : undefined} aria-pressed={selected} onClick={() => selectClassification(option.name)} className={`${railButton(selected)} items-start`}>
+                  <Icon aria-hidden="true" className={`mt-0.5 size-3.5 shrink-0 ${selected ? "" : classificationColour(option.name)}`} />
+                  <span className="min-w-0 flex-1 break-words leading-4 line-clamp-2">{classificationLabel(option.name)}</span>
+                  <span aria-hidden="true" className={`${railCount(selected)} pt-0.5`}>{option.count}</span>
+                </button>
+              );
             })}
-            </div>
+          </div>
         </aside>
-        <section className="min-h-0 min-w-0 overflow-hidden rounded-lg border bg-card lg:flex lg:flex-col" aria-label={t("fileArchive.repositoryLabel")} aria-busy={files.isLoading}>
-              <div className="flex flex-col gap-2 border-b p-3 sm:flex-row sm:flex-wrap lg:shrink-0"><div className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute inset-y-0 start-2.5 my-auto h-4 w-4 text-muted-foreground" /><Input aria-label={t("fileArchive.searchLabel")} className="ps-9" placeholder={t("fileArchive.searchPlaceholder")} value={search} onChange={(event) => updateArchiveRoute({ search: event.target.value }, true)} /></div><div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"><div className="lg:hidden"><Select value={isArchivedView ? "__archived_lifecycle__" : classification} onValueChange={(value) => value === "__archived_lifecycle__" ? selectLifecycle("archived") : value === "all" ? selectLifecycle("all") : selectClassification(value)}><SelectTrigger aria-label={t("fileArchive.classificationsLabel")} className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("fileArchive.allDocuments")}</SelectItem><SelectItem value="__archived_lifecycle__">{t("fileArchive.archivedDocuments")}</SelectItem>{groupedClassifications.map((option) => <SelectItem key={option.name} value={option.name}>{classificationLabel(option.name)} ({option.count})</SelectItem>)}</SelectContent></Select></div><Select value={source} onValueChange={(value) => updateArchiveRoute({ source: value as FileArchiveSource })}><SelectTrigger aria-label={t("fileArchive.sourceFilter")} className="w-full sm:w-[138px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("fileArchive.allSources")}</SelectItem><SelectItem value="resource">{t("fileArchive.resources")}</SelectItem><SelectItem value="project">{t("fileArchive.projectAttachments")}</SelectItem><SelectItem value="plan">{t("fileArchive.planAttachments")}</SelectItem><SelectItem value="report">{t("fileArchive.reportAttachments")}</SelectItem></SelectContent></Select><Select value={sectorFilter} onValueChange={setSectorFilter}><SelectTrigger aria-label={t("fileArchive.sector")} className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("fileArchive.allSectors")}</SelectItem><SelectItem value="General / Cross-Cutting">{t("fileArchive.generalSector")}</SelectItem>{MAIN_SECTORS.map((item) => <SelectItem key={item} value={item}>{t(`fileArchive.sectorValues.${item}`, { defaultValue: item })}</SelectItem>)}</SelectContent></Select><Select value={confidentialityFilter} onValueChange={setConfidentialityFilter}><SelectTrigger aria-label={t("fileArchive.confidentiality")} className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("fileArchive.allConfidentiality")}</SelectItem>{["public", "internal", "confidential", "restricted"].map((item) => <SelectItem key={item} value={item}>{t(`fileArchive.confidentialityValues.${item}`)}</SelectItem>)}</SelectContent></Select><Select value={status} onValueChange={(value) => updateArchiveRoute({ status: value as FileArchiveStatus })}><SelectTrigger aria-label={t("fileArchive.statusFilter")} className="w-full sm:w-[130px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">{t("fileArchive.active")}</SelectItem><SelectItem value="archived">{t("fileArchive.archived")}</SelectItem><SelectItem value="deleted">{t("fileArchive.deleted")}</SelectItem><SelectItem value="all">{t("fileArchive.allStatuses")}</SelectItem></SelectContent></Select><ViewModeSwitcher available={["table", "card", "compact"]} current={view} onChange={(nextView) => { if (nextView === "table" || nextView === "card" || nextView === "compact") selectView(nextView); }} /></div></div>
-             <div data-archive-registry-body className="min-h-0 lg:flex-1 lg:overflow-y-auto">
-              {files.isError ? <div role="alert" className="flex min-h-56 flex-col items-center justify-center gap-3 p-6 text-center"><p className="text-sm text-destructive">{t("fileArchive.loadError")}</p><Button variant="outline" size="sm" onClick={() => void files.refetch()}>{t("fileArchive.retry")}</Button></div> : files.isLoading || isOutOfRangePage ? <div className="space-y-3 p-4">{[0, 1, 2, 3, 4].map((value) => <Skeleton key={value} className="h-12 w-full" />)}</div> : items.length === 0 ? <div className="flex min-h-56 flex-col items-center justify-center gap-2 p-8 text-center"><FolderOpen aria-hidden="true" className="h-8 w-8 text-muted-foreground/50" /><p className="max-w-sm text-sm text-muted-foreground">{emptyMessage()}</p>{(classification !== "all" || isSearchingOrFiltered) && <Button variant="outline" size="sm" onClick={clearFilters}>{t("fileArchive.clearFilters")}</Button>}</div> : <>{view === "table" ? <>
-              <div className="hidden overflow-x-auto md:block">
-                 <Table className="min-w-[1160px]">
-                  <TableHeader className="sticky top-0 z-10 bg-card">
-                    <TableRow>
-                       <TableHead className="w-[110px] min-w-[110px]">{t("fileArchive.reference")}</TableHead>
-                       <TableHead className="min-w-[332px]">{t("fileArchive.titleLabel")}</TableHead>
-                      <TableHead className="w-[172px]">{t("fileArchive.classification")}</TableHead>
-                      <TableHead className="w-[128px]">{t("fileArchive.confidentiality")}</TableHead>
-                      <TableHead className="w-[140px]">{t("fileArchive.sector")}</TableHead>
-                      <TableHead className="w-[112px]">{t("fileArchive.date")}</TableHead>
-                      <TableHead className="w-[96px]">{t("fileArchive.status")}</TableHead>
-                       <TableHead data-archive-actions-column className="w-[144px] min-w-[144px] text-end">{t("fileArchive.actions")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((item) => {
-                      const visibleTags = item.tags.slice(0, 2);
-                      const remainingTagCount = Math.max(0, item.tags.length - visibleTags.length);
-                      const title = item.name || item.fileName || "—";
-                      return (
-                        <TableRow key={`${item.source}-${item.id}`}>
-                          <TableCell className="py-2.5 font-mono text-xs text-muted-foreground">{item.reference ?? "—"}</TableCell>
-                          <TableCell className="py-2.5">
-                            <button onClick={() => setDetail(item)} className="flex max-w-[360px] items-center gap-2 text-start text-sm font-medium hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                               {fileIcon(item.contentType, item.fileName)}
-                              <span className="truncate" title={title}>{title}</span>
-                            </button>
-                            <div className="ms-6 mt-1 max-w-[360px] space-y-1">
-                              <p className="truncate text-xs text-muted-foreground" title={[item.fileName !== title ? item.fileName : null, item.relatedRecordTitle, item.uploadedByName, sourceLabel(item), item.size != null ? formatBytes(item.size) : null].filter(Boolean).join(" · ")}>
-                                {[item.fileName !== title ? item.fileName : null, item.relatedRecordTitle, item.uploadedByName, sourceLabel(item), item.size != null ? formatBytes(item.size) : null].filter(Boolean).join(" · ") || "—"}
-                              </p>
-                              {visibleTags.length > 0 && <div className="flex flex-wrap gap-1">{visibleTags.map((tag) => <Badge key={tag} variant="outline" className="max-w-[104px] truncate px-1.5 py-0 text-[10px]" title={tag}>{tag}</Badge>)}{remainingTagCount > 0 && <Badge variant="outline" className="px-1.5 py-0 text-[10px]" title={item.tags.slice(visibleTags.length).join(", ")}>{t("fileArchive.moreTags", { count: remainingTagCount })}</Badge>}</div>}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-2.5"><Badge variant="outline" className="max-w-[164px] bg-muted/30 font-medium"><span className={classificationColour(item.classification)}>{classificationLabel(item.classification)}</span></Badge></TableCell>
-                          <TableCell className="py-2.5"><Badge variant={confidentialityVariant(item.confidentiality)}>{t(`fileArchive.confidentialityValues.${item.confidentiality}`)}</Badge></TableCell>
-                          <TableCell className="py-2.5 text-sm text-muted-foreground">{item.sector ? t(`fileArchive.sectorValues.${item.sector}`, { defaultValue: item.sector }) : "—"}</TableCell>
-                          <TableCell className="py-2.5 whitespace-nowrap text-sm text-muted-foreground">{formatDate(item.effectiveDate ?? item.updatedAt, locale)}</TableCell>
-                          <TableCell className="py-2.5"><Badge variant={statusVariant(item.status)}>{t(`fileArchive.${item.status}`)}</Badge></TableCell>
-                           <TableCell data-archive-actions-column className="w-[144px] min-w-[144px] py-2.5 text-end">{actionsFor(item)}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+
+        <Card className="min-h-0 min-w-0 gap-0 overflow-hidden p-0 lg:flex lg:flex-col" aria-label={t("fileArchive.repositoryLabel")} aria-busy={files.isLoading}>
+          <div className="flex flex-col gap-2 border-b border-[var(--border)] p-3 sm:flex-row sm:flex-wrap sm:items-center lg:shrink-0">
+            <SearchField
+              aria-label={t("fileArchive.searchLabel")}
+              value={search}
+              onChange={(value) => updateArchiveRoute({ search: value }, true)}
+              className="w-full min-w-[12rem] flex-1"
+            >
+              <SearchField.Group>
+                <SearchField.SearchIcon />
+                <SearchField.Input placeholder={t("fileArchive.searchPlaceholder")} />
+                <SearchField.ClearButton aria-label={t("fileArchive.clearFilters")} />
+              </SearchField.Group>
+            </SearchField>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <div className="lg:hidden">
+                <SelectField
+                  aria-label={t("fileArchive.classificationsLabel")}
+                  value={isArchivedView ? "__archived_lifecycle__" : classification}
+                  onChange={(value) => value === "__archived_lifecycle__" ? selectLifecycle("archived") : value === "all" ? selectLifecycle("all") : selectClassification(value)}
+                  className="w-full"
+                  options={[
+                    { value: "all", label: t("fileArchive.allDocuments") },
+                    { value: "__archived_lifecycle__", label: t("fileArchive.archivedDocuments") },
+                    ...groupedClassifications.map((option) => ({ value: option.name, label: `${classificationLabel(option.name)} (${option.count})` })),
+                  ]}
+                />
               </div>
-              <div className="space-y-2 p-3 md:hidden">{items.map((item) => {
-                const title = item.name || item.fileName || "—";
-                const visibleTags = item.tags.slice(0, 2);
-                return <article key={`${item.source}-${item.id}`} className="rounded-md border p-3"><div className="flex items-start justify-between gap-2"><button onClick={() => setDetail(item)} className="flex min-w-0 items-center gap-2 text-start text-sm font-medium hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{fileIcon(item.contentType, item.fileName)}<span className="truncate" title={title}>{title}</span></button>{actionsFor(item)}</div><p className="mt-1 truncate text-xs text-muted-foreground" title={[item.reference, item.relatedRecordTitle, item.uploadedByName, sourceLabel(item), item.size != null ? formatBytes(item.size) : null].filter(Boolean).join(" · ")}>{[item.reference, item.relatedRecordTitle, item.uploadedByName, sourceLabel(item), item.size != null ? formatBytes(item.size) : null].filter(Boolean).join(" · ") || "—"}</p><div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><Badge variant="outline" className="max-w-[180px] bg-muted/30"><span className={classificationColour(item.classification)}>{classificationLabel(item.classification)}</span></Badge><Badge variant={confidentialityVariant(item.confidentiality)}>{t(`fileArchive.confidentialityValues.${item.confidentiality}`)}</Badge><Badge variant={statusVariant(item.status)}>{t(`fileArchive.${item.status}`)}</Badge>{item.sector && <span>{t(`fileArchive.sectorValues.${item.sector}`, { defaultValue: item.sector })}</span>}<span>{item.versionLabel ?? "—"}</span><span aria-hidden="true">·</span><span>{formatDate(item.effectiveDate ?? item.updatedAt, locale)}</span></div>{visibleTags.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{visibleTags.map((tag) => <Badge key={tag} variant="outline" className="max-w-[110px] truncate px-1.5 py-0 text-[10px]" title={tag}>{tag}</Badge>)}{item.tags.length > visibleTags.length && <Badge variant="outline" className="px-1.5 py-0 text-[10px]" title={item.tags.slice(visibleTags.length).join(", ")}>{t("fileArchive.moreTags", { count: item.tags.length - visibleTags.length })}</Badge>}</div>}</article>;
-               })}</div></> : view === "card" ? <div data-archive-card-grid className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">{items.map((item) => <ArchiveDocumentCard key={`${item.source}-${item.id}`} item={item} actions={actionsFor(item)} onView={setDetail} classificationLabel={classificationLabel(item.classification)} sourceLabel={sourceLabel(item)} locale={locale} />)}</div> : <ArchiveCompactList items={items} actionsFor={actionsFor} onView={setDetail} classificationLabel={classificationLabel} sourceLabel={sourceLabel} locale={locale} />}
-              <footer className="flex flex-col gap-2 border-t px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between"><span className="text-muted-foreground">{t("fileArchive.paginationSummary", { from: firstResult, to: lastResult, total: resultTotal })}</span><div className="flex items-center justify-between gap-2 sm:justify-end"><Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }}><SelectTrigger aria-label={t("fileArchive.pageSizeLabel")} className="h-8 w-[112px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="10">{t("fileArchive.pageSizeValue", { count: 10 })}</SelectItem><SelectItem value="25">{t("fileArchive.pageSizeValue", { count: 25 })}</SelectItem><SelectItem value="50">{t("fileArchive.pageSizeValue", { count: 50 })}</SelectItem><SelectItem value="100">{t("fileArchive.pageSizeValue", { count: 100 })}</SelectItem></SelectContent></Select><div className="flex items-center gap-1"><Button variant="outline" size="sm" aria-label={t("fileArchive.previousPage")} disabled={resultPage <= 1} onClick={() => setPage((value) => value - 1)}>{t("fileArchive.previous")}</Button><span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground">{t("fileArchive.pageOf", { page: resultPage, total: totalPages })}</span><Button variant="outline" size="sm" aria-label={t("fileArchive.nextPage")} disabled={resultPage >= totalPages} onClick={() => setPage((value) => value + 1)}>{t("fileArchive.next")}</Button></div></div></footer>
-             </>}
-             </div>
-        </section>
+              <SelectField
+                aria-label={t("fileArchive.sourceFilter")}
+                value={source}
+                onChange={(value) => updateArchiveRoute({ source: value as FileArchiveSource })}
+                triggerClassName="sm:w-[138px]"
+                options={[
+                  { value: "all", label: t("fileArchive.allSources") },
+                  { value: "resource", label: t("fileArchive.resources") },
+                  { value: "project", label: t("fileArchive.projectAttachments") },
+                  { value: "plan", label: t("fileArchive.planAttachments") },
+                  { value: "report", label: t("fileArchive.reportAttachments") },
+                ]}
+              />
+              <SelectField
+                aria-label={t("fileArchive.sector")}
+                value={sectorFilter}
+                onChange={setSectorFilter}
+                triggerClassName="sm:w-[150px]"
+                options={[
+                  { value: "all", label: t("fileArchive.allSectors") },
+                  { value: "General / Cross-Cutting", label: t("fileArchive.generalSector") },
+                  ...MAIN_SECTORS.map((item) => ({ value: item, label: t(`fileArchive.sectorValues.${item}`, { defaultValue: item }) })),
+                ]}
+              />
+              <SelectField
+                aria-label={t("fileArchive.confidentiality")}
+                value={confidentialityFilter}
+                onChange={setConfidentialityFilter}
+                triggerClassName="whitespace-nowrap sm:w-[204px]"
+                options={[
+                  { value: "all", label: t("fileArchive.allConfidentiality") },
+                  ...CONFIDENTIALITY_VALUES.map((item) => ({ value: item, label: t(`fileArchive.confidentialityValues.${item}`) })),
+                ]}
+              />
+              <SelectField
+                aria-label={t("fileArchive.statusFilter")}
+                value={status}
+                onChange={(value) => updateArchiveRoute({ status: value as FileArchiveStatus })}
+                triggerClassName="sm:w-[130px]"
+                options={[
+                  { value: "active", label: t("fileArchive.active") },
+                  { value: "archived", label: t("fileArchive.archived") },
+                  { value: "deleted", label: t("fileArchive.deleted") },
+                  { value: "all", label: t("fileArchive.allStatuses") },
+                ]}
+              />
+              <ViewModeSwitcher available={["table", "card", "compact"]} current={view} onChange={(nextView) => { if (nextView === "table" || nextView === "card" || nextView === "compact") selectView(nextView); }} />
+            </div>
+          </div>
+
+          <div data-archive-registry-body className="min-h-0 lg:flex-1 lg:overflow-y-auto">
+            {files.isError ? (
+              <div className="p-4">
+                <Alert status="danger" role="alert">
+                  <Alert.Indicator />
+                  <Alert.Content><Alert.Description>{t("fileArchive.loadError")}</Alert.Description></Alert.Content>
+                  <Button variant="outline" size="sm" onPress={() => void files.refetch()}>{t("fileArchive.retry")}</Button>
+                </Alert>
+              </div>
+            ) : files.isLoading || isOutOfRangePage ? (
+              <div className="space-y-3 p-4">{[0, 1, 2, 3, 4].map((value) => <Skeleton key={value} className="h-12 w-full rounded-xl" />)}</div>
+            ) : items.length === 0 ? (
+              <div className="flex min-h-56 flex-col items-center justify-center gap-2 p-8 text-center">
+                <FolderOpen aria-hidden="true" className="size-8 text-[var(--muted)] opacity-50" />
+                <p className="max-w-sm text-sm text-[var(--muted)]">{emptyMessage()}</p>
+                {(classification !== "all" || isSearchingOrFiltered) && <Button variant="outline" size="sm" onPress={clearFilters}>{t("fileArchive.clearFilters")}</Button>}
+              </div>
+            ) : (
+              <>
+                {view === "table" ? (
+                  <>
+                    <div className="hidden md:block">
+                      <DataGrid
+                        aria-label={t("fileArchive.repositoryLabel")}
+                        data={items}
+                        columns={columns}
+                        getRowId={(item) => `${item.source}-${item.id}`}
+                        contentClassName="min-w-[810px] table-fixed"
+                        verticalAlign="middle"
+                      />
+                    </div>
+                    <div className="space-y-2 p-3 md:hidden">
+                      {items.map((item) => {
+                        const title = item.name || item.fileName || "—";
+                        const meta = metaLine(item, item.fileName, sourceLabel(item), true);
+                        return (
+                          <Card key={`${item.source}-${item.id}`} variant="secondary" className="gap-2 p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <button type="button" onClick={() => setDetail(item)} className="flex min-w-0 items-center gap-2 rounded-sm text-start text-sm font-medium outline-none hover:text-[var(--accent)] hover:underline focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+                                <span aria-hidden="true" className="shrink-0">{fileIcon(item.contentType, item.fileName)}</span>
+                                <span dir="auto" className="truncate text-page-start" title={title}>{title}</span>
+                              </button>
+                              {actionsFor(item)}
+                            </div>
+                            <p className="truncate text-xs text-[var(--muted)]" title={meta}>{meta || "—"}</p>
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted)]">
+                              <Chip size="sm" variant="secondary"><span className={classificationColour(item.classification)}>{classificationLabel(item.classification)}</span></Chip>
+                              <Chip size="sm" variant="soft" color={confidentialityColor(item.confidentiality)}>{t(`fileArchive.confidentialityValues.${item.confidentiality}`)}</Chip>
+                              <Chip size="sm" variant="soft" color={statusColor(item.status)}>{t(`fileArchive.${item.status}`)}</Chip>
+                              {item.sector && <span>{t(`fileArchive.sectorValues.${item.sector}`, { defaultValue: item.sector })}</span>}
+                              <span aria-hidden="true">·</span>
+                              <span>{formatDate(item.effectiveDate ?? item.updatedAt, locale)}</span>
+                            </div>
+                            <TagChips tags={item.tags} max={2} />
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : view === "card" ? (
+                  <div data-archive-card-grid className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 2xl:grid-cols-3">
+                    {items.map((item) => <ArchiveDocumentCard key={`${item.source}-${item.id}`} item={item} actions={actionsFor(item)} onView={setDetail} classificationLabel={classificationLabel(item.classification)} sourceLabel={sourceLabel(item)} locale={locale} />)}
+                  </div>
+                ) : (
+                  <ArchiveCompactList items={items} actionsFor={actionsFor} onView={setDetail} classificationLabel={classificationLabel} sourceLabel={sourceLabel} locale={locale} />
+                )}
+                <div className="border-t border-[var(--border)]">
+                  <RegistryPagination
+                    className="px-3 py-2.5"
+                    page={resultPage}
+                    totalPages={totalPages}
+                    onPageChange={(next) => setPage(Math.min(totalPages, Math.max(1, next)))}
+                    summary={t("fileArchive.paginationSummary", { from: firstResult, to: lastResult, total: resultTotal })}
+                    pageSize={pageSize}
+                    pageSizes={[10, 25, 50, 100]}
+                    onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+                    labels={{
+                      region: t("fileArchive.paginationLabel", { defaultValue: "Pages" }),
+                      rowsPerPage: t("fileArchive.pageSizeLabel"),
+                      first: t("fileArchive.firstPage", { defaultValue: "First page" }),
+                      previous: t("fileArchive.previousPage"),
+                      next: t("fileArchive.nextPage"),
+                      last: t("fileArchive.lastPage", { defaultValue: "Last page" }),
+                      pageOf: `${resultPage} / ${totalPages}`,
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
       </div>
       <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
       <DetailDialog item={detail} onOpenChange={(open) => !open && setDetail(null)} />
       <ReplaceDialog item={replaceItem} onOpenChange={(open) => !open && setReplaceItem(null)} />
-      <AlertDialog open={!!pendingAction} onOpenChange={(open) => !open && setPendingAction(null)}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{t(`fileArchive.confirm.${pendingAction?.action ?? "archive"}Title`)}</AlertDialogTitle><AlertDialogDescription>{t(`fileArchive.confirm.${pendingAction?.action ?? "archive"}Description`, { name: pendingAction?.item.name ?? "" })}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>{t("fileArchive.cancel")}</AlertDialogCancel><AlertDialogAction className="inline-flex items-center justify-center gap-2 whitespace-nowrap" disabled={action.isPending} onClick={() => pendingAction && action.mutate({ item: pendingAction.item, nextAction: pendingAction.action })}>{action.isPending && <Loader2 className="inline h-4 w-4 animate-spin" />}{t("fileArchive.confirmAction")}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={!!pendingAction}
+        tone={pendingAction?.action === "delete" ? "danger" : "primary"}
+        title={t(`fileArchive.confirm.${pendingAction?.action ?? "archive"}Title`)}
+        message={t(`fileArchive.confirm.${pendingAction?.action ?? "archive"}Description`, { name: pendingAction?.item.name ?? "" })}
+        cancelLabel={t("fileArchive.cancel")}
+        confirmLabel={t("fileArchive.confirmAction")}
+        isPending={action.isPending}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => pendingAction && action.mutate({ item: pendingAction.item, nextAction: pendingAction.action })}
+      />
     </div>
   );
 }

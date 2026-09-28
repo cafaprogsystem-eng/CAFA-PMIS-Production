@@ -565,7 +565,7 @@
     "dateCol": "التاريخ",
     "actionsCol": "الإجراءات",
     "noAttachments": "لا توجد مرفقات بعد.",
-    "noAttachmentsHint": "انقر على <strong>إرفاق ملف</strong> لإضافة وثائق داعمة.",
+    "noAttachmentsHint": "انقر على إرفاق ملف لإضافة وثائق داعمة.",
     "saveFirstHint": "احفظ هذا السجل أولاً لتفعيل المرفقات.",
     "removeTitle": "إزالة المرفق؟",
     "removeDesc": "ستتم إزالته من هذا السجل.",
@@ -579,7 +579,12 @@
     "loadFailed": "تعذّر تحميل المرفقات.",
     "retry": "حاول مجدداً",
     "downloadFile": "تنزيل الملف",
-    "fileUnavailable": "الملف غير متاح"
+    "fileUnavailable": "الملف غير متاح",
+    "title": "المرفقات",
+    "allowedTypes": "PDF وWord وExcel وPowerPoint والصور · بحد أقصى {{maxMb}} ميغابايت",
+    "prepareFailed": "تعذّر تجهيز الرفع.",
+    "transferFailed": "تعذّر رفع الملف.",
+    "finalizeFailed": "تعذّر إكمال الرفع."
   },
   "connectionStatus": {
     "live": "التحديثات المباشرة",

@@ -41,7 +41,7 @@ function RecordCardBody({ item }: { item: ViewRecord }) {
   return (
     <>
       {item.code && <span className="truncate font-mono text-xs text-[var(--muted)]"><BidiIsolate>{item.code}</BidiIsolate></span>}
-      <span dir="auto" className="font-semibold leading-snug break-words rtl:text-end">{item.title}</span>
+      <span dir="auto" className="font-semibold leading-snug break-words text-page-start">{item.title}</span>
       {item.tag && <span><Chip size="sm" variant="secondary">{item.tag}</Chip></span>}
       {item.meta && item.meta.length > 0 && (
         <span className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-[var(--muted)]">

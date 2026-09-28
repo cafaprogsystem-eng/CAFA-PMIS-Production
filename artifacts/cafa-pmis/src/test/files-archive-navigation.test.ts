@@ -149,38 +149,34 @@ describe("FILE-FUNC / FILE-VIS — File & Archive workspace", () => {
     expect(page).toContain('emptyClassification');
     expect(page).toContain('emptyFiltered');
     expect(page).toContain('aria-pressed={isAllDocumentsView}');
-    expect(page).toContain('bg-primary text-primary-foreground');
+    expect(page).toContain('bg-[var(--accent)] text-[var(--accent-foreground)]');
     expect(page).toContain('w-9 shrink-0 text-end text-xs tabular-nums');
     expect(page).toContain('aria-busy={files.isLoading}');
     expect(page).toContain('aria-label={t("fileArchive.repositoryLabel")}');
-    expect(page).toContain('className="hidden overflow-x-auto md:block"');
+    expect(page).toContain('className="hidden md:block"');
     expect(page).toContain('className="space-y-2 p-3 md:hidden"');
-    expect(page).toContain('min-w-[1160px]');
+    expect(page).toContain('min-w-[810px] table-fixed');
     expect(page).toContain('t("fileArchive.reference")');
-    expect(page).toContain('data-archive-actions-column');
-    expect(page).toContain('w-[144px] min-w-[144px]');
+    // Row actions stay reachable: the DataGrid pins the actions column to the end edge.
+    expect(page).toMatch(/id: "actions", header: [^\n]*pinned: "end"/);
     expect(page).toContain('justify-end gap-0.5 whitespace-nowrap');
-    expect(page).toContain('min-w-[144px] text-end');
     expect(page).toContain('data-classification-taxonomy');
     expect(page).toContain('data-archive-registry-body');
     expect(page).toContain('lg:flex-1 lg:overflow-y-auto');
-    expect(page).toContain('bg-card lg:flex lg:flex-col');
-    expect(page).toContain('confidentialityVariant(item.confidentiality)');
+    expect(page).toContain('p-0 lg:flex lg:flex-col');
+    expect(page).toContain('confidentialityColor(item.confidentiality)');
     expect(page).toContain('item.reference ?? "—"');
-    expect(page).toContain('item.tags.slice(0, 2)');
+    expect(page).toContain('<TagChips tags={item.tags} max={2}');
     expect(page).toContain('t("fileArchive.moreTags"');
     expect(page).toContain('t("fileArchive.viewDocument"');
     expect(page).toContain('t("fileArchive.downloadDocument"');
     expect(page).toContain('className="lg:hidden"');
     expect(page).toContain('__archived_lifecycle__');
-    expect(page).toContain("<AlertDialog");
+    expect(page).toContain("<ConfirmModal");
     expect(page).toContain('i18n.language === "ar" ? "ar" : "en-GB"');
     expect(page).toContain("max-h-[calc(100dvh-2rem)]");
     expect(page).toContain("max-w-2xl");
-    expect(page).toContain('max-w-2xl flex flex-col overflow-hidden');
-    expect(page).toContain('<DialogHeader className="shrink-0">');
-    expect(page).toContain('min-h-0 flex-1 overflow-y-auto pe-1 pb-1');
-    expect(page).toContain('<DialogFooter className="shrink-0 border-t border-border/60 pt-4">');
+    expect(page).toContain('<Modal.Container size="lg" scroll="inside">');
     expect(page).toContain('t("fileArchive.changeFile")');
     expect(page).toContain('t("fileArchive.removeFile"');
     expect(page).toContain('htmlFor="archive-file-input"');
@@ -191,17 +187,21 @@ describe("FILE-FUNC / FILE-VIS — File & Archive workspace", () => {
     expect(page).toContain("confidentiality");
     expect(page).not.toContain("department");
 
-    const desktopTableStart = page.indexOf('<Table className="min-w-[1160px]">');
-    const desktopTableEnd = page.indexOf('</Table>', desktopTableStart);
+    // The desktop register is a DataGrid: the reference sits in the title's
+    // meta line, the sector under the classification, and confidentiality
+    // beside the lifecycle status, so the register fits without scrolling.
+    const desktopTableStart = page.indexOf("const columns = useMemo<DataGridColumn<ArchiveItem>[]>");
+    expect(desktopTableStart).toBeGreaterThan(-1);
+    const desktopTableEnd = page.indexOf("], [t, locale", desktopTableStart);
     const desktopTable = page.slice(desktopTableStart, desktopTableEnd);
+    expect(desktopTable).toContain("metaLine(item, item.fileName, sourceLabel(item), true)");
+    expect(desktopTable).toContain("fileArchive.sectorValues.");
+    expect(desktopTable).toContain("confidentialityColor(item.confidentiality)");
     const desktopHeaders = [
-      't("fileArchive.reference")',
       't("fileArchive.titleLabel")',
       't("fileArchive.classification")',
-      't("fileArchive.confidentiality")',
-      't("fileArchive.sector")',
-      't("fileArchive.date")',
       't("fileArchive.status")',
+      't("fileArchive.date")',
       't("fileArchive.actions")',
     ];
     let headerOffset = -1;
@@ -213,7 +213,6 @@ describe("FILE-FUNC / FILE-VIS — File & Archive workspace", () => {
     expect(desktopTable).not.toContain("versionShort");
     expect(desktopTable).not.toContain("item.versionLabel");
     expect(page).toContain('t("fileArchive.version")');
-    expect(page).toContain('t("fileArchive.versionHistory")');
     expect(page).toContain('item.versionLabel ?? "—"');
 
     for (const key of ["reference", "versionShort", "allSectors", "allConfidentiality", "source", "moreTags", "viewDocument", "downloadDocument"] as const) {
@@ -243,12 +242,13 @@ describe("FILE-FUNC / FILE-VIS — File & Archive workspace", () => {
     expect(sectorIndex).toBeLessThan(retentionIndex);
     expect(retentionIndex).toBeLessThan(tagsIndex);
     expect(tagsIndex).toBeLessThan(fileIndex);
-    expect(page).toContain('<Textarea id="archive-description"');
+    expect(page).toContain('<TextArea id="archive-description"');
     expect(page).toContain('className="grid gap-4 sm:grid-cols-2"');
     expect((page.match(/className="grid gap-4 sm:grid-cols-2"/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(page).toContain('min-h-[11rem]');
     expect(page).toContain('onDrop={(event) =>');
-    expect(page).toContain('aria-describedby="archive-file-guidance"');
+    expect(page).toContain('guidance={{ id: "archive-file-guidance"');
+    expect(page).toContain("aria-describedby={guidance?.id}");
     expect(page).toContain('role="alert" aria-live="assertive"');
     expect(page).toContain('aria-live="polite"');
     expect(page).toContain('fetch("/api/storage/uploads/request-url"');
@@ -264,17 +264,18 @@ describe("FILE-FUNC / FILE-VIS — File & Archive workspace", () => {
 
   it("FILE-UPLOAD-VIEWPORT — keeps the header and actions visible while only the form body scrolls", () => {
     const uploadDialog = page.slice(page.indexOf("function UploadDialog"), page.indexOf("function DetailDialog"));
-    const headerIndex = uploadDialog.indexOf('<DialogHeader className="shrink-0">');
-    const bodyIndex = uploadDialog.indexOf('min-h-0 flex-1 overflow-y-auto pe-1 pb-1');
-    const footerIndex = uploadDialog.indexOf('<DialogFooter className="shrink-0 border-t border-border/60 pt-4">');
+    // HeroUI Modal with scroll="inside": the header and footer stay fixed and
+    // only Modal.Body scrolls, so no hand-rolled overflow container is needed.
+    const headerIndex = uploadDialog.indexOf("<Modal.Header>");
+    const bodyIndex = uploadDialog.indexOf("<Modal.Body");
+    const footerIndex = uploadDialog.indexOf("<Modal.Footer>");
 
     expect(uploadDialog).toContain('max-h-[calc(100dvh-2rem)]');
-    expect(uploadDialog).toContain('max-w-2xl flex flex-col overflow-hidden');
+    expect(uploadDialog).toContain('<Modal.Container size="lg" scroll="inside">');
     expect(headerIndex).toBeGreaterThan(-1);
     expect(headerIndex).toBeLessThan(bodyIndex);
     expect(bodyIndex).toBeLessThan(footerIndex);
-    expect((uploadDialog.match(/overflow-y-auto/g) ?? [])).toHaveLength(1);
-    expect(uploadDialog).toContain('pe-1 pb-1');
+    expect((uploadDialog.match(/overflow-y-auto/g) ?? [])).toHaveLength(0);
   });
 
   it("FILE-UPLOAD-I18N — resolves every upload label, placeholder, option, guidance message, error, and action in English and Arabic", () => {

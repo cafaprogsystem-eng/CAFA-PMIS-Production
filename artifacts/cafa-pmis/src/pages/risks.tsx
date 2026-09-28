@@ -482,14 +482,14 @@ function RiskDetailModal({
                 {risk.description && (
                   <div>
                     <p className="mb-1 text-xs font-medium text-[var(--muted)]">{t("detail.description")}</p>
-                    <p dir="auto" className="rounded-xl bg-[var(--default)] p-3 text-sm whitespace-pre-wrap break-words rtl:text-end">{risk.description}</p>
+                    <p dir="auto" className="rounded-xl bg-[var(--default)] p-3 text-sm whitespace-pre-wrap break-words text-page-start">{risk.description}</p>
                   </div>
                 )}
 
                 {risk.mitigationPlan && (
                   <div>
                     <p className="mb-1 text-xs font-medium text-[var(--muted)]">{t("detail.mitigationAction")}</p>
-                    <p dir="auto" className="rounded-xl bg-[var(--default)] p-3 text-sm whitespace-pre-wrap break-words rtl:text-end">{risk.mitigationPlan}</p>
+                    <p dir="auto" className="rounded-xl bg-[var(--default)] p-3 text-sm whitespace-pre-wrap break-words text-page-start">{risk.mitigationPlan}</p>
                   </div>
                 )}
 
@@ -713,7 +713,7 @@ function RiskDetailModal({
                       </div>
                       <div className="min-w-0 flex-1 pb-3">
                         <p className="font-medium break-words">{actionLabel}</p>
-                        {detail && <p dir="auto" className="mt-0.5 text-xs text-[var(--muted)] break-words rtl:text-end">{detail}</p>}
+                        {detail && <p dir="auto" className="mt-0.5 text-xs text-[var(--muted)] break-words text-page-start">{detail}</p>}
                         <div className="mt-1 text-xs text-[var(--muted)]">
                           <span dir="auto">{h.userName ?? t("history.system")}</span> · <bdi dir="ltr">{formatDateTime(h.createdAt)}</bdi>
                         </div>
@@ -1054,10 +1054,10 @@ export default function RisksPage() {
       cell: (r) => (
         <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex min-w-0 items-start gap-1.5">
-            <span dir="auto" className="line-clamp-2 whitespace-normal break-words font-medium leading-snug rtl:text-end" title={r.title}>{r.title}</span>
+            <span dir="auto" className="line-clamp-2 whitespace-normal break-words font-medium leading-snug text-page-start" title={r.title}>{r.title}</span>
             <AttachmentCountBadge module="risks" recordId={r.id} />
           </div>
-          {r.description && <span dir="auto" className="line-clamp-1 whitespace-normal text-xs text-[var(--muted)] rtl:text-end">{r.description}</span>}
+          {r.description && <span dir="auto" className="line-clamp-1 whitespace-normal text-xs text-[var(--muted)] text-page-start">{r.description}</span>}
         </div>
       ) },
     { id: "level", header: t("table.riskLevel"), width: 96, headerClassName: "w-[96px]",
@@ -1092,12 +1092,12 @@ export default function RisksPage() {
       cell: (r) => <span className="text-sm">{formatLocation({ locationType: r.locationType, stateName: r.stateName, stateNameAr: r.stateNameAr }, i18n.language)}</span> },
     { id: "project", header: t("table.project"), width: 136, headerClassName: "w-[136px]",
       cell: (r) => (
-        <span dir="auto" title={r.projectTitle ?? undefined} className="line-clamp-2 whitespace-normal break-words text-sm text-[var(--muted)] rtl:text-end">
+        <span dir="auto" title={r.projectTitle ?? undefined} className="line-clamp-2 whitespace-normal break-words text-sm text-[var(--muted)] text-page-start">
           {r.projectTitle || (r.projectId ? t("projectRemoved", { defaultValue: "[Project removed]" }) : "—")}
         </span>
       ) },
     { id: "responsible", header: t("table.responsible"), width: 120, headerClassName: "w-[120px]",
-      cell: (r) => <span dir="auto" className="line-clamp-2 whitespace-normal text-sm text-[var(--muted)] rtl:text-end">{r.assignedToName || "—"}</span> },
+      cell: (r) => <span dir="auto" className="line-clamp-2 whitespace-normal text-sm text-[var(--muted)] text-page-start">{r.assignedToName || "—"}</span> },
   ], [t, i18n.language]);
 
   const totalPages = (risksRaw as { totalPages?: number } | undefined)?.totalPages ?? 1;

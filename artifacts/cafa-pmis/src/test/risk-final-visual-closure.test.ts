@@ -90,11 +90,10 @@ describe("Risk Register final visual closure", () => {
 
   it("RISK-FINAL-VIS-10: Evidence uses secured downloads without storage leakage", () => {
     expect(attachmentsPanel).toContain("`/api/attachments/${file.id}/${action}`");
-    expect(attachmentsPanel).toContain('aria-label={t("driveAttachment.downloadFile")}');
-    const tableRows = attachmentsPanel.slice(
-      attachmentsPanel.indexOf("{files.map((file) => <TableRow"),
-      attachmentsPanel.indexOf("</TableBody>"),
-    );
+    expect(attachmentsPanel).toContain('iconButton(t("download"), t("driveAttachment.downloadFile")');
+    const columnsStart = attachmentsPanel.indexOf("const columns: DataGridColumn<CanonicalAttachment>[]");
+    expect(columnsStart).toBeGreaterThan(-1);
+    const tableRows = attachmentsPanel.slice(columnsStart, attachmentsPanel.indexOf("];", columnsStart));
     expect(tableRows).not.toContain("file.driveFileId");
     expect(tableRows).not.toContain("file.driveLink");
     expect(attachmentsRoute).toContain('router.get("/risks/:riskId/attachments"');

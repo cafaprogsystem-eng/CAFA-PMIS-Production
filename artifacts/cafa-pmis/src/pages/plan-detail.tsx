@@ -84,7 +84,7 @@ function DetailField({ label, children }: { label: string; children: React.React
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-xs font-medium text-[var(--muted)]">{label}</span>
-      <span className="break-words text-sm text-[var(--foreground)] rtl:text-end" dir="auto">{children}</span>
+      <span className="break-words text-sm text-[var(--foreground)] text-page-start" dir="auto">{children}</span>
     </div>
   );
 }
@@ -450,7 +450,7 @@ function ActivityOptionalFieldsReadOnly({
         {a.riskId != null && (
           <div>
             <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("activity.linkedRisk")}</dt>
-            <dd dir="auto" className="rtl:text-end">{linkedRisk ? `${linkedRisk.title} (${tRisks(`presentation.riskLevels.${linkedRisk.severity}`, { defaultValue: linkedRisk.severity })})` : "—"}</dd>
+            <dd dir="auto" className="text-page-start">{linkedRisk ? `${linkedRisk.title} (${tRisks(`presentation.riskLevels.${linkedRisk.severity}`, { defaultValue: linkedRisk.severity })})` : "—"}</dd>
           </div>
         )}
         {!!a.expectedOutput.trim() && (
@@ -1460,7 +1460,7 @@ export default function PlanDetailPage({
                         </div>
                         <div>
                           <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("activity.locality")}</dt>
-                          <dd dir="auto" className="rtl:text-end">{a.localityName || "—"}</dd>
+                          <dd dir="auto" className="text-page-start">{a.localityName || "—"}</dd>
                         </div>
                         <div>
                           <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("activity.plannedDate")}</dt>
@@ -1491,13 +1491,13 @@ export default function PlanDetailPage({
                         {a.responsibleName && (
                           <div>
                             <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("activity.responsiblePerson")}</dt>
-                            <dd dir="auto" className="rtl:text-end">{a.responsibleName}</dd>
+                            <dd dir="auto" className="text-page-start">{a.responsibleName}</dd>
                           </div>
                         )}
                         {a.expectedResult && (
                           <div className="sm:col-span-2">
                             <dt className="text-xs font-medium text-muted-foreground mb-0.5">{t("activity.expectedResult")}</dt>
-                            <dd className="whitespace-pre-wrap rtl:text-end" dir="auto">{a.expectedResult}</dd>
+                            <dd className="whitespace-pre-wrap text-page-start" dir="auto">{a.expectedResult}</dd>
                           </div>
                         )}
                       </dl>
@@ -1694,7 +1694,7 @@ export default function PlanDetailPage({
                     contentClassName="min-w-[640px]"
                     columns={[
                       { id: "title", header: t("detail.riskTitle"), isRowHeader: true,
-                        cell: (r) => <span dir="auto" className="block whitespace-normal break-words rtl:text-end">{r.title}</span> },
+                        cell: (r) => <span dir="auto" className="block whitespace-normal break-words text-page-start">{r.title}</span> },
                       { id: "severity", header: t("detail.riskSeverity"), width: 120,
                         cell: (r) => <Chip size="sm" variant="soft" color={r.severity === "critical" || r.severity === "high" ? "danger" : r.severity === "medium" ? "warning" : "default"}>{tRisks(`presentation.riskLevels.${r.severity}`, { defaultValue: r.severity })}</Chip> },
                       { id: "status", header: t("detail.riskStatus"), width: 150,

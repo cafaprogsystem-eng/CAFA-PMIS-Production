@@ -492,7 +492,7 @@
     "dateCol": "Date",
     "actionsCol": "Actions",
     "noAttachments": "No attachments yet.",
-    "noAttachmentsHint": "Click <strong>Attach File</strong> to add supporting documents.",
+    "noAttachmentsHint": "Click Attach File to add supporting documents.",
     "saveFirstHint": "Save this record first to enable attachments.",
     "removeTitle": "Remove attachment?",
     "removeDesc": "will be removed from this record.",
@@ -506,7 +506,12 @@
     "loadFailed": "Could not load attachments.",
     "retry": "Try again",
     "downloadFile": "Download file",
-    "fileUnavailable": "File Unavailable"
+    "fileUnavailable": "File Unavailable",
+    "title": "Attachments",
+    "allowedTypes": "PDF, Word, Excel, PowerPoint, images · max {{maxMb}} MB",
+    "prepareFailed": "Could not prepare the upload.",
+    "transferFailed": "The file could not be uploaded.",
+    "finalizeFailed": "The upload could not be finalised."
   },
   "recordLock": {
     "isEditing": "is currently editing this record. Saving may overwrite their changes.",

@@ -1885,7 +1885,7 @@ function BeneficiaryBreakdownModal({ isOpen, onOpenChange, data, isLoading }: {
         { id: "name", header: t("beneficiaries.projectCol"), isRowHeader: true, width: 240,
           cell: r => (
             <div className="flex min-w-0 flex-col">
-              <span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end font-medium leading-snug">{String(r.projectTitle ?? "")}</span>
+              <span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top text-page-start font-medium leading-snug">{String(r.projectTitle ?? "")}</span>
               <span className="font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{String(r.projectCode ?? "")}</bdi></span>
             </div>
           ) },
@@ -3408,7 +3408,7 @@ function ProjectPerformanceGrid({ projects }: { projects: HierarchicalProject[] 
       cell: (p) => <span className="whitespace-nowrap font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{p.projectCode}</bdi></span> },
     { id: "title", header: t("projectPerfTable.projectTitle"), isRowHeader: true, minWidth: 220, allowsSorting: true,
       sortFn: (a, b) => a.projectTitle.localeCompare(b.projectTitle, i18n.language),
-      cell: (p) => <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end font-medium leading-snug text-foreground" title={p.projectTitle}>{p.projectTitle}</span></span> },
+      cell: (p) => <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top text-page-start font-medium leading-snug text-foreground" title={p.projectTitle}>{p.projectTitle}</span></span> },
     { id: "sector", header: t("projectPerfTable.sector"), minWidth: 140,
       cell: (p) => <span className="text-[var(--muted)]">{displayHierarchicalSectorLabel(p.sector, t("hierarchical.unresolvedSector"))}</span> },
     { id: "state", header: t("projectPerfTable.state"), minWidth: 140,
@@ -5222,7 +5222,7 @@ export function ProjectBudgetPerformanceTable({
         </Link>
       ) },
     { id: "donorName", header: t("budgetWorkspace.donor"), allowsSorting: true, width: 120,
-      cell: (row) => <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end text-sm leading-snug text-[var(--muted)]" title={row.donorName ?? undefined}>{row.donorName ?? "—"}</span></span> },
+      cell: (row) => <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top text-page-start text-sm leading-snug text-[var(--muted)]" title={row.donorName ?? undefined}>{row.donorName ?? "—"}</span></span> },
     { id: "budgetBasis", header: t("budgetWorkspace.budgetBasis"), allowsSorting: true, width: 170,
       cell: (row) => {
         const note = row.budgetBasis === "Project-Level Budget"

@@ -2,19 +2,12 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button, Chip, Skeleton, Spinner, Tooltip } from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { formatDate } from "@/lib/format";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Upload, FileText, FileImage, FileSpreadsheet, Loader2, Trash2,
+  Upload, FileText, FileImage, FileSpreadsheet, Trash2,
   Download, ExternalLink, Paperclip,
 } from "@/components/icons";
 
@@ -65,11 +58,11 @@ function formatBytes(bytes: number) {
 }
 
 function fileIcon(mime: string) {
-  if (mime.startsWith("image/")) return <FileImage className="h-4 w-4 text-blue-500 shrink-0" />;
+  if (mime.startsWith("image/")) return <FileImage className="size-4 shrink-0 text-sky-600" aria-hidden="true" />;
   if (mime.includes("spreadsheet") || mime.includes("excel") || mime.includes("csv")) {
-    return <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />;
+    return <FileSpreadsheet className="size-4 shrink-0 text-emerald-600" aria-hidden="true" />;
   }
-  return <FileText className="h-4 w-4 text-muted-foreground shrink-0" />;
+  return <FileText className="size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />;
 }
 
 function blockedByExtension(name: string) {
@@ -112,9 +105,9 @@ export function AttachmentCountBadge({
   const count = useDriveAttachmentCount(module, recordId);
   if (!recordId || !count) return null;
   return (
-    <Badge variant="secondary" className={`gap-1 text-xs font-normal ${className}`}>
-      <Paperclip className="h-3 w-3" /> {count}
-    </Badge>
+    <Chip size="sm" variant="secondary" className={className} aria-label={String(count)}>
+      <Paperclip className="size-3" aria-hidden="true" /> <span className="tabular-nums">{count}</span>
+    </Chip>
   );
 }
 
@@ -131,9 +124,10 @@ interface DriveAttachmentPanelProps {
 
 export function DriveAttachmentPanel({
   module, recordId, canDelete = false, canUpload = true,
-  label = "Attachments", variant = "full",
+  label, variant = "full",
 }: DriveAttachmentPanelProps) {
   const { t } = useTranslation("common");
+  const heading = label ?? t("driveAttachment.title");
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [inFlight, setInFlight] = useState<string[]>([]);
@@ -145,7 +139,7 @@ export function DriveAttachmentPanel({
     queryFn: async () => {
       if (!recordId) return { items: [] };
       const response = await fetch(`/api/${module}/${recordId}/attachments`, { credentials: "include" });
-      if (!response.ok) throw new Error(await responseMessage(response, "Could not load attachments."));
+      if (!response.ok) throw new Error(await responseMessage(response, t("driveAttachment.loadFailed")));
       return response.json() as Promise<{ items: CanonicalAttachment[] }>;
     },
     enabled: !!recordId,
@@ -185,7 +179,7 @@ export function DriveAttachmentPanel({
           }),
         });
         if (!descriptorResponse.ok) {
-          throw new Error(await responseMessage(descriptorResponse, "Could not prepare upload."));
+          throw new Error(await responseMessage(descriptorResponse, t("driveAttachment.prepareFailed")));
         }
         const descriptor = await descriptorResponse.json() as {
           operationId: string; uploadURL: string; uploadToken: string;
@@ -195,7 +189,7 @@ export function DriveAttachmentPanel({
           body: file,
           headers: { "Content-Type": file.type || "application/octet-stream" },
         });
-        if (!uploadResponse.ok) throw new Error("The file could not be uploaded.");
+        if (!uploadResponse.ok) throw new Error(t("driveAttachment.transferFailed"));
 
         const finalizeResponse = await fetch(
           `/api/attachments/operations/${descriptor.operationId}/finalize`,
@@ -207,7 +201,7 @@ export function DriveAttachmentPanel({
           },
         );
         if (!finalizeResponse.ok) {
-          throw new Error(await responseMessage(finalizeResponse, "The upload could not be finalised."));
+          throw new Error(await responseMessage(finalizeResponse, t("driveAttachment.finalizeFailed")));
         }
         await qc.invalidateQueries({ queryKey: attachmentQueryKey(module, recordId) });
         toast.success(`${file.name} ${t("driveAttachment.uploaded")}`);
@@ -229,7 +223,7 @@ export function DriveAttachmentPanel({
       const response = await fetch(`/api/attachments/${deleteTarget.id}`, {
         method: "DELETE", credentials: "include",
       });
-      if (!response.ok) throw new Error(await responseMessage(response, "Could not remove attachment."));
+      if (!response.ok) throw new Error(await responseMessage(response, t("driveAttachment.couldNotRemove")));
       await qc.invalidateQueries({ queryKey: attachmentQueryKey(module, recordId) });
       toast.success(`${deleteTarget.fileName} ${t("driveAttachment.removed")}`);
     } catch (error) {
@@ -250,139 +244,135 @@ export function DriveAttachmentPanel({
   );
 
   const unavailable = (file: CanonicalAttachment) => file.availabilityStatus === "unavailable";
+  const open = (file: CanonicalAttachment, action: "download" | "preview") => {
+    if (!unavailable(file)) window.open(attachmentUrl(file, action), "_blank", "noopener,noreferrer");
+  };
+  const iconButton = (tip: string, ariaLabel: string, onPress: () => void, icon: React.ReactNode, isDisabled = false, danger = false) => (
+    <Tooltip delay={300}>
+      <Button isIconOnly size="sm" variant="ghost" aria-label={ariaLabel} isDisabled={isDisabled} onPress={onPress}
+        className={danger ? "text-[var(--muted)] hover:text-[var(--danger)]" : undefined}>
+        {icon}
+      </Button>
+      <Tooltip.Content>{tip}</Tooltip.Content>
+    </Tooltip>
+  );
   const actions = (file: CanonicalAttachment, compact = false) => (
     <div className="flex items-center justify-end gap-0.5">
-      <Button type="button" size="icon" variant="ghost" className={compact ? "h-7 w-7" : "h-8 w-8"}
-        disabled={unavailable(file)} title={t("download")} aria-label={t("driveAttachment.downloadFile")}
-        onClick={() => { if (!unavailable(file)) window.open(attachmentUrl(file, "download"), "_blank", "noopener,noreferrer"); }}>
-        <Download className="h-3.5 w-3.5" />
-      </Button>
-      {!compact && (
-        <Button type="button" size="icon" variant="ghost" className="h-8 w-8"
-          disabled={unavailable(file)} title={t("driveAttachment.openFile")} aria-label={t("driveAttachment.openFile")}
-          onClick={() => { if (!unavailable(file)) window.open(attachmentUrl(file, "preview"), "_blank", "noopener,noreferrer"); }}>
-          <ExternalLink className="h-3.5 w-3.5" />
-        </Button>
-      )}
-      {canDelete && (
-        <Button type="button" size="icon" variant="ghost"
-          className={`${compact ? "h-7 w-7" : "h-8 w-8"} text-muted-foreground hover:text-destructive`}
-          title={t("remove")} aria-label={t("driveAttachment.removeAttachment")} onClick={() => setDeleteTarget(file)}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      )}
+      {iconButton(t("download"), t("driveAttachment.downloadFile"), () => open(file, "download"), <Download className="size-3.5" aria-hidden="true" />, unavailable(file))}
+      {!compact && iconButton(t("driveAttachment.openFile"), t("driveAttachment.openFile"), () => open(file, "preview"), <ExternalLink className="size-3.5 rtl:-scale-x-100" aria-hidden="true" />, unavailable(file))}
+      {canDelete && iconButton(t("remove"), t("driveAttachment.removeAttachment"), () => setDeleteTarget(file), <Trash2 className="size-3.5" aria-hidden="true" />, false, true)}
     </div>
   );
+  const size = (bytes: number) => <bdi dir="ltr" className="tabular-nums">{formatBytes(bytes)}</bdi>;
+  const countChip = files.length > 0 && (
+    <Chip size="sm" variant="secondary"><Paperclip className="size-3" aria-hidden="true" /><span className="tabular-nums">{files.length}</span></Chip>
+  );
+  const uploadButton = (compact: boolean) => canUpload && isActive && (
+    <Button size="sm" variant="outline" isDisabled={inFlight.length > 0} onPress={() => fileInputRef.current?.click()}>
+      {inFlight.length ? <Spinner size="sm" aria-hidden="true" /> : <Upload className="size-3.5" aria-hidden="true" />}
+      {compact ? t("add") : t("driveAttachment.attachFile")}
+    </Button>
+  );
+  const deleteDialog = (
+    <ConfirmModal
+      isOpen={!!deleteTarget}
+      title={t("driveAttachment.removeTitle")}
+      message={<><bdi dir="ltr" className="font-medium">{deleteTarget?.fileName}</bdi> {t("driveAttachment.removeDesc")}</>}
+      cancelLabel={t("cancel")}
+      confirmLabel={t("remove")}
+      isPending={deleting}
+      onCancel={() => setDeleteTarget(null)}
+      onConfirm={handleDelete}
+    />
+  );
+
+  const columns: DataGridColumn<CanonicalAttachment>[] = [
+    { id: "file", header: t("driveAttachment.fileCol"), isRowHeader: true,
+      cell: (file) => (
+        <div className="flex min-w-0 items-center gap-2">
+          {fileIcon(file.contentType)}
+          <span dir="ltr" className="min-w-0 truncate text-sm font-medium rtl:text-end" title={file.fileName}>{file.fileName}</span>
+          {file.versionNumber > 1 && <Chip size="sm" variant="tertiary" className="shrink-0"><bdi dir="ltr">v{file.versionNumber}</bdi></Chip>}
+          {unavailable(file) && <Chip size="sm" variant="soft" color="danger" className="shrink-0">{t("driveAttachment.fileUnavailable")}</Chip>}
+        </div>
+      ) },
+    { id: "size", header: t("driveAttachment.sizeCol"), width: 96, cell: (file) => <span className="text-xs text-[var(--muted)]">{size(file.size)}</span> },
+    { id: "by", header: t("driveAttachment.uploadedByCol"), width: 140, cell: (file) => <span dir="auto" className="text-xs text-[var(--muted)]">{file.uploadedByName ?? "—"}</span> },
+    { id: "date", header: t("driveAttachment.dateCol"), width: 112, cell: (file) => <span className="whitespace-nowrap text-xs text-[var(--muted)]"><bdi dir="ltr">{formatDate(file.uploadedAt)}</bdi></span> },
+    { id: "actions", header: <span className="sr-only">{t("driveAttachment.actionsCol")}</span>, width: 120, cell: (file) => actions(file) },
+  ];
 
   if (variant === "compact") {
     return (
       <div className="space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium">{label}</span>
-          {files.length > 0 && <Badge variant="secondary" className="text-xs gap-1"><Paperclip className="h-3 w-3" />{files.length}</Badge>}
-          {canUpload && isActive && (
-            <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs"
-              disabled={inFlight.length > 0} onClick={() => fileInputRef.current?.click()}>
-              {inFlight.length ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />} {t("add")}
-            </Button>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">{heading}</span>
+          {countChip}
+          {uploadButton(true)}
           {hiddenInput}
         </div>
         {files.map((file) => (
-          <div key={file.id} className="flex items-center gap-2 text-xs border rounded px-2 py-1.5 bg-muted/20">
+          <div key={file.id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--default)] px-2 py-1.5 text-xs">
             {fileIcon(file.contentType)}
-            <span className="truncate flex-1" title={file.fileName}>{file.fileName}</span>
-            {unavailable(file) ? <span className="text-destructive shrink-0">{t("driveAttachment.fileUnavailable")}</span> : <span className="text-muted-foreground shrink-0">{formatBytes(file.size)}</span>}
+            <span dir="ltr" className="min-w-0 flex-1 truncate rtl:text-end" title={file.fileName}>{file.fileName}</span>
+            {unavailable(file) ? <span className="shrink-0 text-[var(--danger)]">{t("driveAttachment.fileUnavailable")}</span> : <span className="shrink-0 text-[var(--muted)]">{size(file.size)}</span>}
             {actions(file, true)}
           </div>
         ))}
         {inFlight.map((name) => <PendingFile key={name} name={name} compact />)}
-        <DeleteConfirmDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} loading={deleting} />
+        {deleteDialog}
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h4 className="text-sm font-medium">{label}</h4>
-          {files.length > 0 && <Badge variant="secondary" className="text-xs gap-1"><Paperclip className="h-3 w-3" />{files.length}</Badge>}
+          <h4 className="text-sm font-medium">{heading}</h4>
+          {countChip}
         </div>
         <div className="flex items-center gap-2">
-          {canUpload && isActive && <span className="text-xs text-muted-foreground hidden sm:inline">PDF, Word, Excel, PPT, Images · max {MAX_MB} MB</span>}
-          {canUpload && isActive && (
-            <Button type="button" size="sm" variant="outline" disabled={inFlight.length > 0}
-              onClick={() => fileInputRef.current?.click()}>
-              {inFlight.length ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} {t("driveAttachment.attachFile")}
-            </Button>
-          )}
+          {canUpload && isActive && <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("driveAttachment.allowedTypes", { maxMb: MAX_MB })}</span>}
+          {uploadButton(false)}
           {hiddenInput}
         </div>
       </div>
-      {!isActive && <p className="text-xs text-muted-foreground italic">{t("driveAttachment.saveFirstHint")}</p>}
+      {!isActive && <p className="text-xs text-[var(--muted)]">{t("driveAttachment.saveFirstHint")}</p>}
       {inFlight.map((name) => <PendingFile key={name} name={name} />)}
-      {isLoading ? <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+      {isLoading ? <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-xl" />)}</div>
         : isError ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          <div className="rounded-xl border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] p-3 text-sm">
             <p>{t("driveAttachment.loadFailed", { defaultValue: "Could not load attachments." })}</p>
-            <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => refetch()}>{t("driveAttachment.retry", { defaultValue: "Try again" })}</Button>
+            <Button size="sm" variant="outline" className="mt-2" onPress={() => refetch()}>{t("driveAttachment.retry", { defaultValue: "Try again" })}</Button>
           </div>
         ) : files.length === 0 && !inFlight.length ? (
-          <div className="rounded-lg border border-dashed p-6 text-center">
-            <Paperclip className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
-            <p className="text-sm text-muted-foreground">{t("driveAttachment.noAttachments")}</p>
-            {canUpload && isActive && <p className="text-xs text-muted-foreground mt-1">{t("driveAttachment.noAttachmentsHint")}</p>}
+          <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center">
+            <Paperclip className="mx-auto mb-2 size-8 text-[var(--muted)] opacity-40" aria-hidden="true" />
+            <p className="text-sm text-[var(--muted)]">{t("driveAttachment.noAttachments")}</p>
+            {canUpload && isActive && <p className="mt-1 text-xs text-[var(--muted)]">{t("driveAttachment.noAttachmentsHint")}</p>}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-md border">
-            <Table><TableHeader><TableRow>
-              <TableHead>{t("driveAttachment.fileCol")}</TableHead>
-              <TableHead className="hidden sm:table-cell">{t("driveAttachment.sizeCol")}</TableHead>
-              <TableHead className="hidden md:table-cell">{t("driveAttachment.uploadedByCol")}</TableHead>
-              <TableHead className="hidden md:table-cell">{t("driveAttachment.dateCol")}</TableHead>
-              <TableHead className="w-24 text-end">{t("driveAttachment.actionsCol")}</TableHead>
-            </TableRow></TableHeader><TableBody>
-              {files.map((file) => <TableRow key={file.id}>
-                <TableCell><div className="flex items-center gap-2">{fileIcon(file.contentType)}
-                  <span className="max-w-[160px] truncate text-sm font-medium sm:max-w-xs" title={file.fileName}>{file.fileName}</span>
-                  {file.versionNumber > 1 && <Badge variant="outline" className="text-xs px-1 shrink-0">v{file.versionNumber}</Badge>}
-                  {unavailable(file) && <Badge variant="destructive" className="text-xs shrink-0">{t("driveAttachment.fileUnavailable")}</Badge>}
-                </div></TableCell>
-                <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">{formatBytes(file.size)}</TableCell>
-                <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{file.uploadedByName ?? "—"}</TableCell>
-                <TableCell className="hidden md:table-cell text-xs text-muted-foreground whitespace-nowrap">{new Date(file.uploadedAt).toLocaleDateString()}</TableCell>
-                <TableCell className="text-end">{actions(file)}</TableCell>
-              </TableRow>)}
-            </TableBody></Table>
+            <DataGrid
+              aria-label={heading}
+              data={files}
+              columns={columns}
+              getRowId={(file) => file.id}
+              contentClassName="min-w-[640px]"
+              verticalAlign="middle"
+            />
           </div>
         )}
-      <DeleteConfirmDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} loading={deleting} />
+      {deleteDialog}
     </div>
   );
 }
 
 function PendingFile({ name, compact = false }: { name: string; compact?: boolean }) {
   const { t } = useTranslation("common");
-  return <div className={`flex items-center gap-2 ${compact ? "text-xs px-2 py-1.5" : "text-xs px-3 py-2"} rounded border bg-muted/20 animate-pulse`}>
-    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" /><span className="truncate text-muted-foreground">{name}</span>
-    {!compact && <span className="text-muted-foreground shrink-0 ms-auto">{t("uploadingFile")}</span>}
+  return <div className={`flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--default)] ${compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-xs"}`}>
+    <Spinner size="sm" aria-hidden="true" /><span dir="ltr" className="truncate text-[var(--muted)]">{name}</span>
+    {!compact && <span className="ms-auto shrink-0 text-[var(--muted)]">{t("uploadingFile")}</span>}
   </div>;
-}
-
-function DeleteConfirmDialog({ target, onClose, onConfirm, loading }: {
-  target: CanonicalAttachment | null; onClose: () => void; onConfirm: () => void; loading: boolean;
-}) {
-  const { t } = useTranslation("common");
-  return <AlertDialog open={!!target} onOpenChange={(open) => { if (!open) onClose(); }}>
-    <AlertDialogContent><AlertDialogHeader>
-      <AlertDialogTitle>{t("driveAttachment.removeTitle")}</AlertDialogTitle>
-      <AlertDialogDescription><strong>{target?.fileName}</strong> {t("driveAttachment.removeDesc")}</AlertDialogDescription>
-    </AlertDialogHeader><AlertDialogFooter>
-      <AlertDialogCancel disabled={loading}>{t("cancel")}</AlertDialogCancel>
-      <AlertDialogAction disabled={loading} className="inline-flex items-center justify-center gap-2 whitespace-nowrap bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={onConfirm}>
-        {loading && <Loader2 className="h-4 w-4 animate-spin" />}{t("remove")}
-      </AlertDialogAction>
-    </AlertDialogFooter></AlertDialogContent>
-  </AlertDialog>;
 }

@@ -293,7 +293,7 @@ export default function ProjectsPage() {
     { id: "project", header: t("table.project"), isRowHeader: true, width: 206, pinned: "start", headerClassName: "w-[206px]",
       cell: (p) => (
         <div className="flex min-w-0 flex-col">
-          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end font-medium leading-snug text-foreground" title={p.title}>{p.title}</span></span>
+          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top text-page-start font-medium leading-snug text-foreground" title={p.title}>{p.title}</span></span>
           {p.code && <span className="truncate font-mono text-xs text-[var(--muted)]"><bdi dir="ltr">{p.code}</bdi></span>}
         </div>
       ) },
@@ -301,8 +301,8 @@ export default function ProjectsPage() {
     { id: "sectorDonor", header: t("table.sectorDonor"), width: 140, headerClassName: "w-[140px]",
       cell: (p) => (
         <div className="flex min-w-0 flex-col">
-          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end text-sm leading-snug" title={p.sector}>{p.sector}</span></span>
-          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top rtl:text-end text-xs leading-snug text-[var(--muted)]" title={p.donor}>{p.donor}</span></span>
+          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top text-page-start text-sm leading-snug" title={p.sector}>{p.sector}</span></span>
+          <span className="block"><span dir="auto" className="inline-block max-w-full whitespace-normal break-words line-clamp-3 align-top text-page-start text-xs leading-snug text-[var(--muted)]" title={p.donor}>{p.donor}</span></span>
         </div>
       ) },
     { id: "states", header: t("table.states"), width: 116, headerClassName: "w-[116px]",
