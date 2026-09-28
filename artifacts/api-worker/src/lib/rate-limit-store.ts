@@ -44,3 +44,29 @@ export async function clearAccountFailures(db: QueryExecutor, identifier: string
     identifier,
   ]);
 }
+
+/**
+ * Ported from routes/profile.ts's express-rate-limit-backed password-change
+ * limiter (5 requests / 15 min, keyed by user id — this route requires an
+ * existing session, so it's a per-account request-rate limit, not a
+ * failed-attempt lockout like the login one above). express-rate-limit's
+ * `skip: () => !isProductionEnv()` (disabled outside production) has no
+ * Workers equivalent kept here — this is a security control, not a dev
+ * convenience worth reintroducing, so it now applies in every environment.
+ */
+const PASSWORD_CHANGE_BUCKET = "profile_password_change";
+export const PASSWORD_CHANGE_LIMIT = 5;
+export const PASSWORD_CHANGE_WINDOW_MS = 15 * 60 * 1000;
+
+export async function isPasswordChangeRateLimited(db: QueryExecutor, userId: number): Promise<boolean> {
+  const { rows } = await db.query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM rate_limit_events
+      WHERE bucket = $1 AND key = $2 AND occurred_at > NOW() - INTERVAL '15 minutes'`,
+    [PASSWORD_CHANGE_BUCKET, String(userId)],
+  );
+  return Number(rows[0]?.count ?? 0) >= PASSWORD_CHANGE_LIMIT;
+}
+
+export async function recordPasswordChangeAttempt(db: QueryExecutor, userId: number): Promise<void> {
+  await recordEvent(db, PASSWORD_CHANGE_BUCKET, String(userId));
+}

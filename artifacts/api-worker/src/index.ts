@@ -38,6 +38,7 @@ import { conversationsRoutes } from "./routes/conversations";
 import { auditRoutes } from "./routes/audit";
 import { dashboardRoutes } from "./routes/dashboard";
 import { healthRoutes } from "./routes/health";
+import { profileRoutes } from "./routes/profile";
 import { realtimeLocksRoutes } from "./routes/realtime-locks";
 
 /**
@@ -420,6 +421,7 @@ app.route("/", conversationsRoutes);
 app.route("/", auditRoutes);
 app.route("/", dashboardRoutes);
 app.route("/", healthRoutes);
+app.route("/", profileRoutes);
 app.route("/", realtimeLocksRoutes);
 
 /**
