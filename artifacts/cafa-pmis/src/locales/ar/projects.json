@@ -365,7 +365,22 @@
     },
     "loading": "جارٍ تحميل المشروع…",
     "validation": {
-      "reportingCoverageOrder": "يجب أن يكون تاريخ انتهاء التقارير في تاريخ بدء التقارير أو بعده."
+      "reportingCoverageOrder": "يجب أن يكون تاريخ انتهاء التقارير في تاريخ بدء التقارير أو بعده.",
+      "required": "مطلوب",
+      "stateRequired": "الولاية مطلوبة",
+      "localityRequired": "المحلية مطلوبة",
+      "indicatorRequired": "مطلوب مؤشر واحد على الأقل",
+      "activityRequired": "مطلوب نشاط واحد على الأقل",
+      "titleMin": "مطلوب (3 أحرف على الأقل)",
+      "descriptionMin": "مطلوب — صِف خلفية المشروع ومبرراته وأهدافه والنتائج المتوقعة (50 حرفاً على الأقل)",
+      "sectorRequired": "اختر قطاعاً واحداً على الأقل",
+      "agreementRequired": "رقم الاتفاقية مطلوب",
+      "reportingStartRequired": "تاريخ بدء التقارير مطلوب",
+      "reportingEndRequired": "تاريخ انتهاء التقارير مطلوب",
+      "outputRequired": "مطلوب مُخرَج واحد على الأقل",
+      "locationRequired": "اختر موقعاً تشغيلياً واحداً على الأقل: حدّد المقر الرئيسي أو ولاية أو أكثر.",
+      "endBeforeStart": "لا يمكن أن يسبق تاريخ النهاية تاريخ البداية",
+      "frequencyRequired": "دورية التقارير المجدولة مطلوبة"
     },
     "tabErrorAriaLabel": "يحتوي هذا القسم على أخطاء في التحقق",
     "navAriaLabel": "أقسام تسجيل المشروع",
@@ -463,7 +478,9 @@
       "stateAllocationBeneficiaries": "مستهدف المستفيدين",
       "stateAllocationAllocated": "الموزَّع",
       "stateAllocationOfTotal": "من إجمالي {{total}}",
-      "stateAllocationExceeds": "إجمالي الموزَّع يتجاوز ميزانية المشروع"
+      "stateAllocationExceeds": "إجمالي الموزَّع يتجاوز ميزانية المشروع",
+      "operationalLocationsHint": "اختر كل المواقع التي يتولى فيها هذا المشروع مسؤولية التنفيذ التشغيلي أو إعداد التقارير.",
+      "hq": "المقر الرئيسي"
     },
     "donor": {
       "donorOrg": "منظمة الجهة المانحة",
@@ -483,7 +500,9 @@
       "internalNotes": "ملاحظات داخلية",
       "internalNotesPlaceholder": "ملاحظات داخلية أو سياق أو شروط غير واردة في الاتفاقية...",
       "donorInfoSection": "معلومات الجهة المانحة",
-      "agreementDetailsSection": "تفاصيل الاتفاقية"
+      "agreementDetailsSection": "تفاصيل الاتفاقية",
+      "cancelNewDonor": "إلغاء إضافة الجهة المانحة",
+      "agreementExists": "رقم الاتفاقية مسجَّل بالفعل لمشروع آخر ({{code}} — {{title}}). تأكّد أن هذا مشروع منفصل قبل المتابعة."
     },
     "timeline": {
       "implementationPeriod": "فترة التنفيذ",
@@ -556,7 +575,13 @@
       "selectStateFirst": "اختر الولاية أولاً",
       "selectLocality": "اختر المحلية…",
       "addLocalitiesFirst": "أضف المحليات في القسم 3 أولاً",
-      "selectLocalityNone": "— اختر المحلية —"
+      "selectLocalityNone": "— اختر المحلية —",
+      "recordedExpenditure": "المصروف المسجَّل:",
+      "recordedExpenditureReadOnly": "(للقراءة فقط — لا يمكن تعديله هنا)",
+      "removeFinancedTitle": "إزالة نشاط له مصروفات مسجَّلة؟",
+      "removeFinancedDescription": "لهذا النشاط مصروفات مسجَّلة. إزالته من المشروع ستحذف أيضاً سجل النشاط المحفوظ. راجِع المصروفات قبل المتابعة.",
+      "keepActivity": "الإبقاء على النشاط",
+      "removeActivityConfirm": "إزالة النشاط"
     },
     "team": {
       "role": "الدور",
@@ -566,7 +591,8 @@
       "externalPerson": "— شخص خارجي —",
       "externalName": "الاسم الخارجي",
       "externalNamePlaceholder": "الاسم إذا لم يكن في النظام",
-      "projectTeamSection": "فريق المشروع"
+      "projectTeamSection": "فريق المشروع",
+      "removeAssignment": "حذف تكليف {{role}}"
     },
     "documents": {
       "requiredNote": "وثائق الاتفاقية والميزانية مطلوبة قبل الموافقة النهائية.",
@@ -579,7 +605,10 @@
       "voiceNoteTitle": "ملاحظة صوتية",
       "voiceNoteDesc": "سجّل اختيارياً ملاحظة صوتية لإرفاقها بهذا المشروع. يُحفظ التسجيل عند إنشاء المشروع.",
       "projectDocumentsSection": "وثائق المشروع",
-      "overrideReasonPlaceholder": "اذكر سبب حذف هذا المستند…"
+      "overrideReasonPlaceholder": "اذكر سبب حذف هذا المستند…",
+      "kindLabel": "نوع الوثيقة",
+      "locked": "مقفل",
+      "closedUploadTooltip": "لا يُسمح برفع الوثائق للمشاريع المغلقة."
     },
     "review": {
       "basicInfo": "المعلومات الأساسية",
@@ -638,7 +667,36 @@
     "reportingFrequency": {
       "monthly": "شهري",
       "quarterly": "ربع سنوي",
-      "annual": "سنوي"
+      "annual": "سنوي",
+      "label": "دورية التقارير المجدولة",
+      "placeholder": "اختر الدورية",
+      "notConfigured": "غير محددة",
+      "hint": "اختر جدول التقارير المعتاد لهذا المشروع. يظل بالإمكان إنشاء تقارير عند الطلب بشكل منفصل عند الحاجة."
+    },
+    "options": {
+      "classification": {
+        "emergency": "استجابة طارئة",
+        "recovery": "التعافي",
+        "development": "التنمية",
+        "nexus": "الربط بين العمل الإنساني والتنموي"
+      },
+      "personnelRole": {
+        "project_manager": "مدير المشروع",
+        "technical_coordinator": "المنسق الفني",
+        "finance_focal_point": "مسؤول الاتصال المالي",
+        "meal_focal_point": "مسؤول الاتصال للرصد والتقييم والمساءلة والتعلّم",
+        "state_focal_point": "مسؤول الاتصال في الولاية"
+      },
+      "indicatorUnit": {
+        "people_reached": "أشخاص تم الوصول إليهم",
+        "households_assisted": "أسر تمت مساعدتها",
+        "facilities_supported": "مرافق مدعومة",
+        "communities_served": "مجتمعات مخدومة",
+        "trainings_conducted": "تدريبات منفّذة",
+        "volunteers_trained": "متطوعون مدرَّبون",
+        "count": "عدد",
+        "percent": "نسبة مئوية (%)"
+      }
     }
   },
   "projectActionsAria": "إجراءات المشروع",

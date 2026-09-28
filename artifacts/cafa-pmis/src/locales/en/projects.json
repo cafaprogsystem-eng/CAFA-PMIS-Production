@@ -357,7 +357,22 @@
     },
     "loading": "Loading project…",
     "validation": {
-      "reportingCoverageOrder": "Reporting end date must be on or after reporting start date."
+      "reportingCoverageOrder": "Reporting end date must be on or after reporting start date.",
+      "required": "Required",
+      "stateRequired": "State is required",
+      "localityRequired": "Locality is required",
+      "indicatorRequired": "At least one indicator is required",
+      "activityRequired": "At least one activity is required",
+      "titleMin": "Required (min 3 characters)",
+      "descriptionMin": "Required — describe the project background, rationale, objectives and intended outcomes (min 50 characters)",
+      "sectorRequired": "Select at least one sector",
+      "agreementRequired": "Agreement number is required",
+      "reportingStartRequired": "Reporting start date is required",
+      "reportingEndRequired": "Reporting end date is required",
+      "outputRequired": "At least one output is required",
+      "locationRequired": "Select at least one operational location: tick HQ or one or more states.",
+      "endBeforeStart": "End date cannot be before start date",
+      "frequencyRequired": "Scheduled reporting frequency is required"
     },
     "tabErrorAriaLabel": "This section has validation errors",
     "navAriaLabel": "Project registration sections",
@@ -455,7 +470,9 @@
       "stateAllocationBeneficiaries": "Beneficiary target",
       "stateAllocationAllocated": "Allocated",
       "stateAllocationOfTotal": "of {{total}} budget",
-      "stateAllocationExceeds": "Allocated total exceeds the project budget"
+      "stateAllocationExceeds": "Allocated total exceeds the project budget",
+      "operationalLocationsHint": "Select all locations where this project has operational implementation or reporting responsibility.",
+      "hq": "HQ"
     },
     "donor": {
       "donorOrg": "Donor organisation",
@@ -475,7 +492,9 @@
       "internalNotes": "Internal Notes",
       "internalNotesPlaceholder": "Internal notes, context, or conditions not in the agreement...",
       "donorInfoSection": "Donor information",
-      "agreementDetailsSection": "Agreement details"
+      "agreementDetailsSection": "Agreement details",
+      "cancelNewDonor": "Cancel new donor",
+      "agreementExists": "Agreement number already exists under another project ({{code}} — {{title}}). Confirm this is a separate project before continuing."
     },
     "timeline": {
       "implementationPeriod": "Implementation period",
@@ -548,7 +567,13 @@
       "selectStateFirst": "Select a state first",
       "selectLocality": "Select locality…",
       "addLocalitiesFirst": "Add localities in Section 3 first",
-      "selectLocalityNone": "— Select locality —"
+      "selectLocalityNone": "— Select locality —",
+      "recordedExpenditure": "Recorded expenditure:",
+      "recordedExpenditureReadOnly": "(read-only — cannot be edited here)",
+      "removeFinancedTitle": "Remove activity with recorded expenditure?",
+      "removeFinancedDescription": "This activity has recorded expenditure. Removing it from the project will also remove its stored activity record. Review the expenditure before continuing.",
+      "keepActivity": "Keep activity",
+      "removeActivityConfirm": "Remove activity"
     },
     "team": {
       "role": "Role",
@@ -558,7 +583,8 @@
       "externalPerson": "— External person —",
       "externalName": "External Name",
       "externalNamePlaceholder": "Name if not in system",
-      "projectTeamSection": "Project team"
+      "projectTeamSection": "Project team",
+      "removeAssignment": "Remove {{role}} assignment"
     },
     "documents": {
       "requiredNote": "Agreement and budget documents are required before final approval.",
@@ -571,7 +597,10 @@
       "voiceNoteTitle": "Voice note",
       "voiceNoteDesc": "Optionally record a voice note to attach to this project. Recording is saved when the project is created.",
       "projectDocumentsSection": "Project documents",
-      "overrideReasonPlaceholder": "State the reason for deleting this document…"
+      "overrideReasonPlaceholder": "State the reason for deleting this document…",
+      "kindLabel": "Document type",
+      "locked": "Locked",
+      "closedUploadTooltip": "Document uploads are not permitted for closed projects."
     },
     "review": {
       "basicInfo": "Basic information",
@@ -630,7 +659,36 @@
     "reportingFrequency": {
       "monthly": "Monthly",
       "quarterly": "Quarterly",
-      "annual": "Annual"
+      "annual": "Annual",
+      "label": "Scheduled reporting frequency",
+      "placeholder": "Select frequency",
+      "notConfigured": "Not configured",
+      "hint": "Select the normal reporting schedule for this project. On-demand reports may still be created separately when required."
+    },
+    "options": {
+      "classification": {
+        "emergency": "Emergency Response",
+        "recovery": "Recovery",
+        "development": "Development",
+        "nexus": "Humanitarian-Development Nexus"
+      },
+      "personnelRole": {
+        "project_manager": "Project Manager",
+        "technical_coordinator": "Technical Coordinator",
+        "finance_focal_point": "Finance Focal Point",
+        "meal_focal_point": "MEAL Focal Point",
+        "state_focal_point": "State Focal Point"
+      },
+      "indicatorUnit": {
+        "people_reached": "People Reached",
+        "households_assisted": "Households Assisted",
+        "facilities_supported": "Facilities Supported",
+        "communities_served": "Communities Served",
+        "trainings_conducted": "Trainings Conducted",
+        "volunteers_trained": "Volunteers Trained",
+        "count": "Count",
+        "percent": "Percentage (%)"
+      }
     }
   },
   "projectActionsAria": "Project actions",
@@ -644,18 +702,18 @@
     "cancelled": "Cancelled"
   },
   "documentKinds": {
-    "pca": "PCA",
-    "ip_agreement": "IP Agreement",
+    "pca": "Programme Cooperation Agreement (PCA)",
+    "ip_agreement": "Implementing Partner Agreement",
     "grant_agreement": "Grant Agreement",
-    "mou": "MoU",
+    "mou": "Memorandum of Understanding (MoU)",
     "contract": "Contract",
     "partnership_agreement": "Partnership Agreement",
     "detailed_budget": "Detailed Budget",
     "approved_budget": "Approved Budget",
     "financial_annex": "Financial Annex",
-    "proposal": "Proposal",
-    "logframe": "Logframe",
-    "workplan": "Workplan",
+    "proposal": "Project Proposal",
+    "logframe": "Logical Framework",
+    "workplan": "Work Plan",
     "donor_communications": "Donor Communications",
     "amendments": "Amendments",
     "technical_annexes": "Technical Annexes",

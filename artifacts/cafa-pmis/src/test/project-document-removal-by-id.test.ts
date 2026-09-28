@@ -25,8 +25,8 @@ describe("PROJ-DOC-REMOVE — removeDoc is keyed by objectPath, not fileName", (
   });
 
   it("every call site passes the document's objectPath, not its fileName", () => {
-    expect(src).toContain("onClick={() => removeDoc(doc.objectPath)}");
+    expect(src).toContain("onPress={() => removeDoc(doc.objectPath)}");
     expect(src).toContain("removeDoc(overrideDeleteDialog.objectPath)");
-    expect(src).toContain("onClick={() => openOverrideDialog(doc.id!, doc.fileName, doc.objectPath)}");
+    expect(src).toContain("onPress={() => openOverrideDialog(doc.id!, doc.fileName, doc.objectPath)}");
   });
 });

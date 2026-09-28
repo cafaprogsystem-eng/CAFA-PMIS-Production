@@ -351,6 +351,8 @@ vi.mock("@/components/view-modes/state-map", () => ({
 vi.mock("@/components/project-registration-form", () => ({
   ProjectRegistrationForm: () => <div data-testid="registration-form" />,
   EditProjectDialog: () => null,
+  ProjectFormModal: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
+    isOpen ? <div role="dialog">{children}</div> : null,
 }));
 
 vi.mock("@/components/delete-project-dialog", () => ({

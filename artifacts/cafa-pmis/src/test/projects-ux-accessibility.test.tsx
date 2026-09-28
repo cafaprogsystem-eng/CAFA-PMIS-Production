@@ -24,6 +24,7 @@ import { render, screen, fireEvent, within, cleanup } from "@testing-library/rea
 import React from "react";
 import "@testing-library/jest-dom";
 import { useForm } from "react-hook-form";
+import { Button as HButton } from "@heroui/react";
 
 const detailQueryState = vi.hoisted(() => ({
   projectResult: { data: undefined, isLoading: false, isError: false, refetch: vi.fn() },
@@ -114,6 +115,8 @@ vi.mock("react-i18next", () => ({
         "form.documents.voiceNoteDesc": "Record a voice note for this project.",
         "form.buttons.upload": "Upload",
         "form.buttons.uploading": "Uploading…",
+        "form.documents.locked": "Locked",
+        "detail.docs.lockedTooltip": "Documents cannot be deleted after project approval.",
         "form.review.basicInfo": "Basic Information",
         "form.review.title": "Title",
         "form.review.classification": "Classification",
@@ -173,6 +176,8 @@ vi.mock("react-i18next", () => ({
         "detail.totalActivityTargets": "Total Activity Targets",
         "detail.totalIndicatorTargets": "Total Indicator Targets",
       };
+      if (key === "detail.docs.deleteAria") return `Remove ${String(opts?.name)}`;
+      if (key === "detail.docs.deleteOverrideAria") return `Delete ${String(opts?.name)} (override required)`;
       if (key in map) return map[key];
       if (opts && typeof opts === "object") {
         let result = key;
@@ -508,7 +513,7 @@ describe("PRJ-UX-03 — Registration form has exactly one footer", () => {
         {(form) => (
           <DocUploadSlot
             category="agreement"
-            kinds={[{ value: "pca", label: "PCA" }]}
+            kinds={["pca"]}
             form={form as never}
             docGate="mutable"
             userRole="program_manager"
@@ -527,7 +532,7 @@ describe("PRJ-UX-03 — Registration form has exactly one footer", () => {
         {(form) => (
           <DocUploadSlot
             category="agreement"
-            kinds={[{ value: "pca", label: "PCA" }]}
+            kinds={["pca"]}
             form={form as never}
             docGate="mutable"
             userRole="program_manager"
@@ -711,7 +716,7 @@ describe("PRJ-UX-09 — Completed project Documents tab shows frozen status mess
         {(form) => (
           <DocUploadSlot
             category="agreement"
-            kinds={[{ value: "pca", label: "PCA" }]}
+            kinds={["pca"]}
             form={form as never}
             docGate="frozen"
             userRole="program_manager"
@@ -733,7 +738,7 @@ describe("PRJ-UX-09 — Completed project Documents tab shows frozen status mess
         {(form) => (
           <DocUploadSlot
             category="agreement"
-            kinds={[{ value: "pca", label: "PCA" }]}
+            kinds={["pca"]}
             form={form as never}
             docGate="frozen"
             userRole="program_manager"
@@ -759,7 +764,7 @@ describe("PRJ-UX-10 — Approved project Documents tab shows PM override delete 
         {(form) => (
           <DocUploadSlot
             category="agreement"
-            kinds={[{ value: "pca", label: "PCA" }]}
+            kinds={["pca"]}
             form={form as never}
             docGate="operational"
             userRole="program_manager"
@@ -768,9 +773,9 @@ describe("PRJ-UX-10 — Approved project Documents tab shows PM override delete 
         )}
       </Wrapper>
     );
-    // PM sees the amber trash button (override) — tooltip content should mention "override"
-    const tooltipContent = screen.queryByTestId("tooltip-content");
-    expect(tooltipContent).toBeTruthy();
+    // PM sees the override trash button (labelled as an audited override delete)
+    expect(screen.getByRole("button", { name: /delete contract\.pdf \(override required\)/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /remove contract\.pdf/i })).not.toBeInTheDocument();
   });
 
   it("shows lock icon (not delete) for ordinary user on operational project", () => {
@@ -782,7 +787,7 @@ describe("PRJ-UX-10 — Approved project Documents tab shows PM override delete 
         {(form) => (
           <DocUploadSlot
             category="agreement"
-            kinds={[{ value: "pca", label: "PCA" }]}
+            kinds={["pca"]}
             form={form as never}
             docGate="operational"
             userRole="state_program_officer"
@@ -791,9 +796,11 @@ describe("PRJ-UX-10 — Approved project Documents tab shows PM override delete 
         )}
       </Wrapper>
     );
-    // Ordinary user should NOT see a delete-labelled button
+    // Ordinary user should NOT see a delete-labelled button, only the lock
     const deleteBtn = screen.queryByRole("button", { name: /remove contract\.pdf/i });
     expect(deleteBtn).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /override required/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Documents cannot be deleted after project approval.")).toBeInTheDocument();
   });
 });
 
@@ -806,7 +813,7 @@ describe("PRJ-A11Y-01 — Form fields have programmatic labels", () => {
         {(form) => (
           <DocUploadSlot
             category="agreement"
-            kinds={[{ value: "pca", label: "PCA" }]}
+            kinds={["pca"]}
             form={form as never}
             docGate="mutable"
             userRole="program_manager"
@@ -828,7 +835,7 @@ describe("PRJ-A11Y-01 — Form fields have programmatic labels", () => {
         {(form) => (
           <DocUploadSlot
             category="agreement"
-            kinds={[{ value: "pca", label: "PCA" }]}
+            kinds={["pca"]}
             form={form as never}
             docGate="mutable"
             userRole="program_manager"
@@ -930,26 +937,25 @@ describe("PRJ-A11Y-03 — Project registration form tabs keyboard navigation", (
   });
 });
 
-// ── PRJ-A11Y-04: Save/Submit buttons have aria-busy during mutation ───────────
-describe("PRJ-A11Y-04 — Save/Submit buttons have aria-busy during mutation", () => {
-  it("Save As Draft button renders with aria-busy=false when idle", () => {
-    render(
-      <button type="button" aria-busy={false} disabled={false}>
-        Save As Draft
-      </button>
-    );
-    const btn = screen.getByText("Save As Draft");
-    expect(btn).toHaveAttribute("aria-busy", "false");
+// ── PRJ-A11Y-04: Save/Submit buttons expose their pending state ──────────────
+// The form's footer uses HeroUI buttons with isPending: React Aria marks a
+// pending button aria-disabled + data-pending and announces the change to
+// assistive tech (it does not forward aria-busy).
+describe("PRJ-A11Y-04 — Save/Submit buttons expose pending state during mutation", () => {
+  it("Save As Draft button is not pending when idle", () => {
+    render(<HButton variant="outline" isPending={false}>Save As Draft</HButton>);
+    const btn = screen.getByRole("button", { name: "Save As Draft" });
+    expect(btn).not.toHaveAttribute("data-pending");
+    expect(btn).not.toHaveAttribute("aria-disabled", "true");
   });
 
-  it("Submit button renders with aria-busy=true when pending", () => {
-    render(
-      <button type="submit" aria-busy={true} disabled={true}>
-        Saving…
-      </button>
-    );
-    const btn = screen.getByText("Saving…");
-    expect(btn).toHaveAttribute("aria-busy", "true");
+  it("Submit button is marked pending (and cannot re-submit) while saving", () => {
+    render(<HButton type="submit" isPending>Saving…</HButton>);
+    const btn = screen.getByRole("button", { name: /Saving…/ });
+    expect(btn).toHaveAttribute("data-pending", "true");
+    expect(btn).toHaveAttribute("aria-disabled", "true");
+    // React Aria swaps type=submit to type=button while pending.
+    expect(btn).toHaveAttribute("type", "button");
   });
 });
 

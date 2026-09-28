@@ -11,21 +11,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button as HButton, Card, Chip, Dropdown, Label, ProgressBar as HProgressBar, Separator, Skeleton } from "@heroui/react";
 import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import { SelectField } from "@/components/select-field";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { Empty, EmptyTitle, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ErrorState } from "@/components/ui/error-state";
 import { Plus, FolderKanban, Filter, X, MoreHorizontal, Trash2, Send, Copy } from "@/components/icons";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate, formatStatusLabel, hasPerm } from "@/lib/format";
-import { ProjectRegistrationForm } from "@/components/project-registration-form";
+import { ProjectFormModal, ProjectRegistrationForm } from "@/components/project-registration-form";
 import { DeleteProjectDialog } from "@/components/delete-project-dialog";
 import { SECTORS } from "@/lib/sectors";
 import { useViewMode } from "@/lib/view-modes";
@@ -117,27 +108,15 @@ function NewProjectDialog() {
   const [open, setOpen] = useState(false);
   const { t } = useTranslation("projects");
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="h-10 gap-2">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          {t("newProject")}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
-        <div className="px-6 pt-6 pb-4 border-b shrink-0">
-          <DialogHeader>
-            <DialogTitle>{t("registerNew")}</DialogTitle>
-            <DialogDescription>
-              {t("registerDesc")}
-            </DialogDescription>
-          </DialogHeader>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <ProjectRegistrationForm onClose={() => setOpen(false)} />
-        </div>
-      </DialogContent>
-    </Dialog>
+    <>
+      <HButton onPress={() => setOpen(true)}>
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        {t("newProject")}
+      </HButton>
+      <ProjectFormModal isOpen={open} onOpenChange={setOpen} title={t("registerNew")} description={t("registerDesc")}>
+        <ProjectRegistrationForm onClose={() => setOpen(false)} />
+      </ProjectFormModal>
+    </>
   );
 }
 
@@ -554,24 +533,19 @@ export default function ProjectsPage() {
       )}
 
       {/* ── Duplicate Project Dialog ── */}
-      <Dialog open={duplicateSourceId != null} onOpenChange={(o) => !o && setDuplicateSourceId(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
-          <div className="px-6 pt-6 pb-4 border-b shrink-0">
-            <DialogHeader>
-              <DialogTitle>{t("duplicate")}</DialogTitle>
-              <DialogDescription>{t("registerDesc")}</DialogDescription>
-            </DialogHeader>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col">
-            {duplicateSourceId != null && (
-              <ProjectRegistrationForm
-                duplicateFromProjectId={duplicateSourceId}
-                onClose={() => setDuplicateSourceId(null)}
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ProjectFormModal
+        isOpen={duplicateSourceId != null}
+        onOpenChange={(o) => !o && setDuplicateSourceId(null)}
+        title={t("duplicate")}
+        description={t("registerDesc")}
+      >
+        {duplicateSourceId != null && (
+          <ProjectRegistrationForm
+            duplicateFromProjectId={duplicateSourceId}
+            onClose={() => setDuplicateSourceId(null)}
+          />
+        )}
+      </ProjectFormModal>
     </div>
   );
 }

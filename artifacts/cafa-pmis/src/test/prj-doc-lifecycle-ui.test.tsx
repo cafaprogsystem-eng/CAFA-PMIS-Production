@@ -67,46 +67,8 @@ vi.mock("@/lib/utils", () => ({
   cn: (...args: unknown[]) => args.filter(Boolean).join(" "),
 }));
 
-// ── Radix UI mocks (minimal — avoids portal/pointer issues in jsdom) ─────────
-vi.mock("@/components/ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: React.ReactNode }) => (
-    <span data-testid="tooltip-content" style={{ display: "none" }}>{children}</span>
-  ),
-}));
-
-vi.mock("@/components/ui/dialog", () => ({
-  Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean; onOpenChange?: (o: boolean) => void }) =>
-    open ? <div data-testid="dialog">{children}</div> : null,
-  DialogContent: ({ children }: { children: React.ReactNode }) => <div data-testid="dialog-content">{children}</div>,
-  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogFooter: ({ children }: { children: React.ReactNode }) => <div data-testid="dialog-footer">{children}</div>,
-  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
-  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
-}));
-
-vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectTrigger: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
-  SelectValue: () => <span />,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock("@/components/ui/button", () => ({
-  Button: ({
-    children, onClick, disabled, type, ...rest
-  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => (
-    <button onClick={onClick} disabled={disabled} type={type ?? "button"} {...rest as object}>
-      {children}
-    </button>
-  ),
-}));
-
-vi.mock("@/components/ui/textarea", () => ({
-  Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
-}));
+// DocUploadSlot renders HeroUI (React Aria) buttons, tooltip triggers and its
+// override Modal directly; the i18n mock returns keys, so assertions use keys.
 
 // ── Import the component under test ─────────────────────────────────────────
 // Dynamic import after mocks are registered
@@ -114,7 +76,7 @@ const { DocUploadSlot } = await import("../components/project-registration-form"
 
 // ─── Test fixture helpers ─────────────────────────────────────────────────────
 
-const KINDS = [{ value: "other", label: "Other" }, { value: "report", label: "Report" }];
+const KINDS = ["other", "report"];
 
 /** A document that already has a DB id (simulates a loaded existing doc) */
 const EXISTING_DOC = {
@@ -162,20 +124,22 @@ beforeEach(() => {
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("PRJ-DOC-UI — DocUploadSlot lifecycle gates", () => {
+  const DELETE = "detail.docs.deleteAria";
+  const OVERRIDE = "detail.docs.deleteOverrideAria";
+  const LOCKED = "detail.docs.lockedTooltip";
+
   it("PRJ-DOC-UI-01: Draft project — authorised actor sees Upload and Delete (X) buttons", () => {
     render(
       <Wrapper docGate="mutable" userRole="technical_coordinator" projectId={1} initialDocs={[EXISTING_DOC]} />,
     );
 
-    // Upload control present (label wrapping file input)
-    const fileInputs = document.querySelectorAll("input[type='file']");
-    expect(fileInputs.length).toBeGreaterThan(0);
+    // Upload control present (button driving a hidden file input)
+    expect(document.querySelectorAll("input[type='file']").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /form\.buttons\.upload/ })).toBeInTheDocument();
 
-    // X (delete) button present
-    // The X icon renders inside a button; verify the button has the click handler area
-    const buttons = screen.getAllByRole("button");
-    // At least the X button for the doc should be present (ghost, no text)
-    expect(buttons.some(b => b.classList.contains("p-0") || b.getAttribute("class")?.includes("p-0"))).toBe(true);
+    // Icon-only delete (X) button for the document
+    expect(screen.getByRole("button", { name: DELETE })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: OVERRIDE })).not.toBeInTheDocument();
   });
 
   it("PRJ-DOC-UI-02: Approved project — ordinary actor sees Upload but no Delete (lock shown)", () => {
@@ -184,12 +148,12 @@ describe("PRJ-DOC-UI — DocUploadSlot lifecycle gates", () => {
     );
 
     // Upload input should be present (operational projects allow uploads)
-    const fileInputs = document.querySelectorAll("input[type='file']");
-    expect(fileInputs.length).toBeGreaterThan(0);
+    expect(document.querySelectorAll("input[type='file']").length).toBeGreaterThan(0);
 
-    // Lock tooltip content should be visible (rendered in DOM even if hidden)
-    const lockTooltip = screen.getByText("Documents cannot be deleted after project approval.");
-    expect(lockTooltip).toBeInTheDocument();
+    // Lock affordance (its tooltip text is also its accessible label); no delete
+    expect(screen.getByLabelText(LOCKED)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: DELETE })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: OVERRIDE })).not.toBeInTheDocument();
   });
 
   it("PRJ-DOC-UI-03: Approved project — PM sees override Trash button (not lock, not X)", () => {
@@ -198,17 +162,14 @@ describe("PRJ-DOC-UI — DocUploadSlot lifecycle gates", () => {
     );
 
     // Upload input present
-    const fileInputs = document.querySelectorAll("input[type='file']");
-    expect(fileInputs.length).toBeGreaterThan(0);
+    expect(document.querySelectorAll("input[type='file']").length).toBeGreaterThan(0);
 
-    // Override delete tooltip content
-    const overrideTooltip = screen.getByText("Delete document (override required — will be audited)");
-    expect(overrideTooltip).toBeInTheDocument();
+    // Override delete button
+    expect(screen.getByRole("button", { name: OVERRIDE })).toBeInTheDocument();
 
-    // Lock (ordinary actor) tooltip should NOT be present
-    expect(
-      screen.queryByText("Documents cannot be deleted after project approval."),
-    ).not.toBeInTheDocument();
+    // Neither the ordinary lock nor the plain delete
+    expect(screen.queryByLabelText(LOCKED)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: DELETE })).not.toBeInTheDocument();
   });
 
   it("PRJ-DOC-UI-04: Override dialog requires non-blank reason — shows error when submitted empty", async () => {
@@ -216,36 +177,20 @@ describe("PRJ-DOC-UI — DocUploadSlot lifecycle gates", () => {
       <Wrapper docGate="operational" userRole="program_manager" projectId={1} initialDocs={[EXISTING_DOC]} />,
     );
 
-    // The override button wrapper renders with amber colour — find a button near the Trash icon
-    // Click any button that would open the override dialog (the amber trash button)
-    const buttons = screen.getAllByRole("button");
-    // The override button has no label text, only an icon — click the one in the doc row
-    // It's the only button besides "Select" and "Upload" in the form when operational+PM
-    const amberBtn = buttons.find(
-      b => b.className.includes("amber") || (b as HTMLElement).getAttribute("class")?.includes("amber"),
-    );
-    if (amberBtn) {
-      fireEvent.click(amberBtn);
-    } else {
-      // Fallback: click first p-0 button (the icon-only button in the doc row)
-      const iconBtn = buttons.find(b => (b as HTMLElement).getAttribute("class")?.includes("h-6 w-6 p-0"));
-      expect(iconBtn).toBeTruthy();
-      fireEvent.click(iconBtn!);
-    }
+    fireEvent.click(screen.getByRole("button", { name: OVERRIDE }));
 
     // Dialog should now be open
-    await waitFor(() => {
-      expect(screen.queryByTestId("dialog")).toBeTruthy();
-    });
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("detail.docs.overrideTitle");
 
     // Click Delete Document with empty reason
-    const deleteBtn = screen.getByRole("button", { name: /Delete Document/i });
-    fireEvent.click(deleteBtn);
+    fireEvent.click(screen.getByRole("button", { name: /detail\.docs\.deleteDocument/ }));
 
-    // Error message appears
+    // Error message appears and no delete request is sent
     await waitFor(() => {
-      expect(screen.getByText("An override reason is required.")).toBeInTheDocument();
+      expect(screen.getByText("detail.docs.overrideReasonRequired")).toBeInTheDocument();
     });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("PRJ-DOC-UI-05: Closed project — no Upload button, no Delete button (fully read-only)", () => {
@@ -254,21 +199,15 @@ describe("PRJ-DOC-UI — DocUploadSlot lifecycle gates", () => {
     );
 
     // No file input for upload
-    const fileInputs = document.querySelectorAll("input[type='file']");
-    expect(fileInputs.length).toBe(0);
+    expect(document.querySelectorAll("input[type='file']").length).toBe(0);
 
     // "Locked" label shown instead of Upload
-    expect(screen.getByText("Locked")).toBeInTheDocument();
+    expect(screen.getByText("form.documents.locked")).toBeInTheDocument();
 
-    // No override tooltip for delete
-    expect(
-      screen.queryByText("Delete document (override required — will be audited)"),
-    ).not.toBeInTheDocument();
-
-    // No lock tooltip (since no delete affordance at all for frozen)
-    expect(
-      screen.queryByText("Documents cannot be deleted after project approval."),
-    ).not.toBeInTheDocument();
+    // No override delete, no plain delete, no lock (no delete affordance at all for frozen)
+    expect(screen.queryByRole("button", { name: OVERRIDE })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: DELETE })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(LOCKED)).not.toBeInTheDocument();
   });
 
   it("PRJ-DOC-UI-06: Active project — same gates as approved (upload present, ordinary actor locked)", () => {
@@ -278,18 +217,13 @@ describe("PRJ-DOC-UI — DocUploadSlot lifecycle gates", () => {
     );
 
     // Upload present
-    const fileInputs = document.querySelectorAll("input[type='file']");
-    expect(fileInputs.length).toBeGreaterThan(0);
+    expect(document.querySelectorAll("input[type='file']").length).toBeGreaterThan(0);
 
     // Lock shown (SPC is not an override actor)
-    expect(
-      screen.getByText("Documents cannot be deleted after project approval."),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText(LOCKED)).toBeInTheDocument();
 
     // No override trash button
-    expect(
-      screen.queryByText("Delete document (override required — will be audited)"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: OVERRIDE })).not.toBeInTheDocument();
   });
 });
 

@@ -126,10 +126,12 @@ describe("Migrated labelled action surfaces", () => {
   });
 
   it("uses the shared loading contract in the project document action", () => {
-    expect(registrationSource).toContain('isLoading={uploading}');
+    // HeroUI Button: isPending carries the loading state, the spinner replaces
+    // the icon in place (no layout shift), and onPress opens the file picker.
+    expect(registrationSource).toContain('isPending={uploading}');
     expect(registrationSource).not.toContain('className="h-8 pointer-events-none"');
-    expect(registrationSource).toContain('{!uploading && <Upload className="h-3.5 w-3.5" />}');
-    expect(registrationSource).toContain('onClick={() => fileInputRef.current?.click()}');
+    expect(registrationSource).toContain('{uploading ? <Spinner size="sm" color="current" /> : <Upload className="h-3.5 w-3.5" aria-hidden="true" />}');
+    expect(registrationSource).toContain('onPress={() => fileInputRef.current?.click()}');
   });
 
   it("keeps upload and verification actions on primitive-owned icon spacing", () => {

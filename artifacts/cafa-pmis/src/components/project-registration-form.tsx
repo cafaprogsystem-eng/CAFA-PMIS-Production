@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
-import { StateLabel } from "@/components/state-label";
+import { StateLabel, getStateLabel } from "@/components/state-label";
 import {
   useCreateProject,
   useGetProject,
@@ -21,56 +21,23 @@ import {
   type DuplicateProjectInfo,
 } from "@workspace/api-client-react";
 import { FormVoiceRecorder, type PendingNote } from "@/components/form-voice-recorder";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Alert, Button, Card, Chip, Input, Label, Modal, Skeleton, Spinner, TextArea, TextField, Tooltip,
+} from "@heroui/react";
 import {
   Form,
-  FormControl,
   FormDescription,
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
+  useFormField,
 } from "@/components/ui/form";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { CheckItem, FormDate, FormInput, FormSelect, FormTextArea, RemovableTags } from "@/components/form-controls";
+import { SelectField } from "@/components/select-field";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2, Upload, X, FileText, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, GitMerge, AlertCircle, Lock, TriangleAlert,
+  Upload, X, FileText, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, GitMerge, Lock, TriangleAlert,
 } from "@/components/icons";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { SECTORS, SUB_SECTORS, ASSISTANCE_MODALITIES } from "@/lib/sectors";
 import { cn } from "@/lib/utils";
 import { OfflineDraftNotice } from "@/components/offline-draft-notice";
@@ -85,9 +52,40 @@ import { deriveStateReferenceData } from "@/lib/state-reference-data";
 function SectionHeading({ title, description }: { title: string; description?: string }) {
   return (
     <div className="mb-3">
-      <h3 className="text-sm font-medium text-foreground">{title}</h3>
-      {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+      <h3 className="text-sm font-semibold text-[var(--foreground)]">{title}</h3>
+      {description && <p className="text-xs text-[var(--muted)] mt-0.5">{description}</p>}
     </div>
+  );
+}
+
+/**
+ * Icon-only HeroUI button with a HeroUI tooltip. The tooltip opens on hover
+ * and on keyboard focus (a Radix tooltip around a HeroUI button only does hover).
+ */
+function IconAction({
+  label, tooltip, onPress, danger, className, children,
+}: {
+  label: string;
+  tooltip?: string;
+  onPress: () => void;
+  danger?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip delay={300}>
+      <Button
+        isIconOnly
+        size="sm"
+        variant="ghost"
+        aria-label={label}
+        onPress={onPress}
+        className={cn("text-[var(--muted)]", danger && "hover:text-[var(--danger)]", className)}
+      >
+        {children}
+      </Button>
+      <Tooltip.Content>{tooltip ?? label}</Tooltip.Content>
+    </Tooltip>
   );
 }
 
@@ -95,63 +93,48 @@ function SectionHeading({ title, description }: { title: string; description?: s
 
 const CURRENCIES = ["USD", "SDG", "EUR", "AED"];
 
-const CLASSIFICATIONS = [
-  { value: "emergency", label: "Emergency Response" },
-  { value: "recovery", label: "Recovery" },
-  { value: "development", label: "Development" },
-  { value: "nexus", label: "Humanitarian-Development Nexus" },
-];
+const CLASSIFICATIONS = ["emergency", "recovery", "development", "nexus"] as const;
 
-const ACTIVITY_STATUSES = [
-  { value: "planned", label: "Planned" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "completed", label: "Completed" },
-  { value: "on_hold", label: "On Hold" },
-];
+const ACTIVITY_STATUSES = ["planned", "in_progress", "completed", "on_hold"] as const;
 
 const PERSONNEL_ROLES = [
-  { value: "project_manager", label: "Project Manager" },
-  { value: "technical_coordinator", label: "Technical Coordinator" },
-  { value: "finance_focal_point", label: "Finance Focal Point" },
-  { value: "meal_focal_point", label: "MEAL Focal Point" },
-  { value: "state_focal_point", label: "State Focal Point" },
-];
+  "project_manager",
+  "technical_coordinator",
+  "finance_focal_point",
+  "meal_focal_point",
+  "state_focal_point",
+] as const;
 
-const INDICATOR_UNITS = [
-  "People Reached",
-  "Households Assisted",
-  "Facilities Supported",
-  "Communities Served",
-  "Trainings Conducted",
-  "Volunteers Trained",
-  "count",
-  "%",
-];
+/** Stored unit values (kept as-is for existing records) and their label keys. */
+const INDICATOR_UNITS: Record<string, string> = {
+  "People Reached": "people_reached",
+  "Households Assisted": "households_assisted",
+  "Facilities Supported": "facilities_supported",
+  "Communities Served": "communities_served",
+  "Trainings Conducted": "trainings_conducted",
+  "Volunteers Trained": "volunteers_trained",
+  "count": "count",
+  "%": "percent",
+};
 
-const DOC_AGREEMENT_KINDS = [
-  { value: "pca", label: "Programme Cooperation Agreement (PCA)" },
-  { value: "ip_agreement", label: "Implementing Partner Agreement" },
-  { value: "grant_agreement", label: "Grant Agreement" },
-  { value: "mou", label: "Memorandum of Understanding (MoU)" },
-  { value: "contract", label: "Contract" },
-  { value: "partnership_agreement", label: "Partnership Agreement" },
-];
+type TFn = (key: string, options?: Record<string, unknown>) => string;
 
-const DOC_BUDGET_KINDS = [
-  { value: "detailed_budget", label: "Detailed Budget" },
-  { value: "approved_budget", label: "Approved Budget" },
-  { value: "financial_annex", label: "Financial Annex" },
-];
+function indicatorUnitOptions(t: TFn, current?: string) {
+  const options = Object.entries(INDICATOR_UNITS).map(([value, key]) => ({ value, label: t(`form.options.indicatorUnit.${key}`), textValue: value }));
+  // Keep a unit that isn't in the list (older records) selectable as-is.
+  if (current && !(current in INDICATOR_UNITS)) options.push({ value: current, label: current, textValue: current });
+  return options;
+}
 
-const DOC_OPTIONAL_KINDS = [
-  { value: "proposal", label: "Project Proposal" },
-  { value: "logframe", label: "Logical Framework" },
-  { value: "workplan", label: "Work Plan" },
-  { value: "donor_communications", label: "Donor Communications" },
-  { value: "amendments", label: "Amendments" },
-  { value: "technical_annexes", label: "Technical Annexes" },
-  { value: "other", label: "Other" },
-];
+function personnelRoleLabel(t: TFn, role?: string) {
+  return role ? t(`form.options.personnelRole.${role}`, { defaultValue: role }) : "";
+}
+
+const DOC_AGREEMENT_KINDS = ["pca", "ip_agreement", "grant_agreement", "mou", "contract", "partnership_agreement"];
+
+const DOC_BUDGET_KINDS = ["detailed_budget", "approved_budget", "financial_annex"];
+
+const DOC_OPTIONAL_KINDS = ["proposal", "logframe", "workplan", "donor_communications", "amendments", "technical_annexes", "other"];
 
 const ACCEPTED_DOC_TYPES = ".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -326,6 +309,40 @@ const createSchema = schema.superRefine((data, ctx) => {
     });
   }
 });
+
+/** Schema messages (kept in English above) → projects:form.validation keys. */
+const VALIDATION_MESSAGE_KEYS: Record<string, string> = {
+  "Required": "required",
+  "State is required": "stateRequired",
+  "Locality is required": "localityRequired",
+  "At least one indicator is required": "indicatorRequired",
+  "At least one activity is required": "activityRequired",
+  "Required (min 3 chars)": "titleMin",
+  "Required — describe the project background, rationale, objectives and intended outcomes (min 50 characters)": "descriptionMin",
+  "Select at least one sector": "sectorRequired",
+  "Agreement Number is required": "agreementRequired",
+  "Reporting start date is required": "reportingStartRequired",
+  "Reporting end date is required": "reportingEndRequired",
+  "At least one output is required": "outputRequired",
+  "Select at least one Operational Location: tick HQ or one or more states.": "locationRequired",
+  "Reporting end date must be on or after reporting start date": "reportingCoverageOrder",
+  "End Date cannot be before Start Date": "endBeforeStart",
+  "Scheduled Reporting Frequency is required": "frequencyRequired",
+};
+
+/** FormMessage that shows the schema message in the active language. */
+function FieldMessage() {
+  const { t } = useTranslation("projects");
+  const { error, formMessageId } = useFormField();
+  const message = error?.message ? String(error.message) : "";
+  if (!message) return null;
+  const key = VALIDATION_MESSAGE_KEYS[message];
+  return (
+    <p id={formMessageId} className="text-xs font-medium text-[var(--danger)]">
+      {key ? t(`form.validation.${key}`, { defaultValue: message }) : message}
+    </p>
+  );
+}
 
 type FormValues = z.infer<typeof schema>;
 
@@ -582,7 +599,7 @@ function OutputSection({
 
   const indicatorOptions = (watchedIndicators ?? []).map((ind, i) => ({
     index: i,
-    label: ind.title || `Indicator ${i + 1}`,
+    label: ind.title || t("form.output.indicatorLabel", { outputNum: outputIndex + 1, indNum: i + 1 }),
   }));
 
   const toggleActivity = (id: string) => {
@@ -625,7 +642,7 @@ function OutputSection({
           type="button"
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
-          className="flex items-start gap-3 text-start flex-1 min-w-0 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          className="flex items-start gap-3 text-start flex-1 min-w-0 hover:text-[var(--accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] rounded-md"
         >
           {expanded
             ? <ChevronDown className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
@@ -641,21 +658,9 @@ function OutputSection({
           </div>
         </button>
         {canRemove && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 ms-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                onClick={onRemove}
-                aria-label={t("form.output.removeOutput")}
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t("form.output.removeOutput")}</TooltipContent>
-          </Tooltip>
+          <IconAction label={t("form.output.removeOutput")} onPress={onRemove} danger className="ms-2 shrink-0">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </IconAction>
         )}
       </div>
 
@@ -666,23 +671,23 @@ function OutputSection({
             <FormField control={form.control} name={`outputs.${outputIndex}.title`} render={({ field }) => (
               <FormItem>
                 <FormLabel>{t("form.output.outputTitle")} <span className="text-destructive">*</span></FormLabel>
-                <FormControl><Input {...field} placeholder={t("form.output.outputTitlePlaceholder")} /></FormControl>
-                <FormMessage />
+                <FormInput {...field} placeholder={t("form.output.outputTitlePlaceholder")} />
+                <FieldMessage />
               </FormItem>
             )} />
             <FormField control={form.control} name={`outputs.${outputIndex}.description`} render={({ field }) => (
               <FormItem>
                 <FormLabel>{t("form.output.description")}</FormLabel>
-                <FormControl><Textarea {...field} rows={2} placeholder={t("form.output.outputDescPlaceholder")} /></FormControl>
-                <FormMessage />
+                <FormTextArea {...field} rows={2} placeholder={t("form.output.outputDescPlaceholder")} />
+                <FieldMessage />
               </FormItem>
             )} />
             <div className="md:w-1/3">
               <FormField control={form.control} name={`outputs.${outputIndex}.target`} render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("form.output.outputTarget")}</FormLabel>
-                  <FormControl><Input type="number" min="0" {...field} value={field.value ?? ""} placeholder={t("form.output.outputTargetPlaceholder")} /></FormControl>
-                  <FormMessage />
+                  <FormInput type="number" min="0" {...field} value={field.value ?? ""} placeholder={t("form.output.outputTargetPlaceholder")} />
+                  <FieldMessage />
                 </FormItem>
               )} />
             </div>
@@ -693,16 +698,12 @@ function OutputSection({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <h4 className="text-sm font-semibold">{t("form.output.indicators")}</h4>
-                {indicatorCount > 0 && (
-                  <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{indicatorCount}</span>
-                )}
+                {indicatorCount > 0 && <Chip size="sm" variant="secondary">{indicatorCount}</Chip>}
               </div>
               <Button
-                type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5"
-                onClick={() => indicators.append({ title: "", unit: "People Reached", target: 0 })}
+                onPress={() => indicators.append({ title: "", unit: "People Reached", target: 0 })}
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" /> {t("form.buttons.addIndicator")}
               </Button>
@@ -720,55 +721,41 @@ function OutputSection({
                   <span className="text-xs font-medium text-muted-foreground">
                     {t("form.output.indicatorLabel", { outputNum: outputIndex + 1, indNum: ii + 1 })}
                   </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => indicators.remove(ii)}
-                        aria-label={t("form.output.removeIndicator")}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("form.output.removeIndicator")}</TooltipContent>
-                  </Tooltip>
+                  <IconAction label={t("form.output.removeIndicator")} onPress={() => indicators.remove(ii)} danger>
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </IconAction>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <FormField control={form.control} name={`outputs.${outputIndex}.indicators.${ii}.title`} render={({ field }) => (
                     <FormItem className="md:col-span-2">
                       <FormLabel>{t("form.output.indicatorName")} <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input {...field} placeholder={t("form.output.indicatorNamePlaceholder")} className="text-sm" /></FormControl>
-                      <FormMessage />
+                      <FormInput {...field} placeholder={t("form.output.indicatorNamePlaceholder")} className="text-sm" />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name={`outputs.${outputIndex}.indicators.${ii}.target`} render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("form.output.target")} <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input type="number" min="0" {...field} className="text-sm" /></FormControl>
-                      <FormMessage />
+                      <FormInput type="number" min="0" {...field} className="text-sm" />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name={`outputs.${outputIndex}.indicators.${ii}.unit`} render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("form.output.unit")} <span className="text-destructive">*</span></FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {INDICATOR_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
+                      <FormSelect
+                        label={t("form.output.unit")}
+                        isRequired
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        options={indicatorUnitOptions(t, field.value)}
+                      />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name={`outputs.${outputIndex}.indicators.${ii}.description`} render={({ field }) => (
                     <FormItem className="md:col-span-2">
                       <FormLabel>{t("form.output.description")}</FormLabel>
-                      <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder={t("form.output.indicatorDescPlaceholder")} className="text-sm" />
-                      </FormControl>
+                      <FormInput {...field} value={field.value ?? ""} placeholder={t("form.output.indicatorDescPlaceholder")} className="text-sm" />
                     </FormItem>
                   )} />
                 </div>
@@ -781,16 +768,12 @@ function OutputSection({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <h4 className="text-sm font-semibold">{t("form.output.activities")}</h4>
-                {activityCount > 0 && (
-                  <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{activityCount}</span>
-                )}
+                {activityCount > 0 && <Chip size="sm" variant="secondary">{activityCount}</Chip>}
               </div>
               <Button
-                type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5"
-                onClick={() => activities.append({
+                onPress={() => activities.append({
                   title: "",
                   budgetPlanned: 0,
                   plannedStart: "",
@@ -813,7 +796,7 @@ function OutputSection({
             {activities.fields.map((act, ai) => {
               const isCollapsed = collapsedActivities.has(act.id);
               const watchedAct = watchedActivities?.[ai];
-              const actStatusLabel = ACTIVITY_STATUSES.find(s => s.value === watchedAct?.status)?.label ?? "Planned";
+              const actStatusLabel = t(`activityStatus.${watchedAct?.status || "planned"}`);
               const linkedState = watchedAct?.stateId
                 ? states.find(s => s.id === Number(watchedAct.stateId))?.name
                 : null;
@@ -826,7 +809,7 @@ function OutputSection({
                       type="button"
                       onClick={() => toggleActivity(act.id)}
                       aria-expanded={!isCollapsed}
-                      className="flex items-start gap-3 text-start flex-1 min-w-0 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                      className="flex items-start gap-3 text-start flex-1 min-w-0 hover:text-[var(--accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] rounded-md"
                     >
                       {isCollapsed
                         ? <ChevronRight className="h-4 w-4 mt-0.5 shrink-0 rtl:rotate-180" aria-hidden="true" />
@@ -848,25 +831,15 @@ function OutputSection({
                     </button>
                     <div className="flex items-center gap-1 shrink-0 ms-2">
                       {!isCollapsed && watchedAct?.status && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                          {actStatusLabel}
-                        </span>
+                        <Chip size="sm" variant="secondary">{actStatusLabel}</Chip>
                       )}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => requestRemoveActivity(ai, { id: act.id, budgetSpent: watchedAct?.budgetSpent, title: watchedAct?.title })}
-                            aria-label={t("form.output.removeActivity")}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{t("form.output.removeActivity")}</TooltipContent>
-                      </Tooltip>
+                      <IconAction
+                        label={t("form.output.removeActivity")}
+                        danger
+                        onPress={() => requestRemoveActivity(ai, { id: act.id, budgetSpent: watchedAct?.budgetSpent, title: watchedAct?.title })}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </IconAction>
                     </div>
                   </div>
 
@@ -874,12 +847,12 @@ function OutputSection({
                     <div className="px-4 pb-4 space-y-4 border-t pt-4">
                       {/* #487: Read-only recorded expenditure — shown in edit mode for existing activities with spend */}
                       {editMode && watchedAct?.id && (watchedAct.budgetSpent ?? 0) > 0 && (
-                        <div className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200" aria-live="polite">
-                          <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <div className="flex items-center gap-1.5 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-3 py-2 text-xs text-[var(--warning-foreground,var(--foreground))]" aria-live="polite">
+                          <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[var(--warning)]" aria-hidden="true" />
                           <span>
-                            <span className="font-medium">Recorded Expenditure:</span>{" "}
-                            {new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(watchedAct.budgetSpent ?? 0)} {currency}
-                            {" "}<span className="text-amber-700 dark:text-amber-300">(read-only — cannot be edited here)</span>
+                            <span className="font-medium">{t("form.output.recordedExpenditure")}</span>{" "}
+                            <bdi dir="ltr">{new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(watchedAct.budgetSpent ?? 0)} {currency}</bdi>
+                            {" "}<span className="text-[var(--muted)]">{t("form.output.recordedExpenditureReadOnly")}</span>
                           </span>
                         </div>
                       )}
@@ -889,44 +862,33 @@ function OutputSection({
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.title`} render={({ field }) => (
                           <FormItem>
                             <FormLabel>{t("form.output.activityName")} <span className="text-destructive">*</span></FormLabel>
-                            <FormControl><Input {...field} placeholder={t("form.output.activityNamePlaceholder")} className="text-sm" /></FormControl>
-                            <FormMessage />
+                            <FormInput {...field} placeholder={t("form.output.activityNamePlaceholder")} className="text-sm" />
+                            <FieldMessage />
                           </FormItem>
                         )} />
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.indicatorIndex`} render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{t("form.output.linkedIndicator")}</FormLabel>
-                            <Select
-                              value={field.value !== undefined ? String(field.value) : "__none__"}
-                              onValueChange={(v) => field.onChange(v === "__none__" ? undefined : Number(v))}
-                              disabled={indicatorOptions.length === 0}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="text-sm">
-                                  <SelectValue placeholder={indicatorOptions.length === 0 ? t("form.output.noIndicatorsAvailable") : t("form.output.selectIndicator")} />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="__none__">{t("form.output.noIndicatorOption")}</SelectItem>
-                                {indicatorOptions.map(opt => (
-                                  <SelectItem key={opt.index} value={String(opt.index)}>
-                                    <span className="truncate">{opt.label}</span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <FormSelect
+                              label={t("form.output.linkedIndicator")}
+                              value={indicatorOptions.length === 0 ? "" : field.value !== undefined ? String(field.value) : "__none__"}
+                              onChange={(v) => field.onChange(v === "__none__" || v === "" ? undefined : Number(v))}
+                              isDisabled={indicatorOptions.length === 0}
+                              placeholder={indicatorOptions.length === 0 ? t("form.output.noIndicatorsAvailable") : t("form.output.selectIndicator")}
+                              options={[
+                                { value: "__none__", label: t("form.output.noIndicatorOption") },
+                                ...indicatorOptions.map(opt => ({ value: String(opt.index), label: opt.label })),
+                              ]}
+                            />
                             {indicatorOptions.length === 0 && (
                               <p className="text-xs text-muted-foreground mt-1">{t("form.output.addIndicatorHint")}</p>
                             )}
-                            <FormMessage />
+                            <FieldMessage />
                           </FormItem>
                         )} />
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.description`} render={({ field }) => (
                           <FormItem className="md:col-span-2">
                             <FormLabel>{t("form.output.activityDesc")}</FormLabel>
-                            <FormControl>
-                              <Textarea {...field} value={field.value ?? ""} rows={2} placeholder={t("form.output.activityDescPlaceholder")} className="text-sm" />
-                            </FormControl>
+                            <FormTextArea {...field} value={field.value ?? ""} rows={2} placeholder={t("form.output.activityDescPlaceholder")} className="text-sm" />
                           </FormItem>
                         )} />
                       </div>
@@ -935,36 +897,28 @@ function OutputSection({
                       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.plannedStart`} render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{t("form.output.activityStart")} <span className="text-destructive">*</span></FormLabel>
-                            <FormControl>
-                              <Input type="date" min={projectStart || undefined} max={projectEnd || undefined} {...field} className="text-sm" />
-                            </FormControl>
-                            <FormMessage />
+                            <FormDate label={t("form.output.activityStart")} isRequired value={field.value} onChange={field.onChange} min={projectStart || undefined} max={projectEnd || undefined} />
+                            <FieldMessage />
                           </FormItem>
                         )} />
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.plannedEnd`} render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{t("form.output.activityEnd")} <span className="text-destructive">*</span></FormLabel>
-                            <FormControl>
-                              <Input type="date" min={projectStart || undefined} max={projectEnd || undefined} {...field} className="text-sm" />
-                            </FormControl>
-                            <FormMessage />
+                            <FormDate label={t("form.output.activityEnd")} isRequired value={field.value} onChange={field.onChange} min={projectStart || undefined} max={projectEnd || undefined} />
+                            <FieldMessage />
                           </FormItem>
                         )} />
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.budgetPlanned`} render={({ field }) => (
                           <FormItem>
                             <FormLabel>{t("form.output.activityBudget")} <span className="text-destructive">*</span></FormLabel>
-                            <FormControl><Input type="number" min="0" step="0.01" {...field} className="text-sm" /></FormControl>
-                            <FormMessage />
+                            <FormInput type="number" min="0" step="0.01" {...field} className="text-sm" />
+                            <FieldMessage />
                           </FormItem>
                         )} />
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.target`} render={({ field }) => (
                           <FormItem>
                             <FormLabel>{t("form.output.activityTarget")}</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? ""} placeholder="0" className="text-sm" />
-                            </FormControl>
-                            <FormMessage />
+                            <FormInput type="number" min="0" {...field} value={field.value ?? ""} placeholder="0" className="text-sm" />
+                            <FieldMessage />
                           </FormItem>
                         )} />
                       </div>
@@ -973,13 +927,12 @@ function OutputSection({
                       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.status`} render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{t("form.output.activityStatus")}</FormLabel>
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <FormControl><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                {ACTIVITY_STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
+                            <FormSelect
+                              label={t("form.output.activityStatus")}
+                              value={field.value ?? ""}
+                              onChange={field.onChange}
+                              options={ACTIVITY_STATUSES.map(s => ({ value: s, label: t(`activityStatus.${s}`) }))}
+                            />
                           </FormItem>
                         )} />
                         <FormField control={form.control} name={`outputs.${outputIndex}.activities.${ai}.stateId`} render={({ field }) => {
@@ -989,17 +942,18 @@ function OutputSection({
                             : states;
                           return (
                             <FormItem>
-                              <FormLabel>{t("form.output.state")} <span className="text-destructive">*</span></FormLabel>
-                              <Select value={current} onValueChange={(v) => field.onChange(v === "__none__" ? undefined : Number(v))}>
-                                <FormControl>
-                                  <SelectTrigger className="text-sm"><SelectValue placeholder={t("form.output.selectState")} /></SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="__none__">{t("form.output.selectStateNone")}</SelectItem>
-                                  {opts.map(s => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
+                              <FormSelect
+                                label={t("form.output.state")}
+                                isRequired
+                                value={current}
+                                onChange={(v) => field.onChange(v === "__none__" || v === "" ? undefined : Number(v))}
+                                placeholder={t("form.output.selectState")}
+                                options={[
+                                  { value: "__none__", label: t("form.output.selectStateNone") },
+                                  ...opts.map(s => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name })),
+                                ]}
+                              />
+                              <FieldMessage />
                             </FormItem>
                           );
                         }} />
@@ -1008,23 +962,19 @@ function OutputSection({
                           const hasState = selectedStateId && Number(selectedStateId) > 0;
                           return (
                             <FormItem>
-                              <FormLabel>{t("form.output.locality")} <span className="text-destructive">*</span></FormLabel>
-                              <Select
-                                value={field.value ?? "__none__"}
-                                onValueChange={(v) => field.onChange(v === "__none__" ? undefined : v)}
-                                disabled={!hasState}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="text-sm">
-                                    <SelectValue placeholder={!hasState ? t("form.output.selectStateFirst") : freeLocalities.length ? t("form.output.selectLocality") : t("form.output.addLocalitiesFirst")} />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="__none__">{t("form.output.selectLocalityNone")}</SelectItem>
-                                  {freeLocalities.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
+                              <FormSelect
+                                label={t("form.output.locality")}
+                                isRequired
+                                value={!hasState ? "" : field.value ?? "__none__"}
+                                onChange={(v) => field.onChange(v === "__none__" || v === "" ? undefined : v)}
+                                isDisabled={!hasState}
+                                placeholder={!hasState ? t("form.output.selectStateFirst") : freeLocalities.length ? t("form.output.selectLocality") : t("form.output.addLocalitiesFirst")}
+                                options={[
+                                  { value: "__none__", label: t("form.output.selectLocalityNone") },
+                                  ...freeLocalities.map((loc) => ({ value: loc, label: loc })),
+                                ]}
+                              />
+                              <FieldMessage />
                             </FormItem>
                           );
                         }} />
@@ -1039,41 +989,37 @@ function OutputSection({
       )}
 
       {/* #487: Financed-activity removal confirmation dialog */}
-      <AlertDialog
-        open={!!pendingRemoveActivity}
-        onOpenChange={(open) => { if (!open) setPendingRemoveActivity(null); }}
-      >
-        <AlertDialogContent
-          aria-labelledby="remove-activity-dialog-title"
-          aria-describedby="remove-activity-dialog-desc"
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle id="remove-activity-dialog-title" className="flex items-center gap-2">
-              <TriangleAlert className="h-5 w-5 text-destructive shrink-0" aria-hidden="true" />
-              Remove Activity With Recorded Expenditure?
-            </AlertDialogTitle>
-            <AlertDialogDescription id="remove-activity-dialog-desc">
-              This activity has recorded expenditure. Removing it from the Project will also remove its stored activity record. Review the expenditure before continuing.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel autoFocus onClick={() => setPendingRemoveActivity(null)}>
-              Keep Activity
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (pendingRemoveActivity) {
-                  doRemoveActivity(pendingRemoveActivity.ai, pendingRemoveActivity.id);
-                  setPendingRemoveActivity(null);
-                }
-              }}
-            >
-              Remove Activity
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Modal isOpen={!!pendingRemoveActivity} onOpenChange={(open) => { if (!open) setPendingRemoveActivity(null); }}>
+        <Modal.Backdrop>
+          <Modal.Container size="sm">
+            <Modal.Dialog role="alertdialog" aria-labelledby="remove-activity-dialog-title" aria-describedby="remove-activity-dialog-desc">
+              <Modal.Header>
+                <Modal.Icon className="bg-[var(--danger)]/10 text-[var(--danger)]">
+                  <TriangleAlert className="size-5" aria-hidden="true" />
+                </Modal.Icon>
+                <Modal.Heading id="remove-activity-dialog-title">{t("form.output.removeFinancedTitle")}</Modal.Heading>
+                <p id="remove-activity-dialog-desc" className="text-sm text-[var(--muted)]">{t("form.output.removeFinancedDescription")}</p>
+              </Modal.Header>
+              <Modal.Footer>
+                <Button variant="secondary" autoFocus onPress={() => setPendingRemoveActivity(null)}>
+                  {t("form.output.keepActivity")}
+                </Button>
+                <Button
+                  variant="danger"
+                  onPress={() => {
+                    if (pendingRemoveActivity) {
+                      doRemoveActivity(pendingRemoveActivity.ai, pendingRemoveActivity.id);
+                      setPendingRemoveActivity(null);
+                    }
+                  }}
+                >
+                  {t("form.output.removeActivityConfirm")}
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </div>
   );
 }
@@ -1082,7 +1028,8 @@ function OutputSection({
 
 interface DocUploadSlotProps {
   category: "agreement" | "budget" | "optional";
-  kinds: Array<{ value: string; label: string }>;
+  /** Document kind codes offered for this category (labels come from projects:documentKinds). */
+  kinds: readonly string[];
   form: ReturnType<typeof useForm<FormValues>>;
   /** PRJ-BD-04 lifecycle gate for this project. */
   docGate: "mutable" | "operational" | "frozen";
@@ -1098,7 +1045,8 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [selectedKind, setSelectedKind] = useState(kinds[0]?.value ?? "other");
+  const [selectedKind, setSelectedKind] = useState(kinds[0] ?? "other");
+  const docKindLabel = (kind: string) => t(`documentKinds.${kind}`, { defaultValue: kind });
   // Override delete dialog state (operational projects, PM/SA only)
   const [overrideDeleteDialog, setOverrideDeleteDialog] = useState<{ docId: number; fileName: string; objectPath: string } | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
@@ -1157,7 +1105,7 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
     if (!overrideDeleteDialog || !projectId) return;
     const reason = overrideReason.trim();
     if (!reason) {
-      setOverrideReasonError("An override reason is required.");
+      setOverrideReasonError(t("detail.docs.overrideReasonRequired"));
       return;
     }
     setIsOverrideDeleting(true);
@@ -1171,14 +1119,14 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { message?: string };
-        setOverrideReasonError(data.message ?? "Delete failed. Please try again.");
+        setOverrideReasonError(data.message ?? t("detail.docs.overrideDeleteFailed"));
         return;
       }
       removeDoc(overrideDeleteDialog.objectPath);
-      toast({ title: "Document deleted", description: `"${overrideDeleteDialog.fileName}" has been removed from the project.` });
+      toast({ title: t("detail.docs.overrideDeleted"), description: overrideDeleteDialog.fileName });
       closeOverrideDialog();
     } catch {
-      setOverrideReasonError("An unexpected error occurred. Please try again.");
+      setOverrideReasonError(t("detail.docs.overrideDeleteFailed"));
     } finally {
       setIsOverrideDeleting(false);
     }
@@ -1189,49 +1137,38 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
       {categoryDocs.length > 0 && (
         <div className="space-y-1">
           {categoryDocs.map((doc) => (
-            <div key={doc.id ?? doc.fileName} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm">
-              <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="flex-1 truncate">{doc.fileName}</span>
-              <span className="text-xs text-muted-foreground">
-                {kinds.find(k => k.value === doc.kind)?.label ?? doc.kind}
-              </span>
+            <div key={doc.id ?? doc.fileName} className="flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] p-2 text-sm">
+              <FileText className="h-3.5 w-3.5 text-[var(--muted)] shrink-0" aria-hidden="true" />
+              <span className="flex-1 min-w-0 break-words" dir="auto">{doc.fileName}</span>
+              <span className="text-xs text-[var(--muted)]">{docKindLabel(doc.kind)}</span>
               {/* Delete button — gated by lifecycle status */}
               {docGate === "mutable" && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => removeDoc(doc.objectPath)}
-                  aria-label={`Remove ${doc.fileName}`}
+                <IconAction
+                  label={t("detail.docs.deleteAria", { name: doc.fileName })}
+                  onPress={() => removeDoc(doc.objectPath)}
                 >
-                  <X className="h-3 w-3" aria-hidden="true" />
-                </Button>
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </IconAction>
               )}
               {docGate === "operational" && isOverrideActor && doc.id !== undefined && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 text-amber-600 hover:text-amber-700"
-                      onClick={() => openOverrideDialog(doc.id!, doc.fileName, doc.objectPath)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Delete document (override required — will be audited)</TooltipContent>
-                </Tooltip>
+                <IconAction
+                  label={t("detail.docs.deleteOverrideAria", { name: doc.fileName })}
+                  tooltip={t("detail.docs.overrideTooltip")}
+                  className="text-[var(--warning)]"
+                  onPress={() => openOverrideDialog(doc.id!, doc.fileName, doc.objectPath)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                </IconAction>
               )}
               {docGate === "operational" && !isOverrideActor && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex h-6 w-6 items-center justify-center text-muted-foreground cursor-default">
-                      <Lock className="h-3 w-3" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>Documents cannot be deleted after project approval.</TooltipContent>
+                <Tooltip delay={300}>
+                  <Tooltip.Trigger
+                    aria-label={t("detail.docs.lockedTooltip")}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted)]"
+                  >
+                    <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Tooltip.Trigger>
+                  <Tooltip.Content>{t("detail.docs.lockedTooltip")}</Tooltip.Content>
                 </Tooltip>
               )}
               {/* docGate === "frozen": no delete or lock icon — fully read-only */}
@@ -1239,15 +1176,15 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
           ))}
         </div>
       )}
-      <div className="flex gap-2">
-        <Select value={selectedKind} onValueChange={setSelectedKind}>
-          <SelectTrigger className="text-sm h-8 flex-1">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {kinds.map(k => <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap gap-2">
+        <SelectField
+          aria-label={t("form.documents.kindLabel")}
+          value={selectedKind}
+          onChange={setSelectedKind}
+          options={kinds.map(k => ({ value: k, label: docKindLabel(k) }))}
+          className="min-w-0 flex-1"
+          triggerClassName="h-9"
+        />
         {/* Upload button — hidden for frozen projects */}
         {docGate !== "frozen" ? (
           <>
@@ -1260,79 +1197,67 @@ export function DocUploadSlot({ category, kinds, form, docGate, userRole, projec
               disabled={uploading}
             />
             <Button
-              type="button"
               variant="outline"
               size="sm"
-              isLoading={uploading}
-              onClick={() => fileInputRef.current?.click()}
+              className="h-9"
+              isPending={uploading}
+              onPress={() => fileInputRef.current?.click()}
             >
-              {!uploading && <Upload className="h-3.5 w-3.5" />}
+              {uploading ? <Spinner size="sm" color="current" /> : <Upload className="h-3.5 w-3.5" aria-hidden="true" />}
               {uploading ? t("form.buttons.uploading") : t("form.buttons.upload")}
             </Button>
           </>
         ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button type="button" variant="outline" size="sm" disabled>
-                  <Lock className="h-3.5 w-3.5" />
-                  Locked
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Document uploads are not permitted for closed projects.</TooltipContent>
+          <Tooltip delay={300}>
+            <Tooltip.Trigger className="inline-flex">
+              <Button variant="outline" size="sm" className="h-9" isDisabled>
+                <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("form.documents.locked")}
+              </Button>
+            </Tooltip.Trigger>
+            <Tooltip.Content>{t("form.documents.closedUploadTooltip")}</Tooltip.Content>
           </Tooltip>
         )}
       </div>
       {uploadError && (
-        <p className="text-xs text-destructive mt-1">{uploadError}</p>
+        <p className="text-xs text-[var(--danger)] mt-1" role="alert">{uploadError}</p>
       )}
 
       {/* Override delete dialog — operational projects, PM/SA only */}
-      {overrideDeleteDialog && (
-        <Dialog open={!!overrideDeleteDialog} onOpenChange={(open) => { if (!open) closeOverrideDialog(); }}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Approved Project Document?</DialogTitle>
-              <DialogDescription>
-                This project has already been approved. Deleting an existing document requires an exceptional override and will be recorded in the audit history.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2 py-1">
-              <p className="text-sm font-medium">
-                Override Reason <span className="text-destructive">*</span>
-              </p>
-              <Textarea
-                value={overrideReason}
-                onChange={(e) => {
-                  setOverrideReason(e.target.value);
-                  if (overrideReasonError) setOverrideReasonError("");
-                }}
-                placeholder={t("form.documents.overrideReasonPlaceholder")}
-                rows={3}
-                className="text-sm"
-              />
-              {overrideReasonError && (
-                <p className="text-xs text-destructive">{overrideReasonError}</p>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeOverrideDialog} disabled={isOverrideDeleting}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleOverrideDelete}
-                disabled={isOverrideDeleting}
-              >
-                {isOverrideDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
-                Delete Document
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      <Modal isOpen={!!overrideDeleteDialog} onOpenChange={(open) => { if (!open) closeOverrideDialog(); }}>
+        <Modal.Backdrop>
+          <Modal.Container size="md">
+            <Modal.Dialog>
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{t("detail.docs.overrideTitle")}</Modal.Heading>
+                <p className="text-sm text-[var(--muted)]">{t("detail.docs.overrideDescription")}</p>
+              </Modal.Header>
+              <Modal.Body>
+                <TextField
+                  value={overrideReason}
+                  onChange={(v) => { setOverrideReason(v); if (overrideReasonError) setOverrideReasonError(""); }}
+                  isInvalid={!!overrideReasonError}
+                  fullWidth
+                >
+                  <Label>{t("detail.docs.overrideReasonLabel")}</Label>
+                  <TextArea rows={3} placeholder={t("form.documents.overrideReasonPlaceholder")} />
+                  {overrideReasonError && <p className="text-sm text-[var(--danger)]" role="alert">{overrideReasonError}</p>}
+                </TextField>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onPress={closeOverrideDialog} isDisabled={isOverrideDeleting}>
+                  {t("form.buttons.cancel")}
+                </Button>
+                <Button variant="danger" onPress={handleOverrideDelete} isPending={isOverrideDeleting}>
+                  {isOverrideDeleting && <Spinner size="sm" color="current" />}
+                  {isOverrideDeleting ? t("detail.docs.deleting") : t("detail.docs.deleteDocument")}
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </div>
   );
 }
@@ -1368,133 +1293,132 @@ function DuplicateDetectionModal({
   const addedSectors = newSectors.filter(s => !existingSectors.includes(s));
   const addedLocalities = newLocalities.filter(l => !existing.localities.includes(l));
 
+  const chips = (items: string[], added: string[]) => (
+    <div className="flex flex-wrap gap-1">
+      {items.map(n => (
+        <Chip key={n} size="sm" variant="soft" color={added.includes(n) ? "success" : "default"}>
+          {n}{added.includes(n) ? t("form.duplicate.newBadge") : t("form.duplicate.existsBadge")}
+        </Chip>
+      ))}
+    </div>
+  );
+
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
-            {t("form.duplicate.title")}
-          </DialogTitle>
-          <DialogDescription>
-            {t("form.duplicate.description")}
-          </DialogDescription>
-        </DialogHeader>
+    <Modal isOpen={open} onOpenChange={(v) => !v && onClose()}>
+      <Modal.Backdrop>
+        <Modal.Container size="lg" scroll="inside">
+          <Modal.Dialog className="sm:max-w-2xl">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-[var(--warning)] shrink-0" aria-hidden="true" />
+                {t("form.duplicate.title")}
+              </Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("form.duplicate.description")}</p>
+            </Modal.Header>
+            <Modal.Body className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-3 space-y-2">
+                  <p className="font-semibold text-xs text-[var(--muted)]">{t("form.duplicate.existingProject")}</p>
+                  <div><span className="text-[var(--muted)]">{t("form.duplicate.code")} </span><code className="font-mono text-xs"><bdi dir="ltr">{existing.code}</bdi></code></div>
+                  <div><span className="text-[var(--muted)]">{t("form.duplicate.title_field")} </span><span className="font-medium" dir="auto">{existing.title}</span></div>
+                  <div><span className="text-[var(--muted)]">{t("form.duplicate.agreement")} </span><bdi dir="ltr">{existing.agreementNumber ?? "—"}</bdi></div>
+                  <div><span className="text-[var(--muted)]">{t("form.duplicate.donor")} </span>{existing.donor}</div>
+                  <div>
+                    <p className="text-[var(--muted)] mb-1">{t("form.duplicate.states")}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {existing.stateNames.length > 0
+                        ? existing.stateNames.map(n => <Chip key={n} size="sm" variant="secondary">{n}</Chip>)
+                        : <span className="italic text-[var(--muted)]">{t("form.duplicate.none")}</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[var(--muted)] mb-1">{t("form.duplicate.sectors")}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {existingSectors.length > 0
+                        ? existingSectors.map(s => <Chip key={s} size="sm" variant="secondary">{s}</Chip>)
+                        : <span className="italic text-[var(--muted)]">{t("form.duplicate.none")}</span>}
+                    </div>
+                  </div>
+                  {existing.localities.length > 0 && (
+                    <div><span className="text-[var(--muted)]">{t("form.duplicate.localities")} </span><span className="text-xs">{existing.localities.slice(0, 5).join(t("listSeparator", { defaultValue: ", " }))}{existing.localities.length > 5 ? ` ${t("form.duplicate.moreLocalities", { count: existing.localities.length - 5 })}` : ""}</span></div>
+                  )}
+                </div>
 
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-            <p className="font-semibold text-xs text-muted-foreground">{t("form.duplicate.existingProject")}</p>
-            <div><span className="text-muted-foreground">{t("form.duplicate.code")} </span><code className="font-mono text-xs"><bdi dir="ltr">{existing.code}</bdi></code></div>
-            <div><span className="text-muted-foreground">{t("form.duplicate.title_field")} </span><span className="font-medium">{existing.title}</span></div>
-            <div><span className="text-muted-foreground">{t("form.duplicate.agreement")} </span>{existing.agreementNumber ?? "—"}</div>
-            <div><span className="text-muted-foreground">{t("form.duplicate.donor")} </span>{existing.donor}</div>
-            <div>
-              <p className="text-muted-foreground mb-1">{t("form.duplicate.states")}</p>
-              <div className="flex flex-wrap gap-1">
-                {existing.stateNames.length > 0
-                  ? existing.stateNames.map(n => <Badge key={n} variant="outline" className="text-xs">{n}</Badge>)
-                  : <span className="italic text-muted-foreground">{t("form.duplicate.none")}</span>}
-              </div>
-            </div>
-            <div>
-              <p className="text-muted-foreground mb-1">{t("form.duplicate.sectors")}</p>
-              <div className="flex flex-wrap gap-1">
-                {existingSectors.length > 0
-                  ? existingSectors.map(s => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>)
-                  : <span className="italic text-muted-foreground">{t("form.duplicate.none")}</span>}
-              </div>
-            </div>
-            {existing.localities.length > 0 && (
-              <div><span className="text-muted-foreground">{t("form.duplicate.localities")} </span><span className="text-xs">{existing.localities.slice(0, 5).join(", ")}{existing.localities.length > 5 ? ` ${t("form.duplicate.moreLocalities", { count: existing.localities.length - 5 })}` : ""}</span></div>
-            )}
-          </div>
-
-          <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
-            <p className="font-semibold text-xs text-muted-foreground">{t("form.duplicate.newEntry")}</p>
-            <div>
-              <p className="text-muted-foreground mb-1">{t("form.duplicate.states")}</p>
-              <div className="flex flex-wrap gap-1">
-                {newStateNames.length > 0
-                  ? newStateNames.map(n => (
-                    <Badge key={n} className={`text-xs border ${addedStates.includes(n) ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100" : "bg-muted text-muted-foreground hover:bg-muted"}`}>
-                      {n}{addedStates.includes(n) ? t("form.duplicate.newBadge") : t("form.duplicate.existsBadge")}
-                    </Badge>
-                  ))
-                  : <span className="italic text-muted-foreground">{t("form.duplicate.noneSelected")}</span>}
-              </div>
-            </div>
-            <div>
-              <p className="text-muted-foreground mb-1">{t("form.duplicate.sectors")}</p>
-              <div className="flex flex-wrap gap-1">
-                {newSectors.length > 0
-                  ? newSectors.map(s => (
-                    <Badge key={s} className={`text-xs border ${addedSectors.includes(s) ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100" : "bg-muted text-muted-foreground hover:bg-muted"}`}>
-                      {s}{addedSectors.includes(s) ? t("form.duplicate.newBadge") : t("form.duplicate.existsBadge")}
-                    </Badge>
-                  ))
-                  : <span className="italic text-muted-foreground">{t("form.duplicate.noneSelected")}</span>}
-              </div>
-            </div>
-            {newLocalities.length > 0 && (
-              <div>
-                <p className="text-muted-foreground mb-1">{t("form.duplicate.localities")}</p>
-                <div className="flex flex-wrap gap-1">
-                  {newLocalities.map(l => (
-                    <Badge key={l} className={`text-xs border ${addedLocalities.includes(l) ? "bg-green-100 text-green-800 border-green-300 hover:bg-green-100" : "bg-muted text-muted-foreground hover:bg-muted"}`}>
-                      {l}{addedLocalities.includes(l) ? t("form.duplicate.newBadge") : t("form.duplicate.existsBadge")}
-                    </Badge>
-                  ))}
+                <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-3 space-y-2">
+                  <p className="font-semibold text-xs text-[var(--muted)]">{t("form.duplicate.newEntry")}</p>
+                  <div>
+                    <p className="text-[var(--muted)] mb-1">{t("form.duplicate.states")}</p>
+                    {newStateNames.length > 0
+                      ? chips(newStateNames, addedStates)
+                      : <span className="italic text-[var(--muted)]">{t("form.duplicate.noneSelected")}</span>}
+                  </div>
+                  <div>
+                    <p className="text-[var(--muted)] mb-1">{t("form.duplicate.sectors")}</p>
+                    {newSectors.length > 0
+                      ? chips(newSectors, addedSectors)
+                      : <span className="italic text-[var(--muted)]">{t("form.duplicate.noneSelected")}</span>}
+                  </div>
+                  {newLocalities.length > 0 && (
+                    <div>
+                      <p className="text-[var(--muted)] mb-1">{t("form.duplicate.localities")}</p>
+                      {chips(newLocalities, addedLocalities)}
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        <div className="space-y-2 pt-1">
-          {canMerge ? (
-            <>
-              {addedStates.length === 0 && addedSectors.length === 0 && addedLocalities.length === 0 && (
-                <p className="text-sm text-center text-muted-foreground py-2">{t("form.duplicate.nothingToMerge")}</p>
-              )}
-              {addedStates.length > 0 && (
-                <Button className="w-full" disabled={isMerging} onClick={() => onMerge("states")}>
-                  {isMerging ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitMerge className="h-4 w-4" />}
-                  {t("form.buttons.addStates", { states: addedStates.join(", ") })}
+              <div className="space-y-2">
+                {canMerge ? (
+                  <>
+                    {addedStates.length === 0 && addedSectors.length === 0 && addedLocalities.length === 0 && (
+                      <p className="text-sm text-center text-[var(--muted)] py-2">{t("form.duplicate.nothingToMerge")}</p>
+                    )}
+                    {addedStates.length > 0 && (
+                      <Button fullWidth isPending={isMerging} onPress={() => onMerge("states")}>
+                        {isMerging ? <Spinner size="sm" color="current" /> : <GitMerge className="h-4 w-4" aria-hidden="true" />}
+                        {t("form.buttons.addStates", { states: addedStates.join(", ") })}
+                      </Button>
+                    )}
+                    {addedSectors.length > 0 && (
+                      <Button fullWidth isPending={isMerging} onPress={() => onMerge("sectors")}>
+                        {isMerging ? <Spinner size="sm" color="current" /> : <GitMerge className="h-4 w-4" aria-hidden="true" />}
+                        {t("form.buttons.addSectors", { sectors: addedSectors.join(", ") })}
+                      </Button>
+                    )}
+                    {addedStates.length > 0 && addedSectors.length > 0 && (
+                      <Button fullWidth variant="secondary" isPending={isMerging} onPress={() => onMerge("both")}>
+                        {isMerging ? <Spinner size="sm" color="current" /> : <GitMerge className="h-4 w-4" aria-hidden="true" />}
+                        {t("form.buttons.addBoth")}
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Alert status="warning">
+                    <Alert.Indicator />
+                    <Alert.Content>
+                      <Alert.Description>{t("form.duplicate.noMergePermission")}</Alert.Description>
+                    </Alert.Content>
+                  </Alert>
+                )}
+                <Button fullWidth variant="outline" onPress={onOpenExisting}>
+                  {t("form.buttons.openExisting")}
                 </Button>
-              )}
-              {addedSectors.length > 0 && (
-                <Button className="w-full" disabled={isMerging} onClick={() => onMerge("sectors")}>
-                  {isMerging ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitMerge className="h-4 w-4" />}
-                  {t("form.buttons.addSectors", { sectors: addedSectors.join(", ") })}
-                </Button>
-              )}
-              {addedStates.length > 0 && addedSectors.length > 0 && (
-                <Button className="w-full" variant="secondary" disabled={isMerging} onClick={() => onMerge("both")}>
-                  {isMerging ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitMerge className="h-4 w-4" />}
-                  {t("form.buttons.addBoth")}
-                </Button>
-              )}
-            </>
-          ) : (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              {t("form.duplicate.noMergePermission")}
-            </div>
-          )}
-          <Button className="w-full" variant="outline" onClick={onOpenExisting}>
-            {t("form.buttons.openExisting")}
-          </Button>
-          {canCreateAnyway ? (
-            <Button className="w-full" variant="destructive" onClick={onCreateAnyway}>
-              {t("form.buttons.createAnyway")}
-            </Button>
-          ) : (
-            <p className="text-xs text-muted-foreground text-center pt-1">
-              {t("form.duplicate.noDuplicatePermission")}
-            </p>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+                {canCreateAnyway ? (
+                  <Button fullWidth variant="danger-soft" onPress={onCreateAnyway}>
+                    {t("form.buttons.createAnyway")}
+                  </Button>
+                ) : (
+                  <p className="text-xs text-[var(--muted)] text-center pt-1">
+                    {t("form.duplicate.noDuplicatePermission")}
+                  </p>
+                )}
+              </div>
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -1517,8 +1441,9 @@ interface Props {
 }
 
 export function ProjectRegistrationForm({ open = true, onClose, editProjectId, duplicateFromProjectId }: Props) {
-  const { t } = useTranslation("projects");
+  const { t, i18n } = useTranslation("projects");
   const { t: commonT } = useTranslation("common");
+  const { t: tUsers } = useTranslation("users");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -1696,6 +1621,11 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
   const previousImplementationDates = useRef({ start: projectStart, end: projectEnd });
   useEffect(() => {
     const previous = previousImplementationDates.current;
+    // Only mirror real changes to the implementation period. Running this on
+    // mount validated the still-empty reporting dates, and that async result
+    // could land after edit data loaded — leaving a stale "required" error on
+    // fields that were filled in.
+    if (projectStart === previous.start && projectEnd === previous.end) return;
     const reportingStart = form.getValues("reportingStartDate");
     const reportingEnd = form.getValues("reportingEndDate");
     if (
@@ -1792,6 +1722,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
     isInitialisingRef.current = true;
     reportingCoverageCustomisedRef.current =
       mapped.reportingStartDate !== mapped.startDate || mapped.reportingEndDate !== mapped.endDate;
+    // The loaded period is the baseline, not a user change to mirror.
+    previousImplementationDates.current = { start: mapped.startDate, end: mapped.endDate };
     form.reset(mapped);
     editLoadedRef.current = true;
     const t = setTimeout(() => { isInitialisingRef.current = false; }, 1000);
@@ -1834,6 +1766,10 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
 
   // ── Tab navigation ─────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>("basic");
+  // On narrow screens the step bar scrolls; keep the current step in view.
+  useEffect(() => {
+    document.getElementById(`prj-tab-${activeTab}`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeTab]);
   const activeTabIndex = TABS.findIndex(t => t.id === activeTab);
   const goToNextTab = () => {
     if (activeTab === "timeline") {
@@ -1860,10 +1796,10 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
       <div aria-busy="true" aria-label={t("form.loadingAriaLabel")}>
         <span className="sr-only">{t("form.loadingAriaLabel")}</span>
         {/* Tab nav skeleton */}
-        <div className="border-b bg-muted/30 -mx-1 mb-6">
-          <div className="flex gap-1 overflow-x-auto py-2">
+        <div className="mb-6 rounded-3xl bg-[var(--default)] p-1">
+          <div className="flex gap-1 overflow-x-auto">
             {Array.from({ length: 7 }).map((_, i) => (
-              <Skeleton key={i} className="h-7 w-16 shrink-0 rounded-md" />
+              <Skeleton key={i} className="h-8 w-24 shrink-0 rounded-3xl" />
             ))}
           </div>
         </div>
@@ -1871,31 +1807,31 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
         <div className="space-y-4">
           <div className="space-y-2">
             <Skeleton className="h-4 w-24 rounded" />
-            <Skeleton className="h-9 w-full rounded-md" />
+            <Skeleton className="h-9 w-full rounded-xl" />
           </div>
           <div className="space-y-2">
             <Skeleton className="h-4 w-32 rounded" />
-            <Skeleton className="h-16 w-full rounded-md" />
+            <Skeleton className="h-16 w-full rounded-xl" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Skeleton className="h-4 w-20 rounded" />
-              <Skeleton className="h-9 w-full rounded-md" />
+              <Skeleton className="h-9 w-full rounded-xl" />
             </div>
             <div className="space-y-2">
               <Skeleton className="h-4 w-28 rounded" />
-              <Skeleton className="h-9 w-full rounded-md" />
+              <Skeleton className="h-9 w-full rounded-xl" />
             </div>
           </div>
         </div>
         {/* Footer skeleton */}
-        <div className="mt-6 border-t bg-background">
+        <div className="mt-6 border-t border-[var(--border)]">
           <div className="px-6 py-3">
             <div className="flex items-center justify-between">
-              <Skeleton className="h-9 w-20 rounded-md" />
+              <Skeleton className="h-9 w-20 rounded-full" />
               <div className="flex gap-2">
-                <Skeleton className="h-9 w-28 rounded-md" />
-                <Skeleton className="h-9 w-28 rounded-md" />
+                <Skeleton className="h-9 w-28 rounded-full" />
+                <Skeleton className="h-9 w-28 rounded-full" />
               </div>
             </div>
           </div>
@@ -2371,47 +2307,64 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             <OfflineDraftNotice status={projectDraft.status} error={projectDraft.error} />
 
             {/* ── Tab navigation bar ── */}
-            <nav
-              role="tablist"
-              aria-label={t("form.navAriaLabel")}
-              className="border-b bg-muted/30 -mx-1 mb-6"
-            >
-              <div className="flex gap-1 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {TABS.map((tab, idx) => {
-                  const isActive = activeTab === tab.id;
-                  const hasError = tabsWithErrors[idx]?.hasError;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      id={`prj-tab-${tab.id}`}
-                      aria-selected={isActive}
-                      aria-controls={`prj-panel-${tab.id}`}
-                      onClick={() => setActiveTab(tab.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "ArrowRight") { e.preventDefault(); setActiveTab(TABS[Math.min(idx + 1, TABS.length - 1)].id); }
-                        if (e.key === "ArrowLeft")  { e.preventDefault(); setActiveTab(TABS[Math.max(idx - 1, 0)].id); }
-                        if (e.key === "Home")       { e.preventDefault(); setActiveTab(TABS[0].id); }
-                        if (e.key === "End")        { e.preventDefault(); setActiveTab(TABS[TABS.length - 1].id); }
-                      }}
-                      className={cn(
-                        "relative shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                      )}
-                    >
-                      {t(tab.labelKey)}
-                      {hasError && (
-                        <span
-                          className="absolute -top-0.5 -end-0.5 h-2 w-2 rounded-full bg-destructive border border-background"
-                          aria-label={t("form.tabErrorAriaLabel")}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
+            {/* Step bar: HeroUI Tabs styling on an always-mounted tablist — every
+                panel stays in the DOM (hidden) so react-hook-form can focus and
+                validate fields on any step. */}
+            <div className="tabs mb-6" data-orientation="horizontal">
+              <div className="tabs__list-container overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <nav
+                  role="tablist"
+                  aria-label={t("form.navAriaLabel")}
+                  aria-orientation="horizontal"
+                  data-orientation="horizontal"
+                  className="tabs__list"
+                >
+                  {TABS.map((tab, idx) => {
+                    const isActive = activeTab === tab.id;
+                    const hasError = tabsWithErrors[idx]?.hasError;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        id={`prj-tab-${tab.id}`}
+                        aria-selected={isActive}
+                        aria-controls={`prj-panel-${tab.id}`}
+                        tabIndex={isActive ? 0 : -1}
+                        data-selected={isActive || undefined}
+                        onClick={() => setActiveTab(tab.id)}
+                        onKeyDown={(e) => {
+                          // Arrow keys follow the visual order, which flips in RTL.
+                          const rtl = document.documentElement.dir === "rtl";
+                          const next = rtl ? "ArrowLeft" : "ArrowRight";
+                          const prev = rtl ? "ArrowRight" : "ArrowLeft";
+                          let target: number | null = null;
+                          if (e.key === next) target = Math.min(idx + 1, TABS.length - 1);
+                          if (e.key === prev) target = Math.max(idx - 1, 0);
+                          if (e.key === "Home") target = 0;
+                          if (e.key === "End") target = TABS.length - 1;
+                          if (target === null) return;
+                          e.preventDefault();
+                          setActiveTab(TABS[target].id);
+                          document.getElementById(`prj-tab-${TABS[target].id}`)?.focus();
+                        }}
+                        className="tabs__tab w-auto flex-1 shrink-0 whitespace-nowrap px-2"
+                      >
+                        {isActive && <span className="tabs__indicator" aria-hidden="true" />}
+                        {t(tab.labelKey)}
+                        {hasError && (
+                          <span
+                            className="absolute top-1 end-1.5 h-2 w-2 rounded-full bg-[var(--danger)]"
+                            role="img"
+                            aria-label={t("form.tabErrorAriaLabel")}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </nav>
               </div>
-            </nav>
+            </div>
 
             {/* ── Panel 1: Basic Information ── */}
             <section id="prj-panel-basic" role="tabpanel" aria-labelledby="prj-tab-basic" hidden={activeTab !== "basic"} className="space-y-4">
@@ -2419,52 +2372,47 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
               <FormField control={control} name="title" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("form.basic.title")} <span className="text-destructive">*</span></FormLabel>
-                  <FormControl><Input {...field} placeholder={t("form.basic.titlePlaceholder")} /></FormControl>
-                  <FormMessage />
+                  <FormInput {...field} placeholder={t("form.basic.titlePlaceholder")} />
+                  <FieldMessage />
                 </FormItem>
               )} />
               <FormField control={control} name="description" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("form.basic.description")} <span className="text-destructive">*</span></FormLabel>
-                  <FormControl><Textarea {...field} rows={3} className="resize-y" placeholder={t("form.basic.descriptionPlaceholder")} /></FormControl>
+                  <FormTextArea {...field} rows={3} className="resize-y" placeholder={t("form.basic.descriptionPlaceholder")} />
                   <FormDescription>{t("form.basic.descriptionHint")}</FormDescription>
-                  <FormMessage />
+                  <FieldMessage />
                 </FormItem>
               )} />
               <FormField control={control} name="classification" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("form.basic.classification")}</FormLabel>
-                  <Select value={field.value || "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}>
-                    <FormControl><SelectTrigger><SelectValue placeholder={t("form.basic.classificationPlaceholder")} /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t("form.basic.classificationNone")}</SelectItem>
-                      {CLASSIFICATIONS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <FormSelect
+                    label={t("form.basic.classification")}
+                    value={field.value || "__none__"}
+                    onChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                    placeholder={t("form.basic.classificationPlaceholder")}
+                    options={[
+                      { value: "__none__", label: t("form.basic.classificationNone") },
+                      ...CLASSIFICATIONS.map(c => ({ value: c, label: t(`form.options.classification.${c}`) })),
+                    ]}
+                  />
                 </FormItem>
               )} />
 
               {/* Scheduled Reporting Frequency (Task #325) */}
               <FormField control={control} name="reportingFrequency" render={({ field }) => (
                 <FormItem className="max-w-xs">
-                  <FormLabel>Scheduled reporting frequency {!editProjectId && <span className="text-destructive" aria-hidden>*</span>}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ""}>
-                    <FormControl>
-                      <SelectTrigger aria-required={editProjectId ? undefined : "true"} data-testid="select-reporting-frequency">
-                        <SelectValue placeholder={editProjectId ? "Not configured" : "Select frequency"} />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="monthly">{t("form.reportingFrequency.monthly")}</SelectItem>
-                      <SelectItem value="quarterly">{t("form.reportingFrequency.quarterly")}</SelectItem>
-                      <SelectItem value="annual">{t("form.reportingFrequency.annual")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    Select the normal reporting schedule for this project.
-                    On-Demand reports may still be created separately when required.
-                  </FormDescription>
-                  <FormMessage />
+                  <FormSelect
+                    label={t("form.reportingFrequency.label")}
+                    isRequired={!editProjectId}
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    placeholder={editProjectId ? t("form.reportingFrequency.notConfigured") : t("form.reportingFrequency.placeholder")}
+                    data-testid="select-reporting-frequency"
+                    options={(["monthly", "quarterly", "annual"] as const).map(f => ({ value: f, label: t(`form.reportingFrequency.${f}`) }))}
+                  />
+                  <FormDescription>{t("form.reportingFrequency.hint")}</FormDescription>
+                  <FieldMessage />
                 </FormItem>
               )} />
 
@@ -2475,28 +2423,13 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                   <FormLabel>{t("form.basic.sectors")} <span className="text-destructive">*</span></FormLabel>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 border rounded-md">
                     {SECTORS.map(sector => (
-                      <label key={sector} className="flex items-center gap-2 cursor-pointer text-sm hover:text-primary">
-                        <Checkbox
-                          checked={sectors.includes(sector)}
-                          onCheckedChange={() => toggleSector(sector)}
-                        />
+                      <CheckItem key={sector} isSelected={sectors.includes(sector)} onChange={() => toggleSector(sector)}>
                         {sector}
-                      </label>
+                      </CheckItem>
                     ))}
                   </div>
-                  {sectors.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {sectors.map(s => (
-                        <Badge key={s} variant="secondary" className="text-xs gap-1">
-                          {s}
-                          <button type="button" onClick={() => toggleSector(s)} className="hover:text-destructive">
-                            <X className="h-2.5 w-2.5" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  <FormMessage />
+                  <RemovableTags items={sectors} onRemove={toggleSector} aria-label={t("form.basic.sectors")} className="mt-1" />
+                  <FieldMessage />
                 </FormItem>
               )} />
 
@@ -2519,35 +2452,29 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                             {grouped.length > 1 && <p className="text-xs font-medium text-muted-foreground mb-1">{sector}</p>}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
                               {subs.map(sub => (
-                                <label key={sub} className="flex items-center gap-2 cursor-pointer text-sm hover:text-primary">
-                                  <Checkbox
-                                    checked={current.includes(sub)}
-                                    onCheckedChange={() => {
-                                      const next = current.includes(sub)
-                                        ? current.filter(s => s !== sub)
-                                        : [...current, sub];
-                                      field.onChange(next);
-                                    }}
-                                  />
+                                <CheckItem
+                                  key={sub}
+                                  isSelected={current.includes(sub)}
+                                  onChange={() => {
+                                    const next = current.includes(sub)
+                                      ? current.filter(s => s !== sub)
+                                      : [...current, sub];
+                                    field.onChange(next);
+                                  }}
+                                >
                                   {sub}
-                                </label>
+                                </CheckItem>
                               ))}
                             </div>
                           </div>
                         ))}
                       </div>
-                      {current.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {current.map(s => (
-                            <Badge key={s} variant="outline" className="text-xs gap-1 border-dashed">
-                              {s}
-                              <button type="button" onClick={() => field.onChange(current.filter(x => x !== s))} className="hover:text-destructive">
-                                <X className="h-2.5 w-2.5" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                      <RemovableTags
+                        items={current}
+                        onRemove={(s) => field.onChange(current.filter(x => x !== s))}
+                        aria-label={t("form.basic.subSectors")}
+                        className="mt-1"
+                      />
                     </FormItem>
                   );
                 }} />
@@ -2556,15 +2483,17 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
               {/* Assistance Modality — independent of sector */}
               <FormField control={control} name="assistanceModality" render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm">{t("form.basic.assistanceModality")} <span className="text-muted-foreground font-normal">{t("form.basic.assistanceModalityOptional")}</span></FormLabel>
-                  <Select value={field.value ?? "__none__"} onValueChange={v => field.onChange(v === "__none__" ? undefined : v)}>
-                    <SelectTrigger><SelectValue placeholder={t("form.basic.assistanceModalityPlaceholder")} /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t("form.basic.notSpecified")}</SelectItem>
-                      {ASSISTANCE_MODALITIES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
+                  <FormSelect
+                    label={<>{t("form.basic.assistanceModality")} <span className="text-[var(--muted)] font-normal">{t("form.basic.assistanceModalityOptional")}</span></>}
+                    value={field.value ?? "__none__"}
+                    onChange={v => field.onChange(v === "__none__" || v === "" ? undefined : v)}
+                    placeholder={t("form.basic.assistanceModalityPlaceholder")}
+                    options={[
+                      { value: "__none__", label: t("form.basic.notSpecified") },
+                      ...ASSISTANCE_MODALITIES.map(m => ({ value: m, label: m })),
+                    ]}
+                  />
+                  <FieldMessage />
                 </FormItem>
               )} />
             </section>
@@ -2577,10 +2506,10 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                   <div className="flex items-center gap-3 mb-1">
                     <FormLabel>{t("form.location.operationalLocationsLabel")} <span className="text-destructive">*</span></FormLabel>
                     {!hasHqOpsValue && selectedStateIds.length === 0 && <span className="text-xs text-muted-foreground italic">{t("form.location.selectAtLeastOneState")}</span>}
-                    {selectedStateIds.length === 1 && <Badge className="text-xs bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-100 cursor-default">{t("form.location.singleState")}</Badge>}
-                    {selectedStateIds.length > 1 && <Badge className="text-xs bg-violet-100 text-violet-800 border-violet-300 hover:bg-violet-100 cursor-default">{t("form.location.multiState", { count: selectedStateIds.length })}</Badge>}
+                    {selectedStateIds.length === 1 && <Chip size="sm" variant="soft" color="accent">{t("form.location.singleState")}</Chip>}
+                    {selectedStateIds.length > 1 && <Chip size="sm" variant="soft" color="accent">{t("form.location.multiState", { count: selectedStateIds.length })}</Chip>}
                   </div>
-                  <p className="text-xs text-muted-foreground mb-2">Select all locations where this project has operational implementation or reporting responsibility.</p>
+                  <p className="text-xs text-muted-foreground mb-2">{t("form.location.operationalLocationsHint")}</p>
                   {stateReference.status !== "ready" ? (
                     <StateReferenceStatus
                       status={stateReference.status}
@@ -2603,61 +2532,50 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 border rounded-md max-h-60 overflow-y-auto">
                       <FormField control={control} name="hasHqOperations" render={({ field }) => (
-                        <label className="flex items-center gap-2 cursor-pointer text-sm hover:text-primary font-medium col-span-full border-b pb-2 mb-1">
-                          <Checkbox checked={!!field.value} onCheckedChange={field.onChange} />
-                          HQ
-                        </label>
+                        <CheckItem isSelected={!!field.value} onChange={field.onChange} className="col-span-full border-b pb-2 mb-1 font-medium">
+                          {t("form.location.hq")}
+                        </CheckItem>
                       )} />
                       {states.map(state => (
-                        <label key={state.id} className="flex items-center gap-2 cursor-pointer text-sm hover:text-primary">
-                          <Checkbox checked={selectedStateIds.includes(state.id)} onCheckedChange={() => toggleState(state.id)} />
+                        <CheckItem key={state.id} isSelected={selectedStateIds.includes(state.id)} onChange={() => toggleState(state.id)}>
                           <StateLabel state={state} />
-                        </label>
+                        </CheckItem>
                       ))}
                     </div>
                   )}
-                  <FormMessage />
+                  <FieldMessage />
                 </FormItem>
               )} />
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">{t("form.location.localitiesLabel")}</label>
+                <Label htmlFor="prj-locality-input">{t("form.location.localitiesLabel")}</Label>
                 <div className="flex gap-2">
-                  <Input value={localityInput} onChange={e => setLocalityInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addLocality(); } }} placeholder={t("form.location.localitiesPlaceholder")} />
-                  <Button type="button" variant="outline" onClick={addLocality}>{t("form.buttons.add")}</Button>
+                  <Input id="prj-locality-input" fullWidth value={localityInput} onChange={e => setLocalityInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addLocality(); } }} placeholder={t("form.location.localitiesPlaceholder")} />
+                  <Button variant="outline" onPress={addLocality}>{t("form.buttons.add")}</Button>
                 </div>
-                {freeLocalities.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {freeLocalities.map(loc => (
-                      <Badge key={loc} variant="secondary" className="text-xs gap-1">
-                        {loc}
-                        <button type="button" onClick={() => removeLocality(loc)} className="hover:text-destructive"><X className="h-2.5 w-2.5" /></button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+                <RemovableTags items={freeLocalities} onRemove={removeLocality} aria-label={t("form.location.localitiesLabel")} className="mt-2" />
               </div>
               <div>
                 <SectionHeading title={t("form.location.targetBeneficiaries")} />
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <FormField control={control} name="beneficiariesMale" render={({ field }) => (
-                      <FormItem><FormLabel>{t("form.location.adultMen")}</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>{t("form.location.adultMen")}</FormLabel><FormInput type="number" min="0" {...field} /></FormItem>
                     )} />
                     <FormField control={control} name="beneficiariesFemale" render={({ field }) => (
-                      <FormItem><FormLabel>{t("form.location.adultWomen")}</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>{t("form.location.adultWomen")}</FormLabel><FormInput type="number" min="0" {...field} /></FormItem>
                     )} />
                     <FormField control={control} name="beneficiariesBoys" render={({ field }) => (
-                      <FormItem><FormLabel>{t("form.location.boysUnder18")}</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>{t("form.location.boysUnder18")}</FormLabel><FormInput type="number" min="0" {...field} /></FormItem>
                     )} />
                     <FormField control={control} name="beneficiariesGirls" render={({ field }) => (
-                      <FormItem><FormLabel>{t("form.location.girlsUnder18")}</FormLabel><FormControl><Input type="number" min="0" {...field} /></FormControl></FormItem>
+                      <FormItem><FormLabel>{t("form.location.girlsUnder18")}</FormLabel><FormInput type="number" min="0" {...field} /></FormItem>
                     )} />
                   </div>
                   <FormField control={control} name="beneficiariesTarget" render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("form.location.totalBeneficiaries")}</FormLabel>
-                      <FormControl><Input type="number" min="0" {...field} className="font-semibold" /></FormControl>
-                      <FormMessage />
+                      <FormInput type="number" min="0" {...field} className="font-semibold" />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                 </div>
@@ -2679,13 +2597,13 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                           <FormField control={control} name={`stateAllocations.${rowIndex}.budgetAllocation`} render={({ field }) => (
                             <FormItem>
                               <FormLabel className="text-xs">{t("form.location.stateAllocationBudget")}</FormLabel>
-                              <FormControl><Input type="number" min="0" {...field} value={field.value ?? ""} /></FormControl>
+                              <FormInput type="number" min="0" {...field} value={field.value ?? ""} />
                             </FormItem>
                           )} />
                           <FormField control={control} name={`stateAllocations.${rowIndex}.beneficiaryTarget`} render={({ field }) => (
                             <FormItem>
                               <FormLabel className="text-xs">{t("form.location.stateAllocationBeneficiaries")}</FormLabel>
-                              <FormControl><Input type="number" min="0" {...field} value={field.value ?? ""} /></FormControl>
+                              <FormInput type="number" min="0" {...field} value={field.value ?? ""} />
                             </FormItem>
                           )} />
                         </div>
@@ -2713,12 +2631,18 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                 <div className="space-y-2">
                   <FormField control={control} name="donorId" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("form.donor.donorOrg")}</FormLabel>
-                      <div className="flex gap-2">
-                        <Select
+                      <div className="flex items-end gap-2">
+                        <FormSelect
+                          label={t("form.donor.donorOrg")}
+                          className="min-w-0 flex-1"
                           value={field.value ? String(field.value) : "__none__"}
-                          onValueChange={(v) => {
-                            if (v === "__none__") {
+                          placeholder={t("form.donor.selectDonorPlaceholder")}
+                          options={[
+                            { value: "__none__", label: t("form.donor.selectDonorNone") },
+                            ...donors.map(d => ({ value: String(d.id), label: `${d.name}${d.abbreviation ? ` (${d.abbreviation})` : ""}` })),
+                          ]}
+                          onChange={(v) => {
+                            if (v === "__none__" || v === "") {
                               field.onChange(undefined);
                               form.setValue("donor", "");
                             } else {
@@ -2727,24 +2651,12 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                               form.setValue("donor", found?.name ?? "");
                             }
                           }}
-                        >
-                          <FormControl><SelectTrigger><SelectValue placeholder={t("form.donor.selectDonorPlaceholder")} /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="__none__">{t("form.donor.selectDonorNone")}</SelectItem>
-                            {donors.map(d => (
-                              <SelectItem key={d.id} value={String(d.id)}>
-                                {d.name}{d.abbreviation ? ` (${d.abbreviation})` : ""}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        />
                         <Button
-                          type="button"
                           variant="outline"
-                          size="sm"
-                          onClick={() => { setShowNewDonor(true); field.onChange(undefined); }}
+                          onPress={() => { setShowNewDonor(true); field.onChange(undefined); }}
                         >
-                          <Plus className="h-3.5 w-3.5" /> {t("form.buttons.new")}
+                          <Plus className="h-3.5 w-3.5" aria-hidden="true" /> {t("form.buttons.new")}
                         </Button>
                       </div>
                     </FormItem>
@@ -2753,7 +2665,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                     <FormField control={control} name="donor" render={({ field }) => (
                       <FormItem>
                         <FormLabel>{t("form.donor.orEnterDonorName")}</FormLabel>
-                        <FormControl><Input {...field} placeholder={t("form.donor.donorNamePlaceholder")} /></FormControl>
+                        <FormInput {...field} placeholder={t("form.donor.donorNamePlaceholder")} />
                       </FormItem>
                     )} />
                   )}
@@ -2762,14 +2674,14 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                 <div className="border border-dashed rounded-md p-3 bg-muted/30 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{t("form.donor.newDonor")}</span>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowNewDonor(false)}>
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
+                    <IconAction label={t("form.donor.cancelNewDonor")} onPress={() => setShowNewDonor(false)}>
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    </IconAction>
                   </div>
                   <FormField control={control} name="newDonorName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("form.donor.newDonorNameLabel")} <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input {...field} value={field.value ?? ""} placeholder={t("form.donor.newDonorNamePlaceholder")} /></FormControl>
+                      <FormInput {...field} value={field.value ?? ""} placeholder={t("form.donor.newDonorNamePlaceholder")} />
                     </FormItem>
                   )} />
                 </div>
@@ -2779,49 +2691,45 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
               <FormField control={control} name="agreementNumber" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("form.donor.agreementNumber")} <span className="text-destructive">*</span></FormLabel>
-                  <FormControl><Input {...field} placeholder={t("form.donor.agreementNumberPlaceholder")} /></FormControl>
-                  <FormMessage />
+                  <FormInput {...field} placeholder={t("form.donor.agreementNumberPlaceholder")} />
+                  <FieldMessage />
                 </FormItem>
               )} />
               {/* Agreement warning: same number but different project title */}
               {!forceCreate && duplicateResult?.matchType === "agreement_warning" && duplicateResult.existingProject && !agreementWarningAck && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2 text-sm text-amber-800">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                    <span>
-                      Agreement Number already exists under another project (<code className="font-mono">{duplicateResult.existingProject.code}</code>
-                      {" "}— <em>{duplicateResult.existingProject.title}</em>). Confirm this is a separate project before continuing.
-                    </span>
-                  </div>
-                  <Button type="button" variant="ghost" size="sm" className="text-amber-800 hover:bg-amber-100 shrink-0" onClick={() => setAgreementWarningAck(true)}>
+                <Alert status="warning">
+                  <Alert.Indicator />
+                  <Alert.Content>
+                    <Alert.Description>
+                      {t("form.donor.agreementExists", { code: duplicateResult.existingProject.code, title: duplicateResult.existingProject.title })}
+                    </Alert.Description>
+                  </Alert.Content>
+                  <Button size="sm" variant="secondary" className="shrink-0" onPress={() => setAgreementWarningAck(true)}>
                     {t("form.buttons.confirm")}
                   </Button>
-                </div>
+                </Alert>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={control} name="agreementStart" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("form.donor.agreementStart")}</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormDate label={t("form.donor.agreementStart")} value={field.value} onChange={field.onChange} />
                   </FormItem>
                 )} />
                 <FormField control={control} name="agreementEnd" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("form.donor.agreementEnd")}</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormDate label={t("form.donor.agreementEnd")} value={field.value} onChange={field.onChange} />
                   </FormItem>
                 )} />
                 <FormField control={control} name="signedDate" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("form.donor.signedDate")}</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
+                    <FormDate label={t("form.donor.signedDate")} value={field.value} onChange={field.onChange} />
                   </FormItem>
                 )} />
               </div>
               <FormField control={control} name="internalNotes" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("form.donor.internalNotes")}</FormLabel>
-                  <FormControl><Textarea {...field} rows={2} placeholder={t("form.donor.internalNotesPlaceholder")} /></FormControl>
+                  <FormTextArea {...field} rows={2} placeholder={t("form.donor.internalNotesPlaceholder")} />
                 </FormItem>
               )} />
             </section>
@@ -2833,16 +2741,14 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-sm">
                   <FormField control={control} name="startDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("form.timeline.startDate")} <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input type="date" {...field} /></FormControl>
-                      <FormMessage />
+                      <FormDate label={t("form.timeline.startDate")} isRequired value={field.value} onChange={field.onChange} />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                   <FormField control={control} name="endDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("form.timeline.endDate")} <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input type="date" min={projectStart || undefined} {...field} /></FormControl>
-                      <FormMessage />
+                      <FormDate label={t("form.timeline.endDate")} isRequired value={field.value} onChange={field.onChange} min={projectStart || undefined} />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                 </div>
@@ -2855,22 +2761,20 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-sm">
                   <FormField control={control} name="reportingStartDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("form.timeline.reportingStartDate")} <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input type="date" {...field} onChange={(event) => {
+                      <FormDate label={t("form.timeline.reportingStartDate")} isRequired value={field.value} onChange={(value) => {
                         reportingCoverageCustomisedRef.current = true;
-                        field.onChange(event);
-                      }} /></FormControl>
-                      <FormMessage />
+                        field.onChange(value);
+                      }} />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                   <FormField control={control} name="reportingEndDate" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("form.timeline.reportingEndDate")} <span className="text-destructive">*</span></FormLabel>
-                      <FormControl><Input type="date" {...field} onChange={(event) => {
+                      <FormDate label={t("form.timeline.reportingEndDate")} isRequired value={field.value} onChange={(value) => {
                         reportingCoverageCustomisedRef.current = true;
-                        field.onChange(event);
-                      }} /></FormControl>
-                      <FormMessage />
+                        field.onChange(value);
+                      }} />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                 </div>
@@ -2882,35 +2786,36 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                 <FormField control={control} name="budgetTotal" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("form.timeline.totalBudget")} <span className="text-destructive">*</span></FormLabel>
-                    <FormControl><Input type="number" min="0" step="0.01" {...field} /></FormControl>
-                    <FormMessage />
+                    <FormInput type="number" min="0" step="0.01" {...field} />
+                    <FieldMessage />
                   </FormItem>
                 )} />
                 <FormField control={control} name="currency" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("form.timeline.currency")}</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <FormSelect
+                      label={t("form.timeline.currency")}
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      options={CURRENCIES.map(c => ({ value: c, label: c }))}
+                    />
                   </FormItem>
                 )} />
                 <FormField control={control} name="directCost" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("form.timeline.directCosts")}</FormLabel>
-                    <FormControl><Input type="number" min="0" step="0.01" {...field} value={field.value ?? ""} placeholder="0" /></FormControl>
+                    <FormInput type="number" min="0" step="0.01" {...field} value={field.value ?? ""} placeholder="0" />
                   </FormItem>
                 )} />
                 <FormField control={control} name="indirectCost" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("form.timeline.indirectCosts")}</FormLabel>
-                    <FormControl><Input type="number" min="0" step="0.01" {...field} value={field.value ?? ""} placeholder="0" /></FormControl>
+                    <FormInput type="number" min="0" step="0.01" {...field} value={field.value ?? ""} placeholder="0" />
                   </FormItem>
                 )} />
                 <FormField control={control} name="cafaContribution" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("form.timeline.cafaContribution")}</FormLabel>
-                    <FormControl><Input type="number" min="0" step="0.01" {...field} value={field.value ?? ""} placeholder="0" /></FormControl>
+                    <FormInput type="number" min="0" step="0.01" {...field} value={field.value ?? ""} placeholder="0" />
                   </FormItem>
                 )} />
               </div>
@@ -2962,11 +2867,9 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                 />
               ))}
               <Button
-                type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5"
-                onClick={() => outputs.append({ title: "", description: "", target: undefined, indicators: [], activities: [] })}
+                onPress={() => outputs.append({ title: "", description: "", target: undefined, indicators: [], activities: [] })}
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" /> {t("form.buttons.addOutput")}
               </Button>
@@ -2981,57 +2884,56 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                 <div key={asgn.id} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 border rounded-md">
                   <FormField control={control} name={`assignments.${idx}.role`} render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("form.team.role")} <span className="text-destructive">*</span></FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl><SelectTrigger className="text-sm"><SelectValue placeholder={t("form.team.selectRolePlaceholder")} /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {PERSONNEL_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
+                      <FormSelect
+                        label={t("form.team.role")}
+                        isRequired
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        placeholder={t("form.team.selectRolePlaceholder")}
+                        options={PERSONNEL_ROLES.map(r => ({ value: r, label: personnelRoleLabel(t, r) }))}
+                      />
+                      <FieldMessage />
                     </FormItem>
                   )} />
                   <FormField control={control} name={`assignments.${idx}.userId`} render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("form.team.systemUser")}</FormLabel>
-                      <Select
+                      <FormSelect
+                        label={t("form.team.systemUser")}
                         value={field.value ? String(field.value) : "__none__"}
-                        onValueChange={(v) => field.onChange(v === "__none__" ? undefined : Number(v))}
-                      >
-                        <FormControl><SelectTrigger className="text-sm"><SelectValue placeholder={t("form.team.selectUserPlaceholder")} /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">{t("form.team.externalPerson")}</SelectItem>
-                          {users.map((u) => (
-                            <SelectItem key={u.id} value={String(u.id)}>{u.name} ({u.role})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onChange={(v) => field.onChange(v === "__none__" || v === "" ? undefined : Number(v))}
+                        placeholder={t("form.team.selectUserPlaceholder")}
+                        options={[
+                          { value: "__none__", label: t("form.team.externalPerson") },
+                          ...users.map((u) => {
+                            const role = tUsers(`roles.${u.role}`, { defaultValue: u.roleLabel ?? u.role });
+                            return { value: String(u.id), label: `${u.name} (${role})`, textValue: u.name };
+                          }),
+                        ]}
+                      />
                     </FormItem>
                   )} />
-                  <div className="flex gap-2">
+                  <div className="flex items-end gap-2">
                     <FormField control={control} name={`assignments.${idx}.name`} render={({ field }) => (
                       <FormItem className="flex-1">
                         <FormLabel>{t("form.team.externalName")}</FormLabel>
-                        <FormControl><Input {...field} value={field.value ?? ""} placeholder={t("form.team.externalNamePlaceholder")} className="text-sm" /></FormControl>
+                        <FormInput {...field} value={field.value ?? ""} placeholder={t("form.team.externalNamePlaceholder")} className="text-sm" />
                       </FormItem>
                     )} />
                     {assignments.fields.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="self-end"
-                        aria-label={`Remove ${PERSONNEL_ROLES.find(r => r.value === watch(`assignments.${idx}.role`))?.label ?? "team"} assignment`}
-                        onClick={() => assignments.remove(idx)}
+                      <IconAction
+                        label={t("form.team.removeAssignment", { role: personnelRoleLabel(t, watch(`assignments.${idx}.role`)) || t("form.team.role") })}
+                        danger
+                        className="mb-0.5"
+                        onPress={() => assignments.remove(idx)}
                       >
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
-                      </Button>
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </IconAction>
                     )}
                   </div>
                 </div>
               ))}
-              <Button type="button" variant="outline" size="sm" onClick={() => assignments.append({ role: "state_focal_point", name: "", userId: undefined })}>
-                <Plus className="h-3.5 w-3.5" /> {t("form.buttons.addPersonnel")}
+              <Button variant="outline" size="sm" onPress={() => assignments.append({ role: "state_focal_point", name: "", userId: undefined })}>
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" /> {t("form.buttons.addPersonnel")}
               </Button>
             </section>
 
@@ -3039,48 +2941,48 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
             <section id="prj-panel-documents" role="tabpanel" aria-labelledby="prj-tab-documents" hidden={activeTab !== "documents"} className="space-y-4">
               {/* Document gate status messages — shown when not in mutable (draft) mode */}
               {docGate === "operational" && (
-                <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200" role="note">
-                  <Lock className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
-                  <span>Documents are locked — you may upload supporting files but cannot delete existing documents without an override.</span>
-                </div>
+                <Alert status="warning" role="note">
+                  <Alert.Indicator><Lock className="size-4" aria-hidden="true" /></Alert.Indicator>
+                  <Alert.Content><Alert.Description>{t("detail.docs.lockedOperational")}</Alert.Description></Alert.Content>
+                </Alert>
               )}
               {docGate === "frozen" && (
-                <div className="flex items-start gap-2 rounded-md border border-muted-foreground/30 bg-muted px-4 py-3 text-sm text-muted-foreground" role="note">
-                  <Lock className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
-                  <span>Documents are locked because this Project is completed.</span>
-                </div>
+                <Alert status="default" role="note">
+                  <Alert.Indicator><Lock className="size-4" aria-hidden="true" /></Alert.Indicator>
+                  <Alert.Content><Alert.Description>{t("detail.docs.lockedFrozen")}</Alert.Description></Alert.Content>
+                </Alert>
               )}
               <SectionHeading title={t("form.documents.projectDocumentsSection")} />
               <p className="text-sm text-muted-foreground">{t("form.documents.requiredNote")}</p>
-              <Card className="border-orange-200">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-orange-400" />
+              <Card data-testid="doc-card" className="border border-[var(--warning)]/40">
+                <Card.Header>
+                  <Card.Title className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="h-2 w-2 rounded-full bg-[var(--warning)]" aria-hidden="true" />
                     {t("form.documents.agreementTitle")}
-                    <span className="text-xs font-normal text-muted-foreground">{t("form.documents.agreementRequired")}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent><DocUploadSlot category="agreement" kinds={DOC_AGREEMENT_KINDS} form={form} docGate={docGate} userRole={userRole} projectId={editProjectId} /></CardContent>
+                    <span className="text-xs font-normal text-[var(--muted)]">{t("form.documents.agreementRequired")}</span>
+                  </Card.Title>
+                </Card.Header>
+                <Card.Content><DocUploadSlot category="agreement" kinds={DOC_AGREEMENT_KINDS} form={form} docGate={docGate} userRole={userRole} projectId={editProjectId} /></Card.Content>
               </Card>
-              <Card className="border-blue-200">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-400" />
+              <Card data-testid="doc-card" className="border border-[var(--accent)]/30">
+                <Card.Header>
+                  <Card.Title className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="h-2 w-2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
                     {t("form.documents.budgetTitle")}
-                    <span className="text-xs font-normal text-muted-foreground">{t("form.documents.budgetRequired")}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent><DocUploadSlot category="budget" kinds={DOC_BUDGET_KINDS} form={form} docGate={docGate} userRole={userRole} projectId={editProjectId} /></CardContent>
+                    <span className="text-xs font-normal text-[var(--muted)]">{t("form.documents.budgetRequired")}</span>
+                  </Card.Title>
+                </Card.Header>
+                <Card.Content><DocUploadSlot category="budget" kinds={DOC_BUDGET_KINDS} form={form} docGate={docGate} userRole={userRole} projectId={editProjectId} /></Card.Content>
               </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-muted-foreground" />
+              <Card data-testid="doc-card">
+                <Card.Header>
+                  <Card.Title className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="h-2 w-2 rounded-full bg-[var(--muted)]" aria-hidden="true" />
                     {t("form.documents.supportingTitle")}
-                    <span className="text-xs font-normal text-muted-foreground">{t("form.documents.supportingOptional")}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent><DocUploadSlot category="optional" kinds={DOC_OPTIONAL_KINDS} form={form} docGate={docGate} userRole={userRole} projectId={editProjectId} /></CardContent>
+                    <span className="text-xs font-normal text-[var(--muted)]">{t("form.documents.supportingOptional")}</span>
+                  </Card.Title>
+                </Card.Header>
+                <Card.Content><DocUploadSlot category="optional" kinds={DOC_OPTIONAL_KINDS} form={form} docGate={docGate} userRole={userRole} projectId={editProjectId} /></Card.Content>
               </Card>
               <div>
                 <SectionHeading title={t("form.documents.voiceNoteTitle")} description={t("form.documents.voiceNoteDesc")} />
@@ -3096,14 +2998,14 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                   <p className="text-xs font-semibold text-muted-foreground mb-2 pb-1.5 border-b">{t("form.review.basicInfo")}</p>
                   <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
                     <div><dt className="text-xs text-muted-foreground">{t("form.review.title")}</dt><dd className="font-medium">{watch("title") || "—"}</dd></div>
-                    <div><dt className="text-xs text-muted-foreground">{t("form.review.classification")}</dt><dd>{CLASSIFICATIONS.find(c => c.value === watch("classification"))?.label || "—"}</dd></div>
+                    <div><dt className="text-xs text-muted-foreground">{t("form.review.classification")}</dt><dd>{watch("classification") ? t(`form.options.classification.${watch("classification")}`, { defaultValue: watch("classification") }) : "—"}</dd></div>
                     <div className="md:col-span-2"><dt className="text-xs text-muted-foreground">{t("form.review.sectors")}</dt><dd>{watch("sectors")?.join(", ") || "—"}</dd></div>
                   </dl>
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground mb-2 pb-1.5 border-b">{t("form.review.locationCoverage")}</p>
                   <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
-                    <div><dt className="text-xs text-muted-foreground">{t("form.review.targetStates")}</dt><dd>{selectedStateIds.map(id => states.find(s => s.id === id)?.name).filter(Boolean).join(", ") || "—"}</dd></div>
+                    <div><dt className="text-xs text-muted-foreground">{t("form.review.targetStates")}</dt><dd>{selectedStateIds.map(id => states.find(s => s.id === id)).filter((s): s is NonNullable<typeof s> => !!s).map(s => getStateLabel(s, i18n.language)).join("، ") || "—"}</dd></div>
                     <div><dt className="text-xs text-muted-foreground">{t("form.review.localities")}</dt><dd>{freeLocalities.join(", ") || "—"}</dd></div>
                     <div><dt className="text-xs text-muted-foreground">{t("form.review.totalBeneficiaries")}</dt><dd className="font-medium">{watch("beneficiariesTarget") || "—"}</dd></div>
                   </dl>
@@ -3131,7 +3033,7 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                   <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
                     {assignments.fields.length > 0 ? assignments.fields.map((_, idx) => {
                       const a = watch(`assignments.${idx}`);
-                      const roleLabel = PERSONNEL_ROLES.find(r => r.value === a?.role)?.label ?? a?.role ?? "—";
+                      const roleLabel = personnelRoleLabel(t, a?.role) || "—";
                       const memberName = a?.userId ? (users.find(u => u.id === a.userId)?.name ?? a.name ?? "") : (a?.name ?? "");
                       return <div key={idx}><dt className="text-xs text-muted-foreground">{roleLabel}</dt><dd>{memberName || "—"}</dd></div>;
                     }) : <div><dt className="text-xs text-muted-foreground">{t("form.review.personnel")}</dt><dd>{t("form.review.noneAssigned")}</dd></div>}
@@ -3143,26 +3045,25 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                 </div>
               </div>
               {(form.formState.errors as Record<string, { message?: string }>).root?.message && (
-                <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>{(form.formState.errors as Record<string, { message?: string }>).root!.message}</span>
-                </div>
+                <Alert status="danger">
+                  <Alert.Indicator />
+                  <Alert.Content><Alert.Description>{(form.formState.errors as Record<string, { message?: string }>).root!.message}</Alert.Description></Alert.Content>
+                </Alert>
               )}
             </section>
 
         </div>
             {/* ── Persistent footer ── */}
-            <div className="shrink-0 border-t border-border bg-background">
+            <div className="shrink-0 border-t border-[var(--border)] bg-[var(--overlay)]">
               <div className="px-6 py-3">
                 {/* Mobile: stacked (col-reverse keeps primary action at top); Desktop: single row */}
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
 
                   {/* Left: Cancel */}
                   <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onClose}
-                    disabled={isActioning}
+                    variant="secondary"
+                    onPress={onClose}
+                    isDisabled={isActioning}
                     className="w-full sm:w-auto"
                   >
                     {t("form.buttons.cancel")}
@@ -3173,27 +3074,22 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
 
                     {/* Save As Draft — always visible, secondary outlined */}
                     <Button
-                      type="button"
                       variant="outline"
-                      disabled={isActioning || !stateReference.isReady}
-                      aria-busy={isSavingDraft}
-                      onClick={handleSaveAsDraft}
+                      isDisabled={!isSavingDraft && (isActioning || !stateReference.isReady)}
+                      isPending={isSavingDraft}
+                      onPress={handleSaveAsDraft}
                       className="w-full sm:w-auto"
                     >
-                      {isSavingDraft ? (
-                        <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /><span className="sr-only">Saving…</span>{t("form.buttons.saving")}</>
-                      ) : (
-                        t("form.buttons.saveAsDraft")
-                      )}
+                      {isSavingDraft && <Spinner size="sm" color="current" />}
+                      {isSavingDraft ? t("form.buttons.saving") : t("form.buttons.saveAsDraft")}
                     </Button>
 
                     {/* Previous — only when not on first tab */}
                     {activeTabIndex > 0 && (
                       <Button
-                        type="button"
                         variant="ghost"
-                        onClick={goToPrevTab}
-                        disabled={isActioning || !stateReference.isReady}
+                        onPress={goToPrevTab}
+                        isDisabled={isActioning || !stateReference.isReady}
                         className="w-full sm:w-auto"
                       >
                         {t("form.buttons.previous")}
@@ -3203,9 +3099,8 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                     {/* Continue (all tabs except last) or Create Project / Save changes (last tab) */}
                     {activeTabIndex < TABS.length - 1 ? (
                       <Button
-                        type="button"
-                        onClick={goToNextTab}
-                        disabled={isSavingDraft}
+                        onPress={goToNextTab}
+                        isDisabled={isSavingDraft}
                         className="w-full sm:w-auto"
                       >
                         {t("form.buttons.continue")}
@@ -3213,17 +3108,14 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
                     ) : (
                       <Button
                         type="submit"
-                        disabled={isActioning || !stateReference.isReady}
-                        aria-busy={createProject.isPending || patchProject.isPending}
+                        isDisabled={!(createProject.isPending || patchProject.isPending) && (isActioning || !stateReference.isReady)}
+                        isPending={createProject.isPending || patchProject.isPending}
                         className="w-full sm:w-auto"
                       >
-                        {(createProject.isPending || patchProject.isPending) ? (
-                          <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /><span className="sr-only">Saving…</span>{t("form.buttons.saving")}</>
-                        ) : editProjectId ? (
-                          t("form.buttons.saveChanges")
-                        ) : (
-                          t("form.buttons.createProject")
-                        )}
+                        {(createProject.isPending || patchProject.isPending) && <Spinner size="sm" color="current" />}
+                        {(createProject.isPending || patchProject.isPending)
+                          ? t("form.buttons.saving")
+                          : editProjectId ? t("form.buttons.saveChanges") : t("form.buttons.createProject")}
                       </Button>
                     )}
                   </div>
@@ -3283,6 +3175,43 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
 
 // ── Edit Project Dialog ───────────────────────────────────────────────────────
 
+/**
+ * Wide HeroUI modal that hosts the registration form. The form owns its
+ * scrolling body and sticky footer, so the dialog itself doesn't pad or scroll.
+ */
+export function ProjectFormModal({
+  isOpen,
+  onOpenChange,
+  title,
+  description,
+  children,
+}: {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Modal isOpen={isOpen} onOpenChange={onOpenChange}>
+      <Modal.Backdrop>
+        <Modal.Container size="lg">
+          <Modal.Dialog className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+            <Modal.CloseTrigger />
+            <Modal.Header className="shrink-0 border-b border-[var(--border)] px-6 pt-6 pb-4">
+              <Modal.Heading>{title}</Modal.Heading>
+              {description && <p className="text-sm text-[var(--muted)]">{description}</p>}
+            </Modal.Header>
+            <div className="flex min-h-0 flex-1 flex-col">
+              {children}
+            </div>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 export function EditProjectDialog({
   projectId,
   open,
@@ -3295,20 +3224,13 @@ export function EditProjectDialog({
   const { t } = useTranslation("projects");
   if (!projectId) return null;
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
-        <div className="px-6 pt-6 pb-4 border-b shrink-0">
-          <DialogHeader>
-            <DialogTitle>{t("form.editDialog.title")}</DialogTitle>
-            <DialogDescription>
-              {t("form.editDialog.description")}
-            </DialogDescription>
-          </DialogHeader>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <ProjectRegistrationForm editProjectId={projectId} onClose={onClose} />
-        </div>
-      </DialogContent>
-    </Dialog>
+    <ProjectFormModal
+      isOpen={open}
+      onOpenChange={(v) => !v && onClose()}
+      title={t("form.editDialog.title")}
+      description={t("form.editDialog.description")}
+    >
+      <ProjectRegistrationForm editProjectId={projectId} onClose={onClose} />
+    </ProjectFormModal>
   );
 }

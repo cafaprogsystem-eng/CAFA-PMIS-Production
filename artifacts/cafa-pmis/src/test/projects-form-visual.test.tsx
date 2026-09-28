@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import React from "react";
 import "@testing-library/jest-dom";
 
@@ -182,6 +182,12 @@ vi.mock("react-i18next", () => ({
         "form.output.indicatorCount": "{{count}} indicator(s)",
         "form.output.activityCount": "{{count}} activity(ies)",
         "form.output.removeOutput": "Remove output",
+        "form.output.recordedExpenditure": "Recorded expenditure:",
+        "form.output.recordedExpenditureReadOnly": "(read-only — cannot be edited here)",
+        "form.output.removeFinancedTitle": "Remove activity with recorded expenditure?",
+        "form.output.removeFinancedDescription": "This activity has recorded expenditure.",
+        "form.output.keepActivity": "Keep Activity",
+        "form.output.removeActivityConfirm": "Remove Activity",
         "form.output.outputTitle": "Output title",
         "form.output.outputTitlePlaceholder": "Enter output title",
         "form.output.description": "Description",
@@ -609,11 +615,13 @@ describe("PRJ-FORM-VIS-04 — Save As Draft has secondary visual treatment", () 
     expect(draftBtn).not.toBe(continueBtn);
   });
 
-  it("Save As Draft has aria-busy attribute for pending state tracking", () => {
+  it("Save As Draft exposes its pending state (idle: not pending, still operable)", () => {
     renderCreateForm();
     const draftBtn = screen.getByRole("button", { name: /save as draft/i });
-    // aria-busy is set (false when not saving)
-    expect(draftBtn).toHaveAttribute("aria-busy");
+    // HeroUI/React Aria mark a pending button with data-pending + aria-disabled
+    // and announce the change to assistive tech; idle it is neither.
+    expect(draftBtn).not.toHaveAttribute("data-pending");
+    expect(draftBtn).not.toHaveAttribute("aria-disabled", "true");
   });
 });
 
@@ -631,12 +639,14 @@ describe("PRJ-FORM-VIS-05 — Submit/final action button is primary and accessib
     expect(createBtn).toHaveAttribute("type", "submit");
   });
 
-  it("Create Project button has aria-busy attribute", () => {
+  it("Create Project button is not pending while idle", () => {
     renderCreateForm();
     const tabs = screen.getAllByRole("tab");
     fireEvent.click(tabs[6]);
     const createBtn = screen.getByRole("button", { name: /create project/i });
-    expect(createBtn).toHaveAttribute("aria-busy");
+    // Pending would show data-pending and swap type=submit to type=button.
+    expect(createBtn).not.toHaveAttribute("data-pending");
+    expect(createBtn).toHaveAttribute("type", "submit");
   });
 
   it("on intermediate tabs, Continue button is present instead of Create Project", () => {
@@ -711,15 +721,14 @@ describe("PRJ-FORM-VIS-07 — Financed activity removal dialog has correct butto
     const removeBtns = screen.getAllByRole("button", { name: /remove activity/i });
     fireEvent.click(removeBtns[0]);
 
+    const dialog = screen.getByRole("alertdialog");
     // Cancel button is labelled "Keep Activity" — not destructive
-    const cancelBtn = screen.getByTestId("alert-cancel");
-    expect(cancelBtn).toHaveTextContent("Keep Activity");
-    expect(cancelBtn.className).not.toContain("destructive");
+    const cancelBtn = within(dialog).getByRole("button", { name: "Keep Activity" });
+    expect(cancelBtn.className).not.toContain("danger");
 
     // Confirm button is labelled "Remove Activity" and has destructive styling
-    const actionBtn = screen.getByTestId("alert-action");
-    expect(actionBtn).toHaveTextContent("Remove Activity");
-    expect(actionBtn.className).toContain("destructive");
+    const actionBtn = within(dialog).getByRole("button", { name: "Remove Activity" });
+    expect(actionBtn.className).toContain("danger");
   });
 
   it("dialog title warns about recorded expenditure (not a generic delete prompt)", () => {
@@ -732,8 +741,8 @@ describe("PRJ-FORM-VIS-07 — Financed activity removal dialog has correct butto
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toBeInTheDocument();
     // The dialog heading contains "Recorded Expenditure" warning text
-    const heading = dialog.querySelector("h2");
-    expect(heading?.textContent).toMatch(/recorded expenditure/i);
+    const heading = within(dialog).getByRole("heading");
+    expect(heading.textContent).toMatch(/recorded expenditure/i);
   });
 });
 
@@ -968,7 +977,7 @@ describe("PRJ-FORM-VIS-10 — Zero-residual functional contract unchanged", () =
     // The tab nav shows skeleton placeholders, not real tab buttons
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     // Skeleton elements are present
-    const skeletons = container.querySelectorAll("[data-testid='skeleton']");
+    const skeletons = container.querySelectorAll(".skeleton");
     expect(skeletons.length).toBeGreaterThan(0);
   });
 
