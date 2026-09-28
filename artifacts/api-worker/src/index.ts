@@ -40,6 +40,7 @@ import { dashboardRoutes } from "./routes/dashboard";
 import { healthRoutes } from "./routes/health";
 import { profileRoutes } from "./routes/profile";
 import { passwordResetAdminRoutes } from "./routes/password-reset-admin";
+import { aiRoutes } from "./routes/ai";
 import { realtimeLocksRoutes } from "./routes/realtime-locks";
 
 /**
@@ -424,6 +425,7 @@ app.route("/", dashboardRoutes);
 app.route("/", healthRoutes);
 app.route("/", profileRoutes);
 app.route("/", passwordResetAdminRoutes);
+app.route("/", aiRoutes);
 app.route("/", realtimeLocksRoutes);
 
 /**
