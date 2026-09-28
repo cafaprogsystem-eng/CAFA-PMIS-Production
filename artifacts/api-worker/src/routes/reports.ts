@@ -51,6 +51,7 @@ import {
 } from "../lib/storage";
 import { isStorageDeleteSafeForRecord, partitionSafeStoragePathsForReport } from "../lib/evidence-ownership";
 import { projectCoverageOverlapsMonth } from "../lib/project-reporting-coverage";
+import { broadcastUpdate, captureOperationalAudience } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/reports.ts (4906 lines, 17
@@ -72,10 +73,11 @@ import { projectCoverageOverlapsMonth } from "../lib/project-reporting-coverage"
  * lib/monthly-reporting-deadline.ts module it alone consumes — both exist
  * purely to resolve monthly-reporting "obligations" and deliver reminder
  * notifications/emails via the not-yet-built notification-creation engine.
- * Also dropped throughout (same reasoning as every prior file):
- * notifyEntityActorsDeduped / notifyNextApprover / createNotificationDeduped
- * notification creation, and realtime.broadcastUpdate /
- * realtime.captureOperationalAudience (deferred to the Durable Objects phase).
+ * realtime.broadcastUpdate / realtime.captureOperationalAudience are now
+ * wired (Durable Objects phase, see lib/realtime.ts). Still dropped
+ * throughout (same reasoning as every prior file) — deferred to the separate
+ * notifications-engine port: notifyEntityActorsDeduped / notifyNextApprover /
+ * createNotificationDeduped notification creation.
  */
 
 const objectStorageService = {
@@ -2514,6 +2516,7 @@ reportsRoutes.post("/reports", requireReportsCreateOrProgramStateCreate, async (
     });
     const result = await db.query<Record<string, unknown>>(`${reportSelect} WHERE r.id = $1`, [newId]);
     const enriched = await withHistory(db, result.rows);
+    await broadcastUpdate(c.env, { module: "reports", action: "created", entityId: newId, actorId: user.id, actorName: user.name });
     return c.json(enriched[0], 201);
   } finally {
     close();
@@ -2803,6 +2806,7 @@ reportsRoutes.patch("/reports/:reportId", requireReportsUpdateOrSomSprAuthor, as
     });
     const result = await db.query<Record<string, unknown>>(`${reportSelect} WHERE r.id = $1`, [reportId]);
     const enriched = await withHistory(db, result.rows);
+    await broadcastUpdate(c.env, { module: "reports", action: "updated", entityId: reportId, actorId: user.id, actorName: user.name });
     return c.json(enriched[0]);
   } finally {
     close();
@@ -2878,12 +2882,17 @@ reportsRoutes.delete(
       }
 
       // All storage objects cleaned — now delete DB rows in a single transaction
+      let deletionAudience: Awaited<ReturnType<typeof captureOperationalAudience>> = [];
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
         // Hold the report lock before proceeding, so an identity/scope PATCH
         // cannot race the deletion.
         await client.query(`SELECT id FROM reports WHERE id = $1 FOR UPDATE`, [reportId]);
+        // Deletion audience must be captured now, while the record still
+        // exists — the canonical resolver can't answer "who could see this"
+        // once the delete below commits.
+        deletionAudience = await captureOperationalAudience(client, "report", reportId);
         await client.query(
           `DELETE FROM document_registry_entries dre
            USING report_attachments ra
@@ -2912,6 +2921,7 @@ reportsRoutes.delete(
         module: "reports",
         entityId: reportId,
       });
+      await broadcastUpdate(c.env, { module: "reports", action: "deleted", entityId: reportId, actorId: user.id, actorName: user.name, deletionAudience });
       return c.json({ ok: true });
     } finally {
       close();
@@ -3868,9 +3878,9 @@ reportsRoutes.post(
       await client.query("COMMIT");
 
       // Notification creation (notifyEntityActorsDeduped, createNotificationDeduped,
-      // notifyNextApprover) and realtime.broadcastUpdate are dropped — deferred to
-      // the not-yet-built notification engine / Durable Objects phase, same as
-      // every prior file in this port.
+      // notifyNextApprover) is dropped — deferred to the not-yet-built
+      // notification engine, same as every prior file in this port.
+      await broadcastUpdate(c.env, { module: "reports", action: body.action, entityId: reportId, actorId: user.id, actorName: user.name });
 
       const result = await client.query<Record<string, unknown>>(`${reportSelect} WHERE r.id = $1`, [reportId]);
       const enriched = await withHistory(client, result.rows);
@@ -4148,6 +4158,7 @@ reportsRoutes.post(
 
       if (rows.length > 0) {
         await persistReportAttachmentPresentation(db, reportId, rows[0], body.attachmentType);
+        await broadcastUpdate(c.env, { module: "reports", action: "attachment_created", entityId: reportId, actorId: user.id, actorName: user.name });
         return c.json(toPublicReportAttachmentDto(rows[0]), 201);
       }
 
@@ -4176,6 +4187,7 @@ reportsRoutes.post(
           [existing[0].id],
         );
         await persistReportAttachmentPresentation(db, reportId, existing[0], body.attachmentType);
+        await broadcastUpdate(c.env, { module: "reports", action: "attachment_updated", entityId: reportId, actorId: user.id, actorName: user.name });
       }
       return c.json(existing[0] ? toPublicReportAttachmentDto(existing[0]) : undefined, 201);
     } finally {
@@ -4239,6 +4251,7 @@ reportsRoutes.delete(
         [attachId, reportId],
       );
       if (result.rows.length === 0) return c.json({ error: "not found" }, 404);
+      await broadcastUpdate(c.env, { module: "reports", action: "attachment_deleted", entityId: reportId, actorId: user!.id, actorName: user!.name });
       return c.json({ ok: true });
     } finally {
       close();

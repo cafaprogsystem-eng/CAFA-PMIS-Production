@@ -13,6 +13,7 @@ import {
   clearSessionCookie,
 } from "./lib/session";
 import { isAccountLocked, recordFailedLogin, clearAccountFailures } from "./lib/rate-limit-store";
+import { disconnectSession } from "./lib/realtime";
 import { getOpenAIClient, buildSystemPrompt } from "./lib/ai";
 import { attachCurrentUser, requireAuth, isDemoRoleHarnessEnabled, type Variables } from "./lib/rbac";
 import { notificationsRoutes } from "./routes/notifications";
@@ -188,7 +189,12 @@ app.post("/auth/logout", async (c) => {
   const { db, close } = openDb(c);
   try {
     const session = await getActiveSession(c, db);
-    if (session) await revokeSession(db, session.id);
+    if (session) {
+      await revokeSession(db, session.id);
+      // Terminate only this one session's realtime connections — other
+      // devices/tabs logged in as the same user stay connected.
+      await disconnectSession(c.env, session.id);
+    }
     clearSessionCookie(c);
     return c.json({ ok: true });
   } finally {

@@ -17,14 +17,16 @@ import {
 } from "../lib/rbac";
 import { assertActiveState } from "../lib/state-master";
 import { ACTIVE_RISK_STATUS_SQL } from "../lib/risk-constants";
+import { broadcastUpdate } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/risks.ts (766 lines, 4 routes).
  * Second file of the post-projects.ts phase.
  *
- * Dropped (same reasoning as every prior file): notification creation
- * (notifyByRole, createNotificationDeduped, notifyEntityActorsDeduped) and
- * realtime.broadcastUpdate. GET /risks/due-date-check and the whole
+ * realtime.broadcastUpdate is now wired (Durable Objects phase, see
+ * lib/realtime.ts). Still dropped — deferred to the separate notifications-
+ * engine port: notification creation (notifyByRole, createNotificationDeduped,
+ * notifyEntityActorsDeduped). GET /risks/due-date-check and the whole
  * lib/due-date-checker.ts module it wraps are ALSO dropped — that job (a
  * scheduled or manually-triggered sweep) does nothing but fire
  * createNotificationDeduped calls for risks/projects/plans/plan-activities
@@ -478,7 +480,7 @@ risksRoutes.post("/risks", requirePerm("risks.create"), async (c) => {
     const row = result.rows[0];
     const riskLevel = computeRiskLevel(String(row.likelihood ?? ""), row.impact ? String(row.impact) : null, String(row.severity ?? ""));
     const enriched = { ...row, riskLevel };
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "risks", action: "created", entityId: id, actorId: user.id, actorName: user.name });
     return c.json(enriched, 201);
   } finally {
     close();
@@ -570,7 +572,7 @@ risksRoutes.patch("/risks/:riskId", requirePerm("risks.update"), async (c) => {
     );
 
     const enriched = { ...row, riskLevel: newLevel };
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "risks", action: "updated", entityId: riskId, actorId: user.id, actorName: user.name });
     return c.json(enriched);
   } finally {
     close();

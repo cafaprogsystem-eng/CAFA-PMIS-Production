@@ -31,6 +31,12 @@ import {
 } from "../lib/storage";
 import { UploadTokenError, verifyUploadToken } from "../lib/upload-token";
 import { contentDispositionHeader } from "../lib/content-disposition";
+import {
+  broadcastConversationUpdate,
+  broadcastMessage,
+  broadcastPersonalConversationUpdate,
+  isUserOnline,
+} from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/conversations.ts (1904 lines).
@@ -39,14 +45,12 @@ import { contentDispositionHeader } from "../lib/content-disposition";
  * and message attachments through the same ATT-02 upload-token verification
  * pattern used everywhere else in this migration.
  *
- * Dropped throughout (same reasoning as every prior file): realtime.broadcast*
- * / realtime.isUserOnline (Durable Objects/realtime is the last phase of this
- * migration) and createNotificationDeduped (the not-yet-built notification
- * engine). Every other call — auditing, message_mentions inserts, the actual
- * attachment verification/finalisation, all scope guards — is preserved.
- * member.isOnline is hardcoded false: honest today (no presence tracking
- * exists yet in this worker), to be wired to real presence once realtime
- * lands.
+ * realtime.broadcast* / realtime.isUserOnline are now wired (Durable Objects
+ * phase, see lib/realtime.ts) — all 13 call sites, matching the source
+ * exactly. Still dropped — deferred to the separate notifications-engine
+ * port: createNotificationDeduped. Every other call — auditing,
+ * message_mentions inserts, the actual attachment verification/finalisation,
+ * all scope guards — is preserved.
  */
 
 const SAFE_INLINE_ATTACHMENT_CONTENT_TYPES = new Set([
@@ -707,6 +711,7 @@ conversationsRoutes.post("/conversations", requirePerm("messages.create"), async
     }
 
     await logAudit(db, { userId, action: "create", module: "conversation", entityId: convId, newValue: JSON.stringify({ type, name }) });
+    await broadcastConversationUpdate(c.env, allMemberIds, convId, { change: "conversation:updated", actorId: userId, actorName: user.name });
 
     /* M-03: Notification creation dropped (not-yet-built notification engine). */
 
@@ -767,9 +772,12 @@ conversationsRoutes.get("/conversations/:id", async (c) => {
          AND m.created_at > COALESCE(cm.last_read_at,'1970-01-01'::timestamptz)`,
       [userId, convId],
     );
+    const membersWithPresence = await Promise.all(
+      members.rows.map(async (member) => ({ ...member, isOnline: await isUserOnline(c.env, member.id) })),
+    );
     return c.json({
       ...conv,
-      members: members.rows.map((member) => ({ ...member, isOnline: false })),
+      members: membersWithPresence,
       memberCount: members.rows.length,
       lastMessageBody: lastMsg.rows[0]?.body ?? null,
       lastMessageAt: lastMsg.rows[0]?.lastMessageAt ?? null,
@@ -813,6 +821,7 @@ conversationsRoutes.patch("/conversations/:id", requirePerm("messages.manage_mem
       [name.trim(), convId],
     );
     await logAudit(db, { userId, action: "conversation_rename", module: "messages", entityId: convId, newValue: name.trim() });
+    await broadcastConversationUpdate(c.env, [], convId, { change: "conversation:updated", actorId: userId, actorName: user.name });
     const updated = await getConvById(db, convId, user);
     return c.json({ ...updated, description });
   } finally {
@@ -856,6 +865,7 @@ conversationsRoutes.delete("/conversations/:id/members/:memberId", requirePerm("
       [convId, memberId],
     );
     await logAudit(db, { userId, action: "member_removed", module: "messages", entityId: convId, newValue: String(memberId) });
+    await broadcastConversationUpdate(c.env, [memberId], convId, { change: "membership:changed", actorId: userId, actorName: user.name });
     return c.body(null, 204);
   } finally {
     close();
@@ -914,13 +924,17 @@ conversationsRoutes.post("/conversations/:id/members", requirePerm("messages.man
         `SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND user_id=$2 LIMIT 1`,
         [convId, newUserId],
       );
-      if (!existingMember.rows[0]) {
+      const added = !existingMember.rows[0];
+      if (added) {
         await client.query(
           `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1,$2)`,
           [convId, newUserId],
         );
       }
       await client.query("COMMIT");
+      if (added) {
+        await broadcastConversationUpdate(c.env, [newUserId as number], convId, { change: "membership:changed", actorId: userId, actorName: user.name });
+      }
     } catch (err) {
       await client.query("ROLLBACK").catch(() => {});
       throw err;
@@ -1370,6 +1384,18 @@ conversationsRoutes.post("/conversations/:id/messages", requirePerm("messages.se
     }
     finally { client.release(); }
 
+    const otherMembers = await db.query<{ user_id: number }>(
+      `SELECT user_id FROM conversation_members WHERE conversation_id=$1 AND user_id!=$2`,
+      [convId, userId],
+    );
+    const memberIds = otherMembers.rows.map((m) => m.user_id);
+
+    /* A message's reply preview is viewer-specific: a member may have hidden
+     * the reply source. Emit only the stable identity needed by clients to
+     * refetch their own authorised view; never fan out a sender-rendered DTO. */
+    await broadcastMessage(c.env, [userId, ...memberIds], { id: newMsgId, conversationId: convId });
+    await broadcastConversationUpdate(c.env, memberIds, convId);
+
     /* ── H-01/M-02: notification creation dropped (not-yet-built notification engine). ── */
     if (validatedMentionedUserIds.length > 0) {
       for (const mentionedUid of validatedMentionedUserIds) {
@@ -1441,6 +1467,7 @@ conversationsRoutes.post("/messages/:msgId/reactions", async (c) => {
        WHERE r.message_id=$1 ORDER BY r.created_at ASC`,
       [msgId],
     );
+    await broadcastConversationUpdate(c.env, [], msgRow.rows[0].conversation_id, { change: "message:reaction", messageId: msgId, actorId: userId, actorName: user.name });
     return c.json(reactions.rows);
   } finally {
     close();
@@ -1586,6 +1613,7 @@ conversationsRoutes.patch("/messages/:msgId", async (c) => {
     );
     if ((edited.rowCount ?? 0) !== 1) return c.json({ error: "message_already_deleted" }, 409);
     await logAudit(db, { userId, action: "message_edit", module: "messages", entityId: msgId, newValue: body.trim().slice(0, 200) });
+    await broadcastConversationUpdate(c.env, [], existing.rows[0].conversation_id, { change: "message:updated", messageId: msgId, actorId: userId, actorName: user.name });
     const updated = await db.query<Record<string, unknown>>(
       `SELECT m.id, m.conversation_id AS "conversationId",
               m.sender_id AS "senderId", u.name AS "senderName", u.role_label AS "senderRoleLabel",
@@ -1682,6 +1710,7 @@ conversationsRoutes.delete("/messages/:msgId", async (c) => {
         [msgId, userId],
       );
       await logAudit(db, { userId, action: "message_hide", module: "messages", entityId: msgId });
+      await broadcastPersonalConversationUpdate(c.env, userId, existing.rows[0].conversation_id);
       return c.body(null, 204);
     }
 
@@ -1694,6 +1723,7 @@ conversationsRoutes.delete("/messages/:msgId", async (c) => {
     );
     if ((deleted.rowCount ?? 0) !== 1) return c.json({ error: "message_already_deleted" }, 409);
     await logAudit(db, { userId, action: "message_delete", module: "messages", entityId: msgId, newValue: JSON.stringify({ deletionType: "for_everyone" }) });
+    await broadcastConversationUpdate(c.env, [], existing.rows[0].conversation_id, { change: "message:deleted", messageId: msgId, actorId: userId, actorName: user.name });
     return c.body(null, 204);
   } finally {
     close();
@@ -1745,6 +1775,7 @@ conversationsRoutes.post("/messages/:msgId/pin", async (c) => {
     );
     if ((pinned.rowCount ?? 0) !== 1) return c.json({ error: "message_already_deleted" }, 409);
     await logAudit(db, { userId, action: "message_pin", module: "messages", entityId: msgId });
+    await broadcastConversationUpdate(c.env, [], convId, { change: "message:pin", messageId: msgId, actorId: userId, actorName: user.name });
 
     /* Notification creation dropped (not-yet-built notification engine). */
     return c.body(null, 204);
@@ -1783,6 +1814,7 @@ conversationsRoutes.delete("/messages/:msgId/pin", async (c) => {
     );
     if ((unpinned.rowCount ?? 0) !== 1) return c.json({ error: "message_already_deleted" }, 409);
     await logAudit(db, { userId, action: "message_unpin", module: "messages", entityId: msgId });
+    await broadcastConversationUpdate(c.env, [], msgRow.rows[0].conversation_id, { change: "message:unpin", messageId: msgId, actorId: userId, actorName: user.name });
     return c.body(null, 204);
   } finally {
     close();

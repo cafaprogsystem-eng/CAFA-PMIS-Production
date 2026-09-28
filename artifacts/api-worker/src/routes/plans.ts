@@ -16,6 +16,7 @@ import { assertActiveState } from "../lib/state-master";
 import { VALID_SECTOR_SET } from "../lib/sectors";
 import { createRegistrationSession, validateRegistrationSession, closeRegistrationSession } from "../lib/plan-registration-session";
 import { deleteObjectSafely } from "../lib/storage";
+import { broadcastUpdate, captureOperationalAudience } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/plans.ts (3340 lines, 10
@@ -51,10 +52,10 @@ import { deleteObjectSafely } from "../lib/storage";
  * FOR UPDATE/FOR SHARE before re-running the full 7-rule readiness check —
  * never trusting the pre-transaction read), and POST /plans/:planId/reopen.
  *
- * Dropped (same reasoning as every prior file): notification creation
- * (notifyEntityActorsDeduped, notifyNextApprover) and
- * realtime.broadcastUpdate / realtime.captureOperationalAudience (deferred to
- * the Durable Objects phase).
+ * realtime.broadcastUpdate / realtime.captureOperationalAudience are now
+ * wired (Durable Objects phase, see lib/realtime.ts). Still dropped —
+ * deferred to the separate notifications-engine port: notification creation
+ * (notifyEntityActorsDeduped, notifyNextApprover).
  */
 
 export { PLAN_TRANSITIONS, PLAN_TRANSITION_PERMS };
@@ -1576,7 +1577,7 @@ plansRoutes.post("/plans", requirePerm("plans.create"), async (c) => {
       module: "plans", entityId: planId,
       newValue: `${code} ${title}`,
     });
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "plans", action: "created", entityId: planId, actorId: user.id, actorName: user.name });
 
     if (doCloseOnCreate) {
       // Registration already closed — do NOT return a usable token.
@@ -2172,7 +2173,11 @@ plansRoutes.patch("/plans/:planId", async (c) => {
     if (!hasUpdatePerm && closeRegistration === true) {
       await logAudit(db, { userId: user.id, action: "registration_completed", module: "plans", entityId: planId });
     }
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, {
+      module: "plans",
+      action: Array.isArray(body.activities) ? "activities_updated" : "updated",
+      entityId: planId, actorId: user.id, actorName: user.name,
+    });
     const plan = await getPlanById(db, planId);
     return c.json(plan);
   } catch (err) {
@@ -2228,7 +2233,7 @@ plansRoutes.post("/plans/:planId/close-registration", async (c) => {
     await logAudit(db, {
       userId: user.id, action: "registration_closed", module: "plans", entityId: planId,
     });
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "plans", action: "registration_closed", entityId: planId, actorId: user.id, actorName: user.name });
     return c.json({ closed: true });
   } finally {
     close();
@@ -2257,6 +2262,7 @@ plansRoutes.delete("/plans/:planId", requirePerm("plans.delete", "You do not hav
     if (!stateGuard.ok) return c.json(stateGuard.body, stateGuard.status as any);
 
     let attachmentObjectPaths: string[] = [];
+    let deletionAudience: Awaited<ReturnType<typeof captureOperationalAudience>> = [];
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -2265,9 +2271,10 @@ plansRoutes.delete("/plans/:planId", requirePerm("plans.delete", "You do not hav
       // uploads until we COMMIT, so the path-collection SELECT below is
       // serialised with any in-flight upload.
       await client.query(`SELECT id FROM plans WHERE id = $1 FOR UPDATE`, [planId]);
-      // Dropped: realtime.captureOperationalAudience (read-only audience
-      // snapshot for the post-delete broadcast — the broadcast itself is
-      // dropped, so there is nothing left to capture it for).
+      // Deletion audience must be captured now, while the record still
+      // exists — the canonical resolver can't answer "who could see this"
+      // once the delete below commits.
+      deletionAudience = await captureOperationalAudience(client, "plan", planId);
 
       // Collect attachment paths atomically under the exclusive lock.
       const attachmentPathsResult = await client.query<{ object_path: string }>(
@@ -2349,7 +2356,7 @@ plansRoutes.delete("/plans/:planId", requirePerm("plans.delete", "You do not hav
     }
 
     await logAudit(db, { userId: user.id, action: "delete", module: "plans", entityId: planId });
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "plans", action: "deleted", entityId: planId, actorId: user.id, actorName: user.name, deletionAudience });
     return c.body(null, 204);
   } finally {
     close();
@@ -2584,7 +2591,7 @@ plansRoutes.post("/plans/:planId/transitions", async (c) => {
 
       // Dropped (deferred to the notifications-engine port): notifyEntityActorsDeduped
       // ("resubmitted" notice) and notifyNextApprover (G-01, next approver in chain).
-      // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+      await broadcastUpdate(c.env, { module: "plans", action, entityId: planId, actorId: user.id, actorName: user.name });
       const plan = await getPlanById(db, planId);
       return c.json(plan);
       // Submit is fully self-contained; shared code below is for other actions.
@@ -2704,7 +2711,7 @@ plansRoutes.post("/plans/:planId/transitions", async (c) => {
     // Dropped (deferred to the notifications-engine port): notifyEntityActorsDeduped
     // (transition notice to entity actors) and notifyNextApprover (G-01, next
     // approver in chain, resolved via meta?.sectors[0]).
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "plans", action, entityId: planId, actorId: user.id, actorName: user.name });
     const plan = await getPlanById(db, planId);
     return c.json(plan);
   } finally {
@@ -2823,7 +2830,7 @@ plansRoutes.post("/plans/:planId/reopen", requirePerm("plans.reopen", "You do no
 
     // Dropped (deferred to the notifications-engine port): notifyEntityActorsDeduped
     // ("reopened" notice, mandatory:true).
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "plans", action: "reopened", entityId: planId, actorId: user.id, actorName: user.name });
     const plan = await getPlanById(db, planId);
     return c.json(plan);
   } finally {

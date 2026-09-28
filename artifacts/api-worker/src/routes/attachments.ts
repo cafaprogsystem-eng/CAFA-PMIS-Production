@@ -30,6 +30,7 @@ import { MAX_ATTACHMENT_BYTES } from "../lib/attachment-limits";
 import { ALLOWED_ATTACHMENT_CONTENT_TYPES as ALLOWED_CONTENT_TYPES } from "../lib/attachment-content-types";
 import { contentDispositionHeader } from "../lib/content-disposition";
 import { hasUnsafeFileNameChar } from "../lib/safe-file-name";
+import { publishSupportingEvent } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/attachments.ts (683 lines) —
@@ -40,8 +41,8 @@ import { hasUnsafeFileNameChar } from "../lib/safe-file-name";
  * `plan_attachments` table the Filing & Archive registry (routes/files.ts)
  * already reads.
  *
- * Dropped throughout (same reasoning as every prior file):
- * realtime.publishSupportingEvent.
+ * realtime.publishSupportingEvent is now wired (Durable Objects phase, see
+ * lib/realtime.ts).
  *
  * Adapted: the source's `assertCanonicalParent(req, ..., client = pool)`
  * detected whether it was called inside a transaction by comparing `client
@@ -555,6 +556,7 @@ attachmentsRoutes.post("/attachments/operations/:operationId/finalize", async (c
     }
     const attachment = await getAttachment(db, attachmentId);
     await logAudit(db, { userId: user.id, action: "attachment_uploaded", module: currentModule(op.parentType), entityId: attachmentId });
+    await publishSupportingEvent(c.env, { entityType: "attachment", entityId: attachmentId, action: "finalized" });
     return c.json(publicAttachment(attachment!), 201);
   } finally {
     close();
@@ -693,6 +695,7 @@ async function setLifecycle(
     await client.query(`UPDATE attachments SET status = $1, updated_at = NOW() WHERE id = $2`, [status, id]);
     await client.query("COMMIT");
     await logAudit(db, { userId: user.id, action: `attachment_${status}`, module: currentModule(locked.rows[0].parentType as ParentType), entityId: id });
+    await publishSupportingEvent(c.env, { entityType: "attachment", entityId: id, action: status });
     if (status === "deleted") await deleteObjectSafely(c.env, String(locked.rows[0].objectPath)).catch(() => {});
     return c.json({ ok: true, status });
   } catch (error) {

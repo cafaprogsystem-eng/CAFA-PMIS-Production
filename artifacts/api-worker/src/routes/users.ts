@@ -17,22 +17,20 @@ import { VALID_SECTOR_SET } from "../lib/sectors";
 import { validatePassword } from "../lib/password";
 import { assertActiveState } from "../lib/state-master";
 import { revokeAllSessionsForUser } from "../lib/session";
+import { isUserOnline, publishSupportingEvent, publishAuthorizationChanged, disconnectUser } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/users.ts.
  *
- * Dropped, not stubbed: every realtime.publishSupportingEvent /
- * publishAuthorizationChanged / disconnectUser call — real-time push is the
- * last migration phase. disconnectUser's effect isn't actually lost:
- * attachCurrentUser re-checks status='active' from Postgres on every single
- * request (no cached identity across requests the way Express's
- * long-lived process could accumulate one), so a status change already
- * takes effect on that user's very next request without it.
- * revokeAllSessionsForUser (the reset-password path) already does the real
- * security-relevant revocation at the DB session level.
- *
- * withPresence's isOnline is hardcoded false for the same reason — it needs
- * the Durable Objects presence system, not built yet.
+ * realtime.publishSupportingEvent / publishAuthorizationChanged /
+ * disconnectUser / isUserOnline are now wired (Durable Objects phase, see
+ * lib/realtime.ts). disconnectUser's effect was never security-critical here
+ * (attachCurrentUser already re-checks status='active' from Postgres on
+ * every single request, so a status change already takes effect on that
+ * user's very next request regardless) — wiring it now is purely about
+ * immediate UX (kick a live session now, don't wait for its next request).
+ * revokeAllSessionsForUser (the reset-password path) does the real
+ * security-relevant revocation at the DB session level, unchanged.
  *
  * GET /users/:id/effective-access is deferred: lib/effectiveAccess.ts (495
  * lines) exists solely for that one admin diagnostic endpoint and adds
@@ -157,14 +155,24 @@ interface UserListRow extends Record<string, unknown> {
   emailVerifiedAt: string | null;
 }
 
-function withPresence<T extends { id: number; lastSeenAt?: Date | string | null }>(
+async function withPresence<T extends { id: number; lastSeenAt?: Date | string | null }>(
+  env: Bindings,
   user: T,
-): T & { isOnline: boolean; lastSeenAt: Date | string | null } {
+): Promise<T & { isOnline: boolean; lastSeenAt: Date | string | null }> {
   return {
     ...user,
-    isOnline: false,
+    isOnline: await isUserOnline(env, user.id),
     lastSeenAt: user.lastSeenAt ?? null,
   };
+}
+
+/** Publishes the user-directory refetch hint, plus an authorization-changed
+ *  signal when the change affects what the user themselves can see/do. */
+async function publishUserDirectoryChange(
+  env: Bindings, userId: number, action: string, authorizationChanged = false,
+): Promise<void> {
+  await publishSupportingEvent(env, { entityType: "user", entityId: userId, action });
+  if (authorizationChanged) await publishAuthorizationChanged(env, userId);
 }
 
 async function dispatchInviteEmail(
@@ -300,7 +308,7 @@ usersRoutes.get("/users", requirePerm("users.view"), async (c) => {
     const { rows } = await db.query<UserListRow>(sql, pageParams);
     const total = count.rows[0]?.total ?? 0;
     return c.json({
-      items: rows.map(withPresence),
+      items: await Promise.all(rows.map((row) => withPresence(c.env, row))),
       total,
       limit,
       offset,
@@ -463,7 +471,7 @@ usersRoutes.get("/users/:id", requirePerm("users.view"), async (c) => {
       [id],
     );
     if (!rows[0]) return c.json({ error: "not_found" }, 404);
-    return c.json(withPresence(rows[0]));
+    return c.json(await withPresence(c.env, rows[0]));
   } finally {
     close();
   }
@@ -627,6 +635,7 @@ usersRoutes.post("/users", requirePerm("users.manage"), async (c) => {
       }
     }
 
+    await publishUserDirectoryChange(c.env, id, "created");
     return c.json({
       user: out.rows[0],
       inviteToken,
@@ -711,6 +720,7 @@ usersRoutes.post("/users/:id/resend-invite", requirePerm("users.manage"), async 
         passwordConfigured: false,
       }),
     });
+    await publishUserDirectoryChange(c.env, id, "invite_changed");
     return c.json({ ok: true, inviteToken: token, expiresAt: expires.toISOString(), emailDelivered: delivered, emailDelivery });
   } finally {
     close();
@@ -744,6 +754,7 @@ usersRoutes.post("/users/:id/cancel-invite", requirePerm("users.manage"), async 
       oldValue: JSON.stringify({ status: u.status, inviteExpiresAt: u.inviteExpiresAt ?? null, inviteEmailStatus: u.inviteEmailStatus ?? null }),
       newValue: JSON.stringify({ status: "deactivated", inviteExpiresAt: null, inviteEmailStatus: u.inviteEmailStatus ?? null }),
     });
+    await publishUserDirectoryChange(c.env, id, "invite_changed", true);
     return c.json({ ok: true });
   } finally {
     close();
@@ -927,11 +938,29 @@ usersRoutes.patch("/users/:id", requirePerm("users.manage"), async (c) => {
       newValue: JSON.stringify(auditUserSnapshot({ ...existing, ...next_ }, finalStateId != null ? (stateNameById.get(Number(finalStateId)) ?? null) : null)),
     });
 
+    // next_.sector (and often next_.state_id) is ALWAYS derived above
+    // regardless of what this request actually touched (role→sector/state_id
+    // reconciliation runs unconditionally), so checking mere key presence in
+    // next_ made authorizationChanged true for every PATCH, even a plain name
+    // or phone edit — forcing publishUserDirectoryChange's realtime broadcast
+    // to treat it as a real permission change every time. Compare the final
+    // derived value against what actually existed before instead.
+    const authorizationChanged =
+      (next_.role !== undefined && next_.role !== existing.role) ||
+      (next_.scope !== undefined && next_.scope !== existing.scope) ||
+      stateAssignmentChanged ||
+      next_.sector !== existing.sector ||
+      (next_.status !== undefined && next_.status !== existing.status);
+    await publishUserDirectoryChange(
+      c.env, id, next_.status !== undefined ? "status_changed" : "updated", authorizationChanged,
+    );
+    if (next_.status !== undefined && next_.status !== "active") await disconnectUser(c.env, id);
+
     const out = await db.query<UserListRow>(
       `SELECT ${USER_COLS} FROM users u LEFT JOIN states s ON s.id = u.state_id WHERE u.id = $1`,
       [id],
     );
-    return c.json(withPresence(out.rows[0]));
+    return c.json(await withPresence(c.env, out.rows[0]));
   } finally {
     close();
   }
@@ -952,6 +981,8 @@ usersRoutes.post("/users/:id/status", requirePerm("users.manage"), async (c) => 
     const existing = (await db.query(`SELECT * FROM users WHERE id = $1`, [id])).rows[0] as any;
     if (!existing) return c.json({ error: "not_found" }, 404);
     await db.query(`UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2`, [status, id]);
+    await publishUserDirectoryChange(c.env, id, "status_changed", true);
+    if (status !== "active") await disconnectUser(c.env, id);
     await logAudit(db, {
       userId: actor.id,
       action: "status_change",
@@ -1006,6 +1037,8 @@ usersRoutes.post("/users/:id/reset-password", requirePerm("users.manage"), async
         [inviteToken, inviteExpiresAt, id],
       );
       await revokeAllSessionsForUser(db, id);
+      await publishUserDirectoryChange(c.env, id, "invite_changed", true);
+      await disconnectUser(c.env, id);
       await logAudit(db, { userId: actor.id, action: "password_reset_invite", module: "users", entityId: id });
       return c.json({ ok: true, inviteToken });
     }
@@ -1018,6 +1051,7 @@ usersRoutes.post("/users/:id/reset-password", requirePerm("users.manage"), async
       [hash, id],
     );
     await revokeAllSessionsForUser(db, id);
+    await disconnectUser(c.env, id);
     await logAudit(db, { userId: actor.id, action: "password_reset", module: "users", entityId: id });
     return c.json({ ok: true });
   } finally {
@@ -1038,6 +1072,8 @@ usersRoutes.delete("/users/:id", requirePerm("users.manage"), async (c) => {
     if (!existing) return c.json({ error: "not_found" }, 404);
     await db.query(`DELETE FROM users WHERE id = $1`, [id]);
     await logAudit(db, { userId: actor.id, action: "delete", module: "users", entityId: id, oldValue: JSON.stringify(existing) });
+    await publishUserDirectoryChange(c.env, id, "deleted", true);
+    await disconnectUser(c.env, id);
     return c.json({ ok: true });
   } finally {
     close();

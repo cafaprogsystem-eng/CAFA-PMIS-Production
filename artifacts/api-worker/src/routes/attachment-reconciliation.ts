@@ -10,6 +10,7 @@ import {
 } from "../lib/attachment-reconciliation";
 import { buildStorageEvidenceInventory, migrationRecordClassification } from "../lib/storage-evidence-inventory";
 import { ObjectNotFoundError, getObjectEntityMetadata } from "../lib/storage";
+import { publishSupportingEvent } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/attachment-reconciliation.ts
@@ -19,6 +20,12 @@ import { ObjectNotFoundError, getObjectEntityMetadata } from "../lib/storage";
  * deliberately separate from the Filing & Archive registry: registry rows are
  * discovery indexes, while these rows are evidence and disposition history
  * for unresolved metadata.
+ *
+ * realtime.publishSupportingEvent is now wired (Durable Objects phase, see
+ * lib/realtime.ts) — this was the one module with no drop-comment trail at
+ * all in the earlier port; the 3 call sites (disposition_changed here ×2,
+ * inventory_changed in lib/attachment-reconciliation.ts) are confirmed
+ * against the source file directly.
  */
 
 const OWNER_DISPOSITION_ROLES = new Set(["super_admin", "executive_director", "program_manager"]);
@@ -400,6 +407,7 @@ attachmentReconciliationRoutes.post("/attachment-reconciliation/:id/disposition"
       oldValue: JSON.stringify({ classification: row.classification, before: row.beforeMetadata }),
       newValue: JSON.stringify({ rationale }),
     });
+    await publishSupportingEvent(c.env, { entityType: "attachment_reconciliation", entityId: id, action: "disposition_changed" });
     return c.json({ ok: true, disposition: action });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -503,6 +511,7 @@ attachmentReconciliationRoutes.post("/attachment-reconciliation/:id/recover", re
       entityId: row.sourceId,
       newValue: JSON.stringify({ rationale, evidence: "exact_provider_size_and_content_type" }),
     });
+    await publishSupportingEvent(c.env, { entityType: "attachment_reconciliation", entityId: id, action: "recovered" });
     return c.json({ ok: true, disposition: "RECOVERED" });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);

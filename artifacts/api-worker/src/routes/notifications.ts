@@ -3,6 +3,7 @@ import type { Bindings } from "../lib/db";
 import { openDb } from "../lib/db";
 import { attachCurrentUser, requireAuth, type Variables } from "../lib/rbac";
 import { normaliseNotificationLink, presentNotificationKind } from "../lib/notifications";
+import { publishSupportingEventToUser } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/notifications.ts — the first
@@ -11,13 +12,8 @@ import { normaliseNotificationLink, presentNotificationKind } from "../lib/notif
  * notifications.view (see permissionsFor), so requireAuth alone gates
  * these — no requirePerm needed.
  *
- * realtime.publishSupportingEventToUser(...) calls from the original are
- * dropped, not stubbed: real-time push is deliberately the last migration
- * phase (Durable Objects). Marking a notification read still commits to
- * Postgres immediately; a client just won't see the badge update on
- * another open tab until its next poll/reconnect, the same graceful
- * degradation the current AWS app already relies on for a missed
- * broadcast.
+ * realtime.publishSupportingEventToUser(...) is now wired (Durable Objects
+ * phase, see lib/realtime.ts).
  */
 
 const NOTIFICATION_MODULES = new Set([
@@ -131,6 +127,7 @@ notificationsRoutes.patch("/notifications/:id/read", async (c) => {
       [id, user.id],
     );
     if (!r.rows[0]) return c.json({ error: "not_found" }, 404);
+    await publishSupportingEventToUser(c.env, user.id, { entityType: "notification", entityId: id, action: "read" });
     return c.json({ ok: true });
   } finally {
     close();
@@ -141,10 +138,13 @@ notificationsRoutes.post("/notifications/read-all", async (c) => {
   const user = c.get("currentUser")!;
   const { db, close } = openDb(c);
   try {
-    await db.query(
+    const updated = await db.query<{ id: number }>(
       `UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL RETURNING id`,
       [user.id],
     );
+    if (updated.rows[0]) {
+      await publishSupportingEventToUser(c.env, user.id, { entityType: "notification", entityId: updated.rows[0].id, action: "read_all" });
+    }
     return c.json({ ok: true });
   } finally {
     close();

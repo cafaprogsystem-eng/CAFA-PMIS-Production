@@ -30,6 +30,7 @@ import { isExactDevelopmentTestRetirementTarget } from "../lib/development-test-
 import { deleteObjectSafely, getObjectEntityFile, downloadObject, ObjectNotFoundError } from "../lib/storage";
 import { hasFullOperationalAccess } from "../lib/accessControl";
 import { contentDispositionHeader } from "../lib/content-disposition";
+import { broadcastUpdate, captureOperationalAudience } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/projects.ts. projects.ts is the
@@ -76,13 +77,14 @@ import { contentDispositionHeader } from "../lib/content-disposition";
  * runProjectDataIntegrityScan (a startup-time audit log, not a route) is
  * likewise not ported — see lib/project-data-integrity.ts's comment.
  *
- * Also not ported here (same reasoning as every prior batch): notification
+ * realtime.broadcastUpdate / realtime.captureOperationalAudience are now
+ * wired (Durable Objects phase, see lib/realtime.ts). Still not ported here
+ * — deferred to the separate notifications-engine port: notification
  * creation (createNotificationDeduped, notifyEntityActors,
  * notifyEntityActorsDeduped, notifyNextApprover, checkAndFireBudgetAlert —
- * lib/notifications.ts's ~900-line preference/dedup engine) and
- * realtime.broadcastUpdate / realtime.captureOperationalAudience (deferred to
- * the Durable Objects phase). Every call site where the original fired one of
- * these is left as a comment naming what was dropped, not silently omitted.
+ * lib/notifications.ts's ~900-line preference/dedup engine). Every call site
+ * where the original fired one of these is left as a comment naming what was
+ * dropped, not silently omitted.
  */
 
 interface EffectiveSectors {
@@ -1169,7 +1171,7 @@ projectsRoutes.post("/projects", requirePerm("projects.create"), async (c) => {
       newValue: project.title as string,
     });
     const enriched = await enrichProject(db, project, user.name);
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "projects", action: "created", entityId: projectId, actorId: user.id, actorName: user.name });
     return c.json(enriched, 201);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -1673,7 +1675,7 @@ projectsRoutes.patch("/projects/:projectId", requirePerm("projects.update"), asy
         ? JSON.stringify({ title: body.title, oldBudget: oldBudgetTotal, newBudget: patchEffectiveBudget })
         : body.title,
     });
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "projects", action: "updated", entityId: projectId, actorId: user.id, actorName: user.name });
     const enriched = await enrichProject(db, { id: projectId, title: body.title } as Record<string, unknown>, user.name);
     return c.json(enriched);
   } catch (err) {
@@ -1879,7 +1881,10 @@ projectsRoutes.post("/projects/:projectId/transitions", async (c) => {
     // threshold notification) is dropped for the same reason.
 
     const enriched = await enrichProject(db, updatedRow!, null);
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, {
+      module: "projects", action: body.action, entityId: projectId, actorId: user.id, actorName: user.name,
+      data: { from: fromStatus, to: transition.to },
+    });
     return c.json(enriched);
   } finally {
     close();
@@ -2009,6 +2014,15 @@ projectsRoutes.delete("/projects/:projectId", requirePerm("projects.delete"), as
     const now = new Date();
     const userId = user.id;
 
+    // Deletion audience must be captured now, while the record is still
+    // visible to the canonical resolver (both modes end with a project row
+    // canAccessOperationalRecord's own deleted_at IS NULL check can no longer
+    // see — permanent removes the row outright, soft-delete sets deleted_at).
+    // Only permanent delete actually removes project_assignments rows below.
+    const deletionAudience = await captureOperationalAudience(client, "project", projectId, {
+      projectAssignmentRemovedByDeletion: mode === "permanent",
+    });
+
     // Check protected dependencies before permanent delete.
     if (mode === "permanent") {
       const { rows: spentRows } = await client.query<{ cnt: number }>(
@@ -2042,9 +2056,6 @@ projectsRoutes.delete("/projects/:projectId", requirePerm("projects.delete"), as
         `SELECT project_id, user_id FROM project_assignments WHERE project_id = $1 FOR UPDATE`,
         [projectId],
       );
-      // Dropped: realtime.captureOperationalAudience (read-only audience
-      // snapshot for the post-delete broadcast — the broadcast itself is
-      // dropped, so there is nothing left to capture it for).
     }
 
     // Write audit event BEFORE deletion — must survive permanent delete.
@@ -2201,7 +2212,9 @@ projectsRoutes.delete("/projects/:projectId", requirePerm("projects.delete"), as
       });
     }
 
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, {
+      module: "projects", action: "deleted", entityId: projectId, actorId: user.id, actorName: user.name, deletionAudience,
+    });
     return c.json({ deletionMode: mode, projectId, projectCode: project.code });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -2350,7 +2363,7 @@ projectsRoutes.post("/projects/:projectId/donor-correction", requirePerm("projec
     await client.query("COMMIT");
 
     const result = updated.rows[0];
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "projects", action: "donor_corrected", entityId: projectId, actorId: user.id, actorName: user.name });
     return c.json({
       projectId: result.id,
       projectCode: result.code,
@@ -2458,7 +2471,7 @@ projectsRoutes.post("/projects/:projectId/merge", requirePerm("projects.update")
     const { rows: [updated] } = await client.query(`${projectSummarySelect} WHERE p.id = $1`, [projectId]);
 
     await logAudit(db, { userId: user.id, action: "merge", module: "project", entityId: projectId, newValue: JSON.stringify({ stateIds, sectors, localities }) });
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "projects", action: "merged", entityId: projectId, actorId: user.id, actorName: user.name });
     return c.json(updated);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -2654,7 +2667,7 @@ projectsRoutes.post("/projects/:projectId/documents", requirePerm("documents.upl
     });
     // Dropped (deferred to the notifications-engine port): notifyEntityActors
     // ("document_uploaded" notice to project actors).
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "projects", action: "document_created", entityId: projectId, actorId: user.id, actorName: user.name });
     return c.json(toPublicDocumentDto({ ...uploadResult.rows[0], uploadedByName: user.name }), 201);
   } finally {
     close();
@@ -2823,7 +2836,7 @@ projectsRoutes.delete("/projects/:projectId/documents/:documentId", requirePerm(
       txClient.release();
     }
 
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "projects", action: "document_deleted", entityId: projectId, actorId: user.id, actorName: user.name });
     return c.body(null, 204);
   } finally {
     close();
@@ -3362,7 +3375,7 @@ projectsRoutes.post("/projects/:projectId/state-allocations", requirePerm("proje
       entityId: projectId,
       newValue: JSON.stringify((allocations ?? []).map((a) => ({ stateId: a.stateId, budgetAllocation: a.budgetAllocation ?? null }))),
     });
-    // Dropped: realtime.broadcastUpdate (Durable Objects phase).
+    await broadcastUpdate(c.env, { module: "projects", action: "state_allocations_updated", entityId: projectId, actorId: user.id, actorName: user.name });
 
     // Return allocations scoped to the requesting state role (same semantics as GET).
     const isStateRolePost = user.role === "state_program_officer" || user.role === "state_office_manager";

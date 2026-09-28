@@ -23,6 +23,7 @@ import { verifyUploadToken, UploadTokenError } from "../lib/upload-token";
 import { MAX_ATTACHMENT_BYTES } from "../lib/attachment-limits";
 import { contentDispositionHeader } from "../lib/content-disposition";
 import { hasUnsafeFileNameChar } from "../lib/safe-file-name";
+import { publishSupportingEvent } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/files.ts (853 lines) — first
@@ -38,8 +39,8 @@ import { hasUnsafeFileNameChar } from "../lib/safe-file-name";
  * reportScopeSql are exported for routes/storage.ts (batch 2) to reuse for
  * its own private-object authorization check.
  *
- * Dropped throughout (same reasoning as every prior file):
- * realtime.publishSupportingEvent.
+ * realtime.publishSupportingEvent is now wired (Durable Objects phase, see
+ * lib/realtime.ts).
  */
 
 const objectStorageService = {
@@ -707,6 +708,7 @@ filesRoutes.post("/files/upload", async (c) => {
       client.release();
     }
     await logAudit(db, { userId: user.id, action: "file_archive_uploaded", module: "files", entityId: insertedId });
+    await publishSupportingEvent(c.env, { entityType: "file", entityId: insertedId, action: "created" });
     return c.json({ id: insertedId, source: "resource" }, 201);
   } finally {
     close();
@@ -755,6 +757,7 @@ filesRoutes.patch("/files/resource/:id", async (c) => {
     );
     if (!updated.rows.length) return c.json({ error: "file_not_found" }, 404);
     await logAudit(db, { userId: user.id, action: `file_archive_resource_${status ?? "updated"}`, module: "files", entityId: id });
+    await publishSupportingEvent(c.env, { entityType: "file", entityId: id, action: status === "archived" ? "archived" : "updated" });
     return c.json({ ok: true });
   } finally {
     close();
@@ -851,6 +854,7 @@ filesRoutes.post("/files/resource/:id/replace", async (c) => {
       }
     }
     await logAudit(db, { userId: user.id, action: "file_archive_resource_replaced", module: "files", entityId: id });
+    await publishSupportingEvent(c.env, { entityType: "file", entityId: id, action: "replaced" });
     return c.json({ ok: true });
   } finally {
     close();
@@ -890,6 +894,7 @@ filesRoutes.delete("/files/resource/:id", async (c) => {
     }
     if (!deletedRow) return c.json({ error: "file_not_found" }, 404);
     await logAudit(db, { userId: user.id, action: "file_archive_resource_deleted", module: "files", entityId: id });
+    await publishSupportingEvent(c.env, { entityType: "file", entityId: id, action: "deleted" });
     if (deletedRow.object_path) {
       try {
         await objectStorageService.deleteObject(c.env, deletedRow.object_path);

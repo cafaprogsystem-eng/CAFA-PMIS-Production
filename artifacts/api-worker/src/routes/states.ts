@@ -3,15 +3,13 @@ import type { Bindings } from "../lib/db";
 import { openDb } from "../lib/db";
 import { attachCurrentUser, requireAuth, logAudit, type CurrentUser, type Variables } from "../lib/rbac";
 import { SUDAN_STATES } from "../lib/state-master";
+import { publishSupportingEvent } from "../lib/realtime";
 
 /**
  * Ported from artifacts/api-server/src/routes/states.ts (521 lines, first
  * file of the post-projects.ts phase). States are master data, not a
  * performance dashboard — deliberately limited to canonical State fields and
  * truthful reference information.
- *
- * Dropped (same reasoning as every prior file): realtime.publishSupportingEvent
- * (Durable Objects phase).
  */
 
 const STATE_ADMIN_ROLES = new Set(["super_admin", "executive_director", "program_manager"]);
@@ -286,7 +284,7 @@ statesRoutes.post("/states", async (c) => {
       entityId: state.id,
       newValue: JSON.stringify({ name: state.name, nameAr: state.nameAr, code: state.code, officeAddress: state.officeAddress }),
     });
-    // Dropped: realtime.publishSupportingEvent (Durable Objects phase).
+    await publishSupportingEvent(c.env, { entityType: "state", entityId: state.id, action: "created" });
     return c.json(state, 201);
   } catch (err) {
     if (isUniqueViolation(err)) return c.json({ error: "state_identity_conflict" }, 409);
@@ -351,7 +349,7 @@ statesRoutes.patch("/states/:stateId", async (c) => {
       oldValue: JSON.stringify(before.rows[0]),
       newValue: JSON.stringify({ name: state.name, nameAr: state.nameAr, code: state.code, officeAddress: state.officeAddress }),
     });
-    // Dropped: realtime.publishSupportingEvent (Durable Objects phase).
+    await publishSupportingEvent(c.env, { entityType: "state", entityId: stateId, action: "updated" });
     return c.json(state);
   } catch (err) {
     if (isUniqueViolation(err)) return c.json({ error: "state_identity_conflict" }, 409);
@@ -407,7 +405,7 @@ statesRoutes.patch("/states/:stateId/lifecycle", async (c) => {
         oldValue: JSON.stringify(before.rows[0]),
         newValue: JSON.stringify({ operationalStatus: state.operationalStatus, officeStatus: state.officeStatus }),
       });
-      // Dropped: realtime.publishSupportingEvent (Durable Objects phase).
+      await publishSupportingEvent(c.env, { entityType: "state", entityId: stateId, action: "lifecycle_changed" });
     }
     return c.json(state);
   } finally {

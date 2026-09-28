@@ -29,6 +29,7 @@ import { createHash } from "node:crypto";
 import type { Bindings, QueryExecutor } from "./db";
 import { ObjectNotFoundError, getObjectEntityMetadata, isStorageConfigured } from "./storage";
 import { migrationRecordClassification } from "./storage-evidence-inventory";
+import { publishSupportingEvent } from "./realtime";
 
 export const RECONCILIATION_CLASSIFICATIONS = [
   "OBJECT_RECOVERABLE",
@@ -417,6 +418,7 @@ export async function runAttachmentReconciliationInventory(
   const counts = Object.fromEntries(RECONCILIATION_CLASSIFICATIONS.map((key) => [key, 0])) as Record<ReconciliationClassification, number>;
   let changes = 0;
   let intentionallyUnchanged = 0;
+  let lastChangedEntryId: number | null = null;
   for (const row of rows) {
     const provider = await checkProvider(env, row);
     const { classification, reason } = classifyReconciliationEvidence(row, provider);
@@ -470,7 +472,7 @@ export async function runAttachmentReconciliationInventory(
       if (!hasOwnerDisposition) {
         await updateSourceAvailability(client, row, unavailable, reason);
       }
-      await client.query(
+      const inserted = await client.query<{ id: number }>(
         `INSERT INTO attachment_reconciliation_entries
           (source_kind, metadata_id, source_id, parent_type, parent_id, file_name, content_type,
            file_size, uploaded_by_id, uploaded_at, lifecycle_state, provider_reference,
@@ -497,12 +499,19 @@ export async function runAttachmentReconciliationInventory(
         ],
       );
       await client.query("COMMIT");
+      if (changed) lastChangedEntryId = inserted.rows[0]?.id ?? lastChangedEntryId;
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
     } finally {
       client.release();
     }
+  }
+  // One metadata-only refetch hint for the whole scan, not one per row — a
+  // scan can touch hundreds of rows, and these events are id-only "go
+  // refetch" hints anyway (see lib/realtime.ts).
+  if (lastChangedEntryId !== null) {
+    await publishSupportingEvent(env, { entityType: "attachment_reconciliation", entityId: lastChangedEntryId, action: "inventory_changed" });
   }
   return {
     generatedAt: new Date().toISOString(),
