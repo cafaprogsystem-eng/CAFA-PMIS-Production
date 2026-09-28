@@ -41,3 +41,8 @@ batch; only data-sourced values like those above are deferred.
 - **Start-up bundle:** the `@heroui/react` barrel keeps components imported
   through it in the start-up vendor chunk; a lazily-loaded screen that needs to
   keep a heavy HeroUI component out of it would need a different import route.
+- **API-sourced English text:** budget alert messages (`GET /projects/:id/budget`
+  → `alerts[].message`) arrive as English sentences; the Budgets page
+  translates the alert level only. Translating the message needs the API to
+  send a code plus parameters (like the validation errors do). Same family as
+  the sector, modality and other data-sourced values already deferred.
