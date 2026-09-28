@@ -40,6 +40,7 @@ interface PlanContext {
   startDate: string | null;
   endDate: string | null;
   localities: string[];
+  isHq?: boolean;
 }
 
 /**
@@ -53,12 +54,15 @@ function validatePlanActivityReadiness(
   if (!String(raw.title ?? "").trim()) return "blank_title";
 
   const loc = raw.localityName ? String(raw.localityName).trim().replace(/\s+/g, " ") : "";
-  if (!loc) return "locality_missing";
-  const normLoc = loc.toLowerCase();
-  const inPlan = ctx.localities.some(
-    (l) => l.trim().replace(/\s+/g, " ").toLowerCase() === normLoc,
-  );
-  if (!inPlan) return "locality_not_in_plan";
+  if (!loc) {
+    if (!ctx.isHq) return "locality_missing";
+  } else if (!ctx.isHq || ctx.localities.length > 0) {
+    const normLoc = loc.toLowerCase();
+    const inPlan = ctx.localities.some(
+      (l) => l.trim().replace(/\s+/g, " ").toLowerCase() === normLoc,
+    );
+    if (!inPlan) return "locality_not_in_plan";
+  }
 
   const pd = raw.plannedDate ? String(raw.plannedDate).slice(0, 10) : "";
   if (!pd) return "planned_date_missing";
@@ -448,5 +452,30 @@ describe("§10 React Strict Mode and session invariants", () => {
     // hasData check is separate from readiness — a zero-value Activity has no entered data.
     const hasData = !!(emptyAct.title?.trim() || emptyAct.localityName || emptyAct.plannedDate);
     expect(hasData).toBe(false);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   §12  HQ (national-level) Plans — Locality optional
+   ══════════════════════════════════════════════════════════════════════ */
+describe("§12 HQ Plans", () => {
+  const HQ_NO_COVERAGE: PlanContext = { startDate: "2026-01-01", endDate: "2026-12-31", localities: [], isHq: true };
+  const HQ_WITH_COVERAGE: PlanContext = { ...HQ_NO_COVERAGE, localities: ["Port Sudan"] };
+
+  it("HQ Activity without a Locality is ready", () => {
+    expect(validatePlanActivityReadiness(complete({ localityName: "" }), HQ_NO_COVERAGE)).toBeNull();
+  });
+
+  it("HQ Activity with any Locality is ready when the Plan lists no coverage", () => {
+    expect(validatePlanActivityReadiness(complete({ localityName: "Kassala Town" }), HQ_NO_COVERAGE)).toBeNull();
+  });
+
+  it("HQ Activity with a Locality outside the listed coverage is still rejected", () => {
+    expect(validatePlanActivityReadiness(complete({ localityName: "Kassala Town" }), HQ_WITH_COVERAGE))
+      .toBe("locality_not_in_plan");
+  });
+
+  it("State Plan Activity without a Locality is still rejected", () => {
+    expect(validatePlanActivityReadiness(complete({ localityName: "" }), PLAN)).toBe("locality_missing");
   });
 });

@@ -252,10 +252,17 @@ function isActivityComplete(
   planStartDate: string,
   planEndDate: string,
   planLocalities: string[],
+  isHqPlan = false,
 ): boolean {
   if (!a.title.trim()) return false;
-  // Locality must be non-empty and belong to the Plan's approved coverage
-  if (!a.localityName || !planLocalities.includes(a.localityName)) return false;
+  // Locality must be non-empty and belong to the Plan's approved coverage.
+  // HQ (national-level) Plans: the Locality is optional; one that is given must
+  // still belong to the Plan's coverage when the Plan lists any (mirrors the API).
+  if (!a.localityName) {
+    if (!isHqPlan) return false;
+  } else if ((!isHqPlan || planLocalities.length > 0) && !planLocalities.includes(a.localityName)) {
+    return false;
+  }
   if (!a.plannedDate) return false;
   if (planStartDate && a.plannedDate < planStartDate) return false;
   if (planEndDate && a.plannedDate > planEndDate) return false;
@@ -402,8 +409,10 @@ function LocalityTagInput({
  * message with a shortcut to Tab 3 instead of a broken empty select.
  */
 function ActivityLocalitySelect({
-  value, onChange, localities, onGoToGeography,
+  value, onChange, localities, onGoToGeography, isOptional = false,
 }: {
+  /** HQ Plans: the Locality is optional. */
+  isOptional?: boolean;
   value: string;
   onChange: (v: string) => void;
   /** The Plan's approved locality list from Tab 3 */
@@ -415,7 +424,7 @@ function ActivityLocalitySelect({
     return (
       <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 space-y-1.5">
         <p className="text-xs text-muted-foreground leading-snug">
-          {t("createDialog.localityDepMessage")}
+          {isOptional ? t("createDialog.localityHqOptional") : t("createDialog.localityDepMessage")}
         </p>
         <Button
           size="sm"
@@ -953,14 +962,17 @@ export function CreatePlanRegistrationDialog({
     : (attemptedSave ? validateDraftFields(planDetails) : {});
   const hasDetailErrors = Object.keys(detailErrors).length > 0;
 
+  // HQ (national-level) Plans cover the whole country: Geographical Coverage
+  // and Activity Localities are optional for them (the API applies the same rule).
+  const isHqPlan = planDetails.stateId === "__HQ__";
   // Geographical Coverage error — only flagged after a Save & Finish attempt.
   // Save As Draft is explicitly excluded from this requirement.
-  const hasGeographyError = saveFinishAttempted && localities.length === 0;
+  const hasGeographyError = saveFinishAttempted && localities.length === 0 && !isHqPlan;
   // Activities error — only flagged after Save & Finish attempt.
   const hasActivityError = saveFinishAttempted && (
     activities.length === 0 ||
     !activities.some((a) =>
-      isActivityComplete(a, planDetails.startDate, planDetails.endDate, localities)
+      isActivityComplete(a, planDetails.startDate, planDetails.endDate, localities, isHqPlan)
     )
   );
   // Budget derived values — always kept in sync with the live activities state.
@@ -1264,15 +1276,15 @@ export function CreatePlanRegistrationDialog({
       ? validateFinishFields(planDetails)
       : validateDraftFields(planDetails);
     if (Object.keys(errors).length > 0) return false;
-    // Save & Finish also requires at least one Locality in Geographical Coverage.
-    // Save As Draft does NOT require any Localities.
-    if (requireDescription && localities.length === 0) return false;
+    // Save & Finish also requires at least one Locality in Geographical Coverage,
+    // except for HQ Plans. Save As Draft does NOT require any Localities.
+    if (requireDescription && localities.length === 0 && !isHqPlan) return false;
     // Save & Finish requires at least one complete Activity.
     // Save As Draft is permissive — zero or incomplete Activities are fine.
     if (requireDescription) {
       if (activities.length === 0) return false;
       const hasComplete = activities.some((a) =>
-        isActivityComplete(a, planDetails.startDate, planDetails.endDate, localities)
+        isActivityComplete(a, planDetails.startDate, planDetails.endDate, localities, isHqPlan)
       );
       if (!hasComplete) return false;
     }
@@ -1455,7 +1467,11 @@ export function CreatePlanRegistrationDialog({
 
   const isPending = createMutation.isPending || updateMutation.isPending;
   const activeTab = TABS[activeTabIndex];
-  const currentStateName = states?.find((s) => String(s.id) === planDetails.stateId)?.name ?? "";
+  // HQ Plans have no State but may still record the localities they cover, so
+  // the coverage tab must open for them too (it used to ask for a State forever).
+  const currentStateName = isHqPlan
+    ? t("createDialog.hqHeadquarters")
+    : states?.find((s) => String(s.id) === planDetails.stateId)?.name ?? "";
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -2063,12 +2079,12 @@ export function CreatePlanRegistrationDialog({
                 <div>
                   <h3 className="text-sm font-semibold mb-0.5">
                     {t("createDialog.geoCoverageHeading")}{" "}
-                    <span className="text-destructive" aria-label={t("createDialog.geoCoverageRequired")}>*</span>
+                    {!isHqPlan && <span className="text-destructive" aria-label={t("createDialog.geoCoverageRequired")}>*</span>}
                   </h3>
                   {currentStateName ? (
                     <>
                       <p className="text-xs text-muted-foreground mb-3">
-                        {t("createDialog.addAtLeastOneLocality")}
+                        {isHqPlan ? t("createDialog.geoCoverageHqOptional") : t("createDialog.addAtLeastOneLocality")}
                       </p>
                       {/* State context — read-only, Plan Details is authoritative */}
                       <div className="inline-flex items-center gap-1.5 mb-4 rounded-md bg-muted/60 border border-border/50 px-2.5 py-1">
@@ -2250,9 +2266,10 @@ export function CreatePlanRegistrationDialog({
                         </div>
                         <div>
                           <Label className="text-sm" htmlFor={`activity-locality-${idx}`}>
-                            {t("createDialog.localityLabel")} <span className="text-destructive">*</span>
+                            {t("createDialog.localityLabel")} {!isHqPlan && <span className="text-destructive">*</span>}
                           </Label>
                           <ActivityLocalitySelect
+                            isOptional={isHqPlan}
                             value={a.localityName}
                             onChange={(v) => updateActivity(idx, { localityName: v })}
                             localities={localities}

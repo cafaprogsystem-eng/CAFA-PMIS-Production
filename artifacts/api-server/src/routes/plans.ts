@@ -433,6 +433,17 @@ interface PlanContext {
   startDate: string | null;
   endDate: string | null;
   localities: string[];
+  /**
+   * HQ (national-level) Plan. HQ Plans cover the whole country rather than
+   * specific Localities, so Geographical Coverage is optional for them and an
+   * Activity may have no Locality.
+   */
+  isHq?: boolean;
+}
+
+/** True for HQ (national-level) Plans — see PlanContext.isHq. */
+function isHqPlanLocation(locationType: string | null | undefined): boolean {
+  return locationType === "hq";
 }
 
 /**
@@ -454,7 +465,9 @@ interface PlanContext {
  * The 7 required conditions:
  *   1. Meaningful title (non-empty after trim)
  *   2. Locality present and belonging to Plan Geographical Coverage
- *      (case-insensitive, whitespace-normalised comparison)
+ *      (case-insensitive, whitespace-normalised comparison). HQ Plans: an
+ *      Activity may have no Locality; one that is given must still belong to
+ *      the Plan's coverage when the Plan lists any.
  *   3. Planned date exists and falls within Plan Start … Plan End
  *   4. Priority is an approved enum value (high | medium | low)
  *   5. Target beneficiaries is a finite integer >= 0
@@ -473,12 +486,15 @@ function validatePlanActivityReadiness(
 
   // 2. Locality present and in Plan's Geographical Coverage
   const loc = raw.localityName ? String(raw.localityName).trim().replace(/\s+/g, " ") : "";
-  if (!loc) return "locality_missing";
-  const normLoc = loc.toLowerCase();
-  const inPlan = ctx.localities.some(
-    (l) => l.trim().replace(/\s+/g, " ").toLowerCase() === normLoc,
-  );
-  if (!inPlan) return "locality_not_in_plan";
+  if (!loc) {
+    if (!ctx.isHq) return "locality_missing";
+  } else if (!ctx.isHq || ctx.localities.length > 0) {
+    const normLoc = loc.toLowerCase();
+    const inPlan = ctx.localities.some(
+      (l) => l.trim().replace(/\s+/g, " ").toLowerCase() === normLoc,
+    );
+    if (!inPlan) return "locality_not_in_plan";
+  }
 
   // 3. Planned date within Plan date range
   const pd = raw.plannedDate ? String(raw.plannedDate).slice(0, 10) : "";
@@ -1403,7 +1419,8 @@ router.post("/plans", requirePerm("plans.create"), async (req, res, next) => {
     // Date requiredness is checked at line 832 (above) before reaching here.
     // Remaining checks: locality coverage, activity completeness, budget consistency.
     if (doCloseOnCreate) {
-      if (localities.length === 0) {
+      // HQ Plans are national-level: Geographical Coverage is optional for them.
+      if (localities.length === 0 && !isHqPlan) {
         res.status(400).json({ error: "geographical_coverage_required" });
         return;
       }
@@ -1415,6 +1432,7 @@ router.post("/plans", requirePerm("plans.create"), async (req, res, next) => {
         startDate: canonStartDate,
         endDate: canonEndDate,
         localities,
+        isHq: isHqPlan,
       };
       const hasCompleteOnCreate = activities.some(
         (a) => validatePlanActivityReadiness(a, postPlanCtx) === null,
@@ -1892,9 +1910,13 @@ router.patch("/plans/:planId", async (req, res, next) => {
       params.push(JSON.stringify(locs));
       setClauses.push(`localities = $${params.length}::jsonb`);
     }
-    // Save & Finish (closeRegistration=true) requires at least one meaningful Locality.
+    // Save & Finish (closeRegistration=true) requires at least one meaningful Locality,
+    // except for HQ Plans (national-level, no specific Localities).
     // After canonical normalisation, whitespace-only values have already been stripped.
-    if (closeRegistration === true && patchLocalities !== undefined && patchLocalities.length === 0) {
+    if (
+      closeRegistration === true && patchLocalities !== undefined && patchLocalities.length === 0
+      && !isHqPlanLocation(meta.locationType)
+    ) {
       res.status(400).json({ error: "geographical_coverage_required" });
       return;
     }
@@ -2253,6 +2275,7 @@ router.patch("/plans/:planId", async (req, res, next) => {
             ? String(body.endDate).slice(0, 10)
             : pgDateToIso(patchPlanRow.rows[0]?.end_date ?? null),
           localities: patchPlanEffectiveLocs,
+          isHq: isHqPlanLocation(meta.locationType),
         };
         // Finalisation gate: both plan dates must be non-null at close-registration time.
         // A plan without a defined period cannot be finalised via the direct API.
@@ -2762,6 +2785,7 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
           planSectors: unknown;
           projectId: number | null;
           stateId: number | null;
+          locationType: string | null;
         }>(
           `SELECT status, description, start_date, end_date,
                   COALESCE(localities, '[]'::jsonb) AS localities,
@@ -2769,7 +2793,8 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
                   NULLIF(sector, '') AS "planSector",
                   COALESCE(sectors, '[]'::jsonb) AS "planSectors",
                   project_id AS "projectId",
-                  state_id AS "stateId"
+                  state_id AS "stateId",
+                  location_type AS "locationType"
            FROM plans
            WHERE id = $1
            FOR UPDATE`,
@@ -2855,9 +2880,11 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
           throw new SubmitError("description_required");
         }
 
-        // Geographical Coverage is required for submission.
+        // Geographical Coverage is required for submission, except for HQ Plans
+        // (national-level, no specific Localities).
+        const submitIsHq = isHqPlanLocation(lockedPlan.locationType);
         const submitPlanLocs = normalisePlanLocalities(lockedPlan.localities);
-        if (submitPlanLocs.length === 0) {
+        if (submitPlanLocs.length === 0 && !submitIsHq) {
           throw new SubmitError("geographical_coverage_required");
         }
 
@@ -2866,6 +2893,7 @@ router.post("/plans/:planId/transitions", async (req, res, next) => {
           startDate: pgDateToIso(lockedPlan.start_date ?? null),
           endDate: pgDateToIso(lockedPlan.end_date ?? null),
           localities: submitPlanLocs,
+          isHq: submitIsHq,
         };
         const submitActInputs: ActivityInput[] = lockedActsResult.rows.map((row) => ({
           title: row.title ?? "",

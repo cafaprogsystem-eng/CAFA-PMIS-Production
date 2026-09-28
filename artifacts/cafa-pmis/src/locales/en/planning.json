@@ -589,7 +589,9 @@
     "progressPlannedDelayed": "Planned or delayed activities must have progress between 0% and 99%.",
     "progressCancelled": "Progress must be between 0% and 100%.",
     "activityProgressError": "Activity {{num}} (\"{{title}}\"): {{message}}",
-    "untitledActivity": "Untitled"
+    "untitledActivity": "Untitled",
+    "geoCoverageHqOptional": "Optional for HQ plans, which cover the whole country. Add localities only if the plan targets specific ones.",
+    "localityHqOptional": "Optional for HQ plans. To pick a locality, add it under Geographical Coverage first."
   },
   "statesPage": {
     "heading": "States",
