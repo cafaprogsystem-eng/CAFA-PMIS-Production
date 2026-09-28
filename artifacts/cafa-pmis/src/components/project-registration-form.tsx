@@ -1635,8 +1635,10 @@ export function ProjectRegistrationForm({ open = true, onClose, editProjectId, d
       reportingCoverageCustomisedRef.current = true;
     }
     if (!reportingCoverageCustomisedRef.current) {
-      form.setValue("reportingStartDate", projectStart, { shouldValidate: true });
-      form.setValue("reportingEndDate", projectEnd, { shouldValidate: true });
+      // Validate only a real mirrored date: copying a still-empty end date
+      // would flag "required" before the user has reached that field.
+      form.setValue("reportingStartDate", projectStart, { shouldValidate: !!projectStart });
+      form.setValue("reportingEndDate", projectEnd, { shouldValidate: !!projectEnd });
     }
     previousImplementationDates.current = { start: projectStart, end: projectEnd };
   }, [form, projectStart, projectEnd]);
