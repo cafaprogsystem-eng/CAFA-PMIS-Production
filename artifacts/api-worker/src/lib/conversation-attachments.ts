@@ -1,12 +1,10 @@
 /**
- * Ported from artifacts/api-server/src/lib/conversationAttachments.ts — only
- * the read-side lookup routes/storage.ts's private-object proxy needs
- * (resolving a bare object path back to its parent message/conversation, so
- * possessing the path alone is never enough to read a Communication Centre
- * attachment). The write-side helpers (normaliseIncomingConversationAttachments,
- * publicConversationAttachments, conversationAttachmentAt) belong to
- * conversations.ts's own message create/read routes and will be ported
- * alongside that file, not here.
+ * Ported from artifacts/api-server/src/lib/conversationAttachments.ts. The
+ * read-side lookup (findConversationAttachmentByObjectPath) was ported first,
+ * alongside routes/storage.ts, for its private-object proxy's second line of
+ * defence. The write-side helpers below (normaliseIncomingConversationAttachments,
+ * publicConversationAttachments, conversationAttachmentAt) were added once
+ * routes/conversations.ts — their actual caller — was ported.
  */
 import type { QueryExecutor } from "./db";
 
@@ -76,6 +74,40 @@ function attachmentFromRecord(record: AttachmentRecord): StoredConversationAttac
   if (record.availabilityStatus === "unavailable") attachment.availabilityStatus = "unavailable";
   else if (record.availabilityStatus === "available") attachment.availabilityStatus = "available";
   return attachment;
+}
+
+export function normaliseIncomingConversationAttachments(value: unknown): StoredConversationAttachment[] {
+  if (!Array.isArray(value)) return [];
+  const attachments = value.map((item) => attachmentFromRecord(item as AttachmentRecord));
+  if (attachments.some((attachment) => attachment === null)) {
+    throw new Error("invalid_conversation_attachment");
+  }
+  return attachments as StoredConversationAttachment[];
+}
+
+export function publicConversationAttachments(
+  conversationId: number,
+  messageId: number,
+  value: unknown,
+): Array<Omit<StoredConversationAttachment, "objectPath"> & { url: string }> {
+  return attachmentArray(value).flatMap((record, index) => {
+    const attachment = attachmentFromRecord(record);
+    if (!attachment) return [];
+    const { objectPath: _internalPath, ...publicAttachment } = attachment;
+    return [{
+      ...publicAttachment,
+      url: `/api/conversations/${conversationId}/messages/${messageId}/attachments/${index}`,
+    }];
+  });
+}
+
+export function conversationAttachmentAt(
+  value: unknown,
+  index: number,
+): StoredConversationAttachment | null {
+  if (!Number.isInteger(index) || index < 0) return null;
+  const record = attachmentArray(value)[index];
+  return record ? attachmentFromRecord(record) : null;
 }
 
 /**

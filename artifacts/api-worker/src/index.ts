@@ -33,6 +33,7 @@ import { voiceNotesRoutes } from "./routes/voice-notes";
 import { attachmentReconciliationRoutes } from "./routes/attachment-reconciliation";
 import { historicalStorageImportRoutes } from "./routes/historical-storage-import";
 import { manualRoutes } from "./routes/manual";
+import { conversationsRoutes } from "./routes/conversations";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -344,6 +345,7 @@ app.route("/", voiceNotesRoutes);
 app.route("/", attachmentReconciliationRoutes);
 app.route("/", historicalStorageImportRoutes);
 app.route("/", manualRoutes);
+app.route("/", conversationsRoutes);
 
 /**
  * Ported from artifacts/api-server/src/lib/error-handler.ts's
