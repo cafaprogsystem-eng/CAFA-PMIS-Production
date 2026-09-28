@@ -470,4 +470,21 @@ app.onError((err, c) => {
 // resolve.
 export { RealtimeHub } from "./durable-objects/realtime-hub";
 
-export default app;
+/**
+ * The frontend (the generated API client in lib/api-client-react, and
+ * socket.ts) calls every endpoint under an /api prefix — a holdover from the
+ * AWS nginx/Express setup, where nginx proxied everything to Express and
+ * Express itself mounted its router under /api alongside the compiled SPA.
+ * `app` above has no such prefix (its routes are bare, e.g. `/me`,
+ * `/realtime/connect`), which was invisible all migration long because every
+ * test hit the Worker directly. Mounting the whole app under /api here is
+ * the one place that needs to know about that prefix — everything else
+ * (route files, the Durable Object, lib/realtime.ts's internal DO calls)
+ * stays unprefixed and unaware of it. The realtime WS upgrade path in
+ * particular is unaffected: the DO dispatches on the Upgrade header, not the
+ * request path (see durable-objects/realtime-hub.ts's fetch()).
+ */
+const root = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+root.route("/api", app);
+
+export default root;

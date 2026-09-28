@@ -50,3 +50,85 @@ AI_DAILY_MESSAGE_LIMIT = "50"
 AI_INTEGRATIONS_OPENAI_BASE_URL = "https://api.openai.com/v1"
 # EMAIL_API_KEY / AI_INTEGRATIONS_OPENAI_API_KEY are real credentials — set
 # via `wrangler secret put`, never committed here.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Production environment for the cafa-pmis.org cutover — a genuinely
+# separate Worker script (explicit `name` below), not a same-script
+# redeploy of the config above. That config stays the ongoing test/dev
+# environment; this one is the real launch target. Deploy with
+# `wrangler deploy --env production`.
+#
+# Still TODO before this environment can deploy successfully:
+#   1. DONE — Neon production database created (project cafa-pmis-production,
+#      aws-eu-central-1), tracked migrations applied via scripts/migrate.mjs,
+#      Hyperdrive config 844d6002fd5b463d82a6e00cc90a73e9 created against it
+#      with --caching-disabled confirmed (origin.host =
+#      ep-snowy-hat-b1rdcn9j-pooler.c-5.eu-central-1.aws.neon.tech).
+#   2. DONE — SESSION_SECRET set (random 32-byte value, distinct from the
+#      test environment's).
+#   3. DONE — R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ENDPOINT_URL set,
+#      a real R2 API token scoped to the cafa-pmis-production-storage
+#      bucket.
+#   4. `wrangler secret put EMAIL_API_KEY --env production` and
+#      `AI_INTEGRATIONS_OPENAI_API_KEY --env production` once/if those are
+#      turned on for production (EMAIL_ENABLED/AI_ENABLED default to
+#      "false" below — flip explicitly, this is an operational decision
+#      not made here).
+#   5. DONE (declaratively) — see the [[env.production.routes]] block below
+#      with custom_domain = true; wrangler attaches cafa-pmis.org on the
+#      next `wrangler deploy --env production`, no manual dashboard step.
+#   6. Build the real cafa-pmis frontend (`pnpm --filter cafa-pmis run
+#      build` → dist/public) before that same deploy — blocked on this
+#      dev machine by a pre-existing, unrelated native-binary gap
+#      (@tailwindcss/oxide-darwin-arm64); needs CI or another machine.
+# ─────────────────────────────────────────────────────────────────────────
+[env.production]
+name = "cafa-pmis-api-production"
+
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "844d6002fd5b463d82a6e00cc90a73e9"
+
+[[env.production.durable_objects.bindings]]
+name = "REALTIME_HUB"
+class_name = "RealtimeHub"
+
+[[env.production.migrations]]
+tag = "v1"
+new_sqlite_classes = ["RealtimeHub"]
+
+# Serves the built cafa-pmis SPA (artifacts/cafa-pmis/`pnpm run build` →
+# dist/public) from this same Worker — single deployable unit, single
+# domain, no CORS. run_worker_first ensures /api/* always reaches the Hono
+# app above instead of ever being treated as a missing static asset; every
+# other path falls through to the SPA (with client-side-routing fallback).
+[env.production.assets]
+directory = "../cafa-pmis/dist/public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Declarative Custom Domain — wrangler creates/attaches this automatically
+# on `wrangler deploy --env production` (no separate manual dashboard step
+# needed), provided the cafa-pmis.org zone is already active on this
+# Cloudflare account (confirmed: Nameservers already point here). SSL is
+# fully automatic (Cloudflare Universal SSL) — nothing else to configure.
+[[env.production.routes]]
+pattern = "cafa-pmis.org"
+custom_domain = true
+
+[env.production.vars]
+# vars are NOT inherited from the top-level [vars] block by named
+# environments (confirmed via `wrangler deploy --dry-run --env production`,
+# which warns if this is missing) — every var, including this placeholder,
+# must be repeated here even though it's identical to the top-level one.
+SESSION_SECRET = "dev-only-insecure-secret-change-me"
+R2_BUCKET = "cafa-pmis-production-storage"
+PUBLIC_APP_URL = "https://cafa-pmis.org"
+EMAIL_ENABLED = "false"
+EMAIL_PROVIDER = "resend"
+EMAIL_FROM_ADDRESS = "noreply@cafa.org"
+EMAIL_FROM_NAME = "CAFA Program Management System"
+AI_ENABLED = "false"
+AI_DAILY_MESSAGE_LIMIT = "50"
+AI_INTEGRATIONS_OPENAI_BASE_URL = "https://api.openai.com/v1"
