@@ -37,7 +37,7 @@ describe("RISK-ZR frontend: shareable register state", () => {
     expect(risksPage).not.toContain("window.history.pushState");
   });
   it("ZR-07 filter changes and search reset the URL page atomically", () => {
-    expect(risksPage).toContain('updateRegisterState({ search: e.target.value, page: 1 })');
+    expect(risksPage).toContain('updateRegisterState({ search: value, page: 1 })');
     expect(risksPage).toContain('updateRegisterState({ status: v, page: 1 })');
     expect(risksPage).toContain('updateRegisterState({ riskLevel: v, page: 1 })');
   });
@@ -49,21 +49,28 @@ describe("RISK-ZR frontend: shareable register state", () => {
 
 describe("RISK-ZR frontend: accessible register interaction", () => {
   it("ZR-09/10 makes each clickable risk row keyboard reachable and operable", () => {
-    expect(risksPage).toContain('role="button"');
-    expect(risksPage).toContain("tabIndex={0}");
-    expect(risksPage).toContain('event.key === "Enter" || event.key === " "');
-    // aria-label must use the localised translation key, not hard-coded English
+    // Table rows are Pro DataGrid rows: focusable, arrow-key navigable, and
+    // Enter / click runs onRowAction (see risk-detail-visual for the keyboard test).
+    expect(risksPage).toContain("onRowAction={openRiskRow}");
+    expect(risksPage).toContain("isRowHeader: true");
+    // Card/board records keep the localised "Open risk" name, not hard-coded English
     expect(risksPage).toContain('t("accessibility.openRisk"');
-    expect(risksPage).toContain("title: r.title");
+    expect(risksPage).toContain("title: risk.title");
     // must NOT use hard-coded English string
     expect(risksPage).not.toContain('aria-label={`Open risk: ${r.title}`}');
   });
   it("ZR-11/12 gives pagination an announced current page and localised controls", () => {
-    expect(risksPage).toContain('aria-current="page"');
+    // Shared RegistryPagination: live-announced "page of" summary, and first /
+    // previous buttons disabled at page 1, next / last at the final page.
+    const shared = readFileSync(join(__dirname, "../components/registry-pagination.tsx"), "utf8");
+    expect(risksPage).toContain('t("pagination.pageOf"');
     expect(risksPage).toContain('t("pagination.previous"');
     expect(risksPage).toContain('t("pagination.next"');
-    expect(risksPage).toContain("disabled={page <= 1}");
-    expect(risksPage).toContain("disabled={page >= totalPages}");
+    expect(shared).toContain('aria-live="polite"');
+    expect(shared).toContain("const atStart = page <= 1;");
+    expect(shared).toContain("const atEnd = page >= totalPages;");
+    expect(shared).toContain("isDisabled={atStart}");
+    expect(shared).toContain("isDisabled={atEnd}");
   });
   it("ZR-13 retains server-scoped, cross-page summaries", () => {
     expect(risksPage).toContain("risksRaw?.summary");

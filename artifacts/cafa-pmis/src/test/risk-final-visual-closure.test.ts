@@ -23,7 +23,8 @@ describe("Risk Register final visual closure", () => {
     expect(risksPage).toContain('className="space-y-4"');
     expect(risksPage).toContain("risksRaw?.summary");
     expect(risksPage).toContain('title={r.title}');
-    expect(risksPage).toContain('role="region" aria-label={t("common:risksPage.registerLabel")}');
+    // Was t("common:risksPage.registerLabel"), a key that never existed.
+    expect(risksPage).toContain('role="region" aria-label={t("accessibility.registerRegion")}');
   });
 
   it("RISK-FINAL-VIS-02: pagination and URL state remain shareable and recoverable", () => {
@@ -36,9 +37,8 @@ describe("Risk Register final visual closure", () => {
   });
 
   it("RISK-FINAL-VIS-03: every Register row remains keyboard-operable", () => {
-    expect(risksPage).toContain('role="button"');
-    expect(risksPage).toContain("tabIndex={0}");
-    expect(risksPage).toContain('event.key === "Enter" || event.key === " "');
+    // Pro DataGrid rows are keyboard reachable; Enter opens the risk (onRowAction).
+    expect(risksPage).toContain("onRowAction={openRiskRow}");
     expect(risksPage).toContain('t("accessibility.openRisk"');
   });
 

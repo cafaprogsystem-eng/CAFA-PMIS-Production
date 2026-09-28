@@ -140,7 +140,8 @@
     "tabDetails": "التفاصيل",
     "tabComments": "التعليقات",
     "tabHistory": "السجل التاريخي",
-    "tabAttachments": "المرفقات"
+    "tabAttachments": "المرفقات",
+    "tabsAria": "أقسام المخاطرة"
   },
   "table": {
     "riskTitle": "عنوان المخاطرة",
@@ -153,7 +154,8 @@
     "project": "المشروع",
     "responsible": "المسؤول",
     "dueDate": "تاريخ الاستحقاق",
-    "identified": "تاريخ التحديد"
+    "identified": "تاريخ التحديد",
+    "overdue": "متأخرة"
   },
   "page": {
     "description": "المخاطر التشغيلية والأمنية والبرنامجية عبر المحفظة",
@@ -170,7 +172,10 @@
     "previous": "السابق",
     "next": "التالي",
     "previousPage": "الصفحة السابقة",
-    "nextPage": "الصفحة التالية"
+    "nextPage": "الصفحة التالية",
+    "region": "صفحات سجل المخاطر",
+    "first": "الصفحة الأولى",
+    "last": "الصفحة الأخيرة"
   },
   "accessibility": {
     "openRisk": "فتح المخاطرة: {{title}}",
@@ -224,5 +229,13 @@
       "high": "مرتفع",
       "critical": "حرج"
     }
+  },
+  "validation": {
+    "titleRequired": "عنوان المخاطرة مطلوب.",
+    "stateRequired": "اختر ولاية أو المقر الرئيسي.",
+    "stateNotFound": "الولاية المختارة لم تعد متاحة.",
+    "projectNotFound": "المشروع المختار لم يعد متاحًا.",
+    "assigneeNotFound": "الشخص المسؤول المختار لم يعد متاحًا.",
+    "assigneeInactive": "الشخص المسؤول المختار لم يعد نشطًا."
   }
 }

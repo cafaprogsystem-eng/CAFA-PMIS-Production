@@ -248,7 +248,10 @@ describe("RISK-FORM-SAFE-03: stateId=0 triggers inline error message", () => {
 
   it("stateId inline error renders near the location selector", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
-    expect(src).toContain('createForm.formState.errors.stateId');
+    // createErrors = createForm.formState.errors; FieldError renders role="alert".
+    expect(src).toContain("const createErrors = createForm.formState.errors");
+    expect(src).toContain("createErrors.stateId");
+    expect(src).toContain('<FieldError id="create-state-error">');
     expect(src).toContain('role="alert"');
   });
 });
@@ -325,8 +328,9 @@ describe("RISK-FORM-SAFE-07: Clearing due date sends null in PATCH payload", () 
 describe("RISK-FORM-SAFE-08: Due date input is type=date only", () => {
   it("all dueDate inputs are type=date (not datetime-local or datetime)", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
-    const dateInputMatches = src.match(/type="date"/g) ?? [];
-    expect(dateInputMatches.length).toBeGreaterThanOrEqual(2); // create + edit
+    // Due dates use the date-only HeroUI DateInput (YYYY-MM-DD) in create + edit.
+    expect(src).toMatch(/<DateInput\s+id="create-due-date"/);
+    expect(src).toMatch(/<DateInput\s+id="edit-due-date"/);
     // Ensure no datetime-local usage for due dates
     expect(src).not.toContain('type="datetime-local"');
   });

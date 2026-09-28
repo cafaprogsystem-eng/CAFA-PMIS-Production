@@ -134,17 +134,19 @@ vi.mock("@/components/location-selector", () => ({ LocationSelector: () => null 
 vi.mock("@/components/ui/error-state", () => ({ ErrorState: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+import userEvent from "@testing-library/user-event";
 import RisksPage from "@/pages/risks";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-function renderDetail() {
+// Register rows are DataGrid rows: clicking a row (or Enter on it) opens the risk.
+async function renderDetail() {
   render(<TooltipProvider><RisksPage /></TooltipProvider>);
-  fireEvent.click(screen.getByRole("button", { name: /Open risk:/i }));
+  await userEvent.click(screen.getByRole("rowheader", { name: new RegExp(risk.title) }));
 }
 
 describe("RISK-DETAIL-VIS-01: title and context hierarchy", () => {
-  it("renders the title as the sheet heading with contextual location and project beneath", () => {
-    renderDetail();
+  it("renders the title as the sheet heading with contextual location and project beneath", async () => {
+    await renderDetail();
     expect(screen.getByRole("heading", { name: risk.title })).toBeInTheDocument();
     expect(screen.getByText("Kano · Health Access Programme")).toBeInTheDocument();
   });
@@ -152,15 +154,15 @@ describe("RISK-DETAIL-VIS-01: title and context hierarchy", () => {
 
 describe("RISK-DETAIL-VIS-02: semantic read mode", () => {
   it("uses a definition list for metadata and does not render disabled form controls", async () => {
-    renderDetail();
+    await renderDetail();
     expect(document.querySelector("dl")).toBeInTheDocument();
     expect(document.querySelector("input:disabled, textarea:disabled, button[role='combobox']:disabled")).toBeNull();
   });
 });
 
 describe("RISK-DETAIL-VIS-03: readable assessment values", () => {
-  it("renders human-readable likelihood, impact, risk level, and status labels", () => {
-    renderDetail();
+  it("renders human-readable likelihood, impact, risk level, and status labels", async () => {
+    await renderDetail();
     expect(screen.getAllByText("High").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Medium").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Under Mitigation").length).toBeGreaterThan(0);
@@ -168,15 +170,15 @@ describe("RISK-DETAIL-VIS-03: readable assessment values", () => {
 });
 
 describe("RISK-DETAIL-VIS-04: no raw enum leakage", () => {
-  it("does not expose raw assessment enums in the Detail presentation", () => {
-    renderDetail();
+  it("does not expose raw assessment enums in the Detail presentation", async () => {
+    await renderDetail();
     expect(screen.queryByText(/^under_mitigation$/)).not.toBeInTheDocument();
   });
 });
 
 describe("RISK-DETAIL-VIS-05: narrative safety", () => {
   it("uses whitespace and word-break protection for detail narratives", async () => {
-    renderDetail();
+    await renderDetail();
     const source = await readFile("src/pages/risks.tsx", "utf8");
     expect(source).toContain("whitespace-pre-wrap break-words");
     expect(document.body.textContent).toContain("Long narrative content");
@@ -239,5 +241,14 @@ describe("RISK-DETAIL-VIS-10: functional and security contracts stay intact", ()
     expect(commentsSource).toContain('entityType === "risk" && hasPerm(perms, "risks.update")');
     expect(attachmentsRouteSource).toContain('router.get("/risks/:riskId/attachments"');
     expect(attachmentsRouteSource).toContain("assertCanonicalParent(req, parentType, attachment.parentId)");
+  });
+});
+describe("RISK-DETAIL-VIS-KBD: keyboard access to the register", () => {
+  it("opens the risk when its row is focused and Enter is pressed", async () => {
+    render(<TooltipProvider><RisksPage /></TooltipProvider>);
+    const row = screen.getByRole("rowheader", { name: new RegExp(risk.title) }).closest("[role='row']") as HTMLElement;
+    row.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByRole("heading", { name: risk.title })).toBeInTheDocument();
   });
 });

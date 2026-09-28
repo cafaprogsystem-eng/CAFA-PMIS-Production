@@ -24,7 +24,6 @@ import {
   Button, Card, Chip, Dropdown, Label, Modal, SearchField, Separator, Skeleton, Tooltip,
 } from "@heroui/react";
 import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
-import { KPI } from "@heroui-pro/react/kpi";
 import React from "react";
 import {
   CalendarClock,
@@ -54,6 +53,7 @@ import type { KanbanColumn } from "@/components/view-modes/kanban-board";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
 import { SelectField } from "@/components/select-field";
 import { RegistryPagination } from "@/components/registry-pagination";
+import { FilterKpi } from "@/components/filter-kpi";
 
 /* ── Module-scope constants ────────────────────────────────────────────── */
 
@@ -406,40 +406,6 @@ function DelayedActivities({
         </div>
       )}
     </Card>
-  );
-}
-
-/** A Pro KPI that doubles as a status filter toggle. */
-function FilterKpi({
-  icon: Icon, status, label, value, pressed, onToggle,
-}: {
-  icon: React.ElementType;
-  status?: "success" | "warning" | "danger";
-  label: string;
-  value: React.ReactNode;
-  pressed?: boolean;
-  onToggle?: () => void;
-}) {
-  const kpi = (
-    <KPI className={`h-full justify-start transition-shadow ${pressed ? "ring-2 ring-[var(--accent)]" : ""}`}>
-      <KPI.Header>
-        <KPI.Icon status={status}><Icon aria-hidden="true" /></KPI.Icon>
-        <KPI.Title>{label}</KPI.Title>
-      </KPI.Header>
-      <KPI.Content><dd className="kpi__value tabular-nums">{value}</dd></KPI.Content>
-    </KPI>
-  );
-  if (!onToggle) return kpi;
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={!!pressed}
-      onClick={onToggle}
-      className="h-full rounded-[calc(var(--radius)*2.5)] text-start outline-none hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
-    >
-      {kpi}
-    </button>
   );
 }
 

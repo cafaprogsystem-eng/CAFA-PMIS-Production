@@ -15,18 +15,10 @@
  * Use formatLocation() from lib/format.ts for display-only needs.
  */
 
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Header, ListBox, Select } from "@heroui/react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import { StateLabel } from "@/components/state-label";
+import { StateLabel, getStateLabel } from "@/components/state-label";
 
 /** Sentinel value used in string-based form fields to represent "HQ". */
 export const HQ_SENTINEL = "__HQ__";
@@ -101,7 +93,7 @@ export function LocationSelector({
   "aria-required": ariaRequired,
   "aria-describedby": ariaDescribedby,
 }: LocationSelectorProps) {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
   const selectValue = toSelectValue(value);
   const selectPlaceholder = placeholder ?? t("locationContext.selectLocation");
   const assignedState = t("locationContext.assignedState");
@@ -116,53 +108,70 @@ export function LocationSelector({
 
   if (isStateLocked) {
     return (
-      <Select value={lockedStateId ? String(lockedStateId) : ""} disabled>
-        <SelectTrigger
-          id={id}
-          className={cn("bg-muted cursor-not-allowed", className)}
-          aria-required={ariaRequired}
-          aria-describedby={ariaDescribedby}
-        >
-          <SelectValue>{lockedStateLabel}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {lockedStateId && (
-            <SelectItem value={String(lockedStateId)}>
-              {lockedStateLabel}
-            </SelectItem>
-          )}
-        </SelectContent>
+      <Select
+        id={id}
+        isDisabled
+        value={lockedStateId ? String(lockedStateId) : null}
+        aria-describedby={ariaDescribedby}
+        aria-label={typeof lockedStateName === "string" ? lockedStateName : assignedState}
+        className={cn("w-full", className)}
+      >
+        <Select.Trigger>
+          <Select.Value>{() => lockedStateLabel}</Select.Value>
+          <Select.Indicator />
+        </Select.Trigger>
+        <Select.Popover>
+          <ListBox>
+            {lockedStateId ? (
+              <ListBox.Item id={String(lockedStateId)} textValue={lockedState?.name ?? assignedState}>
+                {lockedStateLabel}
+              </ListBox.Item>
+            ) : null}
+          </ListBox>
+        </Select.Popover>
       </Select>
     );
   }
 
   return (
-    <Select value={selectValue} onValueChange={handleChange} disabled={disabled}>
-      <SelectTrigger
-        id={id}
-        className={cn(invalid && "border-destructive", className)}
-        aria-required={ariaRequired}
-        aria-describedby={ariaDescribedby}
-        aria-invalid={invalid || undefined}
-      >
-        <SelectValue placeholder={selectPlaceholder} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
-          <SelectLabel>{t("locationContext.organisation")}</SelectLabel>
-          <SelectItem value={HQ_SENTINEL}>{t("locationContext.headquarters")}</SelectItem>
-        </SelectGroup>
-        {states && states.length > 0 && (
-          <SelectGroup>
-            <SelectLabel>{t("locationContext.states")}</SelectLabel>
-            {states.map((s) => (
-              <SelectItem key={s.id} value={String(s.id)}>
-                <StateLabel state={s} />
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        )}
-      </SelectContent>
+    <Select
+      id={id}
+      value={selectValue === "" ? null : selectValue}
+      onChange={(key) => { if (key != null) handleChange(String(key)); }}
+      isDisabled={disabled}
+      isRequired={ariaRequired}
+      isInvalid={invalid}
+      validationBehavior="aria"
+      placeholder={selectPlaceholder}
+      aria-describedby={ariaDescribedby}
+      className={cn("w-full", className)}
+    >
+      <Select.Trigger>
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover>
+        <ListBox>
+          <ListBox.Section>
+            <Header>{t("locationContext.organisation")}</Header>
+            <ListBox.Item id={HQ_SENTINEL} textValue={t("locationContext.headquarters")}>
+              {t("locationContext.headquarters")}
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+          </ListBox.Section>
+          {states && states.length > 0 ? (
+            <ListBox.Section>
+              <Header>{t("locationContext.states")}</Header>
+              {states.map((s) => (
+                <ListBox.Item key={s.id} id={String(s.id)} textValue={getStateLabel(s, i18n?.language)}>
+                  <StateLabel state={s} />
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox.Section>
+          ) : null}
+        </ListBox>
+      </Select.Popover>
     </Select>
   );
 }

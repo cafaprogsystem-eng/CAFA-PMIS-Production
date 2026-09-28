@@ -140,7 +140,8 @@
     "tabDetails": "Details",
     "tabComments": "Comments",
     "tabHistory": "History",
-    "tabAttachments": "Attachments"
+    "tabAttachments": "Attachments",
+    "tabsAria": "Risk sections"
   },
   "table": {
     "riskTitle": "Risk Title",
@@ -153,7 +154,8 @@
     "project": "Project",
     "responsible": "Responsible",
     "dueDate": "Due Date",
-    "identified": "Identified"
+    "identified": "Identified",
+    "overdue": "Overdue"
   },
   "page": {
     "description": "Operational, security and programmatic risks across the portfolio",
@@ -170,7 +172,10 @@
     "previous": "Previous",
     "next": "Next",
     "previousPage": "Previous page",
-    "nextPage": "Next page"
+    "nextPage": "Next page",
+    "region": "Risk register pages",
+    "first": "First page",
+    "last": "Last page"
   },
   "accessibility": {
     "openRisk": "Open risk: {{title}}",
@@ -224,5 +229,13 @@
       "high": "High",
       "critical": "Critical"
     }
+  },
+  "validation": {
+    "titleRequired": "Risk title is required.",
+    "stateRequired": "Select a state or HQ.",
+    "stateNotFound": "The selected state is no longer available.",
+    "projectNotFound": "The selected project is no longer available.",
+    "assigneeNotFound": "The selected responsible person is no longer available.",
+    "assigneeInactive": "The selected responsible person is no longer active."
   }
 }

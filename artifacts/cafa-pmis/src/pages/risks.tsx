@@ -16,48 +16,37 @@ import {
   type ListRisksParams,
 } from "@workspace/api-client-react";
 import { CreateRiskBody, UpdateRiskBody } from "@workspace/api-zod";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatCard } from "@/components/ui/stat-card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+  Button, Card, Chip, Input, Label, Modal, SearchField, Separator, Skeleton, Tabs, TextArea,
+} from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  AlertTriangle, AlertCircle, Plus, Search, X, Clock, CheckCircle2, User, Filter,
+  AlertTriangle, AlertCircle, Plus, X, Clock, CheckCircle2, User, Filter,
   Calendar, Shield, FileText, History, MessageSquare,
 } from "@/components/icons";
 import { RISK_STATUS_OPTIONS, RISK_STATUS_VALUES, formatRiskStatus } from "@/lib/risk-statuses";
 import { LocationSelector } from "@/components/location-selector";
-import { StateLabel } from "@/components/state-label";
+import { StateLabel, getStateLabel } from "@/components/state-label";
 import { CommentsPanel } from "@/components/comments-panel";
 import { DriveAttachmentPanel, AttachmentCountBadge } from "@/components/drive-attachment-panel";
 import { toast } from "sonner";
 import { ErrorState } from "@/components/ui/error-state";
-import { formatDate, formatDateTime, hasPerm, severityBadgeVariant, formatLocation } from "@/lib/format";
+import { formatDate, formatDateTime, hasPerm, formatLocation } from "@/lib/format";
 import { RecordDetailModal } from "@/components/record-detail-modal";
 import { ViewModeSwitcher } from "@/components/view-modes/view-mode-switcher";
 import { CardGrid } from "@/components/view-modes/card-grid";
 import { KanbanBoard } from "@/components/view-modes/kanban-board";
+import { statusTone } from "@/components/view-modes/shared";
 import type { ViewRecord } from "@/lib/view-modes";
 import type { KanbanColumn } from "@/components/view-modes/kanban-board";
 import { OfflineDraftNotice } from "@/components/offline-draft-notice";
 import { useDurableFormDraft } from "@/hooks/use-durable-form-draft";
 import { useSyncContext } from "@/contexts/sync-context";
 import { isOfflineQueuedError } from "@/lib/offline/fetch-interceptor";
+import { SelectField } from "@/components/select-field";
+import { DateInput } from "@/components/form-controls";
+import { FilterKpi } from "@/components/filter-kpi";
+import { RegistryPagination } from "@/components/registry-pagination";
 
 type Risk = ListRisksQueryResult["items"][number] & { riskLevel?: string | null };
 
@@ -70,18 +59,6 @@ const FILTER_STATUSES = ["open", "under_mitigation", "closed"] as const;
 const RISK_REGISTER_VIEWS = ["table", "card", "kanban"] as const;
 type RiskRegisterView = typeof RISK_REGISTER_VIEWS[number];
 const DEFAULT_LIMIT = 50;
-const RISK_KANBAN_COLORS: Record<string, string> = {
-  open: "border border-amber-200 bg-amber-50 text-amber-700",
-  under_mitigation: "border border-blue-200 bg-blue-50 text-blue-700",
-  closed: "border border-slate-200 bg-slate-100 text-slate-600",
-  identified: "border border-violet-200 bg-violet-50 text-violet-700",
-  assigned: "border border-indigo-200 bg-indigo-50 text-indigo-700",
-  mitigation_plan: "border border-sky-200 bg-sky-50 text-sky-700",
-  follow_up: "border border-cyan-200 bg-cyan-50 text-cyan-700",
-  escalation: "border border-red-200 bg-red-50 text-red-700",
-  mitigated: "border border-emerald-200 bg-emerald-50 text-emerald-700",
-};
-
 type RiskRegisterState = {
   search: string;
   status: string;
@@ -214,6 +191,7 @@ async function fetchActiveRiskAssignees(): Promise<ActiveAssignee[]> {
     : [];
 }
 
+/** Maps an API reference error to the field it concerns and an i18n key (namespace "risks"). */
 function getRiskReferenceError(error: unknown): { field: RiskReferenceField; message: string } | null {
   const apiError = error as {
     data?: { error?: string; message?: string };
@@ -223,13 +201,13 @@ function getRiskReferenceError(error: unknown): { field: RiskReferenceField; mes
 
   switch (code) {
     case "state_not_found":
-      return { field: "stateId", message: "The selected state is no longer available." };
+      return { field: "stateId", message: "validation.stateNotFound" };
     case "project_not_found":
-      return { field: "projectId", message: "The selected project is no longer available." };
+      return { field: "projectId", message: "validation.projectNotFound" };
     case "assigned_user_not_found":
-      return { field: "assignedToId", message: "The selected responsible person is no longer available." };
+      return { field: "assignedToId", message: "validation.assigneeNotFound" };
     case "assigned_user_not_active":
-      return { field: "assignedToId", message: "The selected responsible person is no longer active." };
+      return { field: "assignedToId", message: "validation.assigneeInactive" };
     default:
       return null;
   }
@@ -238,12 +216,33 @@ function getRiskReferenceError(error: unknown): { field: RiskReferenceField; mes
 function StatusBadge({ status }: { status: string | null | undefined }) {
   const { t } = useTranslation("risks");
   const s = status || "open";
-  const cls =
-    s === "closed" ? "bg-muted text-muted-foreground border border-border" :
-    s === "under_mitigation" || s === "mitigation_plan" ? "bg-info/10 text-info border border-info/30" :
-    s === "escalation" ? "bg-destructive/10 text-destructive border border-destructive/30" :
-    "bg-warning/10 text-warning border border-warning/30";
-  return <Badge className={cls}>{displayStatus(s, t)}</Badge>;
+  return <Chip size="sm" variant="soft" color={statusTone(s)}>{displayStatus(s, t)}</Chip>;
+}
+
+/** Risk level as a Chip: critical is solid red so it stands out from high. */
+function RiskLevelChip({ level }: { level: string | null | undefined }) {
+  const { t } = useTranslation("risks");
+  if (!level) return <span className="text-[var(--muted)]">—</span>;
+  const color = level === "critical" || level === "high" ? "danger" : level === "medium" ? "warning" : "success";
+  return (
+    <Chip size="sm" variant={level === "critical" ? "primary" : "soft"} color={color}>
+      {t(`presentation.riskLevels.${level}`, { defaultValue: displayRiskLevel(level) })}
+    </Chip>
+  );
+}
+
+/** Heading for a group of form fields. */
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="mb-3 w-full border-b border-[var(--border)] pb-1 text-sm font-semibold">{title}</legend>
+      {children}
+    </fieldset>
+  );
+}
+
+function FieldError({ id, children }: { id?: string; children: React.ReactNode }) {
+  return <p id={id} className="mt-1 text-xs text-[var(--danger)]" role="alert">{children}</p>;
 }
 
 function RiskPresentationSkeleton({ view }: { view: RiskRegisterView }) {
@@ -251,18 +250,18 @@ function RiskPresentationSkeleton({ view }: { view: RiskRegisterView }) {
     return (
       <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="skeleton-card-grid">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="space-y-4 rounded-xl border border-border p-4">
+          <div key={index} className="space-y-4 rounded-xl border border-[var(--border)] p-4">
             <div className="flex justify-between gap-3">
-              <Skeleton className="h-5 w-3/5" />
+              <Skeleton className="h-5 w-3/5 rounded-md" />
               <Skeleton className="h-5 w-20 rounded-full" />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
-              <Skeleton className="h-8" />
+              <Skeleton className="h-8 rounded-md" />
+              <Skeleton className="h-8 rounded-md" />
+              <Skeleton className="h-8 rounded-md" />
+              <Skeleton className="h-8 rounded-md" />
             </div>
-            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-4 w-2/5 rounded-md" />
           </div>
         ))}
       </div>
@@ -281,20 +280,18 @@ function RiskPresentationSkeleton({ view }: { view: RiskRegisterView }) {
     );
   }
   return (
-    <div className="divide-y" data-testid="skeleton-table">
+    <div className="divide-y divide-[var(--border)]" data-testid="skeleton-table">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 px-6 py-3">
-          <Skeleton className="h-4 flex-[3]" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-14" />
-          <Skeleton className="h-4 w-14" />
+          <Skeleton className="h-4 flex-[3] rounded-md" />
+          <Skeleton className="h-4 w-20 rounded-md" />
+          <Skeleton className="h-4 w-14 rounded-md" />
+          <Skeleton className="h-4 w-14 rounded-md" />
           <Skeleton className="h-5 w-16 rounded-full" />
           <Skeleton className="h-5 w-24 rounded-full" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-20 rounded-md" />
+          <Skeleton className="h-4 w-28 rounded-md" />
+          <Skeleton className="h-4 w-20 rounded-md" />
         </div>
       ))}
     </div>
@@ -306,6 +303,21 @@ type HistoryEntry = {
   id: number; action: string; newValue: string | null;
   createdAt: string; userName: string | null; userRole: string | null;
 };
+
+const HISTORY_DOT: Record<string, string> = {
+  created: "bg-[var(--success)]", create: "bg-[var(--success)]",
+  closed: "bg-[var(--muted)]",
+};
+
+/** One labelled value in the read-only details grid. */
+function DetailItem({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="mb-1 text-xs font-medium text-[var(--muted)]">{label}</dt>
+      <dd className="font-medium break-words">{children}</dd>
+    </div>
+  );
+}
 
 // ── Risk Detail Modal ──────────────────────────────────────────────────────────
 function RiskDetailModal({
@@ -384,10 +396,10 @@ function RiskDetailModal({
         onError: (error) => {
           const referenceError = getRiskReferenceError(error);
           if (referenceError?.field === "assignedToId") {
-            form.setError("assignedToId", { message: referenceError.message });
+            form.setError("assignedToId", { message: t(referenceError.message) });
             return;
           }
-          toast.error(error instanceof Error ? error.message : "Could not save risk changes.");
+          toast.error(error instanceof Error ? error.message : t("form.couldNotSave"));
         },
       },
     );
@@ -405,6 +417,8 @@ function RiskDetailModal({
   const contextDescription = locationContext === "—"
     ? projectContext.replace(/^ · /, "")
     : `${locationContext}${projectContext}`;
+  const errors = form.formState.errors;
+  const impactValue = (risk as Risk & { impact?: string | null }).impact || risk.severity;
 
   return (
     <RecordDetailModal
@@ -415,263 +429,224 @@ function RiskDetailModal({
       description={editMode ? t("editingRisk", { defaultValue: "Editing risk" }) : contextDescription}
       metadata={
         <>
-          <Badge variant={severityBadgeVariant(riskLevel)}>{riskLevel ? t(`presentation.riskLevels.${riskLevel}`, { defaultValue: displayRiskLevel(riskLevel) }) : "—"}</Badge>
+          <RiskLevelChip level={riskLevel} />
           <StatusBadge status={risk.status} />
         </>
       }
     >
-        <Tabs defaultValue="details" className="w-full min-w-0">
-          <div className="mb-4 w-full overflow-x-auto pb-1">
-            <TabsList className="w-max min-w-full">
-              <TabsTrigger value="details"><Shield className="h-4 w-4 me-1" />{t("detail.tabDetails")}</TabsTrigger>
-              <TabsTrigger value="comments"><MessageSquare className="h-4 w-4 me-1" />{t("detail.tabComments")}</TabsTrigger>
-              <TabsTrigger value="history"><History className="h-4 w-4 me-1" />{t("detail.tabHistory")}</TabsTrigger>
-              <TabsTrigger value="attachments"><FileText className="h-4 w-4 me-1" />{t("detail.tabAttachments")}</TabsTrigger>
-            </TabsList>
-          </div>
+        <Tabs defaultSelectedKey="details" aria-label={t("detail.tabsAria", { defaultValue: "Risk sections" })} className="w-full min-w-0">
+          <Tabs.ListContainer className="mb-4 w-full overflow-x-auto pb-1">
+            <Tabs.List aria-label={t("detail.tabsAria", { defaultValue: "Risk sections" })}>
+              <Tabs.Tab id="details"><Shield className="size-4 me-1" aria-hidden="true" />{t("detail.tabDetails")}<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="comments"><MessageSquare className="size-4 me-1" aria-hidden="true" />{t("detail.tabComments")}<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="history"><History className="size-4 me-1" aria-hidden="true" />{t("detail.tabHistory")}<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="attachments"><FileText className="size-4 me-1" aria-hidden="true" />{t("detail.tabAttachments")}<Tabs.Indicator /></Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
 
-          <TabsContent value="details" className="space-y-4">
+          <Tabs.Panel id="details" className="space-y-4">
             {!editMode ? (
               <>
                 <dl className="grid gap-x-6 gap-y-4 text-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-                  <div>
-                    <dt className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.category")}</dt>
-                    <dd className="font-medium break-words">{risk.category ? t(`presentation.categories.${risk.category}`, { defaultValue: displayCategory(risk.category) }) : "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.status")}</dt>
-                    <dd><StatusBadge status={risk.status} /></dd>
-                  </div>
-                  <div>
-                    <dt className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.probability")}</dt>
-                    <dd className="font-medium">{risk.likelihood ? t(`presentation.likelihoods.${risk.likelihood}`, { defaultValue: displayLikelihood(risk.likelihood) }) : "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.impact")}</dt>
-                    <dd className="font-medium">{(() => { const iv = (risk as Risk & { impact?: string | null }).impact || risk.severity; return iv ? t(`presentation.impacts.${iv}`, { defaultValue: displayImpact(iv) }) : "—"; })()}</dd>
-                  </div>
-                  <div>
-                    <dt className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.riskLevel")}</dt>
-                    <dd><Badge variant={severityBadgeVariant(riskLevel)}>{riskLevel ? t(`presentation.riskLevels.${riskLevel}`, { defaultValue: displayRiskLevel(riskLevel) }) : "—"}</Badge></dd>
-                  </div>
-                  <div>
-                    <dt className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.responsiblePerson")}</dt>
-                    <dd className="flex min-w-0 items-center gap-1 font-medium">
-                      <User className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      <span className="break-words" title={risk.assignedToName ?? undefined}>{risk.assignedToName ?? t("unassigned")}</span>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.dateIdentified")}</dt>
-                    <dd className="flex items-center gap-1 font-medium">
-                      <Calendar className="h-3 w-3 text-muted-foreground" />
-                      {formatDate(risk.identifiedAt)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.dueDate")}</dt>
-                    <dd className="flex items-center gap-1 font-medium">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      {risk.dueDate ? formatDate(risk.dueDate) : "—"}
-                    </dd>
-                  </div>
+                  <DetailItem label={t("detail.category")}>
+                    {risk.category ? t(`presentation.categories.${risk.category}`, { defaultValue: displayCategory(risk.category) }) : "—"}
+                  </DetailItem>
+                  <DetailItem label={t("detail.status")}><StatusBadge status={risk.status} /></DetailItem>
+                  <DetailItem label={t("detail.probability")}>
+                    {risk.likelihood ? t(`presentation.likelihoods.${risk.likelihood}`, { defaultValue: displayLikelihood(risk.likelihood) }) : "—"}
+                  </DetailItem>
+                  <DetailItem label={t("detail.impact")}>
+                    {impactValue ? t(`presentation.impacts.${impactValue}`, { defaultValue: displayImpact(impactValue) }) : "—"}
+                  </DetailItem>
+                  <DetailItem label={t("detail.riskLevel")}><RiskLevelChip level={riskLevel} /></DetailItem>
+                  <DetailItem label={t("detail.responsiblePerson")}>
+                    <span className="flex min-w-0 items-center gap-1">
+                      <User className="size-3 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+                      <span className="break-words" dir="auto" title={risk.assignedToName ?? undefined}>{risk.assignedToName ?? t("unassigned")}</span>
+                    </span>
+                  </DetailItem>
+                  <DetailItem label={t("detail.dateIdentified")}>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="size-3 text-[var(--muted)]" aria-hidden="true" />
+                      <bdi dir="ltr">{formatDate(risk.identifiedAt)}</bdi>
+                    </span>
+                  </DetailItem>
+                  <DetailItem label={t("detail.dueDate")}>
+                    <span className="flex items-center gap-1">
+                      <Clock className="size-3 text-[var(--muted)]" aria-hidden="true" />
+                      {risk.dueDate ? <bdi dir="ltr">{formatDate(risk.dueDate)}</bdi> : "—"}
+                    </span>
+                  </DetailItem>
                 </dl>
 
                 {risk.description && (
                   <div>
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.description")}</p>
-                    <p className="rounded-md bg-muted/40 p-3 text-sm whitespace-pre-wrap break-words">{risk.description}</p>
+                    <p className="mb-1 text-xs font-medium text-[var(--muted)]">{t("detail.description")}</p>
+                    <p dir="auto" className="rounded-xl bg-[var(--default)] p-3 text-sm whitespace-pre-wrap break-words rtl:text-end">{risk.description}</p>
                   </div>
                 )}
 
                 {risk.mitigationPlan && (
                   <div>
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.mitigationAction")}</p>
-                    <p className="rounded-md bg-muted/40 p-3 text-sm whitespace-pre-wrap break-words">{risk.mitigationPlan}</p>
+                    <p className="mb-1 text-xs font-medium text-[var(--muted)]">{t("detail.mitigationAction")}</p>
+                    <p dir="auto" className="rounded-xl bg-[var(--default)] p-3 text-sm whitespace-pre-wrap break-words rtl:text-end">{risk.mitigationPlan}</p>
                   </div>
                 )}
 
                 {canUpdate && (
-                  <Button variant="outline" onClick={onEdit} className="w-full mt-2">{t("detail.editRisk")}</Button>
+                  <Button variant="outline" onPress={onEdit} className="mt-2 w-full">{t("detail.editRisk")}</Button>
                 )}
               </>
             ) : isResetting ? (
               /* Edit-mode skeleton — shown during the brief populate phase */
               <div className="space-y-5" aria-busy="true">
                 <div className="space-y-3">
-                  <Skeleton className="h-4 w-36" />
-                  <Skeleton className="h-10 rounded-md" />
-                  <Skeleton className="h-10 rounded-md" />
+                  <Skeleton className="h-4 w-36 rounded-md" />
+                  <Skeleton className="h-10 rounded-xl" />
+                  <Skeleton className="h-10 rounded-xl" />
                 </div>
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-32" />
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Skeleton className="h-10 rounded-md" />
-                    <Skeleton className="h-10 rounded-md" />
-                  </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Skeleton className="h-10 rounded-xl" />
+                  <Skeleton className="h-10 rounded-xl" />
                 </div>
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-40" />
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Skeleton className="h-10 rounded-md" />
-                    <Skeleton className="h-10 rounded-md" />
-                  </div>
-                  <Skeleton className="h-20 rounded-md" />
-                </div>
-                <div className="flex gap-2">
-                  <Skeleton className="h-9 w-24 rounded-md" />
-                  <Skeleton className="h-9 flex-1 rounded-md" />
-                </div>
+                <Skeleton className="h-20 rounded-xl" />
               </div>
             ) : (
-              <form onSubmit={onSave} className="space-y-5">
-                {/* Section: {t("sections.riskIdentification")} */}
-                <div>
-                  <p className="text-sm font-semibold text-foreground border-b border-border/40 pb-1 mb-3">{t("sections.riskIdentification")}</p>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="edit-title">{t("fields.title")}</Label>
-                      <Input
-                        id="edit-title"
-                        {...form.register("title")}
-                        aria-invalid={!!form.formState.errors.title}
-                      />
-                      {form.formState.errors.title && (
-                        <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
-                      )}
-                    </div>
-                    <div className="max-w-2xl">
-                      <Label htmlFor="edit-description">{t("fields.description")}</Label>
-                      <Textarea
-                        id="edit-description"
-                        rows={2}
-                        className="resize-y"
-                        {...form.register("description")}
-                        aria-invalid={!!form.formState.errors.description}
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label htmlFor="edit-category">{t("fields.category")}</Label>
-                        <Select value={form.watch("category")} onValueChange={(v) => form.setValue("category", v)}>
-                          <SelectTrigger id="edit-category" aria-invalid={!!form.formState.errors.category}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{t(`presentation.categories.${c}`, { defaultValue: displayCategory(c) })}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="edit-status">{t("fields.status")}</Label>
-                        <div className="max-w-xs">
-                          <Select value={form.watch("status")} onValueChange={(v) => form.setValue("status", v)}>
-                            <SelectTrigger id="edit-status" aria-invalid={!!form.formState.errors.status}><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {RISK_STATUS_OPTIONS.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {t(option.labelKey)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
+              <form onSubmit={onSave} className="space-y-5" noValidate>
+                <FormSection title={t("sections.riskIdentification")}>
+                  <div>
+                    <Label htmlFor="edit-title" isRequired>{t("fields.title")}</Label>
+                    <Input
+                      id="edit-title"
+                      fullWidth
+                      dir="auto"
+                      {...form.register("title")}
+                      aria-invalid={!!errors.title}
+                      aria-describedby={errors.title ? "edit-title-error" : undefined}
+                    />
+                    {errors.title && <FieldError id="edit-title-error">{t("validation.titleRequired")}</FieldError>}
                   </div>
-                </div>
+                  <div className="max-w-2xl">
+                    <Label htmlFor="edit-description">{t("fields.description")}</Label>
+                    <TextArea
+                      id="edit-description"
+                      fullWidth
+                      dir="auto"
+                      rows={2}
+                      className="resize-y"
+                      {...form.register("description")}
+                      aria-invalid={!!errors.description}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SelectField
+                      id="edit-category"
+                      label={t("fields.category")}
+                      isRequired
+                      isInvalid={!!errors.category}
+                      value={form.watch("category") ?? ""}
+                      onChange={(v) => form.setValue("category", v)}
+                      className="w-full"
+                      options={CATEGORIES.map((c) => ({ value: c, label: t(`presentation.categories.${c}`, { defaultValue: displayCategory(c) }) }))}
+                    />
+                    <SelectField
+                      id="edit-status"
+                      label={t("fields.status")}
+                      isRequired
+                      isInvalid={!!errors.status}
+                      value={form.watch("status") ?? ""}
+                      onChange={(v) => form.setValue("status", v)}
+                      className="w-full"
+                      options={RISK_STATUS_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                    />
+                  </div>
+                </FormSection>
 
-                {/* Section: {t("sections.riskAssessment")} */}
-                <div>
-                  <p className="text-sm font-semibold text-foreground border-b border-border/40 pb-1 mb-3">{t("sections.riskAssessment")}</p>
+                <FormSection title={t("sections.riskAssessment")}>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SelectField
+                      id="edit-likelihood"
+                      label={t("fields.probability")}
+                      isRequired
+                      isInvalid={!!errors.likelihood}
+                      value={form.watch("likelihood") ?? ""}
+                      onChange={(v) => form.setValue("likelihood", v)}
+                      className="w-full"
+                      options={PROBABILITIES.map((p) => ({ value: p, label: t(`presentation.likelihoods.${p}`, { defaultValue: displayLikelihood(p) }) }))}
+                    />
+                    <SelectField
+                      id="edit-impact"
+                      label={t("fields.impact")}
+                      isRequired
+                      isInvalid={!!errors.impact}
+                      value={form.watch("impact") ?? ""}
+                      // Kept in sync with severity on edit, exactly like the create form:
+                      // impact is the authoritative level input, but any code path that still
+                      // reads the legacy severity column directly (rather than through the
+                      // impact ?? severity fallback computeRiskLevel/riskLevelSQL both use)
+                      // must not see it silently go stale after the risk's first edit.
+                      onChange={(v) => { form.setValue("impact", v); form.setValue("severity", v); }}
+                      className="w-full"
+                      options={IMPACTS.map((i) => ({ value: i, label: t(`presentation.impacts.${i}`, { defaultValue: displayImpact(i) }) }))}
+                    />
+                  </div>
+                </FormSection>
+
+                <FormSection title={t("sections.ownershipFollowUp")}>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
-                      <Label htmlFor="edit-likelihood">{t("fields.probability")}</Label>
-                      <div className="max-w-xs">
-                        <Select value={form.watch("likelihood")} onValueChange={(v) => form.setValue("likelihood", v)}>
-                          <SelectTrigger id="edit-likelihood" aria-invalid={!!form.formState.errors.likelihood}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {PROBABILITIES.map((p) => <SelectItem key={p} value={p}>{t(`presentation.likelihoods.${p}`, { defaultValue: displayLikelihood(p) })}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="edit-impact">{t("fields.impact")}</Label>
-                      <div className="max-w-xs">
-                        <Select
-                          value={form.watch("impact") ?? ""}
-                          // Kept in sync with severity on edit, exactly like the create form
-                          // (createForm.setValue("impact"/"severity") above): impact is the
-                          // authoritative level input, but any code path that still reads the
-                          // legacy severity column directly (rather than through the impact ??
-                          // severity fallback computeRiskLevel/riskLevelSQL both use) must not
-                          // see it silently go stale after the risk's first edit.
-                          onValueChange={(v) => { form.setValue("impact", v); form.setValue("severity", v); }}
-                        >
-                          <SelectTrigger id="edit-impact" aria-invalid={!!form.formState.errors.impact}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {IMPACTS.map((i) => <SelectItem key={i} value={i}>{t(`presentation.impacts.${i}`, { defaultValue: displayImpact(i) })}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section: Ownership & follow-up */}
-                <div>
-                  <p className="text-sm font-semibold text-foreground border-b border-border/40 pb-1 mb-3">{t("sections.ownershipFollowUp")}</p>
-                  <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label htmlFor="edit-assigned">{t("fields.responsiblePerson")}</Label>
-                        <Select
-                          value={form.watch("assignedToId") ? String(form.watch("assignedToId")) : "__none__"}
-                          onValueChange={(v) => {
-                            form.setValue("assignedToId", v === "__none__" ? null : Number(v));
-                            form.clearErrors("assignedToId");
-                          }}
-                        >
-                          <SelectTrigger id="edit-assigned" aria-invalid={!!form.formState.errors.assignedToId}><SelectValue placeholder={t("unassigned")} /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">{t("unassigned")}</SelectItem>
-                            {users?.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        {form.formState.errors.assignedToId && (
-                          <p className="text-xs text-destructive mt-1" role="alert">{form.formState.errors.assignedToId.message}</p>
-                        )}
-                      </div>
-                      <div>
-                        <Label htmlFor="edit-due-date">{t("fields.dueDate")}</Label>
-                        <div className="max-w-xs">
-                          <Input id="edit-due-date" type="date" {...form.register("dueDate")} aria-invalid={!!form.formState.errors.dueDate} />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="max-w-2xl">
-                      <Label htmlFor="edit-mitigation">{t("fields.mitigationAction")}</Label>
-                      <Textarea
-                        id="edit-mitigation"
-                        rows={3}
-                        className="resize-y"
-                        {...form.register("mitigationPlan")}
-                        aria-invalid={!!form.formState.errors.mitigationPlan}
+                      <SelectField
+                        id="edit-assigned"
+                        label={t("fields.responsiblePerson")}
+                        isInvalid={!!errors.assignedToId}
+                        aria-describedby={errors.assignedToId ? "edit-assigned-error" : undefined}
+                        value={form.watch("assignedToId") ? String(form.watch("assignedToId")) : "__none__"}
+                        onChange={(v) => {
+                          form.setValue("assignedToId", v === "__none__" ? null : Number(v));
+                          form.clearErrors("assignedToId");
+                        }}
+                        className="w-full"
+                        options={[
+                          { value: "__none__", label: t("unassigned") },
+                          ...(users ?? []).map((u) => ({ value: String(u.id), label: u.name })),
+                        ]}
                       />
+                      {errors.assignedToId && <FieldError id="edit-assigned-error">{errors.assignedToId.message}</FieldError>}
                     </div>
+                    <DateInput
+                      id="edit-due-date"
+                      label={t("fields.dueDate")}
+                      className="max-w-xs"
+                      value={form.watch("dueDate") ?? ""}
+                      onChange={(v) => form.setValue("dueDate", v)}
+                      isInvalid={!!errors.dueDate}
+                    />
                   </div>
-                </div>
+                  <div className="max-w-2xl">
+                    <Label htmlFor="edit-mitigation">{t("fields.mitigationAction")}</Label>
+                    <TextArea
+                      id="edit-mitigation"
+                      fullWidth
+                      dir="auto"
+                      rows={3}
+                      className="resize-y"
+                      {...form.register("mitigationPlan")}
+                      aria-invalid={!!errors.mitigationPlan}
+                    />
+                  </div>
+                </FormSection>
 
                 <div className="flex gap-2 pt-1">
-                  <Button type="button" variant="outline" onClick={() => setEditMode(false)}>{t("form.cancel")}</Button>
-                  <Button type="submit" disabled={updateMutation.isPending} className="flex-1">
+                  <Button variant="outline" onPress={() => setEditMode(false)}>{t("form.cancel")}</Button>
+                  <Button type="submit" isPending={updateMutation.isPending} isDisabled={updateMutation.isPending} className="flex-1">
                     {updateMutation.isPending ? t("saving") : t("saveChanges")}
                   </Button>
                 </div>
               </form>
             )}
-          </TabsContent>
+          </Tabs.Panel>
 
-          <TabsContent value="comments">
+          <Tabs.Panel id="comments">
             {me?.user && (
               <CommentsPanel
                 entityType="risk"
@@ -680,76 +655,75 @@ function RiskDetailModal({
                 currentUserRole={me.user.role}
               />
             )}
-          </TabsContent>
+          </Tabs.Panel>
 
-          <TabsContent value="attachments" className="pt-2">
+          <Tabs.Panel id="attachments" className="pt-2">
             <DriveAttachmentPanel
               module="risks"
               recordId={risk.id}
               canUpload={canUpdate}
               canDelete={me?.user?.role === "super_admin" || me?.user?.role === "program_manager"}
             />
-          </TabsContent>
+          </Tabs.Panel>
 
-          <TabsContent value="history" className="space-y-2">
+          <Tabs.Panel id="history" className="space-y-2">
             {historyLoading ? (
-              <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
+              <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}</div>
             ) : historyIsError ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-                <p className="text-foreground">{t("history.loadError", { defaultValue: "Could not load history." })}</p>
-                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => refetchHistory()}>
+              <div className="rounded-xl border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] p-3 text-sm">
+                <p>{t("history.loadError", { defaultValue: "Could not load history." })}</p>
+                <Button variant="outline" size="sm" className="mt-2" onPress={() => refetchHistory()}>
                   {t("history.retry", { defaultValue: "Try again" })}
                 </Button>
               </div>
             ) : historyEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">{t("history.noHistory")}</p>
+              <p className="py-8 text-center text-sm text-[var(--muted)]">{t("history.noHistory")}</p>
             ) : (
-              historyEntries.map((h) => {
-                const actionLabel = (() => {
-                  const a = h.action?.toLowerCase();
-                  if (a === "create" || a === "created") return t("history.created");
-                  if (a === "status_changed" || a === "status_change") {
-                    const nv = h.newValue ? displayStatus(String(h.newValue), t) : "";
-                    return nv ? t("history.statusChangedTo", { status: nv }) : t("history.statusChanged");
-                  }
-                  if (a === "closed") return t("history.closed");
-                  if (a === "update" || a === "updated") return t("history.updated");
-                  if (a === "mitigation_updated") return t("history.mitigationUpdated");
-                  if (a === "assigned") return t("history.assigned");
-                  if (a === "due_date_set") return t("history.dueDateSet");
-                  return String(h.action ?? "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-                })();
-                const detail = (() => {
-                  if (!h.newValue) return null;
-                  const a = h.action?.toLowerCase();
-                  if (a === "status_changed" || a === "status_change") return null;
+              <ol className="space-y-0">
+                {historyEntries.map((h) => {
+                  const actionLabel = (() => {
+                    const a = h.action?.toLowerCase();
+                    if (a === "create" || a === "created") return t("history.created");
+                    if (a === "status_changed" || a === "status_change") {
+                      const nv = h.newValue ? displayStatus(String(h.newValue), t) : "";
+                      return nv ? t("history.statusChangedTo", { status: nv }) : t("history.statusChanged");
+                    }
+                    if (a === "closed") return t("history.closed");
+                    if (a === "update" || a === "updated") return t("history.updated");
+                    if (a === "mitigation_updated") return t("history.mitigationUpdated");
+                    if (a === "assigned") return t("history.assigned");
+                    if (a === "due_date_set") return t("history.dueDateSet");
+                    return String(h.action ?? "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                  })();
+                  const detail = (() => {
+                    if (!h.newValue) return null;
+                    const a = h.action?.toLowerCase();
+                    if (a === "status_changed" || a === "status_change") return null;
                     const value = String(h.newValue);
                     if (value.startsWith("{") || value.startsWith("[")) return null;
                     return value.length > 140 ? `${value.slice(0, 140)}…` : value;
-                })();
-                const dotColor =
-                  h.action === "create" || h.action === "created" ? "bg-success" :
-                  h.action === "closed" ? "bg-muted-foreground" :
-                  h.action === "status_changed" && h.newValue === "under_mitigation" ? "bg-info" :
-                  "bg-warning";
-                return (
-                  <div key={h.id} className="flex gap-3 text-sm">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${dotColor}`} />
-                      <div className="w-px flex-1 bg-border mt-1" />
-                    </div>
-                    <div className="min-w-0 flex-1 pb-3">
-                      <p className="font-medium break-words">{actionLabel}</p>
-                      {detail && <p className="mt-0.5 text-xs text-muted-foreground break-words">{detail}</p>}
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {h.userName ?? t("history.system")} · {formatDateTime(h.createdAt)}
+                  })();
+                  const dotColor = HISTORY_DOT[h.action]
+                    ?? (h.action === "status_changed" && h.newValue === "under_mitigation" ? "bg-[var(--accent)]" : "bg-[var(--warning)]");
+                  return (
+                    <li key={h.id} className="flex gap-3 text-sm">
+                      <div className="flex flex-col items-center" aria-hidden="true">
+                        <div className={`mt-1.5 size-2.5 shrink-0 rounded-full ${dotColor}`} />
+                        <div className="mt-1 w-px flex-1 bg-[var(--border)]" />
                       </div>
-                    </div>
-                  </div>
-                );
-              })
+                      <div className="min-w-0 flex-1 pb-3">
+                        <p className="font-medium break-words">{actionLabel}</p>
+                        {detail && <p dir="auto" className="mt-0.5 text-xs text-[var(--muted)] break-words rtl:text-end">{detail}</p>}
+                        <div className="mt-1 text-xs text-[var(--muted)]">
+                          <span dir="auto">{h.userName ?? t("history.system")}</span> · <bdi dir="ltr">{formatDateTime(h.createdAt)}</bdi>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
             )}
-          </TabsContent>
+          </Tabs.Panel>
         </Tabs>
     </RecordDetailModal>
   );
@@ -878,10 +852,10 @@ export default function RisksPage() {
       onError: (error) => {
         const referenceError = getRiskReferenceError(error);
         if (referenceError) {
-          createForm.setError(referenceError.field, { message: referenceError.message });
+          createForm.setError(referenceError.field, { message: t(referenceError.message) });
           return;
         }
-        toast.error(error instanceof Error ? error.message : "Could not register risk.");
+        toast.error(error instanceof Error ? error.message : t("form.couldNotRegister"));
       },
     },
   });
@@ -937,7 +911,7 @@ export default function RisksPage() {
   const onCreate = createForm.handleSubmit(async (values) => {
     // For state risks, validate that stateId is set (Zod now accepts optional)
     if (riskLocationType !== "hq" && (!values.stateId || values.stateId === 0)) {
-      createForm.setError("stateId", { message: `${t("fields.state")} is required` });
+      createForm.setError("stateId", { message: t("validation.stateRequired") });
       return;
     }
     const cleaned: Record<string, unknown> = { ...values };
@@ -988,7 +962,6 @@ export default function RisksPage() {
     () => RISK_STATUS_OPTIONS.map((option) => ({
       key: option.value,
       label: t(option.labelKey),
-      color: RISK_KANBAN_COLORS[option.value],
     })),
     [t],
   );
@@ -1007,12 +980,12 @@ export default function RisksPage() {
       const impactLabel = impact
         ? t(`presentation.impacts.${impact}`, { defaultValue: displayImpact(impact) })
         : "—";
-      const levelLabel = level
-        ? t(`presentation.riskLevels.${level}`, { defaultValue: displayRiskLevel(level) })
-        : "—";
+      // The date is wrapped in Unicode isolates (LRI … PDI) so "15 Oct 2026"
+      // keeps its order inside an Arabic label instead of being reshuffled.
+      const isolate = (text: string) => `\u2066${text}\u2069`;
       const dateContext = risk.dueDate
-        ? `${t("presentation.dueDate")}: ${formatDate(risk.dueDate)}`
-        : `${t("presentation.identified")}: ${formatDate(risk.identifiedAt)}`;
+        ? `${t("presentation.dueDate")}: ${isolate(formatDate(risk.dueDate))}`
+        : `${t("presentation.identified")}: ${isolate(formatDate(risk.identifiedAt))}`;
       return {
         id: risk.id,
         title: risk.title,
@@ -1020,7 +993,7 @@ export default function RisksPage() {
         ariaLabel: t("accessibility.openRisk", { title: risk.title, defaultValue: "Open risk: {{title}}" }),
         statusBadge: (
           <div className="flex max-w-[11rem] flex-wrap justify-end gap-1">
-            <Badge variant={severityBadgeVariant(level)}>{levelLabel}</Badge>
+            <RiskLevelChip level={level} />
             <StatusBadge status={risk.status} />
           </div>
         ),
@@ -1054,12 +1027,12 @@ export default function RisksPage() {
     });
   }
   const emptyPresentation = (
-    <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
-      <Shield className="h-8 w-8 opacity-30" aria-hidden="true" />
+    <div className="flex flex-col items-center gap-2 py-10 text-center text-[var(--muted)]">
+      <Shield className="size-8 opacity-30" aria-hidden="true" />
       {activeFilters > 0 ? (
         <>
           <p className="text-sm font-medium">{t("noRisksFiltered")}</p>
-          <Button variant="ghost" size="sm" onClick={clearFilters}>{t("filters.clearFilters")}</Button>
+          <Button variant="ghost" size="sm" onPress={clearFilters}>{t("filters.clearFilters")}</Button>
         </>
       ) : (
         <p className="text-sm font-medium">{t("noRisks")}</p>
@@ -1067,344 +1040,446 @@ export default function RisksPage() {
     </div>
   );
 
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  /** Opens a table row's risk, passing the row element so focus returns to it. */
+  const openRiskRow = useCallback((key: React.Key) => {
+    const r = (risks ?? []).find((item) => String(item.id) === String(key));
+    if (!r) return;
+    const row = gridRef.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(String(key))}"]`) ?? null;
+    openRiskDetail(r, row);
+  }, [risks, openRiskDetail]);
+
+  const columns = useMemo<DataGridColumn<Risk>[]>(() => [
+    { id: "title", header: t("table.riskTitle"), isRowHeader: true, width: 260, pinned: "start", headerClassName: "w-[260px]",
+      cell: (r) => (
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 items-start gap-1.5">
+            <span dir="auto" className="line-clamp-2 whitespace-normal break-words font-medium leading-snug rtl:text-end" title={r.title}>{r.title}</span>
+            <AttachmentCountBadge module="risks" recordId={r.id} />
+          </div>
+          {r.description && <span dir="auto" className="line-clamp-1 whitespace-normal text-xs text-[var(--muted)] rtl:text-end">{r.description}</span>}
+        </div>
+      ) },
+    { id: "level", header: t("table.riskLevel"), width: 104, headerClassName: "w-[104px]",
+      cell: (r) => <RiskLevelChip level={r.riskLevel ?? ""} /> },
+    { id: "status", header: t("table.status"), width: 124, headerClassName: "w-[124px]",
+      cell: (r) => <StatusBadge status={r.status} /> },
+    { id: "dueDate", header: t("table.dueDate"), width: 112, headerClassName: "w-[112px]",
+      cell: (r) => {
+        const isDue = r.dueDate && new Date(r.dueDate) < new Date() && r.status !== "closed";
+        if (!r.dueDate) return <span className="text-[var(--muted)]">—</span>;
+        return (
+          <span className={`flex items-center gap-1 whitespace-nowrap text-sm ${isDue ? "font-medium text-[var(--danger)]" : "text-[var(--muted)]"}`}>
+            {isDue && <Clock className="size-3" aria-label={t("table.overdue", { defaultValue: "Overdue" })} />}
+            <bdi dir="ltr">{formatDate(r.dueDate)}</bdi>
+          </span>
+        );
+      } },
+    { id: "assessment", header: `${t("table.probability")} / ${t("table.impact")}`, width: 128, headerClassName: "w-[128px]",
+      cell: (r) => {
+        const impact = (r as Risk & { impact?: string | null }).impact || r.severity;
+        return (
+          <span className="text-sm">
+            {r.likelihood ? t(`presentation.likelihoods.${r.likelihood}`, { defaultValue: displayLikelihood(r.likelihood) }) : "—"}
+            <span className="text-[var(--muted)]"> / </span>
+            {impact ? t(`presentation.impacts.${impact}`, { defaultValue: displayImpact(impact) }) : "—"}
+          </span>
+        );
+      } },
+    { id: "category", header: t("table.category"), width: 104, headerClassName: "w-[104px]",
+      cell: (r) => <span className="text-sm">{r.category ? t(`presentation.categories.${r.category}`, { defaultValue: displayCategory(r.category) }) : "—"}</span> },
+    { id: "state", header: t("table.state"), width: 108, headerClassName: "w-[108px]",
+      cell: (r) => <span className="text-sm">{formatLocation({ locationType: r.locationType, stateName: r.stateName, stateNameAr: r.stateNameAr }, i18n.language)}</span> },
+    { id: "project", header: t("table.project"), width: 150, headerClassName: "w-[150px]",
+      cell: (r) => (
+        <span dir="auto" className="line-clamp-2 whitespace-normal break-words text-sm text-[var(--muted)] rtl:text-end">
+          {r.projectTitle || (r.projectId ? t("projectRemoved", { defaultValue: "[Project removed]" }) : "—")}
+        </span>
+      ) },
+    { id: "responsible", header: t("table.responsible"), width: 120, headerClassName: "w-[120px]",
+      cell: (r) => <span dir="auto" className="line-clamp-2 whitespace-normal text-sm text-[var(--muted)] rtl:text-end">{r.assignedToName || "—"}</span> },
+    { id: "identified", header: t("table.identified"), width: 108, headerClassName: "w-[108px]",
+      cell: (r) => <bdi dir="ltr" className="whitespace-nowrap text-sm text-[var(--muted)]">{formatDate(r.identifiedAt)}</bdi> },
+
+  ], [t, i18n.language]);
+
+  const totalPages = (risksRaw as { totalPages?: number } | undefined)?.totalPages ?? 1;
+  const total = (risksRaw as { total?: number } | undefined)?.total ?? 0;
+  const pagination = (() => {
+    if (totalPages <= 1) return null;
+    return (
+      <RegistryPagination
+        className="px-4 py-3"
+        page={page}
+        totalPages={totalPages}
+        onPageChange={(next) => updateRegisterState({ page: Math.min(totalPages, Math.max(1, next)) })}
+        summary={t("pagination.pageOf", { page, totalPages, total, defaultValue: "Page {{page}} of {{totalPages}} ({{total}} risks)" })}
+        labels={{
+          region: t("pagination.region", { defaultValue: "Pagination" }),
+          first: t("pagination.first", { defaultValue: "First page" }),
+          previous: t("pagination.previous", { defaultValue: "Previous page" }),
+          next: t("pagination.next", { defaultValue: "Next page" }),
+          last: t("pagination.last", { defaultValue: "Last page" }),
+          pageOf: `${page} / ${totalPages}`,
+        }}
+      />
+    );
+  })();
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    createForm.reset();
+    setRiskLocationType("state");
+  };
+  const openCreate = () => {
+    setCreateOpen(true);
+    // Auto-fill state for state-scoped users (SPO/SOM cannot select HQ)
+    if (isStateRole && meStateId) { createForm.setValue("stateId", meStateId); }
+  };
+  const createErrors = createForm.formState.errors;
+  const countLabel = t(total === 1 ? "page.risksCount" : "page.risksCountPlural", { count: total });
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
-            <AlertTriangle className="size-5 text-warning" />
+          <h1 className="flex items-center gap-2 text-xl font-semibold">
+            <AlertTriangle className="size-5 text-[var(--warning)]" aria-hidden="true" />
             {t("title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t("page.description")}
-          </p>
+          <p className="mt-0.5 text-sm text-[var(--muted)]">{t("page.description")}</p>
         </div>
         {canCreate && (
-          <Dialog open={createOpen} onOpenChange={(open) => {
-        setCreateOpen(open);
-        if (!open) { createForm.reset(); setRiskLocationType("state"); }
-        // Auto-fill state for state-scoped users (SPO/SOM cannot select HQ)
-        if (open && isStateRole && meStateId) { createForm.setValue("stateId", meStateId); }
-      }}>
-            <DialogTrigger asChild>
-          <Button className="shrink-0"><Plus className="h-4 w-4" />{t("newRisk")}</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{t("page.registerNewRisk")}</DialogTitle>
-                <DialogDescription>
-                  {t("page.registerNewRiskDesc")}
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={onCreate} className="space-y-5">
-                <OfflineDraftNotice status={riskDraft.status} error={riskDraft.error} />
-
-                {/* Section: {t("sections.riskIdentification")} */}
-                <div>
-                  <p className="text-sm font-semibold text-foreground border-b border-border/40 pb-1 mb-3">{t("sections.riskIdentification")}</p>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="create-title">{t("fields.title")} <span className="text-destructive" aria-hidden="true">*</span></Label>
-                      <Input
-                        id="create-title"
-                        {...createForm.register("title")}
-                        placeholder={t("fields.titlePh")}
-                        aria-invalid={!!createForm.formState.errors.title}
-                        aria-required="true"
-                      />
-                      {createForm.formState.errors.title && (
-                        <p className="text-xs text-destructive mt-1" role="alert">{createForm.formState.errors.title.message}</p>
-                      )}
-                    </div>
-                    <div className="max-w-2xl">
-                      <Label htmlFor="create-description">{t("fields.description")}</Label>
-                      <Textarea
-                        id="create-description"
-                        rows={2}
-                        className="resize-y"
-                        {...createForm.register("description")}
-                        placeholder={t("fields.descriptionPh")}
-                        aria-invalid={!!createForm.formState.errors.description}
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label htmlFor="create-category">{t("fields.category")} <span className="text-destructive" aria-hidden="true">*</span></Label>
-                        <Select value={createForm.watch("category")} onValueChange={(v) => createForm.setValue("category", v)}>
-                          <SelectTrigger id="create-category" aria-required="true" aria-invalid={!!createForm.formState.errors.category}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{t(`presentation.categories.${c}`, { defaultValue: displayCategory(c) })}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="create-location">{t("form.stateLocation")} <span className="text-destructive" aria-hidden="true">*</span></Label>
-                        <LocationSelector
-                          value={{ locationType: riskLocationType, stateId: createForm.watch("stateId") || null }}
-                          onChange={({ locationType, stateId: sid }) => {
-                            setRiskLocationType(locationType ?? "state");
-                            createForm.setValue("stateId", sid ?? 0);
-                            if (locationType === "hq") createForm.clearErrors("stateId");
-                          }}
-                          states={states ?? []}
-                          isStateLocked={isStateRole}
-                          lockedStateId={meStateId}
-                          lockedStateName={states?.find((s) => s.id === meStateId)?.name}
-                          placeholder={t("common:risksPage.selectStatePlaceholder")}
-                          invalid={!!createForm.formState.errors.stateId && riskLocationType !== "hq"}
-                          id="create-location"
-                          aria-required
-                          aria-describedby={createForm.formState.errors.stateId ? "create-state-error" : undefined}
-                        />
-                        {createForm.formState.errors.stateId && riskLocationType !== "hq" && (
-                          <p id="create-state-error" className="text-xs text-destructive mt-1" role="alert">
-                            {createForm.formState.errors.stateId.message ?? `${t("fields.state")} is required`}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section: {t("sections.riskAssessment")} */}
-                <div>
-                  <p className="text-sm font-semibold text-foreground border-b border-border/40 pb-1 mb-3">{t("sections.riskAssessment")}</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <Label htmlFor="create-likelihood">{t("fields.probability")} <span className="text-destructive" aria-hidden="true">*</span></Label>
-                      <div className="max-w-xs">
-                        <Select value={createForm.watch("likelihood")} onValueChange={(v) => createForm.setValue("likelihood", v)}>
-                          <SelectTrigger id="create-likelihood" aria-required="true" aria-invalid={!!createForm.formState.errors.likelihood}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {PROBABILITIES.map((p) => <SelectItem key={p} value={p}>{t(`presentation.likelihoods.${p}`, { defaultValue: displayLikelihood(p) })}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="create-impact">{t("fields.impact")} <span className="text-destructive" aria-hidden="true">*</span></Label>
-                      <div className="max-w-xs">
-                        <Select
-                          value={createForm.watch("impact") ?? "medium"}
-                          onValueChange={(v) => { createForm.setValue("impact", v); createForm.setValue("severity", v); }}
-                        >
-                          <SelectTrigger id="create-impact" aria-required="true" aria-invalid={!!createForm.formState.errors.impact}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {IMPACTS.map((i) => <SelectItem key={i} value={i}>{t(`presentation.impacts.${i}`, { defaultValue: displayImpact(i) })}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section: Ownership & follow-up */}
-                <div>
-                  <p className="text-sm font-semibold text-foreground border-b border-border/40 pb-1 mb-3">{t("sections.ownershipFollowUp")}</p>
-                  <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label htmlFor="create-project">{t("fields.linkedProject")}</Label>
-                        <Select
-                          value={createForm.watch("projectId") ? String(createForm.watch("projectId")) : "__none__"}
-                          onValueChange={(v) => {
-                            createForm.setValue("projectId", v === "__none__" ? undefined : Number(v));
-                            createForm.clearErrors("projectId");
-                          }}
-                        >
-                          <SelectTrigger id="create-project" aria-invalid={!!createForm.formState.errors.projectId}><SelectValue placeholder={t("form.none")} /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">{t("form.none")}</SelectItem>
-                            {projects?.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.code} — {p.title}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        {createForm.formState.errors.projectId && (
-                          <p className="text-xs text-destructive mt-1" role="alert">{createForm.formState.errors.projectId.message}</p>
-                        )}
-                      </div>
-                      <div>
-                        <Label htmlFor="create-assigned">{t("fields.responsiblePerson")}</Label>
-                        <Select
-                          value={createForm.watch("assignedToId") ? String(createForm.watch("assignedToId")) : "__none__"}
-                          onValueChange={(v) => {
-                            createForm.setValue("assignedToId", v === "__none__" ? undefined : Number(v));
-                            createForm.clearErrors("assignedToId");
-                          }}
-                        >
-                          <SelectTrigger id="create-assigned" aria-invalid={!!createForm.formState.errors.assignedToId}><SelectValue placeholder={t("unassigned")} /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">{t("unassigned")}</SelectItem>
-                            {users?.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        {createForm.formState.errors.assignedToId && (
-                          <p className="text-xs text-destructive mt-1" role="alert">{createForm.formState.errors.assignedToId.message}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="create-due-date">{t("fields.dueDate")}</Label>
-                      <div className="max-w-xs">
-                        <Input id="create-due-date" type="date" {...createForm.register("dueDate")} aria-invalid={!!createForm.formState.errors.dueDate} />
-                      </div>
-                    </div>
-                    <div className="max-w-2xl">
-                      <Label htmlFor="create-mitigation">{t("fields.mitigationAction")}</Label>
-                      <Textarea
-                        id="create-mitigation"
-                        rows={3}
-                        className="resize-y"
-                        {...createForm.register("mitigationPlan")}
-                        placeholder={t("fields.mitigationPh")}
-                        aria-invalid={!!createForm.formState.errors.mitigationPlan}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>{t("form.cancel")}</Button>
-                  <Button type="submit" disabled={createMutation.isPending}>
-                    {createMutation.isPending ? t("registering") : t("registerRisk")}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button className="shrink-0" onPress={openCreate}><Plus className="size-4" aria-hidden="true" />{t("newRisk")}</Button>
         )}
       </div>
+
+      {canCreate && (
+        <Modal isOpen={createOpen} onOpenChange={(open) => { if (!open) closeCreate(); }}>
+          <Modal.Backdrop>
+            <Modal.Container size="lg" scroll="inside">
+              <Modal.Dialog className="sm:max-w-2xl max-w-2xl max-h-[90vh] overflow-y-auto">
+                <Modal.CloseTrigger />
+                <Modal.Header>
+                  <Modal.Heading>{t("page.registerNewRisk")}</Modal.Heading>
+                  <p className="text-sm text-[var(--muted)]">{t("page.registerNewRiskDesc")}</p>
+                </Modal.Header>
+                <form onSubmit={onCreate} className="contents" noValidate>
+                  <Modal.Body className="space-y-5">
+                    <OfflineDraftNotice status={riskDraft.status} error={riskDraft.error} />
+
+                    <FormSection title={t("sections.riskIdentification")}>
+                      <div>
+                        <Label htmlFor="create-title" isRequired>{t("fields.title")}</Label>
+                        <Input
+                          id="create-title"
+                          fullWidth
+                          dir="auto"
+                          {...createForm.register("title")}
+                          placeholder={t("fields.titlePh")}
+                          aria-invalid={!!createErrors.title}
+                          aria-required="true"
+                          aria-describedby={createErrors.title ? "create-title-error" : undefined}
+                        />
+                        {createErrors.title && <FieldError id="create-title-error">{t("validation.titleRequired")}</FieldError>}
+                      </div>
+                      <div className="max-w-2xl">
+                        <Label htmlFor="create-description">{t("fields.description")}</Label>
+                        <TextArea
+                          id="create-description"
+                          fullWidth
+                          dir="auto"
+                          rows={2}
+                          className="resize-y"
+                          {...createForm.register("description")}
+                          placeholder={t("fields.descriptionPh")}
+                          aria-invalid={!!createErrors.description}
+                        />
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <SelectField
+                          id="create-category"
+                          label={t("fields.category")}
+                          isRequired
+                          isInvalid={!!createErrors.category}
+                          value={createForm.watch("category") ?? ""}
+                          onChange={(v) => createForm.setValue("category", v)}
+                          className="w-full"
+                          options={CATEGORIES.map((c) => ({ value: c, label: t(`presentation.categories.${c}`, { defaultValue: displayCategory(c) }) }))}
+                        />
+                        <div className="flex flex-col gap-1">
+                          <Label htmlFor="create-location" isRequired>{t("form.stateLocation")}</Label>
+                          <LocationSelector
+                            value={{ locationType: riskLocationType, stateId: createForm.watch("stateId") || null }}
+                            onChange={({ locationType, stateId: sid }) => {
+                              setRiskLocationType(locationType ?? "state");
+                              createForm.setValue("stateId", sid ?? 0);
+                              if (locationType === "hq") createForm.clearErrors("stateId");
+                            }}
+                            states={states ?? []}
+                            isStateLocked={isStateRole}
+                            lockedStateId={meStateId}
+                            lockedStateName={(() => { const s = states?.find((st) => st.id === meStateId); return s ? getStateLabel(s, i18n.language) : undefined; })()}
+                            placeholder={t("form.stateLocationPh")}
+                            invalid={!!createErrors.stateId && riskLocationType !== "hq"}
+                            id="create-location"
+                            aria-required
+                            aria-describedby={createErrors.stateId ? "create-state-error" : undefined}
+                          />
+                          {createErrors.stateId && riskLocationType !== "hq" && (
+                            <FieldError id="create-state-error">{t("validation.stateRequired")}</FieldError>
+                          )}
+                        </div>
+                      </div>
+                    </FormSection>
+
+                    <FormSection title={t("sections.riskAssessment")}>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <SelectField
+                          id="create-likelihood"
+                          label={t("fields.probability")}
+                          isRequired
+                          isInvalid={!!createErrors.likelihood}
+                          value={createForm.watch("likelihood") ?? ""}
+                          onChange={(v) => createForm.setValue("likelihood", v)}
+                          className="w-full"
+                          options={PROBABILITIES.map((p) => ({ value: p, label: t(`presentation.likelihoods.${p}`, { defaultValue: displayLikelihood(p) }) }))}
+                        />
+                        <SelectField
+                          id="create-impact"
+                          label={t("fields.impact")}
+                          isRequired
+                          isInvalid={!!createErrors.impact}
+                          value={createForm.watch("impact") ?? "medium"}
+                          onChange={(v) => { createForm.setValue("impact", v); createForm.setValue("severity", v); }}
+                          className="w-full"
+                          options={IMPACTS.map((i) => ({ value: i, label: t(`presentation.impacts.${i}`, { defaultValue: displayImpact(i) }) }))}
+                        />
+                      </div>
+                    </FormSection>
+
+                    <FormSection title={t("sections.ownershipFollowUp")}>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <SelectField
+                            id="create-project"
+                            label={t("fields.linkedProject")}
+                            isInvalid={!!createErrors.projectId}
+                            aria-describedby={createErrors.projectId ? "create-project-error" : undefined}
+                            value={createForm.watch("projectId") ? String(createForm.watch("projectId")) : "__none__"}
+                            onChange={(v) => {
+                              createForm.setValue("projectId", v === "__none__" ? undefined : Number(v));
+                              createForm.clearErrors("projectId");
+                            }}
+                            className="w-full"
+                            options={[
+                              { value: "__none__", label: t("form.none") },
+                              ...(projects ?? []).map((p) => ({
+                                value: String(p.id),
+                                label: <span className="flex min-w-0 flex-col"><bdi dir="ltr" className="font-mono text-xs text-[var(--muted)]">{p.code}</bdi><span dir="auto" className="truncate">{p.title}</span></span>,
+                                textValue: `${p.code} ${p.title}`,
+                              })),
+                            ]}
+                          />
+                          {createErrors.projectId && <FieldError id="create-project-error">{createErrors.projectId.message}</FieldError>}
+                        </div>
+                        <div>
+                          <SelectField
+                            id="create-assigned"
+                            label={t("fields.responsiblePerson")}
+                            isInvalid={!!createErrors.assignedToId}
+                            aria-describedby={createErrors.assignedToId ? "create-assigned-error" : undefined}
+                            value={createForm.watch("assignedToId") ? String(createForm.watch("assignedToId")) : "__none__"}
+                            onChange={(v) => {
+                              createForm.setValue("assignedToId", v === "__none__" ? undefined : Number(v));
+                              createForm.clearErrors("assignedToId");
+                            }}
+                            className="w-full"
+                            options={[
+                              { value: "__none__", label: t("unassigned") },
+                              ...(users ?? []).map((u) => ({ value: String(u.id), label: u.name })),
+                            ]}
+                          />
+                          {createErrors.assignedToId && <FieldError id="create-assigned-error">{createErrors.assignedToId.message}</FieldError>}
+                        </div>
+                      </div>
+                      <DateInput
+                        id="create-due-date"
+                        label={t("fields.dueDate")}
+                        className="max-w-xs"
+                        value={createForm.watch("dueDate") ?? ""}
+                        onChange={(v) => createForm.setValue("dueDate", v)}
+                        isInvalid={!!createErrors.dueDate}
+                      />
+                      <div className="max-w-2xl">
+                        <Label htmlFor="create-mitigation">{t("fields.mitigationAction")}</Label>
+                        <TextArea
+                          id="create-mitigation"
+                          fullWidth
+                          dir="auto"
+                          rows={3}
+                          className="resize-y"
+                          {...createForm.register("mitigationPlan")}
+                          placeholder={t("fields.mitigationPh")}
+                          aria-invalid={!!createErrors.mitigationPlan}
+                        />
+                      </div>
+                    </FormSection>
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button variant="outline" onPress={closeCreate}>{t("form.cancel")}</Button>
+                    <Button type="submit" isPending={createMutation.isPending} isDisabled={createMutation.isPending}>
+                      {createMutation.isPending ? t("registering") : t("registerRisk")}
+                    </Button>
+                  </Modal.Footer>
+                </form>
+              </Modal.Dialog>
+            </Modal.Container>
+          </Modal.Backdrop>
+        </Modal>
+      )}
 
       {/* ── Initial load: full-page skeleton replaces KPI + filters + table ─── */}
       {isLoading && !risksRaw ? (
         <>
-          {/* KPI card skeletons — matches the 4-column summary strip */}
-          <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4" data-testid="skeleton-kpi">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4" data-testid="skeleton-kpi">
             {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-[128px] rounded-xl" />
+              <Skeleton key={i} className="h-[128px] rounded-2xl" />
             ))}
           </div>
-          {/* Filter toolbar skeleton */}
-          <Skeleton className="h-10 rounded-xl w-full" data-testid="skeleton-toolbar" />
-          {/* Table skeleton */}
-          <Card>
-            <CardContent className="p-0">
-              <RiskPresentationSkeleton view={view} />
-            </CardContent>
+          <Skeleton className="h-12 w-full rounded-2xl" data-testid="skeleton-toolbar" />
+          <Card className="p-0">
+            <RiskPresentationSkeleton view={view} />
           </Card>
         </>
       ) : (
         <>
-      {/* Summary cards — visible once data is available (initial or cached) */}
-      <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard
+      {/* Summary — server envelope totals for the whole scoped register (risksRaw?.summary) */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+        <FilterKpi
           icon={AlertTriangle}
-          iconBg="bg-destructive"
+          status="danger"
           label={t("stats.critical")}
-          value={<span className="text-destructive">{counts.critical}</span>}
+          value={<span className="text-[var(--danger)]">{counts.critical}</span>}
           sub={t("stats.criticalSub")}
-          onClick={() => updateRegisterState({ riskLevel: riskLevelFilter === "critical" ? "all" : "critical", page: 1 })}
-          className={`bg-destructive/10 border-destructive/30${riskLevelFilter === "critical" ? " ring-2 ring-primary" : ""}`}
+          pressed={riskLevelFilter === "critical"}
+          onToggle={() => updateRegisterState({ riskLevel: riskLevelFilter === "critical" ? "all" : "critical", page: 1 })}
         />
-        <StatCard
+        <FilterKpi
           icon={AlertTriangle}
-          iconBg="bg-orange-500"
+          status="danger"
           label={t("stats.high")}
-          value={<span className="text-destructive/80">{counts.high}</span>}
+          value={counts.high}
           sub={t("stats.highSub")}
-          onClick={() => updateRegisterState({ riskLevel: riskLevelFilter === "high" ? "all" : "high", page: 1 })}
-          className={`bg-destructive/5 border-destructive/20${riskLevelFilter === "high" ? " ring-2 ring-primary" : ""}`}
+          pressed={riskLevelFilter === "high"}
+          onToggle={() => updateRegisterState({ riskLevel: riskLevelFilter === "high" ? "all" : "high", page: 1 })}
         />
-        <StatCard
+        <FilterKpi
           icon={AlertCircle}
-          iconBg="bg-amber-400"
+          status="warning"
           label={t("stats.medium")}
-          value={<span className="text-warning">{counts.medium}</span>}
+          value={counts.medium}
           sub={t("stats.mediumSub")}
-          onClick={() => updateRegisterState({ riskLevel: riskLevelFilter === "medium" ? "all" : "medium", page: 1 })}
-          className={`bg-warning/10 border-warning/30${riskLevelFilter === "medium" ? " ring-2 ring-primary" : ""}`}
+          pressed={riskLevelFilter === "medium"}
+          onToggle={() => updateRegisterState({ riskLevel: riskLevelFilter === "medium" ? "all" : "medium", page: 1 })}
         />
-        <StatCard
+        <FilterKpi
           icon={CheckCircle2}
-          iconBg="bg-emerald-500"
+          status="success"
           label={t("stats.low")}
-          value={<span className="text-success">{counts.low}</span>}
+          value={counts.low}
           sub={t("stats.lowSub")}
-          onClick={() => updateRegisterState({ riskLevel: riskLevelFilter === "low" ? "all" : "low", page: 1 })}
-          className={`bg-success/10 border-success/30${riskLevelFilter === "low" ? " ring-2 ring-primary" : ""}`}
+          pressed={riskLevelFilter === "low"}
+          onToggle={() => updateRegisterState({ riskLevel: riskLevelFilter === "low" ? "all" : "low", page: 1 })}
         />
       </div>
 
-      {/* Projects-style registry toolbar: controls at the logical start, presentation at the end. */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5" role="group" aria-label={t("accessibility.toolbar")}>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <div className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground select-none">
-            <Filter className="h-4 w-4" aria-hidden="true" />
+      {/* Registry toolbar: filters at the logical start, presentation at the end (as on Projects/Plans). */}
+      <Card className="flex-row flex-wrap items-center gap-2 px-3 py-2.5" role="group" aria-label={t("accessibility.toolbar")}>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 max-md:basis-full">
+          <div className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-[var(--muted)] select-none">
+            <Filter className="size-4" aria-hidden="true" />
             {t("filters.toolbar")}
           </div>
           <Separator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
-          <div className="relative min-w-[14rem] flex-1">
-              <Search className="absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input
-                className="h-10 ps-8 border-border/60"
-                placeholder={t("filters.searchPlaceholder")}
-                value={search}
-                onChange={(e) => updateRegisterState({ search: e.target.value, page: 1 })}
-                aria-label={t("filters.searchRisks")}
-              />
-            </div>
-            <Select value={riskLevelFilter} onValueChange={(v) => updateRegisterState({ riskLevel: v, page: 1 })}>
-              <SelectTrigger className="h-10 min-w-[8rem] w-auto max-w-[12rem] border-border/60" aria-label={t("filters.riskLevel")}><SelectValue placeholder={t("filters.riskLevel")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("filters.allLevels")}</SelectItem>
-                <SelectItem value="critical">{t("levels.critical")}</SelectItem>
-                <SelectItem value="high">{t("levels.high")}</SelectItem>
-                <SelectItem value="medium">{t("levels.medium")}</SelectItem>
-                <SelectItem value="low">{t("levels.low")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={status} onValueChange={(v) => updateRegisterState({ status: v, page: 1 })}>
-              <SelectTrigger className="h-10 min-w-[8rem] w-auto max-w-[12rem] border-border/60" aria-label={t("filters.status")}><SelectValue placeholder={t("filters.status")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("filters.allStatuses")}</SelectItem>
-                <SelectItem value="open">{t("status.open")}</SelectItem>
-                <SelectItem value="under_mitigation">{t("status.under_mitigation")}</SelectItem>
-                <SelectItem value="closed">{t("status.closed")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={categoryFilter} onValueChange={(v) => updateRegisterState({ category: v, page: 1 })}>
-              <SelectTrigger className="h-10 min-w-[8rem] w-auto max-w-[12rem] border-border/60" aria-label={t("filters.category")}><SelectValue placeholder={t("filters.category")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("filters.allCategories")}</SelectItem>
-                {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{t(`presentation.categories.${c}`, { defaultValue: displayCategory(c) })}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={projectId} onValueChange={(v) => updateRegisterState({ projectId: v, page: 1 })}>
-              <SelectTrigger className="h-10 min-w-[9rem] w-auto max-w-[14rem] border-border/60" aria-label={t("filters.project")}><SelectValue placeholder={t("filters.project")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("filters.allProjects")}</SelectItem>
-                {projects?.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.code}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={stateId} onValueChange={(v) => updateRegisterState({ stateId: v, page: 1 })}>
-              <SelectTrigger className="h-10 min-w-[8rem] w-auto max-w-[12rem] border-border/60" aria-label={t("filters.state")}><SelectValue placeholder={t("filters.state")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("filters.allStates")}</SelectItem>
-                {states?.map((s) => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={assignedToFilter} onValueChange={(v) => updateRegisterState({ assignedToId: v, page: 1 })}>
-              <SelectTrigger className="h-10 min-w-[9rem] w-auto max-w-[13rem] border-border/60" aria-label={t("filters.responsible")}><SelectValue placeholder={t("filters.responsible")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("filters.allPersons")}</SelectItem>
-                {users?.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {activeFilters > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 px-2 text-muted-foreground hover:text-foreground">
-              <X className="h-4 w-4" /> {t("filters.clearCount", { count: activeFilters })}
-              </Button>
-            )}
+          <SearchField
+            aria-label={t("filters.searchRisks")}
+            value={search}
+            onChange={(value) => updateRegisterState({ search: value, page: 1 })}
+            className="w-full min-w-[12rem] flex-1 sm:max-w-[18rem]"
+          >
+            <SearchField.Group>
+              <SearchField.SearchIcon />
+              <SearchField.Input placeholder={t("filters.searchPlaceholder")} />
+              <SearchField.ClearButton aria-label={t("filters.clearFilters")} />
+            </SearchField.Group>
+          </SearchField>
+          <SelectField
+            aria-label={t("filters.riskLevel")}
+            value={riskLevelFilter}
+            onChange={(v) => updateRegisterState({ riskLevel: v, page: 1 })}
+            triggerClassName="min-w-[8rem]"
+            options={[
+              { value: "all", label: t("filters.allLevels") },
+              ...RISK_LEVELS.slice().reverse().map((l) => ({ value: l, label: t(`levels.${l}`) })),
+            ]}
+          />
+          <SelectField
+            aria-label={t("filters.status")}
+            value={status}
+            onChange={(v) => updateRegisterState({ status: v, page: 1 })}
+            triggerClassName="min-w-[8rem]"
+            options={[
+              { value: "all", label: t("filters.allStatuses") },
+              ...FILTER_STATUSES.map((s) => ({ value: s, label: t(`status.${s}`) })),
+            ]}
+          />
+          <SelectField
+            aria-label={t("filters.category")}
+            value={categoryFilter}
+            onChange={(v) => updateRegisterState({ category: v, page: 1 })}
+            triggerClassName="min-w-[8rem]"
+            options={[
+              { value: "all", label: t("filters.allCategories") },
+              ...CATEGORIES.map((c) => ({ value: c, label: t(`presentation.categories.${c}`, { defaultValue: displayCategory(c) }) })),
+            ]}
+          />
+          <SelectField
+            aria-label={t("filters.project")}
+            value={projectId}
+            onChange={(v) => updateRegisterState({ projectId: v, page: 1 })}
+            triggerClassName="min-w-[9rem]"
+            options={[
+              { value: "all", label: t("filters.allProjects") },
+              ...(projects ?? []).map((p) => ({ value: String(p.id), label: <bdi dir="ltr">{p.code}</bdi>, textValue: `${p.code} ${p.title}` })),
+            ]}
+          />
+          <SelectField
+            aria-label={t("filters.state")}
+            value={stateId}
+            onChange={(v) => updateRegisterState({ stateId: v, page: 1 })}
+            triggerClassName="min-w-[8rem]"
+            options={[
+              { value: "all", label: t("filters.allStates") },
+              ...(states ?? []).map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: getStateLabel(s, i18n.language) })),
+            ]}
+          />
+          <SelectField
+            aria-label={t("filters.responsible")}
+            value={assignedToFilter}
+            onChange={(v) => updateRegisterState({ assignedToId: v, page: 1 })}
+            triggerClassName="min-w-[9rem]"
+            options={[
+              { value: "all", label: t("filters.allPersons") },
+              ...(users ?? []).map((u) => ({ value: String(u.id), label: u.name })),
+            ]}
+          />
+          {activeFilters > 0 && (
+            <Button variant="ghost" size="sm" onPress={clearFilters} className="text-[var(--muted)]">
+              <X className="size-4" aria-hidden="true" /> {t("filters.clearCount", { count: activeFilters })}
+            </Button>
+          )}
         </div>
         <Separator orientation="vertical" className="hidden h-6 shrink-0 md:block" />
         <ViewModeSwitcher
@@ -1414,170 +1489,64 @@ export default function RisksPage() {
             if (isOneOf(mode, RISK_REGISTER_VIEWS)) updateRegisterState({ view: mode });
           }}
         />
-      </div>
+      </Card>
 
-      {/* Risk table */}
-      <Card>
-        <CardHeader className="pb-2 pt-4 px-6">
-          <CardTitle className="text-base font-medium flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            {isLoading ? t("page.loading") : (() => { const total = risksRaw?.total ?? 0; return `${total} ${total === 1 ? t("page.risksCount", { count: total }).replace(/^\d+ /, "") : t("page.risksCountPlural", { count: total }).replace(/^\d+ /, "")}`; })()}
-            {activeFilters > 0 && <Badge variant="secondary">{activeFilters > 1 ? t("page.filtersActive", { count: activeFilters }) : t("page.filterActive", { count: activeFilters })}</Badge>}
-          </CardTitle>
-        </CardHeader>
-        <Separator />
-        <CardContent className="p-0">
-          {isLoading ? (
-            <RiskPresentationSkeleton view={view} />
-          ) : isError ? (
-            <ErrorState
-              variant="server"
-              title={t("loadError")}
-              description={t("loadErrorDesc")}
-              onRetry={() => refetch()}
-            />
-          ) : view === "card" ? (
-            <div className="p-4" role="region" aria-label={t("views.card")}>
-              <CardGrid items={riskViewRecords} empty={emptyPresentation} />
-            </div>
-          ) : view === "kanban" ? (
-            <div className="space-y-3 p-4" role="region" aria-label={t("views.board")}>
-              <p className="text-sm text-muted-foreground">{t("views.boardDescription")}</p>
-              {boardHasUnsupportedStatuses && (
-                <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground" role="status">
-                  {t("views.unknownStatus")}
-                </p>
-              )}
-              <KanbanBoard
-                items={riskViewRecords}
-                columns={riskKanbanColumns}
-                empty={emptyPresentation}
-                unknownStatusBehavior="omit"
-                showEmptyColumns
-              />
-            </div>
-          ) : (
-            <div className="overflow-x-auto" role="region" aria-label={t("common:risksPage.registerLabel")}>
-              <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
-                  <TableRow>
-                    <TableHead className="min-w-[200px]">{t("table.riskTitle")}</TableHead>
-                    <TableHead>{t("table.category")}</TableHead>
-                    <TableHead>{t("table.probability")}</TableHead>
-                    <TableHead>{t("table.impact")}</TableHead>
-                    <TableHead>{t("table.riskLevel")}</TableHead>
-                    <TableHead>{t("table.status")}</TableHead>
-                    <TableHead>{t("table.state")}</TableHead>
-                    <TableHead>{t("table.project")}</TableHead>
-                    <TableHead>{t("table.responsible")}</TableHead>
-                    <TableHead>{t("table.dueDate")}</TableHead>
-                    <TableHead>{t("table.identified")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {risks?.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={11} className="text-center py-10">
-                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                          <Shield className="h-8 w-8 opacity-30" />
-                          {activeFilters > 0 ? (
-                            <>
-                              <p className="text-sm font-medium">{t("noRisksFiltered")}</p>
-                              <Button variant="ghost" size="sm" onClick={clearFilters}>{t("filters.clearFilters")}</Button>
-                            </>
-                          ) : (
-                            <p className="text-sm font-medium">{t("noRisks")}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {risks?.map((r) => {
-                    const lvl = r.riskLevel ?? "";
-                    const impact = (r as Risk & { impact?: string | null }).impact || r.severity;
-                    const isDue = r.dueDate && new Date(r.dueDate) < new Date() && r.status !== "closed";
-                    return (
-                      <TableRow
-                        key={r.id}
-                        className="cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                        onClick={(event) => openRiskDetail(r, event.currentTarget)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            openRiskDetail(r, event.currentTarget);
-                          }
-                        }}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={t("accessibility.openRisk", { title: r.title, defaultValue: "Open risk: {{title}}" })}
-                      >
-                        <TableCell className="font-medium max-w-xs">
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate" title={r.title}>{r.title}</span>
-                            <AttachmentCountBadge module="risks" recordId={r.id} />
-                          </div>
-                          {r.description && <div className="text-xs text-muted-foreground truncate">{r.description}</div>}
-                        </TableCell>
-                        <TableCell className="text-sm capitalize">{r.category ? t(`presentation.categories.${r.category}`, { defaultValue: displayCategory(r.category) }) : "—"}</TableCell>
-                        <TableCell className="text-sm">{r.likelihood ? t(`presentation.likelihoods.${r.likelihood}`, { defaultValue: displayLikelihood(r.likelihood) }) : "—"}</TableCell>
-                        <TableCell className="text-sm">{impact ? t(`presentation.impacts.${impact}`, { defaultValue: displayImpact(impact) }) : "—"}</TableCell>
-                        <TableCell>
-                          <Badge variant={severityBadgeVariant(lvl)}>{lvl ? t(`presentation.riskLevels.${lvl}`, { defaultValue: displayRiskLevel(lvl) }) : "—"}</Badge>
-                        </TableCell>
-                        <TableCell><StatusBadge status={r.status} /></TableCell>
-                        <TableCell className="text-sm">{formatLocation({ locationType: r.locationType, stateName: r.stateName, stateNameAr: r.stateNameAr }, i18n.language)}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">{r.projectTitle || (r.projectId ? t("projectRemoved", { defaultValue: "[Project removed]" }) : "—")}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{r.assignedToName || "—"}</TableCell>
-                        <TableCell className={`text-sm whitespace-nowrap ${isDue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                          {r.dueDate ? (
-                            <span className="flex items-center gap-1">
-                              {isDue && <Clock className="h-3 w-3" />}
-                              {formatDate(r.dueDate)}
-                            </span>
-                          ) : "—"}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{formatDate(r.identifiedAt)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+      {/* Register */}
+      <Card className="gap-0 overflow-hidden p-0">
+        <Card.Header className="flex-row items-center gap-2 border-b border-[var(--border)] px-5 py-3">
+          <FileText className="size-4 text-[var(--muted)]" aria-hidden="true" />
+          <Card.Title className="text-base font-medium">{isLoading ? t("page.loading") : countLabel}</Card.Title>
+          {activeFilters > 0 && (
+            <Chip size="sm" variant="secondary">
+              {activeFilters > 1 ? t("page.filtersActive", { count: activeFilters }) : t("page.filterActive", { count: activeFilters })}
+            </Chip>
           )}
-        </CardContent>
-        {/* Pagination controls */}
-        {(() => {
-          const totalPages = (risksRaw as { totalPages?: number } | undefined)?.totalPages ?? 1;
-          const total = (risksRaw as { total?: number } | undefined)?.total ?? 0;
-          if (totalPages <= 1) return null;
-          return (
-            <div className="flex items-center justify-between px-6 py-3 border-t">
-              <p className="text-sm text-muted-foreground" aria-live="polite" aria-current="page">
-                {t("pagination.pageOf", { page, totalPages, total, defaultValue: "Page {{page}} of {{totalPages}} ({{total}} risks)" })}
+        </Card.Header>
+        {isLoading ? (
+          <RiskPresentationSkeleton view={view} />
+        ) : isError ? (
+          <ErrorState
+            variant="server"
+            title={t("loadError")}
+            description={t("loadErrorDesc")}
+            onRetry={() => refetch()}
+          />
+        ) : view === "card" ? (
+          <div className="p-4" role="region" aria-label={t("views.card")}>
+            <CardGrid items={riskViewRecords} empty={emptyPresentation} />
+          </div>
+        ) : view === "kanban" ? (
+          <div className="space-y-3 p-4" role="region" aria-label={t("views.board")}>
+            <p className="text-sm text-[var(--muted)]">{t("views.boardDescription")}</p>
+            {boardHasUnsupportedStatuses && (
+              <p className="rounded-xl border border-[color-mix(in_oklab,var(--warning)_35%,transparent)] px-3 py-2 text-xs" role="status">
+                {t("views.unknownStatus")}
               </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => updateRegisterState({ page: Math.max(1, page - 1) })}
-                  disabled={page <= 1}
-                  aria-label={t("pagination.previous", { defaultValue: "Previous page" })}
-                >
-                  {t("pagination.previous", { defaultValue: "Previous" })}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => updateRegisterState({ page: Math.min(totalPages, page + 1) })}
-                  disabled={page >= totalPages}
-                  aria-label={t("pagination.next", { defaultValue: "Next page" })}
-                >
-                  {t("pagination.next", { defaultValue: "Next" })}
-                </Button>
-              </div>
-            </div>
-          );
-        })()}
+            )}
+            <KanbanBoard
+              items={riskViewRecords}
+              columns={riskKanbanColumns}
+              empty={emptyPresentation}
+              unknownStatusBehavior="omit"
+              showEmptyColumns
+            />
+          </div>
+        ) : (
+          <div ref={gridRef} role="region" aria-label={t("accessibility.registerRegion")}>
+            {/* Rows open the risk on click or Enter (t("accessibility.openRisk") names the action). */}
+            <DataGrid
+              aria-label={t("accessibility.registerRegion")}
+              data={risks ?? []}
+              columns={columns}
+              getRowId={(r) => r.id}
+              onRowAction={openRiskRow}
+              contentClassName="min-w-[1218px] table-fixed"
+              verticalAlign="middle"
+              renderEmptyState={() => emptyPresentation}
+            />
+          </div>
+        )}
+        {pagination && <div className="border-t border-[var(--border)]">{pagination}</div>}
       </Card>
         </>
       )}

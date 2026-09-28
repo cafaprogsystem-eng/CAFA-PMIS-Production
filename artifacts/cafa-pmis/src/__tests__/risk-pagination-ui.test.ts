@@ -30,11 +30,12 @@ describe("RISK-PAGE-01: envelope shape consumed correctly", () => {
 
 // ── RISK-PAGE-02 / RISK-PAGE-03: Next and Previous page transitions ──────────
 describe("RISK-PAGE-02/03: Next and Previous page controls", () => {
+  // The shared RegistryPagination reports the target page; the page clamps it to 1…totalPages.
   it("clicking Next increments page using Math.min guard", () => {
-    expect(risksPage).toContain("Math.min(totalPages, page + 1)");
+    expect(risksPage).toContain("Math.min(totalPages, Math.max(1, next))");
   });
   it("clicking Previous decrements page using Math.max guard", () => {
-    expect(risksPage).toContain("Math.max(1, page - 1)");
+    expect(risksPage).toContain("Math.min(totalPages, Math.max(1, next))");
   });
   it("Next button carries localised aria-label via t()", () => {
     expect(risksPage).toContain('t("pagination.next"');
@@ -87,7 +88,7 @@ describe("RISK-PAGE-06: filter change resets page to 1 atomically via URL", () =
     expect(risksPage).toContain("updateRegisterState({ assignedToId: v, page: 1 })");
   });
   it("search input onChange updateRegisterState resets page to 1 atomically", () => {
-    expect(risksPage).toContain("updateRegisterState({ search: e.target.value, page: 1 })");
+    expect(risksPage).toContain("updateRegisterState({ search: value, page: 1 })");
   });
   it("clearFilters updateRegisterState resets page to 1 alongside all filter resets", () => {
     const clearBlock = risksPage.slice(

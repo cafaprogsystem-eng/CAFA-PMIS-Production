@@ -221,14 +221,15 @@ describe("RISK-FORM-VIS-01: Create dialog has section heading elements", () => {
 
   it("section headings use font-semibold class", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
-    const sectionMatches = src.match(/text-sm font-semibold text-foreground/g) ?? [];
-    // Should appear for all sections in both create and edit forms
-    expect(sectionMatches.length).toBeGreaterThanOrEqual(4);
+    // Sections are <FormSection> (fieldset + semibold legend) in both forms.
+    expect(src).toContain('<legend className="mb-3 w-full border-b border-[var(--border)] pb-1 text-sm font-semibold">');
+    const sectionMatches = src.match(/<FormSection title=/g) ?? [];
+    expect(sectionMatches.length).toBeGreaterThanOrEqual(6);
   });
 
   it("section headings have border-b separator treatment", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
-    expect(src).toContain("border-b border-border/40 pb-1 mb-3");
+    expect(src).toContain("border-b border-[var(--border)] pb-1");
   });
 });
 
@@ -261,8 +262,9 @@ describe("RISK-FORM-VIS-03: Short structured fields have max-w constraints", () 
   it("source contains max-w-xs wrappers for short fields", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
     const maxWXsCount = (src.match(/max-w-xs/g) ?? []).length;
-    // Likelihood, Impact (create), Due Date (create+edit), Likelihood, Impact (edit)
-    expect(maxWXsCount).toBeGreaterThanOrEqual(4);
+    // Due Date (create + edit) stays narrow; Likelihood/Impact sit in a two-column grid.
+    expect(maxWXsCount).toBeGreaterThanOrEqual(2);
+    expect(src).toContain('className="grid gap-3 sm:grid-cols-2"');
   });
 
   it("due date inputs are wrapped in max-w-xs containers", async () => {
@@ -278,7 +280,7 @@ describe("RISK-FORM-VIS-03: Short structured fields have max-w constraints", () 
 describe("RISK-FORM-VIS-04: Narrative textarea fields have resize-y", () => {
   it("all Textarea elements in the forms have resize-y class", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
-    const textareaMatches = src.match(/<Textarea[^/]*className="[^"]*resize-y[^"]*"/g) ?? [];
+    const textareaMatches = src.match(/<TextArea[^/]*className="[^"]*resize-y[^"]*"/g) ?? [];
     // description (create), mitigationPlan (create), description (edit), mitigationPlan (edit)
     expect(textareaMatches.length).toBeGreaterThanOrEqual(4);
   });
@@ -287,7 +289,7 @@ describe("RISK-FORM-VIS-04: Narrative textarea fields have resize-y", () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
     // Check that each Textarea in the form has resize-y
     // We look for Textarea with register() but without resize-y (would be a miss)
-    const textareasWithRegister = src.match(/<Textarea rows=\{[23]\}[^>]*>/g) ?? [];
+    const textareasWithRegister = src.match(/<TextArea[^>]*rows=\{[23]\}[^>]*>/g) ?? [];
     for (const ta of textareasWithRegister) {
       expect(ta).toContain("resize-y");
     }
@@ -317,7 +319,8 @@ describe("RISK-FORM-VIS-05: Category SelectItems use displayCategory(), not raw 
     // Category labels are resolved through the canonical i18n presentation map,
     // with the legacy formatter as an English fallback.
     expect(src).toContain("displayCategory(c)");
-    const formCategoryLabels = src.match(/CATEGORIES\.map\(\(c\) => <SelectItem key=\{c\} value=\{c\}>\{t\(`presentation\.categories\.\$\{c\}`, \{ defaultValue: displayCategory\(c\) \}\)\}<\/SelectItem>\)/g) ?? [];
+    // Create form, edit form and the category filter all build their options this way.
+    const formCategoryLabels = src.match(/CATEGORIES\.map\(\(c\) => \(\{ value: c, label: t\(`presentation\.categories\.\$\{c\}`, \{ defaultValue: displayCategory\(c\) \}\) \}\)\)/g) ?? [];
     expect(formCategoryLabels).toHaveLength(3);
   });
 });
@@ -362,7 +365,7 @@ describe("RISK-FORM-VIS-07: Edit footer Cancel button appears before Save button
     const editFormEnd = src.indexOf("</form>", editFormStart);
     const editFormSrc = src.slice(editFormStart, editFormEnd);
     // The Cancel button should be variant="outline"
-    expect(editFormSrc).toContain('<Button type="button" variant="outline"');
+    expect(editFormSrc).toContain('<Button variant="outline" onPress={() => setEditMode(false)}>');
   });
 });
 
@@ -384,7 +387,7 @@ describe("RISK-FORM-VIS-08: Edit mode renders skeleton during isResetting phase"
   it("skeleton uses Skeleton components with appropriate size classes", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
     // The edit skeleton should have multiple Skeleton elements
-    const skeletonMatches = src.match(/<Skeleton className="h-10 rounded-md"/g) ?? [];
+    const skeletonMatches = src.match(/<Skeleton className="h-10 rounded-xl"/g) ?? [];
     expect(skeletonMatches.length).toBeGreaterThanOrEqual(4);
   });
 
@@ -397,45 +400,53 @@ describe("RISK-FORM-VIS-08: Edit mode renders skeleton during isResetting phase"
 // ─────────────────────────────────────────────────────────────────────────────
 // RISK-FORM-VIS-09: All Labels have htmlFor matching a control id
 // ─────────────────────────────────────────────────────────────────────────────
+/** A field is labelled when a <Label htmlFor> points at it, or when it is a
+ *  HeroUI SelectField / DateInput that renders its own linked Label. */
+function expectLabelled(src: string, id: string) {
+  const viaHtmlFor = src.includes(`htmlFor="${id}"`);
+  const viaOwnLabel = new RegExp(`id="${id}"\\s*\\n\\s*label=`).test(src);
+  expect(viaHtmlFor || viaOwnLabel, `${id} has no associated label`).toBe(true);
+}
+
 describe("RISK-FORM-VIS-09: Labels have htmlFor and controls have matching id", () => {
   it("create form labels have htmlFor attributes", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
     // Verify create form field id/htmlFor pairs exist
-    expect(src).toContain('htmlFor="create-title"');
+    expectLabelled(src, "create-title");
     expect(src).toContain('id="create-title"');
-    expect(src).toContain('htmlFor="create-description"');
+    expectLabelled(src, "create-description");
     expect(src).toContain('id="create-description"');
-    expect(src).toContain('htmlFor="create-category"');
+    expectLabelled(src, "create-category");
     expect(src).toContain('id="create-category"');
-    expect(src).toContain('htmlFor="create-location"');
+    expectLabelled(src, "create-location");
     expect(src).toContain('id="create-location"');
-    expect(src).toContain('htmlFor="create-likelihood"');
+    expectLabelled(src, "create-likelihood");
     expect(src).toContain('id="create-likelihood"');
-    expect(src).toContain('htmlFor="create-impact"');
+    expectLabelled(src, "create-impact");
     expect(src).toContain('id="create-impact"');
-    expect(src).toContain('htmlFor="create-due-date"');
+    expectLabelled(src, "create-due-date");
     expect(src).toContain('id="create-due-date"');
-    expect(src).toContain('htmlFor="create-mitigation"');
+    expectLabelled(src, "create-mitigation");
     expect(src).toContain('id="create-mitigation"');
   });
 
   it("edit form labels have htmlFor attributes", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
-    expect(src).toContain('htmlFor="edit-title"');
+    expectLabelled(src, "edit-title");
     expect(src).toContain('id="edit-title"');
-    expect(src).toContain('htmlFor="edit-description"');
+    expectLabelled(src, "edit-description");
     expect(src).toContain('id="edit-description"');
-    expect(src).toContain('htmlFor="edit-category"');
+    expectLabelled(src, "edit-category");
     expect(src).toContain('id="edit-category"');
-    expect(src).toContain('htmlFor="edit-status"');
+    expectLabelled(src, "edit-status");
     expect(src).toContain('id="edit-status"');
-    expect(src).toContain('htmlFor="edit-likelihood"');
+    expectLabelled(src, "edit-likelihood");
     expect(src).toContain('id="edit-likelihood"');
-    expect(src).toContain('htmlFor="edit-impact"');
+    expectLabelled(src, "edit-impact");
     expect(src).toContain('id="edit-impact"');
-    expect(src).toContain('htmlFor="edit-due-date"');
+    expectLabelled(src, "edit-due-date");
     expect(src).toContain('id="edit-due-date"');
-    expect(src).toContain('htmlFor="edit-mitigation"');
+    expectLabelled(src, "edit-mitigation");
     expect(src).toContain('id="edit-mitigation"');
   });
 
@@ -484,8 +495,9 @@ describe("RISK-FORM-VIS-10: Phase 1 RISK-VIS sentinels remain intact", () => {
 describe("RISK-DETAIL-VIS: risk detail uses the shared wide rail without changing behaviour", () => {
   it("risk detail tabs fill the shared rail and keep their own tab overflow", async () => {
     const src = await readFile("src/pages/risks.tsx", "utf-8");
-    expect(src).toContain('<Tabs defaultValue="details" className="w-full min-w-0">');
-    expect(src).toContain('className="mb-4 w-full overflow-x-auto pb-1"');
+    expect(src).toContain('<Tabs defaultSelectedKey="details"');
+    expect(src).toContain('className="w-full min-w-0"');
+    expect(src).toContain('<Tabs.ListContainer className="mb-4 w-full overflow-x-auto pb-1">');
   });
 
   it("risk detail metadata is responsive while narrative fields keep local readable measures", async () => {

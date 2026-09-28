@@ -327,7 +327,7 @@ describe("RISK-VIS-03: filter controls have fluid widths", () => {
     setLoaded();
     const { container } = renderPage();
     const triggers = Array.from(
-      container.querySelectorAll<HTMLElement>("button[role='combobox']"),
+      container.querySelectorAll<HTMLElement>("button[data-slot='select-trigger']"),
     );
     expect(triggers.length).toBeGreaterThan(0);
     for (const trigger of triggers) {
@@ -339,7 +339,7 @@ describe("RISK-VIS-03: filter controls have fluid widths", () => {
     setLoaded();
     const { container } = renderPage();
     const triggers = Array.from(
-      container.querySelectorAll<HTMLElement>("button[role='combobox']"),
+      container.querySelectorAll<HTMLElement>("button[data-slot='select-trigger']"),
     );
     const hasFluid = triggers.some((t) => t.className.includes("min-w"));
     expect(hasFluid).toBe(true);
@@ -385,7 +385,8 @@ describe("RISK-VIS-05: risk title span has title attribute for tooltip", () => {
   it("truncated span exposes full title via title attribute", () => {
     setLoaded();
     renderPage();
-    const spans = Array.from(document.querySelectorAll("span.truncate"));
+    // Long titles wrap to two lines (line-clamp) and keep the full text in title.
+    const spans = Array.from(document.querySelectorAll("span[title]"));
     const titleSpan = spans.find(
       (s) => s.getAttribute("title") === MOCK_RISK.title,
     );
@@ -428,7 +429,8 @@ describe("RISK-VIS-07: risk register table has overflow-x-auto wrapper", () => {
   it("table is inside a div with overflow-x-auto", () => {
     setLoaded();
     const { container } = renderPage();
-    const wrapper = container.querySelector(".overflow-x-auto");
+    // The Pro DataGrid scrolls sideways in its own scroll container.
+    const wrapper = container.querySelector(".table__scroll-container");
     expect(wrapper).not.toBeNull();
     const table = wrapper?.querySelector("table");
     expect(table).not.toBeNull();
@@ -499,9 +501,12 @@ describe("RISK-VIS-09: pagination accessibility", () => {
   it("pagination buttons have aria-label attributes in page source", async () => {
     const { readFile } = await import("node:fs/promises");
     const src = await readFile("src/pages/risks.tsx", "utf-8");
-    expect(src).toContain('aria-label={t("pagination.previous"');
-    expect(src).toContain('aria-label={t("pagination.next"');
-    expect(src).toContain('aria-live="polite"');
+    const shared = await readFile("src/components/registry-pagination.tsx", "utf-8");
+    // Labels are passed to the shared RegistryPagination, which puts them on the buttons.
+    expect(src).toContain('previous: t("pagination.previous"');
+    expect(src).toContain('next: t("pagination.next"');
+    expect(shared).toContain("aria-label={labels.previous}");
+    expect(shared).toContain('aria-live="polite"');
   });
 });
 
@@ -513,9 +518,9 @@ describe("RISK-VIS-VM: table, card, and board presentations", () => {
     setLoaded();
     const { container } = renderPage();
     const toolbar = screen.getByRole("group", { name: "Risk register filters and presentation" });
-    expect(toolbar.className).toContain("rounded-xl");
-    expect(toolbar.className).toContain("border");
-    expect(within(toolbar).getByRole("textbox", { name: "Search risks" })).toHaveClass("h-10");
+    // A HeroUI Card (bordered surface) holding the HeroUI SearchField.
+    expect(toolbar.className).toContain("card");
+    expect(within(toolbar).getByRole("searchbox", { name: "Search risks" })).toBeInTheDocument();
     expect(toolbar.querySelector('[data-orientation="vertical"]')).toBeInTheDocument();
     const viewMode = within(toolbar).getByRole("radiogroup", { name: "View mode" });
     expect(viewMode).toBeInTheDocument();
@@ -558,10 +563,12 @@ describe("RISK-VIS-VM: table, card, and board presentations", () => {
     MOCK_SEARCH = "view=kanban";
     const { container } = renderPage();
 
-    expect(screen.getByRole("region", { name: "Board view" })).toBeInTheDocument();
-    expect(screen.getByText("Open")).toBeInTheDocument();
-    expect(screen.getByText("Under Mitigation")).toBeInTheDocument();
-    expect(screen.getByText("Mitigated")).toBeInTheDocument();
+    const board = screen.getByRole("region", { name: "Board view" });
+    expect(board).toBeInTheDocument();
+    // Column headings (the status filter's options also say "Open", so look inside the board)
+    expect(within(board).getAllByText("Open").length).toBeGreaterThan(0);
+    expect(within(board).getAllByText("Under Mitigation").length).toBeGreaterThan(0);
+    expect(within(board).getByText("Mitigated")).toBeInTheDocument();
     // Pro Kanban: each card is a grid row that opens the risk.
     expect(screen.getByRole("row", { name: `Open risk: ${MOCK_RISK.title}` })).toBeInTheDocument();
     expect(container.querySelector('[draggable="true"]')).toBeNull();
@@ -707,7 +714,7 @@ describe("RISK-VIS-L: initial-load skeleton — structure and placement", () => 
     setInitialLoading();
     const { container } = renderPage();
     // Live filters render combobox buttons — must not appear during initial load
-    const comboboxes = container.querySelectorAll("button[role='combobox']");
+    const comboboxes = container.querySelectorAll("button[data-slot='select-trigger']");
     expect(comboboxes.length).toBe(0);
   });
 
@@ -718,7 +725,7 @@ describe("RISK-VIS-L: initial-load skeleton — structure and placement", () => 
     const kpiSkeleton = container.querySelector('[data-testid="skeleton-kpi"]');
     expect(kpiSkeleton).toBeNull();
     // Live comboboxes present
-    const comboboxes = container.querySelectorAll("button[role='combobox']");
+    const comboboxes = container.querySelectorAll("button[data-slot='select-trigger']");
     expect(comboboxes.length).toBeGreaterThan(0);
   });
 
@@ -735,7 +742,7 @@ describe("RISK-VIS-L: initial-load skeleton — structure and placement", () => 
     expect(kpiSkeleton).toBeNull();
 
     // Live filter comboboxes must still be visible
-    const comboboxes = container.querySelectorAll("button[role='combobox']");
+    const comboboxes = container.querySelectorAll("button[data-slot='select-trigger']");
     expect(comboboxes.length).toBeGreaterThan(0);
   });
 });

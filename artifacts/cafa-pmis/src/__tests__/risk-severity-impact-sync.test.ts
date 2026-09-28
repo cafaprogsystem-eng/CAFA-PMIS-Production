@@ -16,11 +16,11 @@ const src = readFileSync(resolve(__dirname, "../pages/risks.tsx"), "utf8");
 
 describe("RISK-SEVERITY-IMPACT-SYNC: the edit form syncs severity whenever impact changes, same as create", () => {
   it("the create form's impact Select still syncs both fields (unchanged reference behaviour)", () => {
-    expect(src).toContain('onValueChange={(v) => { createForm.setValue("impact", v); createForm.setValue("severity", v); }}');
+    expect(src).toContain('onChange={(v) => { createForm.setValue("impact", v); createForm.setValue("severity", v); }}');
   });
 
   it("the edit form's impact Select now ALSO syncs severity, not just impact", () => {
-    expect(src).toContain('onValueChange={(v) => { form.setValue("impact", v); form.setValue("severity", v); }}');
-    expect(src).not.toContain('onValueChange={(v) => form.setValue("impact", v)}');
+    expect(src).toContain('onChange={(v) => { form.setValue("impact", v); form.setValue("severity", v); }}');
+    expect(src).not.toContain('onChange={(v) => form.setValue("impact", v)}');
   });
 });
