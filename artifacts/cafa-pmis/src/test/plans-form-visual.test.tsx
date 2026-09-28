@@ -436,9 +436,9 @@ describe("Plans Form Visual — Phase 2 (PLAN-FORM-VIS)", () => {
           <CreatePlanRegistrationDialog open={true} onOpenChange={vi.fn()} />
         </Wrapper>,
       );
-      // Navigate to Activities tab to verify it renders
-      const activitiesTabBtn = screen.getByRole("tab", { name: /Activities/i });
-      expect(activitiesTabBtn).toBeInTheDocument();
+      // The Activities step is reachable from the registration stepper
+      const steps = within(screen.getByRole("list", { name: "Plan registration tabs" })).getAllByRole("button");
+      expect(steps.find((s) => /Activities/i.test(s.textContent ?? ""))).toBeInTheDocument();
     });
   });
 
@@ -457,7 +457,7 @@ describe("Plans Form Visual — Phase 2 (PLAN-FORM-VIS)", () => {
       }
       // Confirm Save & Finish is present and not disabled in default state (no duplicate)
       // Navigate to last tab to see it
-      const tabs = screen.getAllByRole("tab");
+      const tabs = within(screen.getByRole("list", { name: "Plan registration tabs" })).getAllByRole("button");
       const budgetTab = tabs.find((t) => t.textContent?.includes("Budget"));
       if (budgetTab) {
         // Tab button exists — the Save & Finish will appear on Budget tab

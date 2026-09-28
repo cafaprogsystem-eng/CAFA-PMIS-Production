@@ -15,6 +15,7 @@ import {
 import { DataGrid } from "@heroui-pro/react/data-grid";
 import { SelectField } from "@/components/select-field";
 import { DateInput } from "@/components/form-controls";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { ArrowLeft, Plus, Trash2, Save, Send, CheckCircle2, X, ChevronRight, AlertTriangle, MapPin, AlertCircle, ChevronDown, ChevronUp, Pencil, MoreHorizontal, RotateCcw } from "@/components/icons";
 import { toast } from "sonner";
 import { formatDate, formatCurrency, formatStatusLabel, formatPlanType, hasPerm, formatLocation } from "@/lib/format";
@@ -75,36 +76,6 @@ function PlanStatusBadge({ status }: { status: string }) {
     <Chip size="sm" variant="soft" color={statusTone(status)} className="whitespace-nowrap">
       {t(`status.${status}`, { defaultValue: t(`activity.status_${status}`, { defaultValue: formatStatusLabel(status) }) })}
     </Chip>
-  );
-}
-
-/** Asks before a destructive or discarding action (replaces the native confirm()). */
-function ConfirmModal({
-  isOpen, title, message, confirmLabel, cancelLabel, onConfirm, onCancel, isPending,
-}: {
-  isOpen: boolean; title: string; message: string; confirmLabel: string; cancelLabel: string;
-  onConfirm: () => void; onCancel: () => void; isPending?: boolean;
-}) {
-  return (
-    <Modal isOpen={isOpen} onOpenChange={(open) => { if (!open) onCancel(); }}>
-      <Modal.Backdrop>
-        <Modal.Container size="sm">
-          <Modal.Dialog role="alertdialog">
-            <Modal.Header>
-              <Modal.Icon className="bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] text-[var(--danger)]">
-                <AlertTriangle className="size-5" aria-hidden="true" />
-              </Modal.Icon>
-              <Modal.Heading>{title}</Modal.Heading>
-              <p className="text-sm text-[var(--muted)]">{message}</p>
-            </Modal.Header>
-            <Modal.Footer>
-              <Button variant="secondary" autoFocus onPress={onCancel} isDisabled={isPending}>{cancelLabel}</Button>
-              <Button variant="danger" onPress={onConfirm} isPending={isPending}>{confirmLabel}</Button>
-            </Modal.Footer>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
   );
 }
 

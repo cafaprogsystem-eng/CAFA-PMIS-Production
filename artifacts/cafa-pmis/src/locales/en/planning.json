@@ -402,7 +402,7 @@
   "createDialog": {
     "title": "Create Plan",
     "description": "Description",
-    "tabsAriaLabel": "Plan registration tabs",
+    "tabsAriaLabel": "Plan registration steps",
     "tab_details": "Plan Details",
     "tab_project": "Related Project",
     "tab_geography": "Geographical Coverage",
@@ -601,7 +601,16 @@
     "progressPlannedDelayed": "Planned or delayed activities must have progress between 0% and 99%.",
     "progressCancelled": "Progress must be between 0% and 100%.",
     "activityProgressError": "Activity {{num}} (\"{{title}}\"): {{message}}",
-    "untitledActivity": "Untitled"
+    "untitledActivity": "Untitled",
+    "subtitle": "Register the plan step by step. You can save a draft at any time and finish later.",
+    "stepHasErrors": "Needs attention",
+    "activityNumTitled": "Activity {{num}}: {{title}}",
+    "noLocalitiesTitle": "No localities added yet",
+    "noLocalitiesDesc": "Add at least one locality this plan covers before finishing the registration.",
+    "suggestionsHint": "Suggestions must be explicitly added before they count as Plan coverage.",
+    "duplicateHardHint": "Please continue editing the existing Plan rather than creating a duplicate.",
+    "duplicateSoftHint": "Review the existing Plan before creating another one. You may continue if this is intentional.",
+    "planRef": "(Plan #{{id}})"
   },
   "statesPage": {
     "heading": "States",

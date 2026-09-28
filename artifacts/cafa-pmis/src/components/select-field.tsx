@@ -17,23 +17,35 @@ type SelectFieldProps = {
   triggerClassName?: string;
   /** Decorative icon shown before the value inside the trigger. */
   icon?: ReactNode;
+  /** Field wiring for forms: id, required/invalid state and error text. */
+  id?: string;
+  isRequired?: boolean;
+  isInvalid?: boolean;
+  "aria-describedby"?: string;
 };
 
 /**
  * Single-value HeroUI Select for the common "value + flat option list" case,
  * so screens don't repeat the Trigger/Popover/ListBox composition. Values are
- * strings, like the Radix Select it replaces.
+ * strings, like the Radix Select it replaces; "" means nothing selected and
+ * shows the placeholder.
  */
 export function SelectField({
-  value, onChange, options, label, placeholder, isDisabled, className, triggerClassName, icon, ...aria
+  value, onChange, options, label, placeholder, isDisabled, className, triggerClassName, icon,
+  id, isRequired, isInvalid, ...aria
 }: SelectFieldProps) {
   return (
     <Select
-      value={value}
+      id={id}
+      value={value === "" ? null : value}
       onChange={(key) => { if (key !== null) onChange(String(key)); }}
       isDisabled={isDisabled}
+      isRequired={isRequired}
+      isInvalid={isInvalid}
+      validationBehavior="aria"
       placeholder={placeholder}
       aria-label={aria["aria-label"]}
+      aria-describedby={aria["aria-describedby"]}
       className={className}
     >
       {label && <Label>{label}</Label>}

@@ -2,11 +2,11 @@
  * CreatePlanRegistrationDialog — five-tab Plan creation workspace.
  *
  * Architecture contract:
- * • Mirrors the Project Registration UX: Dialog shell → tab-nav strip → scrollable body → sticky footer.
+ * • Mirrors the Project Registration UX: Modal shell → Pro Stepper → scrollable body → sticky footer.
  * • Parent state holds the complete form (planDetails, relatedProject, localities, activities[], budget).
  * • "Save As Draft" creates on first call (stores draftPlanId), PATCHes on subsequent calls.
  * • No record is created on tab navigation or dialog open — only on explicit Save/Complete.
- * • All five Tabs are freely navigable — no sequential gate. Tab navigation never triggers validation.
+ * • All five steps are freely navigable — no sequential gate. Step navigation never triggers validation.
  * • Dependencies (e.g. Geographical Coverage requiring a State) are explained inside the tab, not blocked.
  * • Save As Draft validates Plan Details required fields (matches API minimum) before dispatching.
  * • Save & Finish validates Plan Details required fields, shows "Sections Need Attention" summary on failure.
@@ -23,36 +23,13 @@ import { StateLabel, getStateLabel } from "@/components/state-label";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+  Alert, Button, Card, Chip, ComboBox, Input, Label, ListBox, Modal, Radio, RadioGroup, Spinner, TextArea, Tooltip,
+} from "@heroui/react";
+import { Stepper } from "@heroui-pro/react/stepper";
+import { SelectField } from "@/components/select-field";
+import { CheckItem, DateInput, RemovableTags } from "@/components/form-controls";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { statusTone } from "@/components/view-modes/shared";
 import { toast } from "sonner";
 import {
   useCreatePlan,
@@ -64,19 +41,9 @@ import {
 } from "@workspace/api-client-react";
 import { SECTORS } from "@/lib/sectors";
 import {
-  Plus, Trash2, ChevronDown, ChevronUp, MapPin, X, AlertCircle, AlertTriangle,
-  Check, ChevronsUpDown, Loader2,
+  Plus, Trash2, ChevronDown, ChevronUp, MapPin, AlertCircle, AlertTriangle,
 } from "@/components/icons";
-import {
-  Tooltip, TooltipContent, TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from "@/components/ui/command";
-import { hasPerm, statusBadgeVariant, formatStatusLabel } from "@/lib/format";
+import { hasPerm, formatStatusLabel } from "@/lib/format";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
 import { OfflineDraftNotice } from "@/components/offline-draft-notice";
 import { useDurableFormDraft } from "@/hooks/use-durable-form-draft";
@@ -126,9 +93,9 @@ function validateActivityProgressConsistency(status: string, progressPct: number
 }
 
 const PRIORITIES = [
-  { value: "high",   label: "High",   cls: "bg-destructive/10 text-destructive border-destructive/20" },
-  { value: "medium", label: "Medium", cls: "bg-warning/10 text-warning border-warning/20" },
-  { value: "low",    label: "Low",    cls: "bg-muted text-muted-foreground border-border" },
+  { value: "high",   color: "danger"  },
+  { value: "medium", color: "warning" },
+  { value: "low",    color: "default" },
 ] as const;
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
@@ -334,62 +301,50 @@ function LocalityTagInput({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="space-y-1.5">
         <Label htmlFor={inputId} className="text-xs font-medium">{t("createDialog.localityLabel")}</Label>
         <div className="flex gap-2">
           <Input
             id={inputId}
+            fullWidth
+            dir="auto"
             placeholder={t("detail.localityPh")}
             value={inputVal}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLocality(); } }}
             className="flex-1"
           />
-          <Button type="button" variant="outline" size="sm" onClick={() => addLocality()} disabled={!inputVal.trim()}>
+          <Button variant="outline" size="sm" className="h-auto shrink-0" onPress={() => addLocality()} isDisabled={!inputVal.trim()}>
             {t("detail.addLocality")}
           </Button>
         </div>
         {similar && (
-          <Alert className="py-2 border-warning/30 bg-warning/10">
-            <AlertCircle className="h-3.5 w-3.5 text-warning" />
-            <AlertDescription className="text-xs text-warning flex items-center gap-2">
-              {t("detail.similarTo", { name: similar })}
-              <Button size="sm" variant="outline" className="h-5 text-xs px-2 py-0 border-warning/40" onClick={() => addLocality(similar)}>{t("detail.useExisting")}</Button>
-              <Button size="sm" variant="ghost" className="h-5 text-xs px-2 py-0" onClick={() => setSimilar(null)}>{t("detail.keepMine")}</Button>
-            </AlertDescription>
+          <Alert status="warning" className="py-2">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Description className="flex flex-wrap items-center gap-2 text-xs">
+                {t("detail.similarTo", { name: similar })}
+                <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onPress={() => addLocality(similar)}>{t("detail.useExisting")}</Button>
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onPress={() => setSimilar(null)}>{t("detail.keepMine")}</Button>
+              </Alert.Description>
+            </Alert.Content>
           </Alert>
         )}
       </div>
       {localities.length > 0 ? (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-foreground">{t("detail.addLocality")}</span>
-            <span className="text-xs text-muted-foreground">{t("createDialog.localityCount", { count: localities.length })}</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5" aria-label={t("createDialog.addedLocalitiesAria")}>
-          {localities.map((loc, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1 bg-muted border border-border/60 rounded-full px-2.5 py-0.5 text-xs font-medium"
-            >
-              {loc}
-              <button
-                type="button"
-                aria-label={t("createDialog.removeLocalityAria", { name: loc })}
-                onClick={() => onAttemptRemove(i)}
-                className="ms-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5 transition-colors"
-              >
-                <X className="h-2.5 w-2.5" />
-              </button>
-            </span>
-          ))}
-          </div>
+          <p className="text-xs text-[var(--muted)]">{t("createDialog.localityCount", { count: localities.length })}</p>
+          <RemovableTags
+            items={localities}
+            aria-label={t("createDialog.addedLocalitiesAria")}
+            onRemove={(loc) => { const i = localities.indexOf(loc); if (i >= 0) onAttemptRemove(i); }}
+          />
         </div>
       ) : (
-        <div className="rounded-md border border-dashed border-border bg-muted/30 px-4 py-4 text-center">
-          <p className="text-sm font-medium text-foreground">{t("createDialog.noActivitiesTitle")}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{t("createDialog.noActivitiesDesc")}</p>
+        <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-4 text-center">
+          <p className="text-sm font-medium text-[var(--foreground)]">{t("createDialog.noLocalitiesTitle")}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{t("createDialog.noLocalitiesDesc")}</p>
         </div>
       )}
     </div>
@@ -402,8 +357,9 @@ function LocalityTagInput({
  * message with a shortcut to Tab 3 instead of a broken empty select.
  */
 function ActivityLocalitySelect({
-  value, onChange, localities, onGoToGeography,
+  id, value, onChange, localities, onGoToGeography,
 }: {
+  id: string;
   value: string;
   onChange: (v: string) => void;
   /** The Plan's approved locality list from Tab 3 */
@@ -413,37 +369,31 @@ function ActivityLocalitySelect({
   const { t } = useTranslation("planning");
   if (localities.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 space-y-1.5">
-        <p className="text-xs text-muted-foreground leading-snug">
-          {t("createDialog.localityDepMessage")}
-        </p>
-        <Button
-          size="sm"
-          variant="outline"
-          type="button"
-          onClick={onGoToGeography}
-          className="h-6 text-xs px-2"
-        >
-          {t("createDialog.goToGeoCoverage")}
-        </Button>
+      <div className="space-y-1.5">
+        <Label isRequired className="text-sm">{t("createDialog.localityLabel")}</Label>
+        <div className="space-y-1.5 rounded-xl border border-dashed border-[var(--border)] px-3 py-2">
+          <p className="text-xs leading-snug text-[var(--muted)]">{t("createDialog.localityDepMessage")}</p>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onPress={onGoToGeography}>
+            {t("createDialog.goToGeoCoverage")}
+          </Button>
+        </div>
       </div>
     );
   }
   return (
-    <Select
+    <SelectField
+      id={id}
+      label={t("createDialog.localityLabel")}
+      isRequired
       value={value || "__none__"}
-      onValueChange={(v) => onChange(v === "__none__" ? "" : v)}
-    >
-      <SelectTrigger>
-        <SelectValue placeholder={t("createDialog.selectLocality")} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="__none__">—</SelectItem>
-        {localities.map((loc) => (
-          <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      onChange={(v) => onChange(v === "__none__" ? "" : v)}
+      placeholder={t("createDialog.selectLocality")}
+      className="w-full"
+      options={[
+        { value: "__none__", label: "—", textValue: t("createDialog.selectLocality") },
+        ...localities.map((loc) => ({ value: loc, label: loc })),
+      ]}
+    />
   );
 }
 
@@ -458,60 +408,69 @@ function ActivityOptionalFields({
 }) {
   const { t } = useTranslation("planning");
   const [open, setOpen] = useState(false);
+  const f = (n: string) => `cprd-act-${idx}-${n}`;
   return (
-    <div className="border-t pt-2 mt-2">
-      <button type="button" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => setOpen(!open)}>
-        {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+    <div className="mt-2 border-t border-[var(--border)] pt-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 px-1.5 text-xs text-[var(--muted)]"
+        aria-expanded={open}
+        onPress={() => setOpen(!open)}
+      >
+        {open ? <ChevronUp className="size-3" aria-hidden="true" /> : <ChevronDown className="size-3" aria-hidden="true" />}
         {open ? t("createDialog.hideOptional") : t("createDialog.showOptional")}
-      </button>
+      </Button>
       {open && (
-        <div className="mt-3 space-y-2">
-          <div className="grid md:grid-cols-4 gap-2">
-            <div>
-              <Label className="text-xs">{t("createDialog.optStatus")}</Label>
-              <Select value={a.status} onValueChange={(v) => {
+        <div className="mt-3 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+            <SelectField
+              label={t("createDialog.optStatus")}
+              value={a.status}
+              onChange={(v) => {
                 const patch: Partial<ActivityForm> = { status: v };
                 if (v === "completed") patch.progressPct = 100;
                 updateActivity(idx, patch);
-              }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ACTIVITY_STATUSES.map((s) => <SelectItem key={s} value={s}>{t(`activity.status_${s}`)}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              }}
+              className="w-full"
+              options={ACTIVITY_STATUSES.map((s) => ({ value: s, label: t(`activity.status_${s}`) }))}
+            />
+            <div className="space-y-1">
+              <Label htmlFor={f("progress")} className="text-sm">{t("createDialog.optProgress")}</Label>
+              <Input id={f("progress")} fullWidth type="number" min={0} max={100} value={a.progressPct} onChange={(e) => updateActivity(idx, { progressPct: Number(e.target.value) })} />
             </div>
-            <div>
-              <Label className="text-xs">{t("createDialog.optProgress")}</Label>
-              <Input type="number" min={0} max={100} value={a.progressPct} onChange={(e) => updateActivity(idx, { progressPct: Number(e.target.value) })} />
+            <div className="space-y-1">
+              <Label htmlFor={f("actual")} className="text-sm">{t("createDialog.optBudgetActual")}</Label>
+              <Input id={f("actual")} fullWidth type="number" min={0} value={a.budgetActual} onChange={(e) => updateActivity(idx, { budgetActual: Number(e.target.value) })} />
             </div>
-            <div>
-              <Label className="text-xs">{t("createDialog.optBudgetActual")}</Label>
-              <Input type="number" min={0} value={a.budgetActual} onChange={(e) => updateActivity(idx, { budgetActual: Number(e.target.value) })} />
+            <SelectField
+              label={t("createDialog.optLinkedRisk")}
+              value={a.riskId ? String(a.riskId) : "__none__"}
+              onChange={(v) => updateActivity(idx, { riskId: v === "__none__" ? null : Number(v) })}
+              className="w-full"
+              options={[
+                { value: "__none__", label: t("createDialog.optNone") },
+                ...(risks ?? []).map((r) => ({
+                  value: String(r.id),
+                  label: `${r.title} (${t(`presentation.riskLevels.${r.severity}`, { ns: "risks", defaultValue: r.severity })})`,
+                  textValue: r.title,
+                })),
+              ]}
+            />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor={f("output")} className="text-sm">{t("createDialog.optExpectedOutput")}</Label>
+              <Input id={f("output")} fullWidth dir="auto" value={a.expectedOutput} onChange={(e) => updateActivity(idx, { expectedOutput: e.target.value })} />
             </div>
-            <div>
-              <Label className="text-xs">{t("createDialog.optLinkedRisk")}</Label>
-              <Select value={a.riskId ? String(a.riskId) : "__none__"} onValueChange={(v) => updateActivity(idx, { riskId: v === "__none__" ? null : Number(v) })}>
-                <SelectTrigger><SelectValue placeholder={t("createDialog.optNone")} /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">{t("createDialog.optNone")}</SelectItem>
-                  {risks?.map((r) => <SelectItem key={r.id} value={String(r.id)}>{r.title} ({r.severity})</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="space-y-1">
+              <Label htmlFor={f("indicator")} className="text-sm">{t("createDialog.optPerfIndicator")}</Label>
+              <Input id={f("indicator")} fullWidth dir="auto" value={a.performanceIndicator} onChange={(e) => updateActivity(idx, { performanceIndicator: e.target.value })} />
             </div>
           </div>
-          <div className="grid md:grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs">{t("createDialog.optExpectedOutput")}</Label>
-              <Input value={a.expectedOutput} onChange={(e) => updateActivity(idx, { expectedOutput: e.target.value })} />
-            </div>
-            <div>
-              <Label className="text-xs">{t("createDialog.optPerfIndicator")}</Label>
-              <Input value={a.performanceIndicator} onChange={(e) => updateActivity(idx, { performanceIndicator: e.target.value })} />
-            </div>
-          </div>
-          <div>
-            <Label className="text-xs">{t("createDialog.optDescNotes")}</Label>
-            <Textarea rows={2} value={a.description} onChange={(e) => updateActivity(idx, { description: e.target.value })} />
+          <div className="space-y-1">
+            <Label htmlFor={f("notes")} className="text-sm">{t("createDialog.optDescNotes")}</Label>
+            <TextArea id={f("notes")} fullWidth dir="auto" rows={2} value={a.description} onChange={(e) => updateActivity(idx, { description: e.target.value })} />
           </div>
         </div>
       )}
@@ -631,8 +590,19 @@ export function CreatePlanRegistrationDialog({
   const { data: risksData } = useListRisks({ limit: 200 });
   const risks = risksData?.items;
 
-  // ── Tab navigation ─────────────────────────────────────────────────────────
+  // ── Step navigation ────────────────────────────────────────────────────────
   const [activeTabIndex, setActiveTabIndex] = useState(0);
+  // On narrow screens the stepper scrolls sideways; keep the current step in
+  // view by scrolling only the stepper strip, as the project form does.
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>(`[data-stepper-scroll] [id="plan-tab-${TABS[activeTabIndex]?.id}"]`);
+    const strip = el?.closest<HTMLElement>("[data-stepper-scroll]");
+    if (!el || !strip) return;
+    const stripBox = strip.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    if (box.left < stripBox.left) strip.scrollBy?.({ left: box.left - stripBox.left - 16, behavior: "smooth" });
+    else if (box.right > stripBox.right) strip.scrollBy?.({ left: box.right - stripBox.right + 16, behavior: "smooth" });
+  }, [activeTabIndex]);
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planDetails, setPlanDetails] = useState<PlanDetailsForm>(() => makeEmptyDetails(defaultPlanType));
@@ -641,8 +611,6 @@ export function CreatePlanRegistrationDialog({
   const [linkMode, setLinkMode] = useState<"standalone" | "linked">("standalone");
   /** Current search query for the project combobox. */
   const [projectSearch, setProjectSearch] = useState("");
-  /** Controls the project combobox popover open state. */
-  const [projectComboOpen, setProjectComboOpen] = useState(false);
   const [localities, setLocalities] = useState<string[]>([]);
   const [activities, setActivities] = useState<ActivityForm[]>([]);
   const [budget, setBudget] = useState<BudgetForm>(makeEmptyBudget);
@@ -1080,7 +1048,6 @@ export function CreatePlanRegistrationDialog({
     setRelatedProjectId(null);
     setLinkMode("standalone");
     setProjectSearch("");
-    setProjectComboOpen(false);
     setLocalities([]);
     setActivities([]);
     setBudget(makeEmptyBudget());
@@ -1455,1476 +1422,1151 @@ export function CreatePlanRegistrationDialog({
 
   const isPending = createMutation.isPending || updateMutation.isPending;
   const activeTab = TABS[activeTabIndex];
-  const currentStateName = states?.find((s) => String(s.id) === planDetails.stateId)?.name ?? "";
+  const isHqPlan = planDetails.stateId === "__HQ__";
+  const currentState = states?.find((s) => String(s.id) === planDetails.stateId);
+  // HQ plans have no State but still record the localities they cover, so the
+  // coverage step must open for them too (it used to ask for a State forever).
+  const currentStateName = isHqPlan
+    ? t("createDialog.hqHeadquarters")
+    : currentState ? getStateLabel(currentState, i18n?.language) : "";
+  const errorText = (id: string, key?: string) =>
+    key ? <p id={id} role="alert" className="text-xs text-[var(--danger)]">{t(key)}</p> : null;
+  const stepErrors = [
+    attemptedSave && hasDetailErrors,
+    false,
+    hasGeographyError,
+    hasActivityError,
+    hasBudgetFinishError,
+  ];
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <>
-      <Dialog open={open} onOpenChange={(next) => { if (!next) handleCancelClick(); }}>
-        <DialogContent
-          className="max-w-4xl h-[90vh] p-0 gap-0 flex flex-col overflow-hidden"
-          aria-labelledby="cprd-title"
-          aria-describedby="cprd-desc"
-        >
-          {/* ── Sticky Header ────────────────────────────────────────────── */}
-          <div className="px-6 pt-4 pb-3 border-b shrink-0">
-            <DialogHeader className="pe-8">
-              <DialogTitle id="cprd-title" className="text-lg font-semibold leading-tight">{t("createDialog.title")}</DialogTitle>
-              <DialogDescription id="cprd-desc" className="text-[13px] text-muted-foreground mt-0.5 max-w-2xl">
-                {t("createDialog.description")}
-              </DialogDescription>
-            </DialogHeader>
-            <OfflineDraftNotice status={planDraft.status} error={planDraft.error} />
-          </div>
+      <Modal isOpen={open} onOpenChange={(next) => { if (!next) handleCancelClick(); }}>
+        <Modal.Backdrop>
+          <Modal.Container size="lg">
+            <Modal.Dialog
+              className="flex h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+              aria-labelledby="cprd-title"
+              aria-describedby="cprd-desc"
+            >
+              <Modal.CloseTrigger />
+              {/* ── Header ─────────────────────────────────────────────────── */}
+              <Modal.Header className="shrink-0 border-b border-[var(--border)] px-6 pt-5 pb-3">
+                <Modal.Heading id="cprd-title">{t("createDialog.title")}</Modal.Heading>
+                <p id="cprd-desc" className="max-w-2xl text-sm text-[var(--muted)]">
+                  {t("createDialog.subtitle")}
+                </p>
+                <OfflineDraftNotice status={planDraft.status} error={planDraft.error} />
+              </Modal.Header>
 
-          {/* ── Tab navigation strip ──────────────────────────────────────── */}
-          <div
-            role="tablist"
-            aria-label={t("createDialog.tabsAriaLabel")}
-            className="border-b bg-muted/30 shrink-0 px-4"
-          >
-            <div className="flex overflow-x-auto py-1.5 gap-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {TABS.map((tab, i) => {
-                const isActive = activeTabIndex === i;
-                const hasError =
-                  (i === 0 && attemptedSave && hasDetailErrors) ||
-                  (i === 2 && hasGeographyError) ||
-                  (i === 3 && hasActivityError) ||
-                  (i === 4 && hasBudgetFinishError);
-                return (
-                  <button
-                    key={tab.id}
-                    id={`plan-tab-${tab.id}`}
-                    role="tab"
-                    aria-selected={isActive}
-                    aria-controls={`plan-panel-${tab.id}`}
-                    type="button"
-                    onClick={() => setActiveTabIndex(i)}
-                    className={[
-                      "flex flex-1 min-w-max items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/70",
-                    ].join(" ")}
+              {/* ── Step navigation — HeroUI Pro Stepper, as in the project and
+                  report forms. Every step stays clickable; a step with errors
+                  says so under its title. ── */}
+              <div className="shrink-0 border-b border-[var(--border)]">
+                <div data-stepper-scroll className="overflow-x-auto px-6 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <Stepper
+                    aria-label={t("createDialog.tabsAriaLabel")}
+                    className="min-w-[720px]"
+                    currentStep={activeTabIndex}
+                    onStepChange={(index) => { if (TABS[index]) setActiveTabIndex(index); }}
                   >
-                    <span className={[
-                      "flex items-center justify-center w-5 h-5 shrink-0 rounded-full text-xs font-semibold",
-                      isActive
-                        ? "bg-white/20 text-primary-foreground"
-                        : "bg-border/60 text-muted-foreground",
-                    ].join(" ")}>
-                      {i + 1}
-                    </span>
-                    <span>{t(`createDialog.tab_${tab.id}`)}</span>
-                    {hasError && (
-                      <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-destructive inline-block" aria-label={t("createDialog.validationError")} />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ── Scrollable body ───────────────────────────────────────────── */}
-          <div className="overflow-y-auto flex-1 min-h-0 px-6 py-4">
-
-            {/* ── Tab 1: Plan Details ─────────────────────────────────────── */}
-            {activeTab.id === "details" && (
-              <div
-                id="plan-panel-details"
-                role="tabpanel"
-                aria-labelledby="plan-tab-details"
-                className="space-y-4"
-              >
-                {/* Plan title */}
-                <div className="space-y-1">
-                  <Label htmlFor="cprd-title-input" className="text-sm font-medium">
-                    {t("createDialog.planTitle")} <span className="text-destructive" aria-hidden="true">*</span>
-                  </Label>
-                  <Input
-                    id="cprd-title-input"
-                    placeholder={t("createDialog.planTitlePh")}
-                    value={planDetails.title}
-                    onChange={(e) => setDetailField("title", e.target.value)}
-                    aria-required="true"
-                    aria-describedby={detailErrors.title ? "cprd-title-err" : undefined}
-                    autoFocus
-                  />
-                  {detailErrors.title && (
-                    <p id="cprd-title-err" role="alert" className="text-xs text-destructive">{t(detailErrors.title!)}</p>
-                  )}
-                </div>
-
-                {/* Plan type | State */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="cprd-type" className="text-sm font-medium">
-                      {t("createDialog.planType")} <span className="text-destructive" aria-hidden="true">*</span>
-                    </Label>
-                    <Select value={planDetails.planType} onValueChange={(v) => setDetailField("planType", v)}>
-                      <SelectTrigger id="cprd-type" aria-required="true" aria-describedby={detailErrors.planType ? "cprd-type-err" : undefined}>
-                        <SelectValue placeholder={t("createDialog.planTypePh")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PLAN_TYPE_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>{t(`planTypes.${opt.value}`)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {detailErrors.planType && (
-                      <p id="cprd-type-err" role="alert" className="text-xs text-destructive">{t(detailErrors.planType!)}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="cprd-state" className="text-sm font-medium">
-                      {t("createDialog.stateLocation")} <span className="text-destructive" aria-hidden="true">*</span>
-                    </Label>
-                    <Select value={planDetails.stateId} onValueChange={handleStateChange}>
-                      <SelectTrigger id="cprd-state" aria-required="true" aria-describedby={detailErrors.stateId ? "cprd-state-err" : undefined}>
-                        <SelectValue placeholder={t("createDialog.stateLocationPh")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {!isStateRole && (
-                          <SelectGroup>
-                            <SelectLabel>{t("createDialog.organisation")}</SelectLabel>
-                            <SelectItem value="__HQ__">{t("createDialog.hqHeadquarters")}</SelectItem>
-                          </SelectGroup>
-                        )}
-                        <SelectGroup>
-                          <SelectLabel>{t("createDialog.states")}</SelectLabel>
-                          {(states ?? []).map((s) => (
-                            <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    {detailErrors.stateId && (
-                      <p id="cprd-state-err" role="alert" className="text-xs text-destructive">{t(detailErrors.stateId!)}</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Responsible person */}
-                <div className="space-y-1">
-                  <Label htmlFor="cprd-responsible" className="text-sm font-medium">
-                    {t("createDialog.responsiblePerson")} <span className="text-destructive" aria-hidden="true">*</span>
-                  </Label>
-                  <div className="max-w-sm">
-                    <Input
-                      id="cprd-responsible"
-                      placeholder={t("createDialog.responsiblePersonPh")}
-                      value={planDetails.responsibleName}
-                      onChange={(e) => setDetailField("responsibleName", e.target.value)}
-                      aria-required="true"
-                      aria-describedby={detailErrors.responsibleName ? "cprd-responsible-err" : undefined}
-                    />
-                  </div>
-                  {detailErrors.responsibleName && (
-                    <p id="cprd-responsible-err" role="alert" className="text-xs text-destructive">{t(detailErrors.responsibleName!)}</p>
-                  )}
-                </div>
-
-                {/* Sector(s) */}
-                <div className="space-y-1">
-                  <Label className="text-sm font-medium">
-                    {t("createDialog.sectors")} <span className="text-destructive" aria-hidden="true">*</span>
-                  </Label>
-                  {availableSectors.length === 0 ? (
-                    <p className="text-xs text-destructive px-1">{t("createDialog.noSectorsAssigned")}</p>
-                  ) : (
-                    <div
-                      className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-1.5 border rounded-md bg-muted/20"
-                      role="group"
-                      aria-label={t("createDialog.sectorsAriaLabel")}
-                      aria-required="true"
-                    >
-                      {availableSectors.map((sector) => {
-                        const checked = planDetails.sectors.includes(sector);
-                        return (
-                          <label
-                            key={sector}
-                            className={`flex items-center gap-2 text-sm cursor-pointer rounded px-2 py-[7px] select-none transition-colors leading-tight ${
-                              checked
-                                ? "bg-primary/10 text-primary font-medium"
-                                : "hover:bg-muted/60 text-foreground"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              className="accent-primary shrink-0 mt-px"
-                              checked={checked}
-                              onChange={() => toggleSector(sector)}
-                              aria-label={sector}
-                            />
-                            <span className="min-w-0">{sector}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {detailErrors.sectors && (
-                    <p role="alert" className="text-xs text-destructive">{t(detailErrors.sectors!)}</p>
-                  )}
-                </div>
-
-                {/* Start date | End date */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="cprd-start" className="text-sm font-medium">
-                      {t("createDialog.startDate")} <span className="text-destructive" aria-hidden="true">*</span>
-                    </Label>
-                    <Input
-                      id="cprd-start"
-                      type="date"
-                      value={planDetails.startDate}
-                      onChange={(e) => setDetailField("startDate", e.target.value)}
-                      aria-required="true"
-                      aria-describedby={detailErrors.startDate ? "cprd-start-err" : undefined}
-                    />
-                    {detailErrors.startDate && (
-                      <p id="cprd-start-err" role="alert" className="text-xs text-destructive">{t(detailErrors.startDate!)}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="cprd-end" className="text-sm font-medium">
-                      {t("createDialog.endDate")} <span className="text-destructive" aria-hidden="true">*</span>
-                    </Label>
-                    <Input
-                      id="cprd-end"
-                      type="date"
-                      value={planDetails.endDate}
-                      onChange={(e) => setDetailField("endDate", e.target.value)}
-                      aria-required="true"
-                      aria-describedby={detailErrors.endDate ? "cprd-end-err" : undefined}
-                    />
-                    {detailErrors.endDate && (
-                      <p id="cprd-end-err" role="alert" className="text-xs text-destructive">{t(detailErrors.endDate!)}</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div className="space-y-1">
-                  <Label htmlFor="cprd-description" className="text-sm font-medium">
-                    {t("createDialog.description")} <span className="text-destructive" aria-hidden="true">*</span>
-                  </Label>
-                  <Textarea
-                    id="cprd-description"
-                    placeholder={t("createDialog.descriptionPh")}
-                    rows={3}
-                    value={planDetails.description}
-                    onChange={(e) => setDetailField("description", e.target.value)}
-                    aria-required="true"
-                    aria-describedby={detailErrors.description ? "cprd-description-err" : undefined}
-                    className="resize-y"
-                  />
-                  {detailErrors.description && (
-                    <p id="cprd-description-err" role="alert" className="text-xs text-destructive">{t(detailErrors.description!)}</p>
-                  )}
+                    {TABS.map((tab, i) => (
+                      <Stepper.Step key={tab.id} id={`plan-tab-${tab.id}`}>
+                        <Stepper.Indicator />
+                        <Stepper.Content>
+                          <Stepper.Title>{t(`createDialog.tab_${tab.id}`)}</Stepper.Title>
+                          {stepErrors[i] && (
+                            <Stepper.Description className="text-[var(--danger)]">{t("createDialog.stepHasErrors")}</Stepper.Description>
+                          )}
+                        </Stepper.Content>
+                        <Stepper.Separator />
+                      </Stepper.Step>
+                    ))}
+                  </Stepper>
                 </div>
               </div>
-            )}
 
-            {/* ── Tab 2: Related Project ──────────────────────────────────── */}
-            {activeTab.id === "project" && (
-              <div
-                id="plan-panel-project"
-                role="tabpanel"
-                aria-labelledby="plan-tab-project"
-                className="space-y-5 max-w-[640px]"
-              >
-                {/* ── Heading ──────────────────────────────────────────────── */}
-                <div>
-                  <h3 className="text-sm font-semibold leading-tight">{t("createDialog.relatedProjectHeading")}</h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t("createDialog.relatedProjectDesc")}
-                  </p>
-                </div>
+              {/* ── Scrollable body ─────────────────────────────────────────── */}
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
 
-                {/* ── Two-option choice ────────────────────────────────────── */}
-                <div role="group" aria-label={t("createDialog.projectLinkModeAriaLabel")} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {/* Standalone Plan */}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={linkMode === "standalone"}
-                    onClick={() => {
-                      if (linkMode !== "standalone") {
-                        markDirty();
-                        setLinkMode("standalone");
-                        setRelatedProjectId(null);
-                        setProjectSearch("");
-                        setProjectComboOpen(false);
-                      }
-                    }}
-                    className={[
-                      "flex items-start gap-3 rounded-md border p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      linkMode === "standalone"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-border/80 hover:bg-muted/40",
-                    ].join(" ")}
-                  >
-                    <span className={[
-                      "mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                      linkMode === "standalone" ? "border-primary" : "border-muted-foreground/40",
-                    ].join(" ")} aria-hidden="true">
-                      {linkMode === "standalone" && <span className="h-2 w-2 rounded-full bg-primary" />}
-                    </span>
-                    <span>
-                      <span className="text-sm font-medium leading-tight block">{t("createDialog.standalonePlanLabel")}</span>
-                      <span className="text-xs text-muted-foreground mt-0.5 block">
-                        {t("createDialog.standalonePlanDesc")}
-                      </span>
-                    </span>
-                  </button>
+                {/* ── Step 1: Plan Details ─────────────────────────────────── */}
+                {activeTab.id === "details" && (
+                  <section id="plan-panel-details" role="region" aria-labelledby="plan-tab-details" className="space-y-4">
+                    <div className="space-y-1">
+                      <Label isRequired htmlFor="cprd-title-input" className="text-sm font-medium">{t("createDialog.planTitle")}</Label>
+                      <Input
+                        id="cprd-title-input"
+                        fullWidth
+                        dir="auto"
+                        placeholder={t("createDialog.planTitlePh")}
+                        value={planDetails.title}
+                        onChange={(e) => setDetailField("title", e.target.value)}
+                        aria-required="true"
+                        aria-invalid={!!detailErrors.title || undefined}
+                        aria-describedby={detailErrors.title ? "cprd-title-err" : undefined}
+                        autoFocus
+                      />
+                      {errorText("cprd-title-err", detailErrors.title)}
+                    </div>
 
-                  {/* Link To Existing Project */}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={linkMode === "linked"}
-                    onClick={() => {
-                      if (linkMode !== "linked") {
-                        markDirty();
-                        setLinkMode("linked");
-                      }
-                    }}
-                    className={[
-                      "flex items-start gap-3 rounded-md border p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      linkMode === "linked"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-border/80 hover:bg-muted/40",
-                    ].join(" ")}
-                  >
-                    <span className={[
-                      "mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                      linkMode === "linked" ? "border-primary" : "border-muted-foreground/40",
-                    ].join(" ")} aria-hidden="true">
-                      {linkMode === "linked" && <span className="h-2 w-2 rounded-full bg-primary" />}
-                    </span>
-                    <span>
-                      <span className="text-sm font-medium leading-tight block">{t("createDialog.linkToProjectLabel")}</span>
-                      <span className="text-xs text-muted-foreground mt-0.5 block">
-                        {t("createDialog.linkToProjectDesc")}
-                      </span>
-                    </span>
-                  </button>
-                </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <SelectField
+                          id="cprd-type"
+                          label={t("createDialog.planType")}
+                          isRequired
+                          isInvalid={!!detailErrors.planType}
+                          aria-describedby={detailErrors.planType ? "cprd-type-err" : undefined}
+                          value={planDetails.planType}
+                          onChange={(v) => setDetailField("planType", v)}
+                          placeholder={t("createDialog.planTypePh")}
+                          className="w-full"
+                          options={PLAN_TYPE_OPTIONS.map((opt) => ({ value: opt.value, label: t(`planTypes.${opt.value}`) }))}
+                        />
+                        {errorText("cprd-type-err", detailErrors.planType)}
+                      </div>
+                      <div className="space-y-1">
+                        <SelectField
+                          id="cprd-state"
+                          label={t("createDialog.stateLocation")}
+                          isRequired
+                          isInvalid={!!detailErrors.stateId}
+                          aria-describedby={detailErrors.stateId ? "cprd-state-err" : undefined}
+                          value={planDetails.stateId}
+                          onChange={handleStateChange}
+                          placeholder={t("createDialog.stateLocationPh")}
+                          className="w-full"
+                          options={[
+                            ...(!isStateRole ? [{ value: "__HQ__", label: t("createDialog.hqHeadquarters") }] : []),
+                            ...(states ?? []).map((s) => ({
+                              value: String(s.id),
+                              label: <StateLabel state={s} />,
+                              textValue: getStateLabel(s, i18n?.language),
+                            })),
+                          ]}
+                        />
+                        {errorText("cprd-state-err", detailErrors.stateId)}
+                      </div>
+                    </div>
 
-                {/* ── Standalone informational state ───────────────────────── */}
-                {linkMode === "standalone" && (
-                  <div className="rounded-md border border-border bg-muted/20 px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">{t("createDialog.standaloneInfoTitle")}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {t("createDialog.standaloneInfoDesc")}
-                    </p>
-                  </div>
+                    <div className="space-y-1">
+                      <Label isRequired htmlFor="cprd-responsible" className="text-sm font-medium">{t("createDialog.responsiblePerson")}</Label>
+                      <div className="max-w-sm">
+                        <Input
+                          id="cprd-responsible"
+                          fullWidth
+                          dir="auto"
+                          placeholder={t("createDialog.responsiblePersonPh")}
+                          value={planDetails.responsibleName}
+                          onChange={(e) => setDetailField("responsibleName", e.target.value)}
+                          aria-required="true"
+                          aria-invalid={!!detailErrors.responsibleName || undefined}
+                          aria-describedby={detailErrors.responsibleName ? "cprd-responsible-err" : undefined}
+                        />
+                      </div>
+                      {errorText("cprd-responsible-err", detailErrors.responsibleName)}
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label isRequired id="cprd-sectors-label" className="text-sm font-medium">{t("createDialog.sectors")}</Label>
+                      {availableSectors.length === 0 ? (
+                        <p className="px-1 text-xs text-[var(--danger)]">{t("createDialog.noSectorsAssigned")}</p>
+                      ) : (
+                        <div
+                          className="grid grid-cols-2 gap-1.5 rounded-xl border border-[var(--border)] p-2 sm:grid-cols-3"
+                          role="group"
+                          aria-labelledby="cprd-sectors-label"
+                          aria-required="true"
+                          aria-describedby={detailErrors.sectors ? "cprd-sectors-err" : undefined}
+                        >
+                          {availableSectors.map((sector) => (
+                            <CheckItem
+                              key={sector}
+                              isSelected={planDetails.sectors.includes(sector)}
+                              onChange={() => toggleSector(sector)}
+                              className="rounded-lg px-2 py-1.5 hover:bg-[var(--default)]"
+                            >
+                              {sector}
+                            </CheckItem>
+                          ))}
+                        </div>
+                      )}
+                      {errorText("cprd-sectors-err", detailErrors.sectors)}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <DateInput
+                          id="cprd-start"
+                          label={t("createDialog.startDate")}
+                          isRequired
+                          isInvalid={!!detailErrors.startDate}
+                          describedBy={detailErrors.startDate ? "cprd-start-err" : undefined}
+                          value={planDetails.startDate}
+                          onChange={(v) => setDetailField("startDate", v)}
+                        />
+                        {errorText("cprd-start-err", detailErrors.startDate)}
+                      </div>
+                      <div className="space-y-1">
+                        <DateInput
+                          id="cprd-end"
+                          label={t("createDialog.endDate")}
+                          isRequired
+                          isInvalid={!!detailErrors.endDate}
+                          describedBy={detailErrors.endDate ? "cprd-end-err" : undefined}
+                          value={planDetails.endDate}
+                          onChange={(v) => setDetailField("endDate", v)}
+                        />
+                        {errorText("cprd-end-err", detailErrors.endDate)}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label isRequired htmlFor="cprd-description" className="text-sm font-medium">{t("createDialog.description")}</Label>
+                      <TextArea
+                        id="cprd-description"
+                        fullWidth
+                        dir="auto"
+                        placeholder={t("createDialog.descriptionPh")}
+                        rows={3}
+                        value={planDetails.description}
+                        onChange={(e) => setDetailField("description", e.target.value)}
+                        aria-required="true"
+                        aria-invalid={!!detailErrors.description || undefined}
+                        aria-describedby={detailErrors.description ? "cprd-description-err" : undefined}
+                        className="resize-y"
+                      />
+                      {errorText("cprd-description-err", detailErrors.description)}
+                    </div>
+                  </section>
                 )}
 
-                {/* ── Linked state ─────────────────────────────────────────── */}
-                {linkMode === "linked" && (
-                  <div className="space-y-3">
+                {/* ── Step 2: Related Project ──────────────────────────────── */}
+                {activeTab.id === "project" && (
+                  <section id="plan-panel-project" role="region" aria-labelledby="plan-tab-project" className="max-w-[640px] space-y-5">
+                    <div>
+                      <h3 className="text-sm font-semibold leading-tight">{t("createDialog.relatedProjectHeading")}</h3>
+                      <p className="mt-1 text-xs text-[var(--muted)]">{t("createDialog.relatedProjectDesc")}</p>
+                    </div>
 
-                    {/* Loading */}
-                    {projectsLoading && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                        <span>{t("createDialog.loadingProjects")}</span>
+                    <RadioGroup
+                      aria-label={t("createDialog.projectLinkModeAriaLabel")}
+                      value={linkMode}
+                      onChange={(v) => {
+                        if (v === linkMode) return;
+                        markDirty();
+                        if (v === "standalone") {
+                          setLinkMode("standalone");
+                          setRelatedProjectId(null);
+                          setProjectSearch("");
+                        } else {
+                          setLinkMode("linked");
+                        }
+                      }}
+                      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                    >
+                      {(["standalone", "linked"] as const).map((mode) => (
+                        <Radio
+                          key={mode}
+                          value={mode}
+                          className="rounded-xl border border-[var(--border)] p-3 transition-colors data-[selected=true]:border-[var(--accent)] data-[selected=true]:bg-[color-mix(in_oklab,var(--accent)_6%,transparent)]"
+                        >
+                          <Radio.Content className="items-start">
+                            <Radio.Control className="mt-0.5">
+                              <Radio.Indicator />
+                            </Radio.Control>
+                            <span>
+                              <span className="block text-sm font-medium leading-tight">
+                                {mode === "standalone" ? t("createDialog.standalonePlanLabel") : t("createDialog.linkToProjectLabel")}
+                              </span>
+                              <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                                {mode === "standalone" ? t("createDialog.standalonePlanDesc") : t("createDialog.linkToProjectDesc")}
+                              </span>
+                            </span>
+                          </Radio.Content>
+                        </Radio>
+                      ))}
+                    </RadioGroup>
+
+                    {linkMode === "standalone" && (
+                      <div className="rounded-xl border border-[var(--border)] px-4 py-3">
+                        <p className="text-sm font-medium">{t("createDialog.standaloneInfoTitle")}</p>
+                        <p className="mt-0.5 text-xs text-[var(--muted)]">{t("createDialog.standaloneInfoDesc")}</p>
                       </div>
                     )}
 
-                    {/* Error */}
-                    {projectsError && !projectsLoading && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-sm">
-                          {t("createDialog.unableToLoadProjects")}
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                    {linkMode === "linked" && (
+                      <div className="space-y-3">
+                        {projectsLoading && (
+                          <div className="flex items-center gap-2 py-2 text-sm text-[var(--muted)]">
+                            <Spinner size="sm" aria-hidden="true" />
+                            <span>{t("createDialog.loadingProjects")}</span>
+                          </div>
+                        )}
 
-                    {/* No projects in authorised scope */}
-                    {!projectsLoading && !projectsError && (projects ?? []).length === 0 && (
-                      <div className="rounded-md border border-border bg-muted/20 px-4 py-4 space-y-2">
-                        <p className="text-sm font-medium">{t("createDialog.noProjectsAvailable")}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t("createDialog.noProjectsAvailableDesc")}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            markDirty();
-                            setLinkMode("standalone");
-                            setRelatedProjectId(null);
-                          }}
-                        >
-                          {t("createDialog.useStandalonePlan")}
+                        {projectsError && !projectsLoading && (
+                          <Alert status="danger">
+                            <Alert.Indicator />
+                            <Alert.Content>
+                              <Alert.Description>{t("createDialog.unableToLoadProjects")}</Alert.Description>
+                            </Alert.Content>
+                          </Alert>
+                        )}
+
+                        {!projectsLoading && !projectsError && (projects ?? []).length === 0 && (
+                          <div className="space-y-2 rounded-xl border border-[var(--border)] px-4 py-4">
+                            <p className="text-sm font-medium">{t("createDialog.noProjectsAvailable")}</p>
+                            <p className="text-xs text-[var(--muted)]">{t("createDialog.noProjectsAvailableDesc")}</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onPress={() => {
+                                markDirty();
+                                setLinkMode("standalone");
+                                setRelatedProjectId(null);
+                              }}
+                            >
+                              {t("createDialog.useStandalonePlan")}
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Project search — code · title · donor */}
+                        {!projectsLoading && !projectsError && (projects ?? []).length > 0 && !relatedProjectId && (
+                          <ComboBox
+                            fullWidth
+                            allowsEmptyCollection
+                            inputValue={projectSearch}
+                            onInputChange={setProjectSearch}
+                            selectedKey={null}
+                            defaultFilter={() => true}
+                            onSelectionChange={(key) => {
+                              if (key == null) return;
+                              markDirty();
+                              setRelatedProjectId(Number(key));
+                              setProjectSearch("");
+                            }}
+                          >
+                            <Label className="text-xs font-medium">{t("createDialog.selectProject")}</Label>
+                            <ComboBox.InputGroup>
+                              <Input placeholder={t("createDialog.searchProjectPh")} dir="auto" />
+                              <ComboBox.Trigger />
+                            </ComboBox.InputGroup>
+                            <ComboBox.Popover>
+                              <ListBox
+                                className="max-h-72 overscroll-contain"
+                                renderEmptyState={() => (
+                                  <p className="px-3 py-4 text-center text-sm text-[var(--muted)]">{t("createDialog.noMatchingProjects")}</p>
+                                )}
+                              >
+                                {filteredProjects.map((p) => {
+                                  const donor = (p as unknown as { donor?: string }).donor;
+                                  return (
+                                    <ListBox.Item key={p.id} id={String(p.id)} textValue={`${p.code ?? ""} ${p.title ?? ""}`}>
+                                      <span className="flex min-w-0 flex-col">
+                                        <span className="font-mono text-[11px] text-[var(--muted)]"><bdi dir="ltr">{p.code}</bdi></span>
+                                        <span className="text-sm font-medium leading-snug" dir="auto">{p.title}</span>
+                                        {donor && <span className="truncate text-xs text-[var(--muted)]" dir="auto">{donor}</span>}
+                                      </span>
+                                    </ListBox.Item>
+                                  );
+                                })}
+                              </ListBox>
+                            </ComboBox.Popover>
+                          </ComboBox>
+                        )}
+
+                        {/* Selected project preview */}
+                        {relatedProjectId != null && (() => {
+                          const proj = projects?.find((p) => p.id === relatedProjectId);
+                          if (!proj) return null;
+                          const pd = proj as unknown as {
+                            code?: string; title?: string; status?: string;
+                            donor?: string; stateNames?: string[]; stateNamesAr?: string[]; sector?: string; sectors?: string[];
+                          };
+                          const stateNames: string[] = pd.stateNames ?? [];
+                          const stateNamesAr: string[] = pd.stateNamesAr ?? [];
+                          const sectorList: string[] = pd.sectors ?? (pd.sector ? [pd.sector] : []);
+                          const listSep = t("viewModes.listSeparator", { ns: "common", defaultValue: ", " });
+                          return (
+                            <Card className="p-0">
+                              <div className="space-y-2 px-4 py-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="font-mono text-[11px] text-[var(--muted)]"><bdi dir="ltr">{pd.code}</bdi></span>
+                                  {pd.status && (
+                                    <Chip size="sm" variant="soft" color={statusTone(pd.status)}>
+                                      {t(`status.${pd.status}`, { ns: "projects", defaultValue: formatStatusLabel(pd.status) })}
+                                    </Chip>
+                                  )}
+                                </div>
+                                <p className="text-sm font-medium leading-snug rtl:text-end" dir="auto">{pd.title}</p>
+                                {(pd.donor || stateNames.length > 0 || sectorList.length > 0) && (
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                                    {pd.donor && (
+                                      <span>
+                                        <span className="text-[var(--muted)]">{t("createDialog.donorLabel")}</span>{" "}
+                                        <span dir="auto">{pd.donor}</span>
+                                      </span>
+                                    )}
+                                    {stateNames.length > 0 && (
+                                      <span>
+                                        <span className="text-[var(--muted)]">
+                                          {stateNames.length === 1 ? t("createDialog.stateLabel_one") : t("createDialog.stateLabel_other")}
+                                        </span>{" "}
+                                        <span>{stateNames.map((name, index) => getStateLabel({ name, nameAr: stateNamesAr[index] }, i18n?.language)).join(listSep)}</span>
+                                      </span>
+                                    )}
+                                    {sectorList.length > 0 && (
+                                      <span>
+                                        <span className="text-[var(--muted)]">
+                                          {sectorList.length === 1 ? t("createDialog.sectorLabel_one") : t("createDialog.sectorLabel_other")}
+                                        </span>{" "}
+                                        <span>{sectorList.join(listSep)}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                {projectLocalities.length > 0 && (
+                                  <div className="pt-1">
+                                    <p className="mb-1.5 text-xs text-[var(--muted)]">{t("createDialog.localitiesSuggestionsLabel")}</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {projectLocalities.slice(0, 10).map((l) => (
+                                        <Chip key={l} size="sm" variant="secondary">{l}</Chip>
+                                      ))}
+                                      {projectLocalities.length > 10 && (
+                                        <Chip size="sm" variant="tertiary">
+                                          {t("createDialog.moreSuggestions", { count: projectLocalities.length - 10 })}
+                                        </Chip>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 border-t border-[var(--border)] px-2 py-1.5">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onPress={() => {
+                                    markDirty();
+                                    setRelatedProjectId(null);
+                                    setProjectSearch("");
+                                  }}
+                                >
+                                  {t("createDialog.changeProject")}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-[var(--danger)]"
+                                  aria-label={t("createDialog.removeLinkAria")}
+                                  onPress={() => {
+                                    markDirty();
+                                    setRelatedProjectId(null);
+                                    setLinkMode("standalone");
+                                    setProjectSearch("");
+                                  }}
+                                >
+                                  {t("createDialog.removeLink")}
+                                </Button>
+                              </div>
+                            </Card>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                {/* ── Step 3: Geographical Coverage ────────────────────────── */}
+                {activeTab.id === "geography" && (
+                  <section id="plan-panel-geography" role="region" aria-labelledby="plan-tab-geography" className="space-y-4">
+                    <div>
+                      <h3 className="mb-0.5 text-sm font-semibold">
+                        {t("createDialog.geoCoverageHeading")}{" "}
+                        <span className="text-[var(--danger)]" aria-label={t("createDialog.geoCoverageRequired")}>*</span>
+                      </h3>
+                      {currentStateName ? (
+                        <>
+                          <p className="mb-3 text-xs text-[var(--muted)]">{t("createDialog.addAtLeastOneLocality")}</p>
+                          <div className="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--default)] px-2.5 py-1">
+                            <span className="text-xs text-[var(--muted)]">{t("createDialog.stateContextLabel")}</span>
+                            <span className="text-xs font-medium">{currentStateName}</span>
+                          </div>
+
+                          {hasGeographyError && (
+                            <Alert status="danger" id="geography-error" role="alert" className="mb-3">
+                              <Alert.Indicator />
+                              <Alert.Content>
+                                <Alert.Description>{t("createDialog.atLeastOneLocality")}</Alert.Description>
+                              </Alert.Content>
+                            </Alert>
+                          )}
+
+                          <LocalityTagInput
+                            localities={localities}
+                            onChange={(v) => { markDirty(); setLocalities(v); }}
+                            onAttemptRemove={handleAttemptRemoveLocality}
+                            suggestions={localitySuggestions}
+                          />
+
+                          {/* Linked project suggestions (separate — not auto-applied) */}
+                          {projectLocalities.length > 0 && (
+                            <div className="mt-4 border-t border-[var(--border)] pt-3">
+                              <p className="mb-2 text-xs font-medium text-[var(--muted)]">{t("createDialog.suggestedFromLinkedProject")}</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {projectLocalities
+                                  .filter((pl) => !localities.some(
+                                    (l) => l.toLowerCase().replace(/\s+/g, " ") === pl.toLowerCase().replace(/\s+/g, " ")
+                                  ))
+                                  .map((pl, i) => (
+                                    <Button
+                                      key={i}
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 rounded-full border-dashed px-2.5 text-xs"
+                                      aria-label={t("createDialog.addSuggestedLocality", { name: pl })}
+                                      onPress={() => {
+                                        const norm = pl.toLowerCase().replace(/\s+/g, " ");
+                                        const isDupe = localities.some((l) => l.toLowerCase().replace(/\s+/g, " ") === norm);
+                                        if (!isDupe) {
+                                          markDirty();
+                                          setLocalities((prev) => [...prev, pl.trim()]);
+                                        }
+                                      }}
+                                    >
+                                      <Plus className="size-3" aria-hidden="true" /> {pl}
+                                    </Button>
+                                  ))}
+                              </div>
+                              <p className="mt-1.5 text-xs text-[var(--muted)]">{t("createDialog.suggestionsHint")}</p>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="mt-3 rounded-xl border border-dashed border-[var(--border)] p-6 text-center">
+                          <MapPin className="mx-auto mb-2 size-6 text-[var(--muted)]" aria-hidden="true" />
+                          <p className="mb-1 text-sm font-medium">{t("createDialog.selectStateFirst")}</p>
+                          <p className="mb-4 text-xs text-[var(--muted)]">{t("createDialog.selectStateFirstDesc")}</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onPress={() => setActiveTabIndex(0)}
+                            aria-label={t("createDialog.goToPlanDetailsAria")}
+                          >
+                            {t("createDialog.goToPlanDetails")}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {/* ── Step 4: Activities ───────────────────────────────────── */}
+                {activeTab.id === "activities" && (
+                  <section id="plan-panel-activities" role="region" aria-labelledby="plan-tab-activities" className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="flex items-baseline gap-2 text-sm font-semibold">
+                          {t("createDialog.activitiesHeading")}
+                          {activities.length > 0 && (
+                            <span className="text-xs font-normal text-[var(--muted)]">
+                              {t("createDialog.activitiesCount", { count: activities.length })}
+                            </span>
+                          )}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-[var(--muted)]">{t("createDialog.activitiesDesc")}</p>
+                      </div>
+                      {activities.length > 0 && (
+                        <Button size="sm" variant="outline" onPress={addActivity} className="shrink-0 gap-1.5">
+                          <Plus className="size-3.5" aria-hidden="true" /> {t("createDialog.addActivity")}
+                        </Button>
+                      )}
+                    </div>
+
+                    {activities.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center">
+                        <p className="text-sm font-medium">{t("createDialog.noActivitiesTitle")}</p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">{t("createDialog.noActivitiesDesc")}</p>
+                        <Button size="sm" variant="outline" className="mt-3 gap-1.5" onPress={addActivity}>
+                          <Plus className="size-3.5" aria-hidden="true" /> {t("createDialog.addFirstActivity")}
                         </Button>
                       </div>
                     )}
 
-                    {/* Project selector — shown when projects exist and none selected yet */}
-                    {!projectsLoading && !projectsError && (projects ?? []).length > 0 && !relatedProjectId && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium" id="cprd-project-label">
-                          {t("createDialog.selectProject")}
-                        </Label>
-                        <Popover open={projectComboOpen} onOpenChange={setProjectComboOpen}>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              role="combobox"
-                              aria-expanded={projectComboOpen}
-                              aria-haspopup="listbox"
-                              aria-labelledby="cprd-project-label"
-                              className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            >
-                              <span>{t("createDialog.searchProjectPh")}</span>
-                              <ChevronsUpDown className="ms-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            className="p-0"
-                            style={{ width: "var(--radix-popover-trigger-width)" }}
-                            align="start"
-                          >
-                            <Command shouldFilter={false}>
-                              <CommandInput
-                                placeholder={t("createDialog.searchProjectPh")}
-                                value={projectSearch}
-                                onValueChange={setProjectSearch}
-                              />
-                              <CommandList
-                              onWheel={(e) => e.stopPropagation()}
-                              className="overscroll-contain"
-                            >
-                                {filteredProjects.length === 0 && (
-                                  <CommandEmpty>{t("createDialog.noMatchingProjects")}</CommandEmpty>
-                                )}
-                                <CommandGroup>
-                                  {filteredProjects.map((p) => {
-                                    const donor = (p as unknown as { donor?: string }).donor;
-                                    return (
-                                      <CommandItem
-                                        key={p.id}
-                                        value={String(p.id)}
-                                        onSelect={() => {
-                                          markDirty();
-                                          setRelatedProjectId(p.id);
-                                          setProjectSearch("");
-                                          setProjectComboOpen(false);
-                                        }}
-                                        className="flex items-start gap-2 py-2"
-                                      >
-                                        <Check className="mt-[3px] h-3.5 w-3.5 shrink-0 opacity-0 group-data-[selected=true]:opacity-100" aria-hidden="true" />
-                                        <span className="flex flex-col min-w-0">
-                                          <span className="text-[11px] font-mono text-muted-foreground"><bdi dir="ltr">{p.code}</bdi></span>
-                                          <span className="text-sm font-medium leading-snug">{p.title}</span>
-                                          {donor && (
-                                            <span className="text-xs text-muted-foreground truncate">{donor}</span>
-                                          )}
-                                        </span>
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    )}
-
-                    {/* Selected project preview */}
-                    {relatedProjectId != null && (() => {
-                      const proj = projects?.find((p) => p.id === relatedProjectId);
-                      if (!proj) return null;
-                      const pd = proj as unknown as {
-                        code?: string; title?: string; status?: string;
-                        donor?: string; stateNames?: string[]; stateNamesAr?: string[]; sector?: string; sectors?: string[];
-                      };
-                      const stateNames: string[] = pd.stateNames ?? [];
-                      const stateNamesAr: string[] = pd.stateNamesAr ?? [];
-                      const sectorList: string[] = pd.sectors ?? (pd.sector ? [pd.sector] : []);
-                      const { variant, className: badgeCls } = statusBadgeVariant(pd.status ?? "");
+                    {activities.map((a, idx) => {
+                      const f = (n: string) => `cprd-act-${idx}-${n}`;
                       return (
-                        <div className="rounded-md border bg-card">
-                          <div className="px-4 py-3 space-y-2">
-                            {/* Code + Status */}
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[11px] font-mono text-muted-foreground">{pd.code}</span>
-                              {pd.status && (
-                                <Badge
-                                  variant={variant}
-                                  className={`${badgeCls ?? ""} text-xs`}
-                                  aria-label={`Status: ${formatStatusLabel(pd.status)}`}
-                                >
-                                  {formatStatusLabel(pd.status)}
-                                </Badge>
-                              )}
+                        <Card key={idx} className="gap-0 p-0">
+                          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-2">
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium" dir="auto">
+                              {a.title
+                                ? t("createDialog.activityNumTitled", { num: idx + 1, title: a.title })
+                                : t("createDialog.activityNum", { num: idx + 1 })}
+                            </span>
+                            <Tooltip delay={300}>
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="ghost"
+                                className="shrink-0 text-[var(--danger)]"
+                                onPress={() => handleRemoveActivity(idx)}
+                                aria-label={t("createDialog.removeActivityAria", { num: idx + 1 })}
+                              >
+                                <Trash2 className="size-3.5" aria-hidden="true" />
+                              </Button>
+                              <Tooltip.Content>{t("createDialog.tooltipRemoveActivity")}</Tooltip.Content>
+                            </Tooltip>
+                          </div>
+
+                          <div className="space-y-3 px-4 py-3">
+                            <div className="space-y-1">
+                              <Label isRequired htmlFor={f("title")} className="text-sm">{t("createDialog.activityTitle")}</Label>
+                              <Input
+                                id={f("title")}
+                                fullWidth
+                                dir="auto"
+                                placeholder={t("createDialog.activityTitlePh")}
+                                value={a.title}
+                                onChange={(e) => updateActivity(idx, { title: e.target.value })}
+                              />
                             </div>
-                            {/* Title */}
-                            <p className="text-sm font-medium leading-snug">{pd.title}</p>
-                            {/* Labelled metadata row */}
-                            {(pd.donor || stateNames.length > 0 || sectorList.length > 0) && (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                                {pd.donor && (
-                                  <span>
-                                    <span className="text-muted-foreground">{t("createDialog.donorLabel")}</span>{" "}
-                                    <span className="text-foreground">{pd.donor}</span>
-                                  </span>
-                                )}
-                                {stateNames.length > 0 && (
-                                  <span>
-                                    <span className="text-muted-foreground">
-                                      {stateNames.length === 1 ? t("createDialog.stateLabel_one") : t("createDialog.stateLabel_other")}
-                                    </span>{" "}
-                                    <span className="text-foreground">{stateNames.map((name, index) => getStateLabel({ name, nameAr: stateNamesAr[index] }, i18n?.language)).join(", ")}</span>
-                                  </span>
-                                )}
-                                {sectorList.length > 0 && (
-                                  <span>
-                                    <span className="text-muted-foreground">
-                                      {sectorList.length === 1 ? t("createDialog.sectorLabel_one") : t("createDialog.sectorLabel_other")}
-                                    </span>{" "}
-                                    <span className="text-foreground">{sectorList.join(", ")}</span>
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            {/* Locality suggestions */}
-                            {projectLocalities.length > 0 && (
-                              <div className="pt-1">
-                                <p className="text-xs text-muted-foreground mb-1.5">
-                                  {t("createDialog.localitiesSuggestionsLabel")}
-                                </p>
-                                <div className="flex flex-wrap gap-1">
-                                  {projectLocalities.slice(0, 10).map((l) => (
-                                    <Badge key={l} variant="outline" className="text-xs font-normal">{l}</Badge>
-                                  ))}
-                                  {projectLocalities.length > 10 && (
-                                    <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
-                                      {t("createDialog.moreSuggestions", { count: projectLocalities.length - 10 })}
-                                    </Badge>
-                                  )}
+
+                            {/* State (read-only — inherited from Plan Details) | Locality */}
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium">{t("createDialog.stateLabel")}</p>
+                                <div
+                                  className="space-y-0.5 py-1.5"
+                                  role="note"
+                                  aria-label={t("createDialog.stateContextAria", { state: currentStateName || t("createDialog.stateNotSet") })}
+                                >
+                                  <p className="text-sm leading-tight">
+                                    {currentStateName || <span className="text-[var(--muted)]">—</span>}
+                                  </p>
+                                  <p className="text-[11px] leading-none text-[var(--muted)]">{t("createDialog.stateInherited")}</p>
                                 </div>
                               </div>
-                            )}
+                              <ActivityLocalitySelect
+                                id={`activity-locality-${idx}`}
+                                value={a.localityName}
+                                onChange={(v) => updateActivity(idx, { localityName: v })}
+                                localities={localities}
+                                onGoToGeography={() => setActiveTabIndex(2)}
+                              />
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <DateInput
+                                id={f("date")}
+                                label={t("createDialog.plannedDate")}
+                                isRequired
+                                value={a.plannedDate}
+                                onChange={(v) => updateActivity(idx, { plannedDate: v })}
+                                min={planDetails.startDate || undefined}
+                                max={planDetails.endDate || undefined}
+                              />
+                              <SelectField
+                                id={f("priority")}
+                                label={t("createDialog.priority")}
+                                isRequired
+                                value={a.priority}
+                                onChange={(v) => updateActivity(idx, { priority: v })}
+                                className="w-full"
+                                options={PRIORITIES.map((p) => ({
+                                  value: p.value,
+                                  label: <Chip size="sm" variant="soft" color={p.color}>{t(`activity.priority_${p.value}`)}</Chip>,
+                                  textValue: t(`activity.priority_${p.value}`),
+                                }))}
+                              />
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="space-y-1">
+                                <Label isRequired htmlFor={f("beneficiaries")} className="text-sm">{t("createDialog.targetBeneficiaries")}</Label>
+                                <Input
+                                  id={f("beneficiaries")}
+                                  fullWidth
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={a.targetBeneficiaries}
+                                  onChange={(e) => updateActivity(idx, { targetBeneficiaries: Number(e.target.value) })}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label isRequired htmlFor={f("budget")} className="text-sm">{t("createDialog.plannedBudget")}</Label>
+                                <Input
+                                  id={f("budget")}
+                                  fullWidth
+                                  type="number"
+                                  min={0}
+                                  value={a.budgetPlanned}
+                                  onChange={(e) => updateActivity(idx, { budgetPlanned: Number(e.target.value) })}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="max-w-sm space-y-1">
+                              <Label htmlFor={f("responsible")} className="text-sm">{t("createDialog.responsiblePersonActivity")}</Label>
+                              <Input
+                                id={f("responsible")}
+                                fullWidth
+                                dir="auto"
+                                placeholder={t("createDialog.responsiblePersonActivityPh")}
+                                value={a.responsibleName}
+                                onChange={(e) => updateActivity(idx, { responsibleName: e.target.value })}
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label isRequired htmlFor={f("result")} className="text-sm">{t("createDialog.expectedResult")}</Label>
+                              <TextArea
+                                id={f("result")}
+                                fullWidth
+                                dir="auto"
+                                rows={2}
+                                placeholder={t("createDialog.expectedResultPh")}
+                                value={a.expectedResult}
+                                onChange={(e) => updateActivity(idx, { expectedResult: e.target.value })}
+                                className="resize-y"
+                              />
+                            </div>
+
+                            <ActivityOptionalFields a={a} idx={idx} updateActivity={updateActivity} risks={risks} />
                           </div>
-                          {/* Actions */}
-                          <div className="flex items-center gap-4 px-4 py-2.5 border-t bg-muted/10 rounded-b-md">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                markDirty();
-                                setRelatedProjectId(null);
-                                setProjectSearch("");
-                              }}
-                              className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                            >
-                              {t("createDialog.changeProject")}
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={t("createDialog.removeLinkAria")}
-                              onClick={() => {
-                                markDirty();
-                                setRelatedProjectId(null);
-                                setLinkMode("standalone");
-                                setProjectSearch("");
-                                setProjectComboOpen(false);
-                              }}
-                              className="text-xs text-muted-foreground hover:text-destructive transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                            >
-                              {t("createDialog.removeLink")}
-                            </button>
-                          </div>
-                        </div>
+                        </Card>
                       );
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Tab 3: Geographical Coverage ───────────────────────────── */}
-            {activeTab.id === "geography" && (
-              <div
-                id="plan-panel-geography"
-                role="tabpanel"
-                aria-labelledby="plan-tab-geography"
-                className="space-y-4"
-              >
-                {/* Section heading */}
-                <div>
-                  <h3 className="text-sm font-semibold mb-0.5">
-                    {t("createDialog.geoCoverageHeading")}{" "}
-                    <span className="text-destructive" aria-label={t("createDialog.geoCoverageRequired")}>*</span>
-                  </h3>
-                  {currentStateName ? (
-                    <>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        {t("createDialog.addAtLeastOneLocality")}
-                      </p>
-                      {/* State context — read-only, Plan Details is authoritative */}
-                      <div className="inline-flex items-center gap-1.5 mb-4 rounded-md bg-muted/60 border border-border/50 px-2.5 py-1">
-                        <span className="text-xs text-muted-foreground">{t("createDialog.stateContextLabel")}</span>
-                        <span className="text-xs font-medium text-foreground">{currentStateName}</span>
-                      </div>
-
-                      {/* Section-level validation message — only after Save & Finish attempt */}
-                      {hasGeographyError && (
-                        <div
-                          role="alert"
-                          id="geography-error"
-                          className="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-                        >
-                          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                          <span>{t("createDialog.atLeastOneLocality")}</span>
-                        </div>
-                      )}
-
-                      {/* Locality input + chip list */}
-                      <LocalityTagInput
-                        localities={localities}
-                        onChange={(v) => { markDirty(); setLocalities(v); }}
-                        onAttemptRemove={handleAttemptRemoveLocality}
-                        suggestions={localitySuggestions}
-                      />
-
-                      {/* Linked project suggestions (separate — not auto-applied) */}
-                      {projectLocalities.length > 0 && (
-                        <div className="mt-4 pt-3 border-t">
-                          <p className="text-xs font-medium text-muted-foreground mb-2">
-                            {t("createDialog.suggestedFromLinkedProject")}
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {projectLocalities
-                              .filter((pl) => !localities.some(
-                                (l) => l.toLowerCase().replace(/\s+/g, " ") === pl.toLowerCase().replace(/\s+/g, " ")
-                              ))
-                              .map((pl, i) => (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  aria-label={t("createDialog.addSuggestedLocality", { name: pl })}
-                                  onClick={() => {
-                                    const norm = pl.toLowerCase().replace(/\s+/g, " ");
-                                    const isDupe = localities.some(
-                                      (l) => l.toLowerCase().replace(/\s+/g, " ") === norm,
-                                    );
-                                    if (!isDupe) {
-                                      markDirty();
-                                      setLocalities((prev) => [...prev, pl.trim()]);
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1 bg-card border border-dashed border-border/60 rounded-full px-2.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-                                >
-                                  <Plus className="h-2.5 w-2.5" /> {pl}
-                                </button>
-                              ))}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1.5">
-                            Suggestions must be explicitly added before they count as Plan coverage.
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    /* No State selected — show dependency state only */
-                    <div className="rounded-lg border bg-muted/40 p-6 text-center mt-3">
-                      <MapPin className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm font-medium text-foreground mb-1">
-                        {t("createDialog.selectStateFirst")}
-                      </p>
-                      <p className="text-xs text-muted-foreground mb-4">
-                        {t("createDialog.selectStateFirstDesc")}
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        onClick={() => setActiveTabIndex(0)}
-                        aria-label={t("createDialog.goToPlanDetailsAria")}
-                      >
-                        {t("createDialog.goToPlanDetails")}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ── Tab 4: Activities ───────────────────────────────────────── */}
-            {activeTab.id === "activities" && (
-              <div
-                id="plan-panel-activities"
-                role="tabpanel"
-                aria-labelledby="plan-tab-activities"
-                className="space-y-4"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold flex items-baseline gap-2">
-                      {t("createDialog.activitiesHeading")}
-                      {activities.length > 0 && (
-                        <span className="text-xs font-normal text-muted-foreground">
-                          {t("createDialog.activitiesCount", { count: activities.length })}
-                        </span>
-                      )}
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">{t("createDialog.activitiesDesc")}</p>
-                  </div>
-                  {activities.length > 0 && (
-                    <Button size="sm" variant="outline" onClick={addActivity} type="button" className="gap-1.5">
-                      <Plus className="h-3 w-3 shrink-0" /> {t("createDialog.addActivity")}
-                    </Button>
-                  )}
-                </div>
-
-                {activities.length === 0 && (
-                  <div className="rounded-md border border-dashed border-border bg-muted/30 p-6 text-center">
-                    <p className="text-sm font-medium text-foreground">{t("createDialog.noActivitiesTitle")}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{t("createDialog.noActivitiesDesc")}</p>
-                    <Button size="sm" variant="outline" className="mt-3" onClick={addActivity} type="button">
-                  <Plus className="h-3 w-3" /> {t("createDialog.addFirstActivity")}
-                    </Button>
-                  </div>
+                    })}
+                  </section>
                 )}
 
-                {activities.map((a, idx) => (
-                  <div key={idx} className="rounded-lg border bg-muted/10">
-                    {/* Card header */}
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b">
-                      <span className="text-sm font-medium truncate flex-1">
-                        {t("createDialog.activityNum", { num: idx + 1 })}{a.title ? `: ${a.title}` : ""}
-                      </span>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 shrink-0"
-                            onClick={() => handleRemoveActivity(idx)}
-                            type="button"
-                            aria-label={t("createDialog.removeActivityAria", { num: idx + 1 })}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{t("createDialog.tooltipRemoveActivity")}</TooltipContent>
-                      </Tooltip>
-                    </div>
-
-                    {/* Card body */}
-                    <div className="px-4 py-3 space-y-2.5">
-                      {/* Activity title */}
-                      <div>
-                        <Label className="text-sm">{t("createDialog.activityTitle")} <span className="text-destructive">*</span></Label>
-                        <Input
-                          placeholder={t("createDialog.activityTitlePh")}
-                          value={a.title}
-                          onChange={(e) => updateActivity(idx, { title: e.target.value })}
-                        />
-                      </div>
-
-                      {/* State (read-only — inherited from Plan Details) | Locality */}
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-sm">{t("createDialog.stateLabel")}</Label>
-                          {/* State is authoritative in Tab 1 — contextual info, not an editable field */}
-                          <div
-                            className="py-1.5 space-y-0.5"
-                            role="note"
-                            aria-label={t("createDialog.stateContextAria", { state: currentStateName || t("createDialog.stateNotSet") })}
-                          >
-                            <p className="text-sm text-foreground leading-tight">
-                              {currentStateName || <span className="italic text-muted-foreground/60">—</span>}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground leading-none">{t("createDialog.stateInherited")}</p>
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-sm" htmlFor={`activity-locality-${idx}`}>
-                            {t("createDialog.localityLabel")} <span className="text-destructive">*</span>
-                          </Label>
-                          <ActivityLocalitySelect
-                            value={a.localityName}
-                            onChange={(v) => updateActivity(idx, { localityName: v })}
-                            localities={localities}
-                            onGoToGeography={() => setActiveTabIndex(2)}
+                {/* ── Step 5: Budget ───────────────────────────────────────── */}
+                {activeTab.id === "budget" && (
+                  <section id="plan-panel-budget" role="region" aria-labelledby="plan-tab-budget" className="space-y-6">
+                    <div>
+                      <h3 className="mb-3 text-sm font-semibold">{t("createDialog.budgetHeading")}</h3>
+                      <div className="flex flex-wrap items-start gap-3">
+                        <div className="w-full sm:w-36">
+                          <SelectField
+                            id="cprd-currency"
+                            label={t("createDialog.currency")}
+                            isRequired
+                            value={budget.currency}
+                            onChange={handleCurrencyChange}
+                            className="w-full"
+                            options={CURRENCIES.map((c) => ({ value: c, label: c }))}
                           />
                         </div>
-                      </div>
-
-                      {/* Planned date | Priority */}
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-sm">{t("createDialog.plannedDate")} <span className="text-destructive">*</span></Label>
+                        <div className="w-full space-y-1 sm:w-52">
+                          <Label isRequired htmlFor="cprd-budget-planned">{t("createDialog.planPlannedBudget")}</Label>
                           <Input
-                            type="date"
-                            value={a.plannedDate}
-                            onChange={(e) => updateActivity(idx, { plannedDate: e.target.value })}
-                            min={planDetails.startDate || undefined}
-                            max={planDetails.endDate || undefined}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-sm">{t("createDialog.priority")} <span className="text-destructive">*</span></Label>
-                          <Select value={a.priority} onValueChange={(v) => updateActivity(idx, { priority: v })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {PRIORITIES.map((p) => (
-                                <SelectItem key={p.value} value={p.value}>
-                                  <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${p.cls}`}>{t(`activity.priority_${p.value}`)}</span>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      {/* Target beneficiaries | Planned budget */}
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-sm">{t("createDialog.targetBeneficiaries")} <span className="text-destructive">*</span></Label>
-                          <Input
+                            id="cprd-budget-planned"
+                            fullWidth
                             type="number"
                             min={0}
-                            value={a.targetBeneficiaries}
-                            step={1}
-                            onChange={(e) => updateActivity(idx, { targetBeneficiaries: Number(e.target.value) })}
+                            value={budget.budgetPlanned}
+                            onChange={(e) => { markDirty(); setBudgetField("budgetPlanned", Number(e.target.value)); }}
+                            aria-invalid={(saveFinishAttempted && (!Number.isFinite(budget.budgetPlanned) || budget.budgetPlanned < 0)) || undefined}
+                            aria-describedby={
+                              saveFinishAttempted && (!Number.isFinite(budget.budgetPlanned) || budget.budgetPlanned < 0)
+                                ? "cprd-budget-planned-error"
+                                : undefined
+                            }
                           />
-                        </div>
-                        <div>
-                          <Label className="text-sm">{t("createDialog.plannedBudget")} <span className="text-destructive">*</span></Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={a.budgetPlanned}
-                            onChange={(e) => updateActivity(idx, { budgetPlanned: Number(e.target.value) })}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Responsible person */}
-                      <div className="max-w-sm">
-                        <Label className="text-sm">{t("createDialog.responsiblePersonActivity")}</Label>
-                        <Input
-                          placeholder={t("createDialog.responsiblePersonActivityPh")}
-                          value={a.responsibleName}
-                          onChange={(e) => updateActivity(idx, { responsibleName: e.target.value })}
-                        />
-                      </div>
-
-                      {/* Expected result */}
-                      <div>
-                        <Label className="text-sm">{t("createDialog.expectedResult")} <span className="text-destructive">*</span></Label>
-                        <Textarea
-                          rows={2}
-                          placeholder={t("createDialog.expectedResultPh")}
-                          value={a.expectedResult}
-                          onChange={(e) => updateActivity(idx, { expectedResult: e.target.value })}
-                          className="resize-y"
-                        />
-                      </div>
-
-                      <ActivityOptionalFields a={a} idx={idx} updateActivity={updateActivity} risks={risks} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* ── Tab 5: Budget ───────────────────────────────────────────── */}
-            {activeTab.id === "budget" && (
-              <div
-                id="plan-panel-budget"
-                role="tabpanel"
-                aria-labelledby="plan-tab-budget"
-                className="space-y-6"
-              >
-                {/* ── Budget fields ──────────────────────────────────────────── */}
-                <div>
-                  <h3 className="text-sm font-semibold mb-3">{t("createDialog.budgetHeading")}</h3>
-                  <div className="flex flex-wrap gap-3">
-                    <div className="max-w-xs w-full sm:w-auto sm:min-w-[140px]">
-                      <Label htmlFor="cprd-currency">{t("createDialog.currency")} <span className="text-destructive">*</span></Label>
-                      <Select value={budget.currency} onValueChange={handleCurrencyChange}>
-                        <SelectTrigger id="cprd-currency"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {CURRENCIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="max-w-sm w-full sm:w-auto sm:min-w-[200px]">
-                      <Label htmlFor="cprd-budget-planned">
-                        {t("createDialog.planPlannedBudget")} <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="cprd-budget-planned"
-                        type="number"
-                        min={0}
-                        value={budget.budgetPlanned}
-                        onChange={(e) => { markDirty(); setBudgetField("budgetPlanned", Number(e.target.value)); }}
-                        aria-describedby={
-                          saveFinishAttempted && (!Number.isFinite(budget.budgetPlanned) || budget.budgetPlanned < 0)
-                            ? "cprd-budget-planned-error"
-                            : undefined
-                        }
-                      />
-                      {saveFinishAttempted && (!Number.isFinite(budget.budgetPlanned) || budget.budgetPlanned < 0) && (
-                        <p id="cprd-budget-planned-error" role="alert" className="text-xs text-destructive mt-0.5">
-                          {t("createDialog.validPlannedBudget")}
-                        </p>
-                      )}
-                    </div>
-                    <div className="max-w-xs w-full sm:w-auto sm:min-w-[180px]">
-                      <Label htmlFor="cprd-funding-source">{t("createDialog.fundingSource")}</Label>
-                      <Input
-                        id="cprd-funding-source"
-                        placeholder={t("createDialog.fundingSourcePh")}
-                        value={budget.fundingSource}
-                        onChange={(e) => { markDirty(); setBudgetField("fundingSource", e.target.value); }}
-                      />
-                    </div>
-                  </div>
-                  {/* Plan budget actual is NOT manually entered during Registration —
-                      actual expenditure comes from authoritative implementation data. */}
-                </div>
-
-                {/* ── Activity Summary ───────────────────────────────────────── */}
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-3">
-                    {t("createDialog.activitySummaryHeading")}
-                  </p>
-
-                  {totals.count === 0 ? (
-                    /* Empty state — neutral, not warning-styled */
-                    <div className="rounded-md border border-dashed border-border bg-muted/30 px-4 py-5 text-center">
-                      <p className="text-sm font-medium text-foreground">{t("createDialog.noActivitiesBudgetTitle")}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {t("createDialog.noActivitiesBudgetDesc")}
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        className="mt-3 gap-1.5"
-                        onClick={() => setActiveTabIndex(3)}
-                      >
-                        {t("createDialog.goToActivities")}
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Over-allocation inline warning — not communicated by colour alone */}
-                      {isOverAllocated && (
-                        <div
-                          role="alert"
-                          aria-live="polite"
-                          className="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2"
-                        >
-                          <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" aria-hidden="true" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-destructive font-medium">
-                              {t("createDialog.overAllocatedMessage", {
-                                currency: budget.currency,
-                                amount: Math.abs(remainingBudget).toLocaleString(),
-                              })}
-                            </p>
-                            <p className="text-xs text-destructive/80 mt-0.5">
-                              {t("createDialog.overAllocatedHint")}
-                            </p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            type="button"
-                            className="shrink-0 h-7 text-xs px-2 border-destructive/30 text-destructive hover:bg-destructive/10"
-                            onClick={() => setActiveTabIndex(3)}
-                          >
-                            {t("createDialog.goToActivities")}
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Summary stat cards — derived from live shared activities state */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className="rounded-lg border bg-muted/30 p-3">
-                          <p className="text-xs text-muted-foreground mb-1">{t("createDialog.totalActivities")}</p>
-                          <p className="font-bold text-2xl leading-none" aria-label={t("createDialog.activitiesCountAria", { count: totals.count })}>
-                            {totals.count}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border bg-muted/30 p-3">
-                          <p className="text-xs text-muted-foreground mb-1">{t("createDialog.totalTargetBeneficiaries")}</p>
-                          <p
-                            className="font-bold text-2xl leading-none"
-                            aria-label={t("createDialog.beneficiariesAria", { count: totals.totalBeneficiaries.toLocaleString() })}
-                          >
-                            {totals.totalBeneficiaries.toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border bg-muted/30 p-3">
-                          <p className="text-xs text-muted-foreground mb-1">{t("createDialog.activityPlannedBudget")}</p>
-                          <p
-                            className="font-bold text-xl leading-none"
-                            aria-label={`${budget.currency} ${totals.plannedBudget.toLocaleString()}`}
-                          >
-                            {budget.currency} {totals.plannedBudget.toLocaleString()}
-                          </p>
-                        </div>
-                        <div className={`rounded-lg border p-3 ${isOverAllocated ? "bg-destructive/10 border-destructive/30" : "bg-muted/30"}`}>
-                          <p className="text-xs text-muted-foreground mb-1">{t("createDialog.remainingBudget")}</p>
-                          {!Number.isFinite(budget.budgetPlanned) ? (
-                            <p className="text-sm text-muted-foreground italic">{t("createDialog.setBudgetAbove")}</p>
-                          ) : isOverAllocated ? (
-                            <p
-                              className="font-bold text-xl leading-none text-destructive"
-                              aria-label={`${budget.currency} ${Math.abs(remainingBudget).toLocaleString()} ${t("createDialog.overallocated")}`}
-                            >
-                              {budget.currency} {Math.abs(remainingBudget).toLocaleString()}
-                              <span className="block text-xs font-normal text-destructive/80 mt-0.5">{t("createDialog.overallocated")}</span>
-                            </p>
-                          ) : (
-                            <p
-                              className="font-bold text-xl leading-none"
-                              aria-label={`${budget.currency} ${remainingBudget.toLocaleString()} ${t("createDialog.remaining")}`}
-                            >
-                              {budget.currency} {remainingBudget.toLocaleString()}
-                              <span className="block text-xs font-normal text-muted-foreground mt-0.5">{t("createDialog.remaining")}</span>
+                          {saveFinishAttempted && (!Number.isFinite(budget.budgetPlanned) || budget.budgetPlanned < 0) && (
+                            <p id="cprd-budget-planned-error" role="alert" className="text-xs text-[var(--danger)]">
+                              {t("createDialog.validPlannedBudget")}
                             </p>
                           )}
                         </div>
+                        <div className="w-full space-y-1 sm:w-56">
+                          <Label htmlFor="cprd-funding-source">{t("createDialog.fundingSource")}</Label>
+                          <Input
+                            id="cprd-funding-source"
+                            fullWidth
+                            dir="auto"
+                            placeholder={t("createDialog.fundingSourcePh")}
+                            value={budget.fundingSource}
+                            onChange={(e) => { markDirty(); setBudgetField("fundingSource", e.target.value); }}
+                          />
+                        </div>
                       </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
+                      {/* Plan budget actual is NOT manually entered during Registration —
+                          actual expenditure comes from authoritative implementation data. */}
+                    </div>
 
-            {/* PLAN-BD-2: Duplicate warning banner */}
-            {isHardDuplicate && (
-              <div
-                role="alert"
-                aria-live="assertive"
-                className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm"
-                data-testid="duplicate-hard-warning"
-              >
-                <p className="font-medium text-destructive mb-1 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  A Plan already exists for this scope and period.
-                </p>
-                {hardDuplicateExisting?.planId != null
-                  && hardDuplicateExisting.status === "draft"
-                  && canResumeExistingDraft && (
-                  <div className="mt-2">
-                    <ContinueEditingAction
-                      recordTitle={hardDuplicateExisting.title}
-                      onClick={() => {
-                        const targetId = hardDuplicateExisting!.planId!;
-                        handleReset();
-                        onOpenChange(false);
-                        setLocation(`/plans/${targetId}?edit=1`);
-                      }}
-                    />
-                    <span className="text-muted-foreground ms-2 text-xs"><bdi dir="ltr">(Plan #{hardDuplicateExisting.planId})</bdi></span>
-                  </div>
+                    <div>
+                      <p className="mb-3 text-xs font-medium text-[var(--muted)]">{t("createDialog.activitySummaryHeading")}</p>
+
+                      {totals.count === 0 ? (
+                        <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-5 text-center">
+                          <p className="text-sm font-medium">{t("createDialog.noActivitiesBudgetTitle")}</p>
+                          <p className="mt-1 text-xs text-[var(--muted)]">{t("createDialog.noActivitiesBudgetDesc")}</p>
+                          <Button size="sm" variant="outline" className="mt-3" onPress={() => setActiveTabIndex(3)}>
+                            {t("createDialog.goToActivities")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Over-allocation — stated in words, not colour alone */}
+                          {isOverAllocated && (
+                            <Alert status="danger" role="alert" aria-live="polite" className="mb-3">
+                              <Alert.Indicator />
+                              <Alert.Content>
+                                <Alert.Title>
+                                  {t("createDialog.overAllocatedMessage", {
+                                    currency: budget.currency,
+                                    amount: Math.abs(remainingBudget).toLocaleString(),
+                                  })}
+                                </Alert.Title>
+                                <Alert.Description>{t("createDialog.overAllocatedHint")}</Alert.Description>
+                              </Alert.Content>
+                              <Button size="sm" variant="outline" className="shrink-0" onPress={() => setActiveTabIndex(3)}>
+                                {t("createDialog.goToActivities")}
+                              </Button>
+                            </Alert>
+                          )}
+
+                          {/* Summary figures — derived from the live activities */}
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                            <div className="rounded-xl border border-[var(--border)] p-3">
+                              <p className="mb-1 text-xs text-[var(--muted)]">{t("createDialog.totalActivities")}</p>
+                              <p className="text-2xl font-bold leading-none tabular-nums" aria-label={t("createDialog.activitiesCountAria", { count: totals.count })}>
+                                {totals.count}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-[var(--border)] p-3">
+                              <p className="mb-1 text-xs text-[var(--muted)]">{t("createDialog.totalTargetBeneficiaries")}</p>
+                              <p
+                                className="text-2xl font-bold leading-none tabular-nums"
+                                aria-label={t("createDialog.beneficiariesAria", { count: totals.totalBeneficiaries.toLocaleString() })}
+                              >
+                                {totals.totalBeneficiaries.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-[var(--border)] p-3">
+                              <p className="mb-1 text-xs text-[var(--muted)]">{t("createDialog.activityPlannedBudget")}</p>
+                              <p className="text-xl font-bold leading-none" aria-label={`${budget.currency} ${totals.plannedBudget.toLocaleString()}`}>
+                                <bdi dir="ltr">{budget.currency} {totals.plannedBudget.toLocaleString()}</bdi>
+                              </p>
+                            </div>
+                            <div
+                              className={`rounded-xl border p-3 ${isOverAllocated
+                                ? "border-[color-mix(in_oklab,var(--danger)_35%,transparent)] bg-[color-mix(in_oklab,var(--danger)_8%,transparent)]"
+                                : "border-[var(--border)]"}`}
+                            >
+                              <p className="mb-1 text-xs text-[var(--muted)]">{t("createDialog.remainingBudget")}</p>
+                              {!Number.isFinite(budget.budgetPlanned) ? (
+                                <p className="text-sm text-[var(--muted)]">{t("createDialog.setBudgetAbove")}</p>
+                              ) : isOverAllocated ? (
+                                <p
+                                  className="text-xl font-bold leading-none text-[var(--danger)]"
+                                  aria-label={`${budget.currency} ${Math.abs(remainingBudget).toLocaleString()} ${t("createDialog.overallocated")}`}
+                                >
+                                  <bdi dir="ltr">{budget.currency} {Math.abs(remainingBudget).toLocaleString()}</bdi>
+                                  <span className="mt-0.5 block text-xs font-normal">{t("createDialog.overallocated")}</span>
+                                </p>
+                              ) : (
+                                <p
+                                  className="text-xl font-bold leading-none"
+                                  aria-label={`${budget.currency} ${remainingBudget.toLocaleString()} ${t("createDialog.remaining")}`}
+                                >
+                                  <bdi dir="ltr">{budget.currency} {remainingBudget.toLocaleString()}</bdi>
+                                  <span className="mt-0.5 block text-xs font-normal text-[var(--muted)]">{t("createDialog.remaining")}</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </section>
                 )}
-                <p className="text-xs text-muted-foreground mt-1">
-                  Please continue editing the existing Plan rather than creating a duplicate.
-                </p>
-              </div>
-            )}
 
-            {isSoftDuplicate && (
-              <div
-                role="status"
-                aria-live="polite"
-                className="mt-4 rounded-md border border-amber-400/40 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm"
-                data-testid="duplicate-soft-warning"
-              >
-                <p className="font-medium text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  A similar Plan already exists for this scope and period.
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-500">
-                  Review the existing Plan before creating another one. You may continue if this is intentional.
-                </p>
-                {/* Wave 2: navigate to the accessible existing plan's detail view.
-                    Rendered only when the backend returned an accessible planId. */}
-                {softDuplicatePlanId != null && (
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      data-testid="duplicate-soft-review-link"
-                      className="underline underline-offset-2 text-amber-700 dark:text-amber-400 hover:no-underline font-medium"
-                      onClick={() => {
-                        const targetId = softDuplicatePlanId;
-                        handleReset();
-                        onOpenChange(false);
-                        setLocation(`/plans/${targetId}`);
-                      }}
-                    >
-                      Review Existing Plan
-                    </button>
-                    <span className="text-muted-foreground ms-2 text-xs"><bdi dir="ltr">(Plan #{softDuplicatePlanId})</bdi></span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* API-level error banner */}
-            {apiError && (
-              <div
-                role="alert"
-                className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-              >
-                {apiError}
-              </div>
-            )}
-
-            {/* ── "Sections Need Attention" summary — shown only after Save & Finish attempt ── */}
-            {saveFinishAttempted && hasAnyFinishError && (() => {
-              const sectionCount =
-                (hasDetailErrors ? 1 : 0) +
-                (hasGeographyError ? 1 : 0) +
-                (hasActivityError ? 1 : 0) +
-                (hasBudgetFinishError ? 1 : 0);
-              return (
-                <div
-                  role="alert"
-                  aria-live="polite"
-                  className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm"
-                >
-                  <p className="font-medium text-destructive mb-2">
-                    {t("createDialog.sectionNeedsAttention", { count: sectionCount })}
-                  </p>
-                  <ul className="space-y-1">
-                    {hasDetailErrors && (
-                      <li className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" aria-hidden="true" />
-                        <button
-                          type="button"
-                          className="text-destructive underline underline-offset-2 hover:no-underline text-sm font-medium"
-                          onClick={() => setActiveTabIndex(0)}
-                        >
-                          {t("createDialog.sectionPlanDetails")}
-                        </button>
-                        <span className="text-destructive/80 text-xs">{t("createDialog.sectionPlanDetailsError")}</span>
-                      </li>
-                    )}
-                    {hasGeographyError && (
-                      <li className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" aria-hidden="true" />
-                        <button
-                          type="button"
-                          className="text-destructive underline underline-offset-2 hover:no-underline text-sm font-medium"
-                          onClick={() => setActiveTabIndex(2)}
-                        >
-                          {t("createDialog.sectionGeoCoverage")}
-                        </button>
-                        <span className="text-destructive/80 text-xs">{t("createDialog.sectionGeoCoverageError")}</span>
-                      </li>
-                    )}
-                    {hasActivityError && (
-                      <li className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" aria-hidden="true" />
-                        <button
-                          type="button"
-                          className="text-destructive underline underline-offset-2 hover:no-underline text-sm font-medium"
-                          onClick={() => setActiveTabIndex(3)}
-                        >
-                          {t("createDialog.sectionActivities")}
-                        </button>
-                        <span className="text-destructive/80 text-xs">
-                          {activities.length === 0
-                            ? t("createDialog.sectionActivitiesErrorEmpty")
-                            : t("createDialog.sectionActivitiesErrorIncomplete")}
-                        </span>
-                      </li>
-                    )}
-                    {hasBudgetFinishError && (
-                      <li className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" aria-hidden="true" />
-                        <button
-                          type="button"
-                          className="text-destructive underline underline-offset-2 hover:no-underline text-sm font-medium"
-                          onClick={() => setActiveTabIndex(4)}
-                        >
-                          {t("createDialog.sectionBudget")}
-                        </button>
-                        <span className="text-destructive/80 text-xs">
-                          {isOverAllocated
-                            ? t("createDialog.sectionBudgetErrorOverallocated")
-                            : t("createDialog.sectionBudgetErrorIncomplete")}
-                        </span>
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* ── Sticky footer ─────────────────────────────────────────────── */}
-          <div className="border-t bg-background px-6 py-3 shrink-0">
-            <div className="flex items-center justify-between gap-3">
-              {/* Left: Cancel or Previous */}
-              {activeTabIndex === 0 ? (
-                <Button variant="outline" size="sm" onClick={handleCancelClick} disabled={isPending} type="button">
-                  {t("createDialog.cancel")}
-                </Button>
-              ) : (
-                <Button variant="outline" size="sm" onClick={goToPrevTab} disabled={isPending} type="button">
-                  {t("createDialog.previous")}
-                </Button>
-              )}
-
-              {/* Right: Save As Draft + Next or Save & Finish */}
-              <div className="flex items-center gap-2">
-                {/* PLAN-BD-2: Disable save buttons when a hard duplicate exists */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSaveAsDraft}
-                  disabled={isPending || isHardDuplicate}
-                  aria-disabled={isHardDuplicate || undefined}
-                  aria-busy={isPending && !completeAfterCreate.current}
-                  type="button"
-                >
-                  {isPending && !completeAfterCreate.current ? (
-                    <><span aria-hidden="true">{t("createDialog.savingDraft")}</span><span className="sr-only">{t("createDialog.savingDraftSr")}</span></>
-                  ) : t("createDialog.saveAsDraft")}
-                </Button>
-
-                {activeTabIndex < TABS.length - 1 ? (
-                  <Button size="sm" onClick={goToNextTab} disabled={isPending} type="button">
-                    {t("createDialog.next")}
-                  </Button>
-                ) : (
-                  /* "Save & Finish" — saves as Draft and closes Registration.
-                     Does NOT submit, trigger any approval, or change plan status.
-                     Submit For Approval remains a separate explicit action in Plan Details. */
-                  <Button
-                    size="sm"
-                    onClick={handleComplete}
-                    disabled={isPending || isHardDuplicate}
-                    aria-disabled={isHardDuplicate || undefined}
-                    aria-busy={isPending && completeAfterCreate.current}
-                    type="button"
+                {/* PLAN-BD-2: Duplicate warning banner */}
+                {isHardDuplicate && (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="mt-4 rounded-xl border border-[color-mix(in_oklab,var(--danger)_35%,transparent)] bg-[color-mix(in_oklab,var(--danger)_8%,transparent)] px-4 py-3 text-sm"
+                    data-testid="duplicate-hard-warning"
                   >
-                    {isPending && completeAfterCreate.current ? (
-                      <><span aria-hidden="true">{t("createDialog.savingFinish")}</span><span className="sr-only">{t("createDialog.savingFinishSr")}</span></>
-                    ) : t("createDialog.saveAndFinish")}
-                  </Button>
+                    <p className="mb-1 flex items-center gap-2 font-medium text-[var(--danger)]">
+                      <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                      {t("createDialog.duplicateHardTitle", { defaultValue: "A Plan already exists for this scope and period." })}
+                    </p>
+                    {hardDuplicateExisting?.planId != null
+                      && hardDuplicateExisting.status === "draft"
+                      && canResumeExistingDraft && (
+                      <div className="mt-2">
+                        <ContinueEditingAction
+                          recordTitle={hardDuplicateExisting.title}
+                          onClick={() => {
+                            const targetId = hardDuplicateExisting!.planId!;
+                            handleReset();
+                            onOpenChange(false);
+                            setLocation(`/plans/${targetId}?edit=1`);
+                          }}
+                        />
+                        <span className="ms-2 text-xs text-[var(--muted)]">
+                          {t("createDialog.planRef", { id: hardDuplicateExisting.planId, defaultValue: "(Plan #{{id}})" })}
+                        </span>
+                      </div>
+                    )}
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {t("createDialog.duplicateHardHint", { defaultValue: "Please continue editing the existing Plan rather than creating a duplicate." })}
+                    </p>
+                  </div>
+                )}
+
+                {isSoftDuplicate && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="mt-4 rounded-xl border border-[color-mix(in_oklab,var(--warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--warning)_10%,transparent)] px-4 py-3 text-sm"
+                    data-testid="duplicate-soft-warning"
+                  >
+                    <p className="mb-1 flex items-center gap-2 font-medium text-[var(--warning-foreground,var(--foreground))]">
+                      <AlertTriangle className="size-4 shrink-0 text-[var(--warning)]" aria-hidden="true" />
+                      {t("createDialog.duplicateSoftTitle", { defaultValue: "A similar Plan already exists for this scope and period." })}
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {t("createDialog.duplicateSoftHint", { defaultValue: "Review the existing Plan before creating another one. You may continue if this is intentional." })}
+                    </p>
+                    {/* Wave 2: navigate to the accessible existing plan's detail view.
+                        Rendered only when the backend returned an accessible planId. */}
+                    {softDuplicatePlanId != null && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          data-testid="duplicate-soft-review-link"
+                          onPress={() => {
+                            const targetId = softDuplicatePlanId;
+                            handleReset();
+                            onOpenChange(false);
+                            setLocation(`/plans/${targetId}`);
+                          }}
+                        >
+                          {t("createDialog.reviewExistingPlan", { defaultValue: "Review Existing Plan" })}
+                        </Button>
+                        <span className="text-xs text-[var(--muted)]">
+                          {t("createDialog.planRef", { id: softDuplicatePlanId, defaultValue: "(Plan #{{id}})" })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* API-level error banner */}
+                {apiError && (
+                  <Alert status="danger" role="alert" className="mt-4">
+                    <Alert.Indicator />
+                    <Alert.Content>
+                      <Alert.Description className="whitespace-pre-line">{apiError}</Alert.Description>
+                    </Alert.Content>
+                  </Alert>
+                )}
+
+                {/* ── "Sections Need Attention" summary — only after a Save & Finish attempt ── */}
+                {saveFinishAttempted && hasAnyFinishError && (() => {
+                  const sections = [
+                    hasDetailErrors && { step: 0, label: t("createDialog.sectionPlanDetails"), hint: t("createDialog.sectionPlanDetailsError") },
+                    hasGeographyError && { step: 2, label: t("createDialog.sectionGeoCoverage"), hint: t("createDialog.sectionGeoCoverageError") },
+                    hasActivityError && {
+                      step: 3,
+                      label: t("createDialog.sectionActivities"),
+                      hint: activities.length === 0
+                        ? t("createDialog.sectionActivitiesErrorEmpty")
+                        : t("createDialog.sectionActivitiesErrorIncomplete"),
+                    },
+                    hasBudgetFinishError && {
+                      step: 4,
+                      label: t("createDialog.sectionBudget"),
+                      hint: isOverAllocated
+                        ? t("createDialog.sectionBudgetErrorOverallocated")
+                        : t("createDialog.sectionBudgetErrorIncomplete"),
+                    },
+                  ].filter(Boolean) as Array<{ step: number; label: string; hint: string }>;
+                  return (
+                    <Alert status="danger" role="alert" aria-live="polite" className="mt-4">
+                      <Alert.Indicator />
+                      <Alert.Content>
+                        <Alert.Title>{t("createDialog.sectionNeedsAttention", { count: sections.length })}</Alert.Title>
+                        <ul className="mt-1 space-y-1">
+                          {sections.map((sec) => (
+                            <li key={sec.step} className="flex flex-wrap items-center gap-x-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-1.5 font-medium text-[var(--danger)] underline underline-offset-2"
+                                onPress={() => setActiveTabIndex(sec.step)}
+                              >
+                                {sec.label}
+                              </Button>
+                              <span className="text-xs text-[var(--muted)]">{sec.hint}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </Alert.Content>
+                    </Alert>
+                  );
+                })()}
+              </div>
+
+              {/* ── Sticky footer ─────────────────────────────────────────────── */}
+              <div className="shrink-0 border-t border-[var(--border)] px-6 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  {activeTabIndex === 0 ? (
+                    <Button variant="outline" size="sm" onPress={handleCancelClick} isDisabled={isPending}>
+                      {t("createDialog.cancel")}
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onPress={goToPrevTab} isDisabled={isPending}>
+                      {t("createDialog.previous")}
+                    </Button>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    {/* PLAN-BD-2: saving is disabled while a hard duplicate exists */}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onPress={handleSaveAsDraft}
+                      isDisabled={isPending || isHardDuplicate}
+                      isPending={isPending && !completeAfterCreate.current}
+                    >
+                      {isPending && !completeAfterCreate.current ? (
+                        <><span aria-hidden="true">{t("createDialog.savingDraft")}</span><span className="sr-only">{t("createDialog.savingDraftSr")}</span></>
+                      ) : t("createDialog.saveAsDraft")}
+                    </Button>
+
+                    {activeTabIndex < TABS.length - 1 ? (
+                      <Button size="sm" onPress={goToNextTab} isDisabled={isPending}>
+                        {t("createDialog.next")}
+                      </Button>
+                    ) : (
+                      /* "Save & Finish" — saves as Draft and closes Registration.
+                         Does NOT submit, trigger any approval, or change plan status.
+                         Submit For Approval remains a separate explicit action in Plan Details. */
+                      <Button
+                        size="sm"
+                        onPress={handleComplete}
+                        isDisabled={isPending || isHardDuplicate}
+                        isPending={isPending && completeAfterCreate.current}
+                      >
+                        {isPending && completeAfterCreate.current ? (
+                          <><span aria-hidden="true">{t("createDialog.savingFinish")}</span><span className="sr-only">{t("createDialog.savingFinishSr")}</span></>
+                        ) : t("createDialog.saveAndFinish")}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {draftPlanId != null && (
+                  <p className="mt-2 text-end text-xs text-[var(--muted)]">
+                    {t("createDialog.draftSaved", { id: draftPlanId })}
+                  </p>
                 )}
               </div>
-            </div>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
-            {/* Draft saved indicator */}
-            {draftPlanId != null && (
-              <p className="text-xs text-muted-foreground mt-2 text-end">
-                {t("createDialog.draftSaved", { id: draftPlanId })}
-              </p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* ── State change: clears localities (and activity localities) ──── */}
+      <ConfirmModal
+        isOpen={stateChangeConfirmOpen}
+        tone="primary"
+        title={t("createDialog.stateChangeTitle")}
+        message={
+          t("createDialog.stateChangeDesc")
+          + (activities.some((a) => a.localityName) ? t("createDialog.stateChangeDescActivities") : "")
+          + t("createDialog.stateChangeDescEnd")
+        }
+        cancelLabel={t("createDialog.cancel")}
+        confirmLabel={t("createDialog.changeState")}
+        onCancel={() => { setPendingStateId(null); setStateChangeConfirmOpen(false); }}
+        onConfirm={confirmStateChange}
+      />
 
-      {/* ── State-change confirmation AlertDialog ────────────────────────── */}
-      <AlertDialog
-        open={stateChangeConfirmOpen}
-        onOpenChange={(next) => {
-          if (!next) {
-            setPendingStateId(null);
-            setStateChangeConfirmOpen(false);
+      {/* ── Currency change while activities carry budgets ──────────────── */}
+      <ConfirmModal
+        isOpen={currencyChangeConfirm !== null}
+        tone="primary"
+        title={t("createDialog.currencyChangeTitle")}
+        message={t("createDialog.currencyChangeDesc")}
+        cancelLabel={t("createDialog.cancel")}
+        confirmLabel={t("createDialog.changeCurrency")}
+        onCancel={() => setCurrencyChangeConfirm(null)}
+        onConfirm={() => {
+          if (currencyChangeConfirm) {
+            markDirty();
+            setBudgetField("currency", currencyChangeConfirm);
           }
+          setCurrencyChangeConfirm(null);
         }}
+      />
+
+      {/* ── Deleting an activity that has data ──────────────────────────── */}
+      <ConfirmModal
+        isOpen={activityDeleteConfirmIdx !== null}
+        title={t("createDialog.activityDeleteTitle")}
+        message={t("createDialog.activityDeleteDesc")}
+        cancelLabel={t("createDialog.cancel")}
+        confirmLabel={t("createDialog.removeActivity")}
+        onCancel={() => setActivityDeleteConfirmIdx(null)}
+        onConfirm={confirmRemoveActivity}
+      />
+
+      {/* ── Removing a locality that activities use ─────────────────────── */}
+      <ConfirmModal
+        isOpen={localityRemoveState !== null}
+        tone="primary"
+        title={t("createDialog.localityRemoveTitle")}
+        message={localityRemoveState
+          ? t("createDialog.localityRemoveDesc", { name: localityRemoveState.name, count: localityRemoveState.count })
+          : ""}
+        cancelLabel={t("createDialog.cancel")}
+        confirmLabel={t("createDialog.removeLocality")}
+        onCancel={() => setLocalityRemoveState(null)}
+        onConfirm={confirmRemoveLocality}
+      />
+
+      {/* ── Cancel registration. While the server-side revocation is in
+          flight the dialog can't be dismissed (Escape / outside press) and
+          both buttons are locked; on failure it stays open for a retry. ── */}
+      <ConfirmModal
+        isOpen={cancelConfirmOpen}
+        title={isClosingSession ? t("createDialog.cancelRegistrationTitle_closing") : t("createDialog.cancelRegistrationTitle")}
+        message={closeSessionError
+          ? t("createDialog.cancelRegistrationDesc_error")
+          : draftPlanId != null
+            ? t("createDialog.cancelRegistrationDesc_draft")
+            : t("createDialog.cancelRegistrationDesc_new")}
+        cancelLabel={t("createDialog.keepEditing")}
+        confirmLabel={isClosingSession
+          ? t("createDialog.closing")
+          : closeSessionError
+            ? t("createDialog.tryAgain")
+            : draftPlanId != null
+              ? t("createDialog.closeKeepDraft")
+              : t("createDialog.discard")}
+        isPending={isClosingSession}
+        onCancel={() => { if (isClosingSession) return; setCloseSessionError(null); setCancelConfirmOpen(false); }}
+        onConfirm={handleConfirmCancel}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("createDialog.stateChangeTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("createDialog.stateChangeDesc")}
-              {activities.some((a) => a.localityName)
-                ? t("createDialog.stateChangeDescActivities")
-                : ""}
-              {t("createDialog.stateChangeDescEnd")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                setPendingStateId(null);
-                setStateChangeConfirmOpen(false);
-              }}
-            >
-              {t("createDialog.cancel")}
-            </AlertDialogCancel>
-            <Button variant="default" onClick={confirmStateChange}>
-              {t("createDialog.changeState")}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* ── Currency change confirmation AlertDialog ──────────────────────── */}
-      <AlertDialog
-        open={currencyChangeConfirm !== null}
-        onOpenChange={(next) => { if (!next) setCurrencyChangeConfirm(null); }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("createDialog.currencyChangeTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("createDialog.currencyChangeDesc")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setCurrencyChangeConfirm(null)}>
-              {t("createDialog.cancel")}
-            </AlertDialogCancel>
-            <Button
-              variant="default"
-              onClick={() => {
-                if (currencyChangeConfirm) {
-                  markDirty();
-                  setBudgetField("currency", currencyChangeConfirm);
-                }
-                setCurrencyChangeConfirm(null);
-              }}
-            >
-              {t("createDialog.changeCurrency")}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* ── Activity deletion confirmation AlertDialog ───────────────────── */}
-      <AlertDialog
-        open={activityDeleteConfirmIdx !== null}
-        onOpenChange={(next) => { if (!next) setActivityDeleteConfirmIdx(null); }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("createDialog.activityDeleteTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("createDialog.activityDeleteDesc")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setActivityDeleteConfirmIdx(null)}>
-              {t("createDialog.cancel")}
-            </AlertDialogCancel>
-            <Button variant="destructive" onClick={confirmRemoveActivity}>
-              {t("createDialog.removeActivity")}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* ── Locality removal confirmation AlertDialog ────────────────────── */}
-      <AlertDialog
-        open={localityRemoveState !== null}
-        onOpenChange={(next) => { if (!next) setLocalityRemoveState(null); }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("createDialog.localityRemoveTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {localityRemoveState
-                ? t("createDialog.localityRemoveDesc", {
-                    name: localityRemoveState.name,
-                    count: localityRemoveState.count,
-                  })
-                : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setLocalityRemoveState(null)}>
-              {t("createDialog.cancel")}
-            </AlertDialogCancel>
-            <Button variant="default" onClick={confirmRemoveLocality}>
-              {t("createDialog.removeLocality")}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* ── Cancel confirmation AlertDialog ──────────────────────────────── */}
-      {/*
-        onOpenChange is guarded: when isClosingSession is true the dialog cannot
-        be dismissed via Escape or clicking outside — the revocation is in-flight
-        and the user must wait for it to complete or fail before choosing to retry.
-      */}
-      <AlertDialog
-        open={cancelConfirmOpen}
-        onOpenChange={(next) => {
-          if (isClosingSession) return;       // block dismiss while revocation in-flight
-          if (!next) setCloseSessionError(null); // clear error on natural close
-          setCancelConfirmOpen(next);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {isClosingSession ? t("createDialog.cancelRegistrationTitle_closing") : t("createDialog.cancelRegistrationTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {closeSessionError
-                ? t("createDialog.cancelRegistrationDesc_error")
-                : draftPlanId != null
-                  ? t("createDialog.cancelRegistrationDesc_draft")
-                  : t("createDialog.cancelRegistrationDesc_new")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          {/* Error feedback — no credential values; factual message only */}
-          {closeSessionError && (
-            <Alert className="mx-6 mb-0 mt-1 py-2 border-destructive/30 bg-destructive/5">
-              <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-              <AlertDescription className="text-xs text-destructive">
-                {closeSessionError}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <AlertDialogFooter>
-            {/* "Keep editing" — always closes the AlertDialog (unless revocation is in-flight) */}
-            <AlertDialogCancel
-              disabled={isClosingSession}
-              onClick={() => setCloseSessionError(null)}
-            >
-              {t("createDialog.keepEditing")}
-            </AlertDialogCancel>
-
-            {/*
-              Confirm button is a plain Button (not AlertDialogAction) so the
-              AlertDialog does not auto-close on click — we manage open state
-              manually to handle the async revocation pending/error cycle.
-            */}
-            <Button
-              variant="destructive"
-              disabled={isClosingSession}
-              onClick={handleConfirmCancel}
-            >
-              {isClosingSession
-                ? t("createDialog.closing")
-                : closeSessionError
-                  ? t("createDialog.tryAgain")
-                  : draftPlanId != null
-                    ? t("createDialog.closeKeepDraft")
-                    : t("createDialog.discard")}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {/* Error feedback — no credential values; factual message only */}
+        {closeSessionError && (
+          <Alert status="danger">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Description className="text-xs">{closeSessionError}</Alert.Description>
+            </Alert.Content>
+          </Alert>
+        )}
+      </ConfirmModal>
     </>
   );
 }
