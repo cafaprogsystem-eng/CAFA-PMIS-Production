@@ -37,6 +37,7 @@ import { manualRoutes } from "./routes/manual";
 import { conversationsRoutes } from "./routes/conversations";
 import { auditRoutes } from "./routes/audit";
 import { dashboardRoutes } from "./routes/dashboard";
+import { healthRoutes } from "./routes/health";
 import { realtimeLocksRoutes } from "./routes/realtime-locks";
 
 /**
@@ -418,6 +419,7 @@ app.route("/", manualRoutes);
 app.route("/", conversationsRoutes);
 app.route("/", auditRoutes);
 app.route("/", dashboardRoutes);
+app.route("/", healthRoutes);
 app.route("/", realtimeLocksRoutes);
 
 /**
