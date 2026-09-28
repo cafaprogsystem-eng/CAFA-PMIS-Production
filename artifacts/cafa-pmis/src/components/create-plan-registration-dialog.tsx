@@ -1746,6 +1746,9 @@ export function CreatePlanRegistrationDialog({
                               markDirty();
                               setRelatedProjectId(Number(key));
                               setProjectSearch("");
+                              // The search field unmounts once a project is chosen; keep
+                              // keyboard focus in the step instead of the dialog's close button.
+                              setTimeout(() => document.getElementById("cprd-change-project")?.focus(), 0);
                             }}
                           >
                             <Label className="text-xs font-medium">{t("createDialog.selectProject")}</Label>
@@ -1845,6 +1848,7 @@ export function CreatePlanRegistrationDialog({
                               </div>
                               <div className="flex items-center gap-2 border-t border-[var(--border)] px-2 py-1.5">
                                 <Button
+                                  id="cprd-change-project"
                                   variant="ghost"
                                   size="sm"
                                   onPress={() => {
