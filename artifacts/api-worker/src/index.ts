@@ -39,6 +39,7 @@ import { auditRoutes } from "./routes/audit";
 import { dashboardRoutes } from "./routes/dashboard";
 import { healthRoutes } from "./routes/health";
 import { profileRoutes } from "./routes/profile";
+import { passwordResetAdminRoutes } from "./routes/password-reset-admin";
 import { realtimeLocksRoutes } from "./routes/realtime-locks";
 
 /**
@@ -422,6 +423,7 @@ app.route("/", auditRoutes);
 app.route("/", dashboardRoutes);
 app.route("/", healthRoutes);
 app.route("/", profileRoutes);
+app.route("/", passwordResetAdminRoutes);
 app.route("/", realtimeLocksRoutes);
 
 /**
