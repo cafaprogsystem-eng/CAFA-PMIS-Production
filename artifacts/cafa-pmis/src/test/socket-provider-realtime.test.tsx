@@ -7,52 +7,52 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const socketHarness = vi.hoisted(() => {
-  type Listener = (payload?: unknown) => void;
-  const listeners = new Map<string, Set<Listener>>();
-  const managerListeners = new Map<string, Set<Listener>>();
-  const add = (target: Map<string, Set<Listener>>, name: string, listener: Listener) => {
-    const set = target.get(name) ?? new Set<Listener>();
-    set.add(listener);
-    target.set(name, set);
-  };
-  const remove = (target: Map<string, Set<Listener>>, name: string, listener: Listener) => {
-    target.get(name)?.delete(listener);
-  };
-  const socket = {
-    connected: true,
-    on: vi.fn((name: string, listener: Listener) => add(listeners, name, listener)),
-    off: vi.fn((name: string, listener: Listener) => remove(listeners, name, listener)),
-    emit: vi.fn(),
-    disconnect: vi.fn(),
-    io: {
-      on: vi.fn((name: string, listener: Listener) => add(managerListeners, name, listener)),
-      off: vi.fn((name: string, listener: Listener) => remove(managerListeners, name, listener)),
-    },
-  };
+  class FakeWebSocket {
+    static current: FakeWebSocket | null = null;
+    static OPEN = 1;
+
+    readyState = 0;
+    onopen: (() => void) | null = null;
+    onmessage: ((ev: { data: string }) => void) | null = null;
+    onclose: ((ev: { code: number; reason: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    closeSpy = vi.fn();
+    sendSpy = vi.fn();
+
+    constructor(public url: string) {
+      FakeWebSocket.current = this;
+    }
+    send(data: string) {
+      this.sendSpy(data);
+    }
+    close(code = 1000, reason = "") {
+      this.closeSpy(code, reason);
+      if (this.readyState === 3) return;
+      this.readyState = 3;
+      this.onclose?.({ code, reason });
+    }
+  }
   return {
-    socket,
-    io: vi.fn(() => socket),
-    emit(name: string, payload?: unknown) {
-      for (const listener of listeners.get(name) ?? []) listener(payload);
+    FakeWebSocket,
+    // Simulates the underlying transport reaching "open" — the source of the
+    // client's own "connect" event.
+    open() {
+      const ws = FakeWebSocket.current!;
+      ws.readyState = 1;
+      ws.onopen?.();
+    },
+    // Simulates a JSON event pushed by the realtime hub over the wire.
+    serverEmit(type: string, payload: Record<string, unknown> = {}) {
+      const ws = FakeWebSocket.current!;
+      ws.onmessage?.({ data: JSON.stringify({ type, ...payload }) });
     },
     reset() {
-      listeners.clear();
-      managerListeners.clear();
-      socket.connected = true;
-      socket.on.mockClear();
-      socket.off.mockClear();
-      socket.emit.mockClear();
-      socket.disconnect.mockClear();
-      socket.io.on.mockClear();
-      socket.io.off.mockClear();
-      this.io.mockClear();
+      FakeWebSocket.current = null;
     },
   };
 });
 
-vi.mock("socket.io-client", () => ({
-  io: socketHarness.io,
-}));
+vi.stubGlobal("WebSocket", socketHarness.FakeWebSocket as unknown as typeof WebSocket);
 
 import { SocketProvider } from "@/lib/socket";
 
@@ -95,7 +95,7 @@ describe("SocketProvider realtime convergence", () => {
     client.setQueryData(detailKey, { cached: true });
     renderProvider(client);
 
-    socketHarness.emit("domain:event", {
+    socketHarness.serverEmit("domain:event", {
       version: 1,
       entityType: "project",
       entityId: 9,
@@ -119,7 +119,7 @@ describe("SocketProvider realtime convergence", () => {
     });
     renderProvider(client);
 
-    socketHarness.emit("domain:event", {
+    socketHarness.serverEmit("domain:event", {
       version: 1,
       entityType: "project",
       entityId: 9,
@@ -128,7 +128,7 @@ describe("SocketProvider realtime convergence", () => {
       occurredAt: "2026-08-25T10:00:00.000Z",
     });
     const callsAfterNewest = invalidate.mock.calls.length;
-    socketHarness.emit("domain:event", {
+    socketHarness.serverEmit("domain:event", {
       version: 1,
       entityType: "project",
       entityId: 9,
@@ -136,7 +136,7 @@ describe("SocketProvider realtime convergence", () => {
       revision: 8,
       occurredAt: "2026-08-25T10:00:01.000Z",
     });
-    socketHarness.emit("domain:event", {
+    socketHarness.serverEmit("domain:event", {
       version: 1,
       entityType: "project",
       entityId: 9,
@@ -162,7 +162,7 @@ describe("SocketProvider realtime convergence", () => {
     for (const key of [mine, anotherUser, conversations, projects]) client.setQueryData(key, { cached: true });
     renderProvider(client);
 
-    socketHarness.emit("notification:new", {});
+    socketHarness.serverEmit("notification:new", {});
     await waitFor(() => {
       expect(client.getQueryState(mine)?.isInvalidated).toBe(true);
       expect(client.getQueryState(anotherUser)?.isInvalidated).toBe(false);
@@ -170,7 +170,7 @@ describe("SocketProvider realtime convergence", () => {
     });
 
     client.setQueryData(projects, { cached: true });
-    socketHarness.emit("connect");
+    socketHarness.open();
     await waitFor(() => {
       expect(client.getQueryState(projects)?.isInvalidated).toBe(true);
       expect(fetch).toHaveBeenCalledWith("/api/me", expect.objectContaining({ credentials: "include" }));
@@ -190,8 +190,9 @@ describe("SocketProvider realtime convergence", () => {
     client.setQueryData(documentsKey, { cached: true });
     client.setQueryData(listKey, { cached: true });
     const rendered = renderProvider(client);
+    const ws = socketHarness.FakeWebSocket.current!;
 
-    socketHarness.emit("record:access", {
+    socketHarness.serverEmit("record:access", {
       entityType: "project",
       entityId: 9,
       allowed: false,
@@ -203,10 +204,20 @@ describe("SocketProvider realtime convergence", () => {
     });
 
     rendered.unmount();
-    expect(socketHarness.socket.disconnect).toHaveBeenCalledOnce();
-    expect(socketHarness.socket.off).toHaveBeenCalledWith("domain:event", expect.any(Function));
-    expect(socketHarness.socket.off).toHaveBeenCalledWith("notification:new", expect.any(Function));
-    expect(socketHarness.socket.io.off).toHaveBeenCalledWith("reconnect_attempt", expect.any(Function));
+    expect(ws.closeSpy).toHaveBeenCalledOnce();
+
+    // Listeners must be torn down, not just the transport — a message that
+    // arrives on the (now-closed, but still JS-reachable) socket after
+    // unmount must never reach react-query again.
+    client.setQueryData(listKey, { cached: true });
+    socketHarness.serverEmit("domain:event", {
+      version: 1,
+      entityType: "project",
+      entityId: 9,
+      action: "updated",
+      occurredAt: "2026-08-25T10:00:02.000Z",
+    });
+    expect(client.getQueryState(listKey)?.isInvalidated).toBe(false);
   });
 
   it("purges an unknown cache owner before reconnect catch-up can refetch it", async () => {
@@ -219,7 +230,7 @@ describe("SocketProvider realtime convergence", () => {
     client.setQueryData(files, { cached: "former-user" });
     renderProvider(client);
 
-    socketHarness.emit("connect");
+    socketHarness.open();
 
     await waitFor(() => {
       expect(client.getQueryData(projects)).toBeUndefined();
@@ -242,8 +253,9 @@ describe("SocketProvider realtime convergence", () => {
       json: async () => null,
     }));
     renderProvider(client);
+    const ws = socketHarness.FakeWebSocket.current!;
 
-    socketHarness.emit("domain:event", {
+    socketHarness.serverEmit("domain:event", {
       version: 1,
       entityType: "user",
       entityId: 44,
@@ -254,7 +266,7 @@ describe("SocketProvider realtime convergence", () => {
     await waitFor(() => {
       expect(client.getQueryData(projects)).toBeUndefined();
       expect(client.getQueryData(["auth", "me"])).toBeNull();
-      expect(socketHarness.socket.disconnect).toHaveBeenCalledOnce();
+      expect(ws.closeSpy).toHaveBeenCalledOnce();
     });
   });
 
@@ -294,7 +306,7 @@ describe("SocketProvider realtime convergence", () => {
     });
     const rendered = renderProvider(client);
 
-    socketHarness.emit("connect");
+    socketHarness.open();
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     rendered.unmount();
     client.clear();
@@ -321,8 +333,8 @@ describe("SocketProvider realtime convergence", () => {
     client.setQueryData(["auth", "me"], initialAuth);
     renderProvider(client);
 
-    socketHarness.emit("connect");
-    socketHarness.emit("connect");
+    socketHarness.open();
+    socketHarness.open();
     await waitFor(() => expect(resolvers).toHaveLength(2));
     resolvers[0](new Response(JSON.stringify({
       user: { id: 44, role: "super_admin", stateId: null, status: "active" },

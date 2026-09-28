@@ -7,7 +7,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { io, type Socket } from "socket.io-client";
 import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import {
   getGetBeneficiariesBreakdownQueryKey,
@@ -80,8 +79,168 @@ export interface DomainRealtimeEvent {
   };
 }
 
+/**
+ * Minimal event-emitter-style client speaking a plain JSON-over-WebSocket
+ * protocol to the Durable Objects realtime hub (artifacts/api-worker/src/
+ * durable-objects/realtime-hub.ts), in place of socket.io-client. Every
+ * consumer in this codebase (this file, messages.tsx, users.tsx,
+ * record-lock-indicator.tsx) only ever used `.on`/`.off`/`.emit`(with an
+ * optional ack callback)/`.connected` — never Socket.IO's own protocol
+ * internals — so this class is deliberately scoped to exactly that surface.
+ *
+ * Wire envelope, both directions: `{ type: string, ...payload }`. An
+ * `emit(event, payload, ack)` call attaches a `cid` correlation id; the
+ * server replies `{ type: "ack", cid, ...result }`, which resolves that one
+ * ack callback and is never forwarded to `.on(event, ...)` listeners.
+ */
+class RealtimeSocket {
+  connected = false;
+
+  private ws: WebSocket | null = null;
+  private readonly listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+  private readonly pendingAcks = new Map<string, (result: unknown) => void>();
+  private cidCounter = 0;
+  private reconnectDelayMs = 1000;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private destroyed = false;
+  private hasOpenedOnce = false;
+
+  constructor(private readonly url: string) {
+    this.open();
+  }
+
+  on(event: string, handler: (...args: unknown[]) => void): void {
+    let set = this.listeners.get(event);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(event, set);
+    }
+    set.add(handler);
+  }
+
+  off(event: string, handler: (...args: unknown[]) => void): void {
+    this.listeners.get(event)?.delete(handler);
+  }
+
+  emit(event: string, payload: Record<string, unknown> = {}, ack?: (result: unknown) => void): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const message: Record<string, unknown> = { type: event, ...payload };
+    if (ack) {
+      const cid = `c${++this.cidCounter}`;
+      message.cid = cid;
+      this.pendingAcks.set(cid, ack);
+    }
+    try {
+      this.ws.send(JSON.stringify(message));
+    } catch {
+      // Socket already closing — the pending ack (if any) simply never resolves,
+      // matching Socket.IO's own behaviour for a send on a dead connection.
+    }
+  }
+
+  /** Permanent teardown — this instance never reconnects after this call. */
+  disconnect(): void {
+    this.destroyed = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.connected = false;
+    this.ws?.close(1000, "client disconnect");
+    this.ws = null;
+  }
+
+  private emitLocal(event: string, ...args: unknown[]): void {
+    const set = this.listeners.get(event);
+    if (!set) return;
+    for (const handler of [...set]) handler(...args);
+  }
+
+  private open(): void {
+    if (this.destroyed) return;
+    const attemptOpenedRef = { opened: false };
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.url);
+    } catch {
+      this.scheduleReconnect(attemptOpenedRef.opened);
+      return;
+    }
+    this.ws = ws;
+
+    ws.onopen = () => {
+      attemptOpenedRef.opened = true;
+      this.hasOpenedOnce = true;
+      this.connected = true;
+      this.reconnectDelayMs = 1000;
+      this.emitLocal("connect");
+    };
+
+    ws.onmessage = (ev) => {
+      if (typeof ev.data !== "string") return;
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+      const { type, cid } = msg as { type?: unknown; cid?: unknown };
+      if (typeof type !== "string") return;
+      if (type === "ack") {
+        if (typeof cid === "string" && this.pendingAcks.has(cid)) {
+          const resolve = this.pendingAcks.get(cid)!;
+          this.pendingAcks.delete(cid);
+          const { type: _t, cid: _c, ...result } = msg;
+          resolve(result);
+        }
+        return;
+      }
+      const { type: _t2, ...payload } = msg;
+      this.emitLocal(type, payload);
+    };
+
+    ws.onclose = (ev) => {
+      this.connected = false;
+      if (this.destroyed) return;
+      if (!attemptOpenedRef.opened) {
+        // Never reached "open" — a rejected handshake (unauthenticated) and a
+        // transient network failure look identical to a browser WebSocket
+        // client (no HTTP status/reason is exposed on a failed upgrade).
+        // connect_error's job is only to tell the caller "keep waiting, or
+        // stop because you're actually logged out" — the caller resolves
+        // that ambiguity itself via the same /api/me probe used elsewhere.
+        this.emitLocal("connect_error", new Error("connect_error"));
+        this.scheduleReconnect(false);
+        return;
+      }
+      // 4001 is this app's reserved application close code for a server-
+      // initiated forced disconnect (session revoked / account deactivated) —
+      // see durable-objects/realtime-hub.ts. Every other close reconnects.
+      const reason = ev.code === 4001 ? "io server disconnect" : "transport close";
+      this.emitLocal("disconnect", reason);
+      if (reason === "io server disconnect") return; // matches Socket.IO: no auto-reconnect for this reason
+      this.scheduleReconnect(true);
+    };
+
+    ws.onerror = () => {
+      // Always followed by onclose, which does the real handling — this
+      // exists only so an unhandled "error" event never reaches the console.
+    };
+  }
+
+  private scheduleReconnect(_wasOpen: boolean): void {
+    if (this.destroyed || this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.emitLocal("reconnect_attempt");
+      this.open();
+    }, this.reconnectDelayMs);
+    this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 10000);
+  }
+}
+
 interface SocketContextValue {
-  socket: Socket | null;
+  socket: RealtimeSocket | null;
   status: ConnectionStatus;
 }
 
@@ -482,11 +641,19 @@ async function refreshAuthenticatedIdentity(
   }
 }
 
+function realtimeWebSocketUrl(userId: number): string {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  // Same edge-level /api rewrite every other REST call in this file relies on
+  // (see fetch("/api/me") below) — the Worker itself mounts this route as
+  // GET /realtime/connect, with no /api prefix.
+  return `${proto}//${window.location.host}/api/realtime/connect?asUserId=${encodeURIComponent(String(userId))}`;
+}
+
 export function SocketProvider({ children, userId }: { children: ReactNode; userId: number }) {
   const qc = useQueryClient();
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
-  const socketRef = useRef<Socket | null>(null);
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const socketRef = useRef<RealtimeSocket | null>(null);
+  const [socket, setSocket] = useState<RealtimeSocket | null>(null);
   const [authorizationRefreshing, setAuthorizationRefreshing] = useState(false);
   const lastRevisionRef = useRef(new Map<string, number>());
   const authRef = useRef<string | null>(authorizationFingerprint(qc.getQueryData<AuthorizationContext>(["auth", "me"])));
@@ -496,16 +663,7 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
   useEffect(() => {
     const providerGeneration = ++providerGenerationRef.current;
     const abortController = new AbortController();
-    const s = io({
-      path: "/api/socket.io",
-      withCredentials: true,
-      // The server authenticates using the existing session cookie. userId is
-      // only the development role-switcher hint and is never authority.
-      auth: { userId },
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-    });
+    const s = new RealtimeSocket(realtimeWebSocketUrl(userId));
 
     socketRef.current = s;
     setSocket(s);
@@ -582,7 +740,8 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
         invalidateRealtimeCatchupQueries(qc, userId);
       });
     };
-    const onDisconnect = (reason: string) => {
+    const onDisconnect = (...args: unknown[]) => {
+      const reason = args[0];
       setStatus("disconnected");
       // Server-initiated disconnects are used for session/account revocation.
       // Revalidate identity immediately; ordinary transport loss remains
@@ -591,14 +750,20 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
         void refreshIdentity(true);
       }
     };
-    const onConnectError = (error: Error) => {
-      if (error.message === "unauthorized" || error.message === "auth_error") {
-        setStatus("disconnected");
-        void refreshIdentity(true);
-        s.disconnect();
-        return;
-      }
+    // A rejected/failed WebSocket handshake carries no inspectable status or
+    // reason (unlike Socket.IO's own protocol, which could smuggle an error
+    // message) — resolve the ambiguity via the same /api/me probe used
+    // everywhere else, and only stop retrying if that probe itself confirms
+    // the session is actually gone.
+    const onConnectError = () => {
       setStatus("reconnecting");
+      void refreshIdentity().then((result) => {
+        if (!result.current) return;
+        if (result.status === "unauthenticated") {
+          setStatus("disconnected");
+          s.disconnect();
+        }
+      });
     };
     const onReconnectAttempt = () => setStatus("reconnecting");
     let notificationInvalidationQueued = false;
@@ -612,8 +777,8 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
         invalidateKeys(qc, [getGetDashboardNotificationsSummaryQueryKey()]);
       });
     };
-    const onDomainEvent = (value: unknown) => {
-      const event = parseDomainRealtimeEvent(value);
+    const onDomainEvent = (...args: unknown[]) => {
+      const event = parseDomainRealtimeEvent(args[0]);
       if (!event) return;
       if (event.entityType === "notification") {
         invalidateNotificationsOnce();
@@ -631,9 +796,10 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
       }
       invalidateDomainEventQueries(qc, event);
     };
-    const onModuleUpdate = (value: unknown) => invalidateLegacyModuleEventQueries(qc, value);
+    const onModuleUpdate = (...args: unknown[]) => invalidateLegacyModuleEventQueries(qc, args[0]);
     const onNotification = () => invalidateNotificationsOnce();
-    const onConversationChange = (value: unknown) => {
+    const onConversationChange = (...args: unknown[]) => {
+      const value = args[0];
       const conversationId = isObject(value) && isPositiveInteger(value.conversationId)
         ? value.conversationId
         : isObject(value) && isPositiveInteger(value.convId)
@@ -641,7 +807,8 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
           : undefined;
       invalidateConversationQueries(qc, conversationId);
     };
-    const onRecordAccess = (value: unknown) => {
+    const onRecordAccess = (...args: unknown[]) => {
+      const value = args[0];
       if (!isObject(value) || value.allowed !== false || !isPositiveInteger(value.entityId)) return;
       if (typeof value.entityType !== "string" || !ENTITY_TYPES.has(value.entityType as OperationalEntityType)) return;
       removeEntityQueries(qc, value.entityType as OperationalEntityType, value.entityId);
@@ -651,7 +818,7 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
     s.on("connect", onConnect);
     s.on("disconnect", onDisconnect);
     s.on("connect_error", onConnectError);
-    s.io.on("reconnect_attempt", onReconnectAttempt);
+    s.on("reconnect_attempt", onReconnectAttempt);
     s.on("domain:event", onDomainEvent);
     s.on("module:update", onModuleUpdate);
     s.on("notification:new", onNotification);
@@ -674,7 +841,7 @@ export function SocketProvider({ children, userId }: { children: ReactNode; user
       s.off("connect", onConnect);
       s.off("disconnect", onDisconnect);
       s.off("connect_error", onConnectError);
-      s.io.off("reconnect_attempt", onReconnectAttempt);
+      s.off("reconnect_attempt", onReconnectAttempt);
       s.off("domain:event", onDomainEvent);
       s.off("module:update", onModuleUpdate);
       s.off("notification:new", onNotification);
@@ -720,7 +887,8 @@ export function useRealtime(
   const { socket } = useContext(SocketContext);
   useEffect(() => {
     if (!socket) return;
-    const handler = (event: Record<string, unknown>) => {
+    const handler = (...args: unknown[]) => {
+      const event = args[0] as Record<string, unknown>;
       if (event["module"] === module) onEvent(event);
     };
     socket.on("module:update", handler);
@@ -732,7 +900,7 @@ export function useRealtime(
 
 /**
  * Tell the server to push record-level lock events for this entity to this client.
- * The Socket.IO room is per-connection, so it is rejoined after every reconnect.
+ * The connection is per-tab, so watch is rejoined after every reconnect.
  */
 export function useWatchRecord(
   entityType: OperationalEntityType,
