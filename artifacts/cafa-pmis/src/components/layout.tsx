@@ -506,6 +506,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       // Parent segment of the File & Archive route (it redirects there); without
       // a label the breadcrumb fell back to the raw English path "Document management".
       "/document-management": tNav("groups.dataManagement"),
+      // Reached from the header, not the sidebar; the breadcrumb showed "Messages".
+      "/messages": tNav("items.communicationCentre"),
     };
     for (const entry of navEntries) {
       const items = entry.kind === "group" ? entry.group.items : [entry.item];
@@ -541,6 +543,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       const recordLabel = /^\d+$/.test(seg)
         ? parent === "/projects" ? tCommon("recordDetails.projectTitle")
           : parent === "/plans" ? tCommon("recordDetails.planTitle")
+          : parent === "/messages" ? tCommon("recordDetails.conversationTitle")
           : tCommon("recordDetails.title")
         : undefined;
       const label = routeTitleMap[built]

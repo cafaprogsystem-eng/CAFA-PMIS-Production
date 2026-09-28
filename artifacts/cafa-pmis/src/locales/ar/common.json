@@ -600,6 +600,7 @@
     "loading": "جارٍ تحميل تفاصيل السجل",
     "projectTitle": "تفاصيل المشروع",
     "planTitle": "تفاصيل الخطة",
+    "conversationTitle": "محادثة",
     "description": "معلومات السجل والإجراءات المصرح بها"
   },
   "output": "المُخرَج",

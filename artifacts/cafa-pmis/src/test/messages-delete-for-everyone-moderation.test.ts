@@ -28,7 +28,9 @@ describe("MESSAGES-DELETE-FOR-EVERYONE-MODERATION", () => {
   });
 
   it("the menu item itself is rendered for a moderator too, not just the message owner", () => {
-    expect(src).toContain("{(isOwn || isModerator) && (");
+    // The delete-for-everyone entry is built for the owner or a moderator.
+    expect(src).toContain("...((isOwn || isModerator) ? [{");
+    expect(src).toContain('id: "delete-everyone",');
     expect(src).not.toMatch(/\{isOwn && \(\s*<DropdownMenuItem\s*\n\s*onClick=\{\(\) => \{ if \(canDeleteForEveryone\)/);
   });
 });

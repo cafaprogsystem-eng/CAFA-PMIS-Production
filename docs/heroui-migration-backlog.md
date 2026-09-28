@@ -46,3 +46,12 @@ batch; only data-sourced values like those above are deferred.
   translates the alert level only. Translating the message needs the API to
   send a code plus parameters (like the validation errors do). Same family as
   the sector, modality and other data-sourced values already deferred.
+- **Header popovers:** the Communication Centre and notifications popovers in
+  the top bar (`messages-dropdown.tsx`, `notifications-bell.tsx`) still use the
+  Radix Popover and shadcn Badge. They sit side by side, so they should move to
+  the HeroUI Popover together rather than one per screen batch.
+- **Messages stored with an English body:** voice and attachment-only messages
+  are saved with the literal body "(Voice message)" or "(attachment)". The
+  Communication Centre translates these for display, but other consumers
+  (notifications, search, exports) may still show it; storing an empty body
+  plus a type would remove it at the source.

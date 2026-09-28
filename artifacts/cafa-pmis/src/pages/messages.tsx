@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { StateLabel } from "@/components/state-label";
 import { useSyncContext } from "@/contexts/sync-context";
@@ -41,21 +42,19 @@ import {
   Pin,
   PinOff,
   CircleFill,
+  Ban,
+  File,
+  FileText,
+  FileSpreadsheet,
+  FileArchive,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import type { IconComponent } from "@/components/icons";
+import {
+  Alert, Avatar, Button, Chip, Dropdown, Input, Label, Modal, SearchField, Separator, Skeleton, Tabs, Tooltip,
+} from "@heroui/react";
 import { ErrorState } from "@/components/ui/error-state";
-import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { SelectField } from "@/components/select-field";
+import { ConfirmModal } from "@/components/confirm-modal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SECTORS } from "@/lib/sectors";
@@ -115,7 +114,7 @@ export function mergeConversationPages(pages: ConversationListPage[]): ConvSumma
 }
 interface PinnedMsg { id: number; body: string; createdAt: string; pinnedAt: string; senderName: string; pinnedByName: string | null; }
 interface UserItem { id: number; name: string; role: string; roleLabel: string; email: string }
-interface StateItem { id: number; name: string; code: string }
+interface StateItem { id: number; name: string; nameAr?: string | null; code: string }
 interface MediaItem { type: string; url: string; name: string; size?: number; duration?: number; sentAt: string; senderName: string; messageId: number }
 
 /**
@@ -138,15 +137,17 @@ export function mergeMessageHistory(pages: MessagePage[]): Msg[] {
 }
 
 /* ─── constants ─────────────────────────────────────────────────── */
-const TYPE_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  direct:       { label: "Direct",       icon: MessageSquare, color: "text-primary" },
-  project:      { label: "Project",      icon: FolderKanban,  color: "text-info" },
-  state:        { label: "State",        icon: MapPin,        color: "text-success" },
-  sector:       { label: "Sector",       icon: Layers,        color: "text-warning" },
-  group:        { label: "Group",        icon: Users,         color: "text-secondary" },
-  system:       { label: "System",       icon: Building2,     color: "text-muted-foreground" },
-  announcement: { label: "Announcement", icon: Megaphone,     color: "text-destructive" },
+// Labels come from the `type_${type}` locale keys; this map only carries the icon.
+const TYPE_ICON: Record<string, IconComponent> = {
+  direct: MessageSquare,
+  project: FolderKanban,
+  state: MapPin,
+  sector: Layers,
+  group: Users,
+  system: Building2,
+  announcement: Megaphone,
 };
+const typeIcon = (type: string) => TYPE_ICON[type] ?? TYPE_ICON.group;
 // Must match the server announcement policy: SA/ED/PM only.
 const ANNOUNCEMENT_ROLES = new Set(["super_admin", "executive_director", "program_manager"]);
 const EMOJI_REACTIONS = ["👍", "❤️", "😂", "👏", "🎉", "🙏"];
@@ -172,11 +173,12 @@ function formatDuration(s: number): string {
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
+/** Byte size as "163 KB"; render it inside <bdi dir="ltr"> so it never reverses in Arabic. */
 function formatFileSize(bytes?: number): string {
   if (!bytes) return "";
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 function onlineStatus(isOnline: boolean, lastSeenAt: string | null, t: (key: string, opts?: Record<string, unknown>) => string): { online: boolean; label: string } {
   if (isOnline) return { online: true, label: t("online") };
@@ -187,19 +189,12 @@ function onlineStatus(isOnline: boolean, lastSeenAt: string | null, t: (key: str
   if (diffMins < 1440) return { online: false, label: t("lastSeenHours", { count: Math.floor(diffMins / 60) }) };
   return { online: false, label: t("lastSeenDays", { count: Math.floor(diffMins / 1440) }) };
 }
-function convName(conv: ConvSummary, t?: (key: string, opts?: Record<string, unknown>) => string): string {
+function convName(conv: ConvSummary, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (conv.name) return conv.name;
-  if (!t) {
-    if (conv.type === "direct") return conv.otherMemberName ?? "Direct Message";
-    if (conv.type === "project") return "Project Chat";
-    if (conv.type === "state") return "State Office Chat";
-    if (conv.type === "sector") return conv.sector ? `${conv.sector} Team` : "Sector Chat";
-    return "Group Chat";
-  }
   if (conv.type === "direct") return conv.otherMemberName ?? t("convNameDirect");
   if (conv.type === "project") return t("convNameProject");
   if (conv.type === "state") return t("convNameState");
-  if (conv.type === "sector") return conv.sector ? `${conv.sector} Team` : t("convNameSector");
+  if (conv.type === "sector") return conv.sector ? t("sectorTeam", { sector: conv.sector }) : t("convNameSector");
   return t("convNameGroup");
 }
 function convSubtitle(conv: ConvSummary): string | null {
@@ -215,15 +210,26 @@ const AVATAR_COLORS = [
   "bg-pink-500", "bg-teal-500", "bg-rose-500", "bg-indigo-500",
 ];
 function avatarColor(id: number) { return AVATAR_COLORS[id % AVATAR_COLORS.length]; }
-function fileIcon(name: string): string {
+
+/** Gravity file-type icon for an attachment name (replaces the old emoji icons). */
+function FileTypeIcon({ name, className = "size-4" }: { name: string; className?: string }) {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "pdf") return "📄";
-  if (["doc", "docx"].includes(ext)) return "📝";
-  if (["xls", "xlsx"].includes(ext)) return "📊";
-  if (["ppt", "pptx"].includes(ext)) return "📋";
-  if (["zip", "rar"].includes(ext)) return "🗜️";
-  if (["csv", "txt"].includes(ext)) return "📃";
-  return "📎";
+  if (["xls", "xlsx", "csv"].includes(ext)) return <FileSpreadsheet className={`${className} shrink-0 text-emerald-600`} aria-hidden="true" />;
+  if (["pdf", "doc", "docx", "ppt", "pptx", "txt"].includes(ext)) return <FileText className={`${className} shrink-0 text-rose-600`} aria-hidden="true" />;
+  if (["zip", "rar", "7z"].includes(ext)) return <FileArchive className={`${className} shrink-0 text-amber-600`} aria-hidden="true" />;
+  return <File className={`${className} shrink-0 text-[var(--muted)]`} aria-hidden="true" />;
+}
+
+/** Coloured initials (people) or a conversation-type icon, on the HeroUI Avatar. */
+function ConvAvatar({ id, name, type, size = "md", className }: { id: number; name?: string | null; type?: string; size?: "sm" | "md"; className?: string }) {
+  const Icon = typeIcon(type ?? "group");
+  return (
+    <Avatar size={size} className={cn("shrink-0", size === "sm" ? "size-7" : "size-9", className)}>
+      <Avatar.Fallback className={cn("text-xs font-medium text-white", avatarColor(id))}>
+        {name ? initials(name) : <Icon className="size-4" aria-hidden="true" />}
+      </Avatar.Fallback>
+    </Avatar>
+  );
 }
 
 export function parseConversationRouteId(value: string | undefined): number | null {
@@ -247,27 +253,40 @@ async function apiFetch(url: string, opts?: RequestInit) {
   return res.json();
 }
 
+/** Server error codes arrive as the Error message; show a translated sentence, never the code. */
+function apiErrorText(error: unknown, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  const code = error instanceof Error ? error.message : "";
+  return /^[a-z_]+$/.test(code) ? t(`apiErrors.${code}`, { defaultValue: t("apiErrors.default") }) : t("apiErrors.default");
+}
+
+/** Voice and attachment-only messages are stored with a fixed English body; show it translated. */
+function displayBody(body: string | null | undefined, t: (key: string) => string): string {
+  if (body === "(Voice message)") return t("voiceMessage");
+  if (body === "(attachment)") return t("attachmentPlaceholder");
+  return body ?? "";
+}
+
 /* ─── ImageLightbox ───────────────────────────────────────────────── */
 function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
   const { t } = useTranslation("messages");
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={onClose}>
-      <img src={url} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
-        onClick={(e) => e.stopPropagation()} />
-      <button onClick={onClose} aria-label={t("closeLightbox")} className="absolute top-4 end-4 bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition-colors">
-        <X className="h-5 w-5" />
-      </button>
-      <a href={url} download target="_blank" rel="noreferrer" aria-label={t("downloadAttachment", { name: "" })}
-        className="absolute bottom-4 end-4 bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition-colors"
-        onClick={(e) => e.stopPropagation()}>
-        <DownloadCloud className="h-5 w-5" />
-      </a>
-    </div>
+    <Modal isOpen onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Modal.Backdrop isDismissable className="bg-black/90">
+        <Modal.Container size="full" className="items-center justify-center bg-transparent shadow-none">
+          <Modal.Dialog aria-label={t("openImage", { name: "" })} className="relative flex h-full w-full items-center justify-center bg-transparent p-4 shadow-none">
+            <img src={url} alt="" className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl" />
+            <Button isIconOnly variant="tertiary" aria-label={t("closeLightbox")} onPress={onClose}
+              className="absolute end-4 top-4 bg-white/10 text-white hover:bg-white/20">
+              <X className="size-5" aria-hidden="true" />
+            </Button>
+            <a href={url} download target="_blank" rel="noreferrer" aria-label={t("downloadAttachment", { name: "" })}
+              className="absolute bottom-4 end-4 rounded-full bg-white/10 p-2.5 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
+              <DownloadCloud className="size-5" aria-hidden="true" />
+            </a>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -287,27 +306,28 @@ function VoicePlayer({ url, duration, isOwn }: { url: string; duration?: number;
   };
 
   return (
-    <div className={cn("flex items-center gap-2 min-w-[180px] mt-1.5 rounded-xl px-3 py-2",
-      isOwn ? "bg-white/10" : "bg-accent/30")}>
+    <div className={cn("mt-1.5 flex min-w-[180px] items-center gap-2 rounded-xl px-3 py-2",
+      isOwn ? "bg-white/10" : "bg-[var(--default)]")}>
       <audio ref={audioRef} src={url}
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
         onDurationChange={() => setTotalDuration(audioRef.current?.duration ?? duration ?? 0)}
         onEnded={() => { setPlaying(false); setCurrentTime(0); }} />
-      <button onClick={toggle} aria-label={playing ? t("pauseVoice") : t("playVoice")}
-        className={cn("h-7 w-7 rounded-full flex items-center justify-center shrink-0 transition-colors",
-          isOwn ? "bg-white/20 hover:bg-white/30 text-white" : "bg-primary/10 hover:bg-primary/20 text-primary")}>
-        {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ms-0.5" />}
+      <button type="button" onClick={toggle} aria-label={playing ? t("pauseVoice") : t("playVoice")}
+        className={cn("flex size-7 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]",
+          isOwn ? "bg-white/20 text-white hover:bg-white/30" : "bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20")}>
+        {playing ? <Pause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}
       </button>
-      <div className="flex-1 min-w-0">
+      {/* Audio time runs left to right in both languages. */}
+      <div className="min-w-0 flex-1" dir="ltr">
         <input type="range" min={0} max={totalDuration || 100} value={currentTime} step={0.1} aria-label={t("seekVoice")}
           onChange={(e) => { if (audioRef.current) { audioRef.current.currentTime = parseFloat(e.target.value); }}}
-          className={cn("w-full h-1 cursor-pointer rounded-full appearance-none",
-            isOwn ? "[&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-runnable-track]:bg-white/30" : "[&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-runnable-track]:bg-primary/20")} />
-        <p className={cn("text-xs mt-0.5", isOwn ? "text-white/70" : "text-muted-foreground")}>
+          className={cn("h-1 w-full cursor-pointer appearance-none rounded-full",
+            isOwn ? "accent-white" : "accent-[var(--accent)]")} />
+        <p className={cn("mt-0.5 text-xs tabular-nums", isOwn ? "text-white/70" : "text-[var(--muted)]")}>
           {formatDuration(currentTime)} / {formatDuration(totalDuration)}
         </p>
       </div>
-      <Volume2 className={cn("h-3.5 w-3.5 shrink-0", isOwn ? "text-white/60" : "text-muted-foreground")} />
+      <Volume2 className={cn("size-3.5 shrink-0", isOwn ? "text-white/60" : "text-[var(--muted)]")} aria-hidden="true" />
     </div>
   );
 }
@@ -317,12 +337,12 @@ function EmojiReactionPicker({ onPick, isOwn }: { onPick: (e: string) => void; i
   const { t } = useTranslation("messages");
   return (
     <div className={cn(
-      "absolute z-20 flex gap-0.5 bg-card border border-border rounded-2xl shadow-xl p-1",
+      "absolute z-20 flex gap-0.5 rounded-2xl border border-[var(--border)] bg-[var(--overlay)] p-1 shadow-xl",
       isOwn ? "end-0" : "start-0",
     )} style={{ bottom: "calc(100% + 4px)" }}>
       {EMOJI_REACTIONS.map((e) => (
-        <button key={e} onClick={() => onPick(e)} aria-label={t("reactWith", { emoji: e })}
-          className="text-lg w-8 h-8 flex items-center justify-center hover:bg-muted/50 rounded-xl transition-transform hover:scale-125 active:scale-90">
+        <button key={e} type="button" onClick={() => onPick(e)} aria-label={t("reactWith", { emoji: e })}
+          className="flex size-8 items-center justify-center rounded-xl text-lg transition-transform hover:scale-125 hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] active:scale-90">
           {e}
         </button>
       ))}
@@ -345,18 +365,19 @@ function ReactionsBar({ reactions, myId, onToggle }: {
 
   if (!Object.keys(grouped).length) return null;
   return (
-    <div className="flex flex-wrap gap-1 mt-1.5">
+    <div className="mt-1.5 flex flex-wrap gap-1">
       {Object.entries(grouped).map(([emoji, info]) => (
-        <button key={emoji} onClick={() => onToggle(emoji)}
+        <button key={emoji} type="button" onClick={() => onToggle(emoji)}
           aria-label={t("toggleReaction", { emoji, count: info.count })}
+          aria-pressed={info.mine}
           title={info.users.join(", ")}
           className={cn(
-            "flex items-center gap-0.5 text-sm px-2 py-0.5 rounded-full border transition-all hover:scale-105 active:scale-95",
+            "flex items-center gap-0.5 rounded-full border px-2 py-0.5 text-sm transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] active:scale-95",
             info.mine
-              ? "bg-primary/10 border-primary/30 text-primary"
-              : "bg-card border-border hover:bg-muted/50 text-foreground/70",
+              ? "border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]"
+              : "border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]/70 hover:bg-[var(--default)]",
           )}>
-          {emoji}<span className="text-xs font-semibold ms-0.5">{info.count}</span>
+          {emoji}<span className="ms-0.5 text-xs font-semibold tabular-nums">{info.count}</span>
         </button>
       ))}
     </div>
@@ -371,14 +392,18 @@ function ReactionsBar({ reactions, myId, onToggle }: {
 const MESSAGE_MODERATION_ROLES = new Set(["super_admin", "executive_director", "program_manager", "senior_program_coordinator"]);
 const BUBBLE_PIN_ROLES = new Set(["super_admin","executive_director","program_manager","senior_program_coordinator","technical_coordinator"]);
 
-function renderMentions(text: string) {
+// On the sender's own (accent) bubble an accent-coloured mention was invisible.
+function renderMentions(text: string, isOwn = false) {
   const parts = text.split(/(@\w+)/g);
   return parts.map((part, i) =>
     part.startsWith("@")
-      ? <mark key={i} className="bg-primary/10 text-primary rounded px-0.5 not-italic font-medium">{part}</mark>
+      ? <mark key={i} dir="ltr" className={cn("rounded px-0.5 font-medium not-italic",
+          isOwn ? "bg-white/20 text-[var(--accent-foreground)]" : "bg-[var(--accent)]/10 text-[var(--accent)]")}>{part}</mark>
       : part,
   );
 }
+
+type BubbleAction = { id: string; label: string; icon: IconComponent; danger?: boolean; disabled?: boolean; run: () => void };
 
 function MessageBubble({
   msg, isOwn, showSender, isGroup, myId, myRole,
@@ -420,28 +445,48 @@ function MessageBubble({
   };
   const handleContextMenu = (e: React.MouseEvent) => { e.preventDefault(); setMenuOpen(true); };
 
+  const hasCopyableText = !!msg.body && !["(Voice message)", "(attachment)"].includes(msg.body) && !isDeleted;
+  const primaryActions: BubbleAction[] = [
+    { id: "reply", label: t("reply"), icon: Reply, run: () => onReply(msg) },
+    { id: "forward", label: t("forward"), icon: Forward, run: () => onForward(msg) },
+    ...(hasCopyableText ? [{ id: "copy", label: t("copyText"), icon: Copy, run: () => { navigator.clipboard.writeText(msg.body).catch(() => {}); } }] : []),
+    ...(canPin && !isDeleted ? [{ id: "pin", label: msg.isPinned ? t("unpin") : t("pinMessage"), icon: msg.isPinned ? PinOff : Pin, run: () => onPin(msg.id, !msg.isPinned) }] : []),
+    ...(isOwn && !isDeleted ? [{ id: "edit", label: canEdit ? t("edit") : t("editExpired"), icon: Edit2, disabled: !canEdit, run: () => { if (canEdit) onEdit(msg); } }] : []),
+  ];
+  const deleteActions: BubbleAction[] = [
+    { id: "delete-me", label: t("deleteForMe"), icon: Trash2, danger: true, run: () => onDeleteForMe(msg.id) },
+    // Shown to the owner and to moderators; disabled once the window has passed.
+    ...((isOwn || isModerator) ? [{
+      id: "delete-everyone",
+      label: canDeleteForEveryone ? t("deleteForEveryone") : t("deleteForEveryoneExpired"),
+      icon: Trash2, danger: canDeleteForEveryone, disabled: !canDeleteForEveryone,
+      run: () => { if (canDeleteForEveryone) onDeleteForEveryone(msg.id); },
+    }] : []),
+  ];
+  const allActions = [...primaryActions, ...deleteActions];
+  const menuItem = (action: BubbleAction) => (
+    <Dropdown.Item key={action.id} id={action.id} textValue={action.label} variant={action.danger ? "danger" : undefined}>
+      <action.icon className={cn("size-4 shrink-0", action.danger ? "text-[var(--danger)]" : "text-[var(--muted)]")} aria-hidden="true" />
+      <Label>{action.label}</Label>
+    </Dropdown.Item>
+  );
+
   return (
     <div
-      className={cn("flex items-end gap-2 group", isOwn ? "flex-row-reverse" : "flex-row")}
+      className={cn("group flex items-end gap-2", isOwn ? "flex-row-reverse" : "flex-row")}
       onContextMenu={handleContextMenu}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {!isOwn && (
-        <Avatar className="h-7 w-7 shrink-0 mb-1">
-          <AvatarFallback className={cn("text-xs text-white", avatarColor(msg.senderId))}>
-            {initials(msg.senderName)}
-          </AvatarFallback>
-        </Avatar>
-      )}
+      {!isOwn && <ConvAvatar id={msg.senderId} name={msg.senderName} size="sm" className="mb-1" />}
       <div className={cn("w-fit max-w-[min(78%,42rem)] flex flex-col", isOwn ? "items-end" : "items-start")}>
         {showSender && isGroup && !isOwn && (
-          <span className="text-xs font-medium text-primary mb-0.5 px-1">{msg.senderName}</span>
+          <span dir="auto" className="mb-0.5 px-1 text-xs font-medium text-[var(--accent)]">{msg.senderName}</span>
         )}
         {/* Pinned indicator */}
         {msg.isPinned && (
-          <div className="flex items-center gap-1 text-xs text-warning mb-0.5 px-1">
-            <Pin className="h-2.5 w-2.5" /> <span>{t("pinned")}</span>
+          <div className="mb-0.5 flex items-center gap-1 px-1 text-xs text-[var(--warning)]">
+            <Pin className="size-2.5" aria-hidden="true" /> <span>{t("pinned")}</span>
           </div>
         )}
         {/* Reply context — click to scroll to original */}
@@ -452,55 +497,55 @@ function MessageBubble({
             onClick={() => onScrollToMessage(msg.replyToId!)}
             onKeyDown={(e) => e.key === "Enter" && onScrollToMessage(msg.replyToId!)}
             className={cn(
-              "text-xs px-3 py-1.5 rounded-t-lg border-s-2 border-primary mb-0.5 max-w-full",
-              "cursor-pointer select-none",
+              "text-xs px-3 py-1.5 rounded-t-lg border-s-2 border-[var(--accent)] mb-0.5 max-w-full",
+              "cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]",
               isOwn
-                ? "bg-primary/10 text-primary hover:bg-primary/15"
-                : "bg-muted/70 text-foreground/70 hover:bg-muted",
+                ? "bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15"
+                : "bg-[var(--default)] text-[var(--foreground)]/70 hover:bg-[var(--default-hover)]",
               "transition-colors duration-150",
             )}
           >
-            <p className="font-medium text-xs opacity-70">{msg.replySenderName}</p>
-            <p className="truncate">{msg.replyBody}</p>
+            <p dir="auto" className="text-xs font-medium opacity-70">{msg.replySenderName}</p>
+            <p dir="auto" className="truncate">{displayBody(msg.replyBody, t)}</p>
           </div>
         )}
         {/* Main bubble */}
         <div className={cn(
           "relative px-3.5 py-2.5 rounded-xl text-sm leading-relaxed break-words [overflow-wrap:anywhere]",
           isDeleted
-            ? "bg-muted/55 border border-dashed border-border text-muted-foreground italic"
+            ? "border border-dashed border-[var(--border)] bg-[var(--default)] italic text-[var(--muted)]"
             : isOwn
-              ? "bg-primary text-primary-foreground rounded-ee-sm"
-              : "bg-card border border-border/80 text-foreground rounded-es-sm",
+              ? "bg-[var(--accent)] text-[var(--accent-foreground)] rounded-ee-sm"
+              : "border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-es-sm",
         )}>
           {isDeleted ? (
-            <span className="text-xs">🚫 {t("messageDeleted")}</span>
+            <span className="flex items-center gap-1.5 text-xs"><Ban className="size-3.5" aria-hidden="true" />{t("messageDeleted")}</span>
           ) : (
             <>
               {/* Forwarded label */}
               {isForwarded && (
-                <div className={cn("flex items-center gap-1 text-xs mb-1 opacity-60 italic")}>
-                  <Forward className="h-3 w-3 rotate-180 shrink-0" />
+                <div className="mb-1 flex items-center gap-1 text-xs italic opacity-70">
+                  <Forward className="size-3 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
                   <span>{t("forwarded")}</span>
                 </div>
               )}
               {/* Message text */}
               {msg.body && msg.body !== "(Voice message)" && (
-                <span className="whitespace-pre-wrap">{renderMentions(msg.body)}</span>
+                <span dir="auto" className="whitespace-pre-wrap">{renderMentions(msg.body, isOwn)}</span>
               )}
 
               {/* Image attachments — inline preview grid */}
               {images.length > 0 && (
                 <div className={cn("mt-1.5 grid gap-1", images.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
                   {images.map((att, i) => att.availabilityStatus === "unavailable" ? (
-                    <div key={i} role="status" className="flex min-h-24 items-center justify-center rounded-lg border border-warning/30 bg-warning/5 px-3 text-xs text-muted-foreground">{t("fileUnavailable")}</div>
+                    <div key={i} role="status" className="flex min-h-24 items-center justify-center rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/5 px-3 text-xs text-[var(--muted)]">{t("fileUnavailable")}</div>
                   ) : (
-                    <button key={i} type="button" className="relative rounded-lg overflow-hidden cursor-pointer group/img focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    <button key={i} type="button" className="group/img relative cursor-pointer overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
                       onClick={() => onLightbox(att.url)} aria-label={t("openImage", { name: att.name })}>
                       <img src={att.url} alt={att.name}
-                        className="w-full max-h-56 sm:max-h-64 object-cover rounded-lg transition-opacity group-hover/img:opacity-90" />
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/20 rounded-lg">
-                        <ImageIcon className="h-6 w-6 text-white drop-shadow" />
+                        className="max-h-56 w-full rounded-lg object-cover transition-opacity group-hover/img:opacity-90 sm:max-h-64" />
+                      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 opacity-0 transition-opacity group-hover/img:opacity-100">
+                        <ImageIcon className="size-6 text-white drop-shadow" aria-hidden="true" />
                       </div>
                     </button>
                   ))}
@@ -509,27 +554,27 @@ function MessageBubble({
 
               {/* Voice attachments */}
               {voices.map((att, i) => att.availabilityStatus === "unavailable" ? (
-                <div key={i} role="status" className="mt-1.5 rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-2 text-xs text-muted-foreground">{t("fileUnavailable")}</div>
+                <div key={i} role="status" className="mt-1.5 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/5 px-2.5 py-2 text-xs text-[var(--muted)]">{t("fileUnavailable")}</div>
               ) : <VoicePlayer key={i} url={att.url} duration={att.duration} isOwn={isOwn} />)}
 
               {/* File attachments */}
               {files.map((att, i) => att.availabilityStatus === "unavailable" ? (
                 <div key={i} role="status"
-                  className={cn("flex items-center gap-2 mt-1.5 px-2.5 py-2 rounded-lg text-xs", isOwn ? "bg-white/10 text-white/70" : "bg-muted/50 border border-border text-muted-foreground")}>
-                  <span className="text-base shrink-0">{fileIcon(att.name)}</span><span className="truncate">{t("fileUnavailable")}</span>
+                  className={cn("mt-1.5 flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs", isOwn ? "bg-white/10 text-white/70" : "border border-[var(--border)] bg-[var(--default)] text-[var(--muted)]")}>
+                  <FileTypeIcon name={att.name} /><span className="truncate">{t("fileUnavailable")}</span>
                 </div>
               ) : (
                 <a key={i} href={att.url} target="_blank" rel="noreferrer" download aria-label={t("downloadAttachment", { name: att.name })}
                   className={cn(
-                    "flex items-center gap-2 mt-1.5 px-2.5 py-2 rounded-lg text-xs no-underline transition-colors",
-                    isOwn ? "bg-white/10 hover:bg-white/20" : "bg-muted/50 hover:bg-muted/70 border border-border",
+                    "mt-1.5 flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs no-underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]",
+                    isOwn ? "bg-white/10 hover:bg-white/20" : "border border-[var(--border)] bg-[var(--default)] hover:bg-[var(--default-hover)]",
                   )}>
-                  <span className="text-base shrink-0">{fileIcon(att.name)}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={cn("truncate font-medium", isOwn ? "text-white" : "text-foreground")}>{att.name}</p>
-                    {att.size && <p className={cn("text-xs", isOwn ? "text-white/60" : "text-muted-foreground")}>{formatFileSize(att.size)}</p>}
+                  <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md", isOwn ? "bg-white" : "bg-[var(--surface)]")}><FileTypeIcon name={att.name} /></span>
+                  <div className="min-w-0 flex-1">
+                    <p dir="ltr" className={cn("truncate font-medium rtl:text-end", isOwn ? "text-white" : "text-[var(--foreground)]")} title={att.name}>{att.name}</p>
+                    {att.size && <p className={cn("text-xs", isOwn ? "text-white/60" : "text-[var(--muted)]")}><bdi dir="ltr">{formatFileSize(att.size)}</bdi></p>}
                   </div>
-                  <DownloadCloud className={cn("h-3.5 w-3.5 shrink-0", isOwn ? "text-white/70" : "text-muted-foreground")} />
+                  <DownloadCloud className={cn("size-3.5 shrink-0", isOwn ? "text-white/70" : "text-[var(--muted)]")} aria-hidden="true" />
                 </a>
               ))}
             </>
@@ -542,9 +587,9 @@ function MessageBubble({
         )}
 
         {/* Timestamp + status */}
-        <div className="flex items-center gap-1.5 mt-0.5 px-1">
-          <span className="text-xs text-muted-foreground">{formatMsgTime(msg.createdAt, i18n.language)}</span>
-          {msg.editedAt && !isDeleted && <span className="text-xs text-muted-foreground italic">{t("edited")}</span>}
+        <div className="mt-0.5 flex items-center gap-1.5 px-1">
+          <span className="text-xs tabular-nums text-[var(--muted)]"><bdi dir="ltr">{formatMsgTime(msg.createdAt, i18n.language)}</bdi></span>
+          {msg.editedAt && !isDeleted && <span className="text-xs italic text-[var(--muted)]">{t("edited")}</span>}
         </div>
       </div>
 
@@ -556,11 +601,11 @@ function MessageBubble({
         {/* Emoji reaction button */}
         {!isDeleted && (
           <div className="relative">
-            <Button variant="ghost" size="icon"
+            <Button isIconOnly size="sm" variant="ghost"
               aria-label={t("addReaction")}
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-warning hover:bg-warning/10 rounded-full"
-              onClick={() => setShowEmojiPicker((v) => !v)}>
-              <Smile className="h-3.5 w-3.5" />
+              className="size-7 min-w-7 rounded-full text-[var(--muted)] hover:bg-[var(--warning)]/10 hover:text-[var(--warning)]"
+              onPress={() => setShowEmojiPicker((v) => !v)}>
+              <Smile className="size-3.5" aria-hidden="true" />
             </Button>
             {showEmojiPicker && (
               <EmojiReactionPicker isOwn={isOwn} onPick={(emoji) => {
@@ -570,61 +615,26 @@ function MessageBubble({
             )}
           </div>
         )}
-        {/* More options dropdown */}
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon"
-              aria-label={t("messageOptions")}
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground rounded-full">
-              <MoreVertical className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align={isOwn ? "end" : "start"} className="w-56">
-            <DropdownMenuItem onClick={() => onReply(msg)} className="gap-2">
-              <Reply className="h-3.5 w-3.5" /> {t("reply")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onForward(msg)} className="gap-2">
-              <Forward className="h-3.5 w-3.5" /> {t("forward")}
-            </DropdownMenuItem>
-            {msg.body && !["(Voice message)", "(attachment)"].includes(msg.body) && !isDeleted && (
-              <DropdownMenuItem
-                onClick={() => { navigator.clipboard.writeText(msg.body).catch(() => {}); setMenuOpen(false); }}
-                className="gap-2">
-                <Copy className="h-3.5 w-3.5" /> {t("copyText")}
-              </DropdownMenuItem>
-            )}
-            {canPin && !isDeleted && (
-              <DropdownMenuItem onClick={() => { onPin(msg.id, !msg.isPinned); setMenuOpen(false); }} className="gap-2">
-                {msg.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-                {msg.isPinned ? t("unpin") : t("pinMessage")}
-              </DropdownMenuItem>
-            )}
-            {isOwn && !isDeleted && (
-              <DropdownMenuItem
-                onClick={() => { if (canEdit) { onEdit(msg); setMenuOpen(false); } }}
-                disabled={!canEdit}
-                className="gap-2">
-                <Edit2 className="h-3.5 w-3.5" />
-                {canEdit ? t("edit") : t("editExpired")}
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => { onDeleteForMe(msg.id); setMenuOpen(false); }}
-              className="gap-2 text-destructive focus:text-destructive">
-              <Trash2 className="h-3.5 w-3.5" /> {t("deleteForMe")}
-            </DropdownMenuItem>
-            {(isOwn || isModerator) && (
-              <DropdownMenuItem
-                onClick={() => { if (canDeleteForEveryone) { onDeleteForEveryone(msg.id); setMenuOpen(false); } }}
-                disabled={!canDeleteForEveryone}
-                className={cn("gap-2", canDeleteForEveryone ? "text-destructive focus:text-destructive" : "opacity-50")}>
-                <Trash2 className="h-3.5 w-3.5" />
-                {canDeleteForEveryone ? t("deleteForEveryone") : t("deleteForEveryoneExpired")}
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* More options: also opens on right-click and long-press */}
+        <Dropdown isOpen={menuOpen} onOpenChange={setMenuOpen}>
+          <Button isIconOnly size="sm" variant="ghost"
+            aria-label={t("messageOptions")}
+            className="size-7 min-w-7 rounded-full text-[var(--muted)] hover:text-[var(--foreground)]">
+            <MoreVertical className="size-3.5" aria-hidden="true" />
+          </Button>
+          <Dropdown.Popover placement={isOwn ? "bottom end" : "bottom start"} className="min-w-56">
+            <Dropdown.Menu
+              disabledKeys={allActions.filter((action) => action.disabled).map((action) => action.id)}
+              onAction={(key) => allActions.find((action) => action.id === key)?.run()}
+            >
+              <Dropdown.Section>{primaryActions.map(menuItem)}</Dropdown.Section>
+              <Dropdown.Section>
+                <Separator />
+                {deleteActions.map(menuItem)}
+              </Dropdown.Section>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
       </div>
     </div>
   );
@@ -636,8 +646,6 @@ function MediaGalleryPanel({ convId, onClose, onLightbox }: {
 }) {
   const { t, i18n } = useTranslation("messages");
   const [tab, setTab] = useState<"photos" | "docs" | "voices">("photos");
-  const tabKeys = ["photos", "docs", "voices"] as const;
-  const tabRefs = useRef<Partial<Record<(typeof tabKeys)[number], HTMLButtonElement>>>({});
   const { data, isLoading, isError, refetch } = useQuery<{ photos: MediaItem[]; docs: MediaItem[]; voices: MediaItem[] }>({
     queryKey: ["media", convId],
     queryFn: () => apiFetch(`/api/conversations/${convId}/media`),
@@ -645,197 +653,149 @@ function MediaGalleryPanel({ convId, onClose, onLightbox }: {
   const photos = data?.photos ?? [];
   const docs = data?.docs ?? [];
   const voices = data?.voices ?? [];
-  const tabLabel = (tabKey: (typeof tabKeys)[number]) =>
-    tabKey === "photos" ? t("tabPhotos") : tabKey === "docs" ? t("tabDocs") : t("tabVoice");
-  const moveTab = (current: number, direction: -1 | 1) => {
-    const nextTab = tabKeys[(current + direction + tabKeys.length) % tabKeys.length];
-    setTab(nextTab);
-    requestAnimationFrame(() => tabRefs.current[nextTab]?.focus());
+  const tabs = [
+    { id: "photos" as const, label: t("tabPhotos"), count: photos.length },
+    { id: "docs" as const, label: t("tabDocs"), count: docs.length },
+    { id: "voices" as const, label: t("tabVoice"), count: voices.length },
+  ];
+
+  const body = (current: "photos" | "docs" | "voices") => {
+    if (isLoading) return <div className="flex min-h-32 items-center justify-center text-sm text-[var(--muted)]" role="status">{t("loading")}</div>;
+    if (isError) {
+      return (
+        <div className="flex min-h-32 flex-col items-center justify-center gap-2 text-center">
+          <p className="text-sm text-[var(--muted)]">{t("errLoadMedia")}</p>
+          <Button type="button" variant="tertiary" size="sm" onPress={() => void refetch()}>{t("retry")}</Button>
+        </div>
+      );
+    }
+    if (current === "photos") {
+      return (
+        <div className="grid grid-cols-3 gap-1">
+          {photos.length === 0 && <p className="col-span-3 py-8 text-center text-xs text-[var(--muted)]">{t("noPhotos")}</p>}
+          {photos.map((p, i) => (
+            <button key={i} type="button" className="aspect-square cursor-pointer overflow-hidden rounded-lg transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+              onClick={() => onLightbox(p.url)} aria-label={t("openImage", { name: p.name })}>
+              <img src={p.url} alt={p.name} className="size-full object-cover" />
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (current === "docs") {
+      return (
+        <div className="space-y-1.5">
+          {docs.length === 0 && <p className="py-8 text-center text-xs text-[var(--muted)]">{t("noDocs")}</p>}
+          {docs.map((d, i) => (
+            <a key={i} href={d.url} target="_blank" rel="noreferrer" download aria-label={t("downloadAttachment", { name: d.name })}
+              className="flex items-center gap-2.5 rounded-lg border border-[var(--border)] p-2.5 no-underline transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+              <FileTypeIcon name={d.name} className="size-5" />
+              <div className="min-w-0 flex-1">
+                <p dir="ltr" className="truncate text-xs font-medium text-[var(--foreground)] rtl:text-end" title={d.name}>{d.name}</p>
+                <p className="text-xs text-[var(--muted)]">
+                  {d.size ? <><bdi dir="ltr">{formatFileSize(d.size)}</bdi> · </> : null}{d.senderName.split(" ")[0]}
+                </p>
+              </div>
+              <DownloadCloud className="size-3.5 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+            </a>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        {voices.length === 0 && <p className="py-8 text-center text-xs text-[var(--muted)]">{t("noVoice")}</p>}
+        {voices.map((v, i) => (
+          <div key={i} className="rounded-lg border border-[var(--border)] bg-[var(--default)] p-2.5">
+            <p className="mb-1.5 text-xs text-[var(--muted)]">
+              {v.senderName.split(" ")[0]} · {new Date(v.sentAt).toLocaleDateString(uiLocale(i18n.language), { month: "short", day: "numeric" })}
+            </p>
+            <VoicePlayer url={v.url} duration={v.duration} isOwn={false} />
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
-    <div className="absolute inset-y-0 end-0 z-30 w-full max-w-sm bg-card border-s border-border shadow-xl flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+    <aside className="absolute inset-y-0 end-0 z-30 w-full max-w-sm bg-[var(--surface)] border-s border-[var(--border)] shadow-xl flex flex-col" aria-label={t("mediaGallery")}>
+      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
         <div className="flex items-center gap-2">
-          <GalleryHorizontal className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm text-foreground">{t("mediaGallery")}</span>
+          <GalleryHorizontal className="size-4 text-[var(--accent)]" aria-hidden="true" />
+          <span className="text-sm font-medium">{t("mediaGallery")}</span>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} aria-label={t("closeMediaGallery")}>
-          <X className="h-4 w-4" />
+        <Button isIconOnly size="sm" variant="ghost" onPress={onClose} aria-label={t("closeMediaGallery")}>
+          <X className="size-4" aria-hidden="true" />
         </Button>
       </div>
-      {/* Tabs */}
-      <div className="flex border-b border-border px-2 pt-1" role="tablist" aria-label={t("mediaGallery")}>
-        {tabKeys.map((tabKey, index) => (
-          <button key={tabKey} id={`media-tab-${tabKey}`} onClick={() => setTab(tabKey)}
-            type="button"
-            role="tab"
-            aria-selected={tab === tabKey}
-            aria-controls={`media-tabpanel-${tabKey}`}
-            tabIndex={tab === tabKey ? 0 : -1}
-            ref={(element) => { tabRefs.current[tabKey] = element ?? undefined; }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-                event.preventDefault();
-                moveTab(index, 1);
-              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-                event.preventDefault();
-                moveTab(index, -1);
-              } else if (event.key === "Home") {
-                event.preventDefault();
-                setTab(tabKeys[0]);
-                requestAnimationFrame(() => tabRefs.current.photos?.focus());
-              } else if (event.key === "End") {
-                event.preventDefault();
-                setTab(tabKeys[tabKeys.length - 1]);
-                requestAnimationFrame(() => tabRefs.current.voices?.focus());
-              }
-            }}
-            className={cn(
-              "flex-1 min-w-0 pb-2 text-xs font-medium capitalize transition-colors border-b-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
-              tab === tabKey ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
-            )}>
-            {tabKey === "photos" ? `📷 ${tabLabel(tabKey)} (${photos.length})` : tabKey === "docs" ? `📄 ${tabLabel(tabKey)} (${docs.length})` : `🎙 ${tabLabel(tabKey)} (${voices.length})`}
-          </button>
+      <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as typeof tab)} className="flex min-h-0 flex-1 flex-col">
+        <Tabs.ListContainer className="shrink-0 px-3 pt-2">
+          <Tabs.List aria-label={t("mediaGallery")} className="w-full">
+            {tabs.map((item) => (
+              <Tabs.Tab key={item.id} id={item.id} className="flex-1 gap-1 whitespace-nowrap px-2 text-xs">
+                {item.label}
+                {!isLoading && !isError && <span className="tabular-nums text-[var(--muted)]">({item.count})</span>}
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs.ListContainer>
+        {tabs.map((item) => (
+          <Tabs.Panel key={item.id} id={item.id} className="min-h-0 flex-1 overflow-y-auto p-3">
+            {body(item.id)}
+          </Tabs.Panel>
         ))}
-      </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
-        <div
-          role="tabpanel"
-          id={`media-tabpanel-${tab}`}
-          aria-labelledby={`media-tab-${tab}`}
-          tabIndex={0}
-          className="min-h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-        >
-        {isLoading && (
-          <div className="flex items-center justify-center min-h-32 text-muted-foreground text-sm" role="status">{t("loading")}</div>
-        )}
-        {isError && (
-          <div className="flex flex-col items-center justify-center min-h-32 gap-2 text-center">
-            <p className="text-sm text-muted-foreground">{t("errLoadMedia")}</p>
-            <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>{t("retry")}</Button>
-          </div>
-        )}
-        {!isLoading && !isError && tab === "photos" && (
-          <div className="grid grid-cols-3 gap-1">
-            {photos.length === 0 && !isLoading && (
-              <p className="col-span-3 text-center text-xs text-muted-foreground py-8">{t("noPhotos")}</p>
-            )}
-            {photos.map((p, i) => (
-              <button key={i} type="button" className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                onClick={() => onLightbox(p.url)} aria-label={t("openImage", { name: p.name })}>
-                <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
-        {!isLoading && !isError && tab === "docs" && (
-          <div className="space-y-1.5">
-            {docs.length === 0 && !isLoading && (
-              <p className="text-center text-xs text-muted-foreground py-8">{t("noDocs")}</p>
-            )}
-            {docs.map((d, i) => (
-              <a key={i} href={d.url} target="_blank" rel="noreferrer" download aria-label={t("downloadAttachment", { name: d.name })}
-                className="flex items-center gap-2.5 p-2.5 rounded-lg border border-border hover:bg-muted/50 transition-colors no-underline">
-                <span className="text-xl shrink-0">{fileIcon(d.name)}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground truncate">{d.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {d.size ? formatFileSize(d.size) + " · " : ""}{d.senderName.split(" ")[0]}
-                  </p>
-                </div>
-                <DownloadCloud className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </a>
-            ))}
-          </div>
-        )}
-        {!isLoading && !isError && tab === "voices" && (
-          <div className="space-y-2">
-            {voices.length === 0 && !isLoading && (
-              <p className="text-center text-xs text-muted-foreground py-8">{t("noVoice")}</p>
-            )}
-            {voices.map((v, i) => (
-              <div key={i} className="p-2.5 rounded-lg border border-border bg-muted/40">
-                <p className="text-xs text-muted-foreground mb-1.5">
-                    {v.senderName.split(" ")[0]} · {new Date(v.sentAt).toLocaleDateString(uiLocale(i18n.language), { month: "short", day: "numeric" })}
-                </p>
-                <VoicePlayer url={v.url} duration={v.duration} isOwn={false} />
-              </div>
-            ))}
-          </div>
-        )}
-        </div>
-      </div>
-    </div>
+      </Tabs>
+    </aside>
   );
 }
 
 /* ─── ConversationItem ────────────────────────────────────────────── */
+function UnreadCount({ value, label }: { value: number | string; label: string }) {
+  return (
+    <span className="ms-1 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[11px] font-medium tabular-nums text-[var(--accent-foreground)]" aria-label={label}>
+      {value}
+    </span>
+  );
+}
+
 function ConversationItem({ conv, selected, onClick }: { conv: ConvSummary; selected: boolean; onClick: () => void }) {
   const { t, i18n } = useTranslation("messages");
-  const meta = TYPE_META[conv.type] ?? TYPE_META.group;
-  const Icon = meta.icon;
   const name = convName(conv, t);
   const subtitle = convSubtitle(conv);
   const isDirect = conv.type === "direct";
   const avatarId = isDirect && conv.otherMemberId ? conv.otherMemberId : conv.id;
   const hasUnread = typeof conv.unreadCount === "number" && conv.unreadCount > 0;
-  const unreadLabel = hasUnread ? (conv.unreadCount! > 99 ? "99+" : conv.unreadCount) : null;
+  const unreadLabel = hasUnread ? (conv.unreadCount! > 99 ? "99+" : conv.unreadCount!) : null;
+  const preview = conv.lastMessageBody
+    ? (conv.lastMessageSenderName && !isDirect
+        ? `${conv.lastMessageSenderName.split(" ")[0]}: ${displayBody(conv.lastMessageBody, t)}`
+        : displayBody(conv.lastMessageBody, t))
+    : null;
   return (
     <button onClick={onClick} type="button" title={name} aria-current={selected ? "page" : undefined}
       className={cn(
-        "w-full flex items-center gap-3 px-3.5 py-2.5 text-start transition-colors border-e-2 border-transparent hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
-        selected && "bg-primary/5 hover:bg-primary/5 border-primary",
+        "w-full flex items-center gap-3 px-3.5 py-2.5 text-start transition-colors border-e-2 border-transparent hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]",
+        selected && "bg-[var(--accent)]/5 hover:bg-[var(--accent)]/5 border-[var(--accent)]",
       )}>
-      <div className={cn("shrink-0 h-9 w-9 rounded-full flex items-center justify-center", avatarColor(avatarId))}>
-        {isDirect && conv.otherMemberName
-          ? <span className="text-xs font-medium text-white">{initials(conv.otherMemberName)}</span>
-          : <Icon className="h-4 w-4 text-white" />}
-      </div>
-      <div className="flex-1 min-w-0">
+      <ConvAvatar id={avatarId} name={isDirect ? conv.otherMemberName : null} type={conv.type} />
+      <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className={cn("text-sm font-medium truncate", selected ? "text-foreground" : "text-foreground/90")}>{name}</span>
-            {conv.type === "announcement" && (
-              <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
-                {t("broadcast")}
-              </span>
-            )}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span dir="auto" className={cn("text-sm font-medium truncate", hasUnread ? "text-[var(--foreground)]" : "text-[var(--foreground)]/90")}>{name}</span>
+            {conv.type === "announcement" && <Chip size="sm" variant="soft" color="danger" className="shrink-0 text-[10px]">{t("broadcast")}</Chip>}
           </div>
-          <span className="text-[11px] text-muted-foreground shrink-0 ms-1 tabular-nums">
+          <span className="text-[11px] text-[var(--muted)] shrink-0 ms-1 tabular-nums">
             {conv.lastMessageAt ? formatTime(conv.lastMessageAt, t, i18n.language) : ""}
           </span>
         </div>
-        {isDirect && subtitle ? (
-          <p className="text-xs text-muted-foreground truncate mt-0.5">{subtitle}</p>
-        ) : (
-          <div className="flex items-center justify-between mt-0.5">
-            <p className="text-xs text-muted-foreground truncate flex-1">
-              {conv.lastMessageBody
-                ? (conv.lastMessageSenderName && !isDirect
-                    ? `${conv.lastMessageSenderName.split(" ")[0]}: ${conv.lastMessageBody}`
-                    : conv.lastMessageBody)
-                : <span className="italic">{t("noMessages")}</span>}
-            </p>
-            {hasUnread && (
-              <span className="ms-1 shrink-0 h-5 min-w-5 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-medium" aria-label={`${unreadLabel} ${t("tabUnread")}`}>
-                {unreadLabel}
-              </span>
-            )}
-          </div>
-        )}
-        {isDirect && subtitle && (
-          <div className="flex items-center justify-between mt-0.5">
-            <p className="text-xs text-muted-foreground/70 truncate flex-1">
-              {conv.lastMessageBody ?? <span className="italic">{t("noMessages")}</span>}
-            </p>
-            {hasUnread && (
-              <span className="ms-1 shrink-0 h-5 min-w-5 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-medium" aria-label={`${unreadLabel} ${t("tabUnread")}`}>
-                {unreadLabel}
-              </span>
-            )}
-          </div>
-        )}
+        {isDirect && subtitle && <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{subtitle}</p>}
+        <div className="mt-0.5 flex items-center justify-between">
+          <p dir="auto" className={cn("flex-1 truncate text-xs text-page-start", hasUnread ? "font-medium text-[var(--foreground)]/80" : "text-[var(--muted)]")}>
+            {preview ?? <span className="italic">{t("noMessages")}</span>}
+          </p>
+          {hasUnread && <UnreadCount value={unreadLabel!} label={`${unreadLabel} ${t("tabUnread")}`} />}
+        </div>
       </div>
     </button>
   );
@@ -851,15 +811,32 @@ function DateDivider({ dateStr }: { dateStr: string }) {
   else if (d.toDateString() === new Date(now.setDate(now.getDate() - 1)).toDateString()) label = t("yesterday");
   else label = d.toLocaleDateString(uiLocale(i18n.language), { weekday: "long", month: "long", day: "numeric" });
   return (
-    <div className="flex items-center gap-3 my-3">
-      <div className="flex-1 h-px bg-border" />
-      <span className="text-xs font-medium text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full whitespace-nowrap">{label}</span>
-      <div className="flex-1 h-px bg-border" />
+    <div className="my-3 flex items-center gap-3" role="separator" aria-label={label}>
+      <div className="h-px flex-1 bg-[var(--border)]" />
+      <Chip size="sm" variant="tertiary" className="whitespace-nowrap text-xs">{label}</Chip>
+      <div className="h-px flex-1 bg-[var(--border)]" />
     </div>
   );
 }
 
+/** Toggle pill used by the list filters and the creation-type chooser. */
+function TogglePill({ pressed, onPress, danger, children }: { pressed: boolean; onPress: () => void; danger?: boolean; children: ReactNode }) {
+  return (
+    <button type="button" onClick={onPress} aria-pressed={pressed}
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]",
+        pressed
+          ? danger ? "border-[var(--danger)] bg-[var(--danger)] text-[var(--danger-foreground)]" : "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-foreground)]"
+          : danger ? "border-[var(--danger)]/30 text-[var(--danger)] hover:bg-[var(--danger)]/10" : "border-[var(--border)] text-[var(--muted)] hover:bg-[var(--default)] hover:text-[var(--foreground)]",
+      )}>
+      {children}
+    </button>
+  );
+}
+
 /* ─── NewConversationModal ────────────────────────────────────────── */
+const ANNOUNCEMENT_TARGET_ROLES = ["super_admin","executive_director","program_manager","senior_program_coordinator","technical_coordinator","state_office_manager","state_program_officer"];
+
 function NewConversationModal({
   open, onClose, onCreate, userRole,
 }: {
@@ -867,7 +844,7 @@ function NewConversationModal({
   onCreate: (body: Record<string, unknown>) => Promise<void>;
   userRole: string;
 }) {
-  const { t } = useTranslation("messages");
+  const { t, i18n } = useTranslation("messages");
   const [type, setType] = useState<string>("direct");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -899,6 +876,9 @@ function NewConversationModal({
       (u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
        u.email.toLowerCase().includes(userSearch.toLowerCase())),
   );
+  const stateOptions = states.map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }));
+  const sectorOptions = SECTORS.map((s) => ({ value: s, label: s }));
+  const selectedState = states.find((s) => String(s.id) === selectedStateId);
 
   const reset = () => {
     setType("direct"); setName(""); setDescription(""); setSelectedUsers([]); setUserSearch("");
@@ -941,7 +921,7 @@ function NewConversationModal({
   const handleSubmit = async () => {
     setBusy(true);
     try { await onCreate(buildPayload()); onClose(); reset(); }
-    catch (e: unknown) { toast.error((e as Error).message ?? t("errFailed")); }
+    catch (e: unknown) { toast.error(apiErrorText(e, t)); }
     finally { setBusy(false); }
   };
 
@@ -954,233 +934,196 @@ function NewConversationModal({
   const availableTypes: string[] = ["direct", "group", "project", "state", "sector"];
   if (canAnnounce) availableTypes.push("announcement");
 
+  const close = () => { onClose(); reset(); };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); reset(); } }}>
-      <DialogContent className="w-[calc(100%-1.5rem)] sm:max-w-md max-h-[min(90vh,42rem)] flex flex-col gap-0 p-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
-          <DialogTitle className="text-base font-medium">{confirmStep ? t("confirmAnnouncement") : t("newConversation")}</DialogTitle>
-          <DialogDescription className="sr-only">
-            {confirmStep ? t("confirmAnnouncementDescription") : t("newConversationDescription")}
-          </DialogDescription>
-        </DialogHeader>
+    <Modal isOpen={open} onOpenChange={(o) => { if (!o) close(); }}>
+      <Modal.Backdrop isDismissable={!busy}>
+        <Modal.Container size="md" scroll="inside">
+          <Modal.Dialog className="w-[calc(100%-1.5rem)] sm:max-w-md max-h-[min(90vh,42rem)]">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{confirmStep ? t("confirmAnnouncement") : t("newConversation")}</Modal.Heading>
+              <p className="sr-only">{confirmStep ? t("confirmAnnouncementDescription") : t("newConversationDescription")}</p>
+            </Modal.Header>
 
-        {confirmStep ? (
-          <div className="space-y-4 px-5 py-2 overflow-y-auto min-h-0">
-            <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Megaphone className="h-4 w-4 text-destructive shrink-0" />
-                <p className="font-medium text-destructive text-sm">{t("broadcastAnnouncement")}</p>
-              </div>
-              <p className="text-sm text-foreground font-medium mb-1">{name}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("recipients")}:{" "}
-                {announcementTarget === "all" && t("allActiveUsers")}
-                {announcementTarget === "state" && `${t("stateLabel")}: ${states.find(s => String(s.id) === selectedStateId)?.name ?? selectedStateId}`}
-                {announcementTarget === "sector" && `${t("sectorLabel")}: ${selectedSector}`}
-                {announcementTarget === "role" && `${t("roleLabel")}: ${t(`role_${announcementRole}`)}`}
-              </p>
-              <p className="text-xs text-destructive mt-3 font-medium flex items-start gap-1.5">
-                <span aria-hidden="true">⚠</span><span>{t("announcementWarning")}</span>
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4 px-5 py-2 overflow-y-auto flex-1 min-h-0">
-            {/* Quick actions */}
-            {(userRole === "super_admin" || userRole === "program_manager" || userRole === "executive_director") && (
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-2 block">{t("quickCreate")}</label>
-                <button onClick={createTCGroup}
-                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-border hover:bg-muted/50 text-sm transition-colors text-start">
-                  <Users className="h-4 w-4 text-info shrink-0" />
-                  <span className="font-medium text-foreground">{t("tcGroupName")}</span>
-                  <span className="ms-auto text-xs text-muted-foreground">{t("autoFill")}</span>
-                </button>
-              </div>
-            )}
-
-            {/* Type selector */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-2 block">{t("typeLabel")}</label>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("typeLabel")}>
-                {availableTypes.map((typeKey) => {
-                  const M = TYPE_META[typeKey];
-                  const Icon = M.icon;
-                  return (
-                    <button key={typeKey} onClick={() => { setType(typeKey); setSelectedSector(""); setSelectedStateId(""); }}
-                      aria-pressed={type === typeKey}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                        type === typeKey
-                          ? typeKey === "announcement" ? "bg-destructive text-destructive-foreground border-destructive" : "bg-primary text-primary-foreground border-primary"
-                          : typeKey === "announcement" ? "border-destructive/30 text-destructive hover:bg-destructive/10" : "border-border hover:bg-muted/50",
-                      )}>
-                      <Icon className="h-3 w-3" />{t(`type_${typeKey}`)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Announcement */}
-            {type === "announcement" ? (
-              <div className="space-y-3">
-                <div>
-                  <label htmlFor="announcement-subject" className="text-xs font-medium text-muted-foreground mb-1 block">{t("subjectLabel")}</label>
-                  <input id="announcement-subject" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("announcementSubjectPlaceholder")}
-                    className="w-full h-9 px-3 text-sm rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-destructive/30" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-2 block">{t("recipients")}</label>
-                  <div className="flex flex-wrap gap-2">
-                    {(["all", "state", "sector", "role"] as const).map((target) => (
-                      <button key={target} onClick={() => setAnnouncementTarget(target)}
-                        aria-pressed={announcementTarget === target}
-                        className={cn(
-                          "px-3 py-1 rounded-full text-xs border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                          announcementTarget === target ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted/50",
-                        )}>
-                        {target === "all" ? t("allUsers") : target === "state" ? t("byState") : target === "sector" ? t("bySector") : t("byRole")}
+            <Modal.Body className="space-y-4">
+              {confirmStep ? (
+                <Alert status="danger">
+                  <Alert.Indicator><Megaphone className="size-4" aria-hidden="true" /></Alert.Indicator>
+                  <Alert.Content>
+                    <Alert.Title>{t("broadcastAnnouncement")}</Alert.Title>
+                    <Alert.Description className="space-y-2">
+                      <span dir="auto" className="block font-medium text-[var(--foreground)]">{name}</span>
+                      <span className="block text-xs">
+                        {t("recipients")}:{" "}
+                        {announcementTarget === "all" && t("allActiveUsers")}
+                        {announcementTarget === "state" && `${t("stateLabel")}: ${selectedState ? (i18n.language.startsWith("ar") ? selectedState.nameAr || selectedState.name : selectedState.name) : selectedStateId}`}
+                        {announcementTarget === "sector" && `${t("sectorLabel")}: ${selectedSector}`}
+                        {announcementTarget === "role" && `${t("roleLabel")}: ${t(`role_${announcementRole}`)}`}
+                      </span>
+                      <span className="block text-xs font-medium">{t("announcementWarning")}</span>
+                    </Alert.Description>
+                  </Alert.Content>
+                </Alert>
+              ) : (
+                <>
+                  {/* Quick actions */}
+                  {(userRole === "super_admin" || userRole === "program_manager" || userRole === "executive_director") && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-[var(--muted)]">{t("quickCreate")}</p>
+                      <button type="button" onClick={createTCGroup}
+                        className="flex w-full items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-start text-sm transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+                        <Users className="size-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+                        <span className="font-medium">{t("tcGroupName")}</span>
+                        <span className="ms-auto text-xs text-[var(--muted)]">{t("autoFill")}</span>
                       </button>
-                    ))}
-                  </div>
-                  {announcementTarget === "state" && (
-                    <Select value={selectedStateId} onValueChange={setSelectedStateId}>
-                      <SelectTrigger aria-label={t("stateLabel")} className="mt-2 h-9 text-sm border-border"><SelectValue placeholder={t("selectStatePlaceholder")} /></SelectTrigger>
-                      <SelectContent>{states.map((s) => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}</SelectContent>
-                    </Select>
-                  )}
-                  {announcementTarget === "sector" && (
-                    <Select value={selectedSector} onValueChange={setSelectedSector}>
-                      <SelectTrigger aria-label={t("sectorLabel")} className="mt-2 h-9 text-sm border-border"><SelectValue placeholder={t("selectSectorPlaceholder")} /></SelectTrigger>
-                      <SelectContent>{SECTORS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                    </Select>
-                  )}
-                  {announcementTarget === "role" && (
-                    <Select value={announcementRole} onValueChange={setAnnouncementRole}>
-                      <SelectTrigger aria-label={t("roleLabel")} className="mt-2 h-9 text-sm border-border"><SelectValue placeholder={t("selectRolePlaceholder")} /></SelectTrigger>
-                      <SelectContent>
-                        {["super_admin","executive_director","program_manager","senior_program_coordinator","technical_coordinator","state_office_manager","state_program_officer"].map((r) => (
-                          <SelectItem key={r} value={r}>{t(`role_${r}`)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Name */}
-                {type !== "direct" && type !== "state" && type !== "sector" && (
-                  <div>
-                    <label htmlFor="conversation-name" className="text-xs font-medium text-muted-foreground mb-1 block">{t("nameLabel")}</label>
-                    <input id="conversation-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("conversationNamePlaceholder")}
-                      className="w-full h-9 px-3 text-sm rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary/30" />
-                  </div>
-                )}
-                {/* Description for groups */}
-                {type === "group" && (
-                  <div>
-                    <label htmlFor="conversation-description" className="text-xs font-medium text-muted-foreground mb-1 block">{t("descriptionLabel")}</label>
-                    <input id="conversation-description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("descriptionPlaceholder")}
-                      className="w-full h-9 px-3 text-sm rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary/30" />
-                  </div>
-                )}
-                {/* State */}
-                {type === "state" && (
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">{t("stateLabelRequired")}</label>
-                    <Select value={selectedStateId} onValueChange={setSelectedStateId}>
-                      <SelectTrigger aria-label={t("stateLabelRequired")} className="h-9 text-sm border-border"><SelectValue placeholder={t("selectStatePlaceholder")} /></SelectTrigger>
-                      <SelectContent>{states.map((s) => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {/* Sector */}
-                {type === "sector" && (
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">{t("sectorLabelRequired")}</label>
-                    <Select value={selectedSector} onValueChange={setSelectedSector}>
-                      <SelectTrigger aria-label={t("sectorLabelRequired")} className="h-9 text-sm border-border"><SelectValue placeholder={t("selectSectorPlaceholder")} /></SelectTrigger>
-                      <SelectContent>{SECTORS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {/* Member search */}
-                {(type === "direct" || type === "group" || type === "project") && (
-                  <div>
-                    <label htmlFor="conversation-member-search" className="text-xs font-medium text-muted-foreground mb-1 block">
-                      {type === "direct" ? t("selectUserLabel") : t("addMembersLabel")}
-                    </label>
-                    {selectedUsers.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2" aria-label={t("selectedMembers")}>
-                        {selectedUsers.map((u) => (
-                          <span key={u.id} className="flex items-center gap-1 bg-primary/10 text-primary text-xs px-2 py-1 rounded-full max-w-full">
-                            <span className="truncate" title={u.name}>{u.name}</span>
-                            <button type="button" aria-label={t("removeMember", { name: u.name })} onClick={() => setSelectedUsers((s) => s.filter((x) => x.id !== u.id))}
-                              className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                              <X className="h-2.5 w-2.5" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="relative">
-                      <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                      <input id="conversation-member-search" value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
-                        placeholder={t("searchUserPlaceholder")}
-                        className="w-full h-9 ps-9 pe-3 text-sm rounded-lg border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" />
                     </div>
-                    {filteredUsers.length > 0 && (
-                      <div className="mt-1 border border-border rounded-lg max-h-40 overflow-y-auto" role="listbox" aria-label={t("memberResults")}>
-                        {filteredUsers.slice(0, 8).map((u) => (
-                          <button key={u.id}
-                            type="button"
-                            role="option"
-                            aria-label={`${u.name}, ${u.roleLabel}`}
-                            onClick={() => {
-                              setSelectedUsers((s) => type === "direct" ? [u] : [...s, u]);
-                              setUserSearch("");
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
-                            <Avatar className="h-6 w-6 shrink-0">
-                              <AvatarFallback className={cn("text-[9px] text-white", avatarColor(u.id))}>{initials(u.name)}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{u.name}</p>
-                              <p className="text-xs text-muted-foreground truncate">{u.roleLabel}</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
+                  )}
 
-        <DialogFooter className="px-5 py-4 border-t border-border/70 shrink-0">
-          {confirmStep ? (
-            <>
-              <Button variant="outline" onClick={() => setConfirmStep(false)} disabled={busy}>{t("back")}</Button>
-              <Button onClick={handleSubmit} disabled={busy} variant="destructive">
-                {busy ? t("sending") : t("sendAnnouncement")}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => { onClose(); reset(); }} disabled={busy}>{t("cancel")}</Button>
-              <Button onClick={handleNext} disabled={busy}
-                className={type === "announcement" ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground" : ""}>
-                {busy ? t("creating") : type === "announcement" ? t("previewArrow") : t("startConversation")}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+                  {/* Type selector */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-[var(--muted)]">{t("typeLabel")}</p>
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("typeLabel")}>
+                      {availableTypes.map((typeKey) => {
+                        const Icon = typeIcon(typeKey);
+                        return (
+                          <TogglePill key={typeKey} pressed={type === typeKey} danger={typeKey === "announcement"}
+                            onPress={() => { setType(typeKey); setSelectedSector(""); setSelectedStateId(""); }}>
+                            <Icon className="size-3" aria-hidden="true" />{t(`type_${typeKey}`)}
+                          </TogglePill>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {type === "announcement" ? (
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="announcement-subject" isRequired>{t("subjectLabel")}</Label>
+                        <Input id="announcement-subject" fullWidth dir="auto" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("announcementSubjectPlaceholder")} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-[var(--muted)]">{t("recipients")}</p>
+                        <div className="flex flex-wrap gap-2" role="group" aria-label={t("recipients")}>
+                          {(["all", "state", "sector", "role"] as const).map((target) => (
+                            <TogglePill key={target} pressed={announcementTarget === target} onPress={() => setAnnouncementTarget(target)}>
+                              {target === "all" ? t("allUsers") : target === "state" ? t("byState") : target === "sector" ? t("bySector") : t("byRole")}
+                            </TogglePill>
+                          ))}
+                        </div>
+                        {announcementTarget === "state" && (
+                          <SelectField aria-label={t("stateLabel")} placeholder={t("selectStatePlaceholder")} value={selectedStateId} onChange={setSelectedStateId} className="mt-2" options={stateOptions} />
+                        )}
+                        {announcementTarget === "sector" && (
+                          <SelectField aria-label={t("sectorLabel")} placeholder={t("selectSectorPlaceholder")} value={selectedSector} onChange={setSelectedSector} className="mt-2" options={sectorOptions} />
+                        )}
+                        {announcementTarget === "role" && (
+                          <SelectField aria-label={t("roleLabel")} placeholder={t("selectRolePlaceholder")} value={announcementRole} onChange={setAnnouncementRole} className="mt-2"
+                            options={ANNOUNCEMENT_TARGET_ROLES.map((r) => ({ value: r, label: t(`role_${r}`) }))} />
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Name */}
+                      {type !== "direct" && type !== "state" && type !== "sector" && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="conversation-name" isRequired>{t("nameLabel")}</Label>
+                          <Input id="conversation-name" fullWidth dir="auto" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("conversationNamePlaceholder")} />
+                        </div>
+                      )}
+                      {/* Description for groups */}
+                      {type === "group" && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="conversation-description">{t("descriptionLabel")}</Label>
+                          <Input id="conversation-description" fullWidth dir="auto" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("descriptionPlaceholder")} />
+                        </div>
+                      )}
+                      {type === "state" && (
+                        <SelectField id="conversation-state" label={t("stateLabel")} isRequired placeholder={t("selectStatePlaceholder")} value={selectedStateId} onChange={setSelectedStateId} options={stateOptions} />
+                      )}
+                      {type === "sector" && (
+                        <SelectField id="conversation-sector" label={t("sectorLabel")} isRequired placeholder={t("selectSectorPlaceholder")} value={selectedSector} onChange={setSelectedSector} options={sectorOptions} />
+                      )}
+                      {/* Member search */}
+                      {(type === "direct" || type === "group" || type === "project") && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="conversation-member-search" isRequired={type === "direct"}>
+                            {type === "direct" ? t("selectUserLabel") : t("addMembersLabel")}
+                          </Label>
+                          {selectedUsers.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5" aria-label={t("selectedMembers")}>
+                              {selectedUsers.map((u) => (
+                                <Chip key={u.id} size="sm" variant="soft" color="accent" className="max-w-full gap-1 pe-1">
+                                  <span className="truncate" title={u.name}>{u.name}</span>
+                                  <button type="button" aria-label={t("removeMember", { name: u.name })} onClick={() => setSelectedUsers((s) => s.filter((x) => x.id !== u.id))}
+                                    className="flex size-4 shrink-0 items-center justify-center rounded-full hover:bg-[var(--accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+                                    <X className="size-2.5" aria-hidden="true" />
+                                  </button>
+                                </Chip>
+                              ))}
+                            </div>
+                          )}
+                          <SearchField aria-label={type === "direct" ? t("selectUserLabel") : t("addMembersLabel")} value={userSearch} onChange={setUserSearch}>
+                            <SearchField.Group>
+                              <SearchField.SearchIcon />
+                              <SearchField.Input id="conversation-member-search" placeholder={t("searchUserPlaceholder")} />
+                              <SearchField.ClearButton />
+                            </SearchField.Group>
+                          </SearchField>
+                          {filteredUsers.length > 0 && (
+                            <div className="max-h-40 overflow-y-auto rounded-xl border border-[var(--border)]" role="listbox" aria-label={t("memberResults")}>
+                              {filteredUsers.slice(0, 8).map((u) => (
+                                <button key={u.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={false}
+                                  aria-label={`${u.name}, ${u.roleLabel}`}
+                                  onClick={() => {
+                                    setSelectedUsers((s) => type === "direct" ? [u] : [...s, u]);
+                                    setUserSearch("");
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-start hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]">
+                                  <ConvAvatar id={u.id} name={u.name} size="sm" />
+                                  <div className="min-w-0 flex-1">
+                                    <p dir="auto" className="truncate text-sm font-medium text-page-start">{u.name}</p>
+                                    <p className="truncate text-xs text-[var(--muted)]">{u.roleLabel}</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </Modal.Body>
+
+            <Modal.Footer>
+              {confirmStep ? (
+                <>
+                  <Button variant="tertiary" onPress={() => setConfirmStep(false)} isDisabled={busy}>{t("back")}</Button>
+                  <Button variant="danger" onPress={() => { void handleSubmit(); }} isPending={busy}>
+                    <Megaphone className="size-4" aria-hidden="true" />
+                    {busy ? t("sending") : t("sendAnnouncement")}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="tertiary" onPress={close} isDisabled={busy}>{t("cancel")}</Button>
+                  <Button variant={type === "announcement" ? "danger" : "primary"} onPress={handleNext} isPending={busy}>
+                    {busy ? t("creating") : type === "announcement" ? t("previewArrow") : t("startConversation")}
+                  </Button>
+                </>
+              )}
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -1198,44 +1141,46 @@ function ForwardDialog({
     return n.includes(search.toLowerCase());
   });
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Forward className="h-4 w-4" /> {t("forwardMessage")}</DialogTitle>
-          <DialogDescription className="sr-only">{t("forwardMessageDescription")}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          <div className="rounded-lg bg-muted/40 border border-border p-3 text-sm text-muted-foreground italic truncate">
-            "{msg.body.slice(0, 100)}{msg.body.length > 100 ? "…" : ""}"
-          </div>
-          <div className="relative">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input id="forward-conversation-search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label={t("searchConversations")} placeholder={t("searchConversations")}
-              className="w-full h-9 ps-9 pe-3 text-sm rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary/30" />
-          </div>
-          <div className="max-h-56 overflow-y-auto rounded-lg border border-border divide-y divide-border">
-            {filtered.map((c) => (
-              <button key={c.id} onClick={() => onForward(c.id)}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/50 text-start transition-colors">
-                <div className={cn("h-8 w-8 rounded-full flex items-center justify-center shrink-0",
-                  avatarColor(c.type === "direct" && c.otherMemberId ? c.otherMemberId : c.id))}>
-                  {c.type === "direct" && c.otherMemberName
-                    ? <span className="text-xs font-bold text-white">{initials(c.otherMemberName)}</span>
-                    : (() => { const M = TYPE_META[c.type] ?? TYPE_META.group; const Icon = M.icon; return <Icon className="h-3.5 w-3.5 text-white" />; })()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{convName(c, t)}</p>
-                  {c.memberCount > 0 && <p className="text-xs text-muted-foreground">{c.memberCount} {t("membersCount")}</p>}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>{t("cancel")}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal isOpen onOpenChange={(o) => { if (!o) onClose(); }}>
+      <Modal.Backdrop isDismissable>
+        <Modal.Container size="sm" scroll="inside">
+          <Modal.Dialog>
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading className="flex items-center gap-2"><Forward className="size-4 rtl:-scale-x-100" aria-hidden="true" /> {t("forwardMessage")}</Modal.Heading>
+              <p className="sr-only">{t("forwardMessageDescription")}</p>
+            </Modal.Header>
+            <Modal.Body className="space-y-3">
+              <blockquote dir="auto" className="truncate rounded-xl border border-[var(--border)] bg-[var(--default)] p-3 text-sm italic text-[var(--muted)]">
+                {displayBody(msg.body, t).slice(0, 100)}{msg.body.length > 100 ? "…" : ""}
+              </blockquote>
+              <SearchField aria-label={t("searchConversations")} value={search} onChange={setSearch}>
+                <SearchField.Group>
+                  <SearchField.SearchIcon />
+                  <SearchField.Input id="forward-conversation-search" placeholder={t("searchConversations")} />
+                  <SearchField.ClearButton />
+                </SearchField.Group>
+              </SearchField>
+              <div className="max-h-56 divide-y divide-[var(--border)] overflow-y-auto rounded-xl border border-[var(--border)]">
+                {filtered.map((c) => (
+                  <button key={c.id} type="button" onClick={() => onForward(c.id)}
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-start transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]">
+                    <ConvAvatar id={c.type === "direct" && c.otherMemberId ? c.otherMemberId : c.id} name={c.type === "direct" ? c.otherMemberName : null} type={c.type} />
+                    <div className="min-w-0 flex-1">
+                      <p dir="auto" className="truncate text-sm font-medium text-page-start">{convName(c, t)}</p>
+                      {c.memberCount > 0 && <p className="text-xs text-[var(--muted)]">{c.memberCount} {t("membersCount")}</p>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="tertiary" onPress={onClose}>{t("cancel")}</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -1307,6 +1252,9 @@ export default function Messages() {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /* image pending preview */
   const [pendingImagePreviews, setPendingImagePreviews] = useState<string[]>([]);
+  /* One object URL per recording, released when it is replaced or discarded. */
+  const voicePreviewUrl = useMemo(() => voiceBlob ? URL.createObjectURL(voiceBlob) : null, [voiceBlob]);
+  useEffect(() => () => { if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl); }, [voicePreviewUrl]);
 
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1620,7 +1568,7 @@ export default function Messages() {
     // MutationCache in App.tsx — suppress the local toast to avoid duplicates.
     onError: (e: Error) => {
       if (!isOfflineQueuedError(e) && !isOfflineBlockedError(e)) {
-        toast.error(e.message);
+        toast.error(apiErrorText(e, t));
       }
     },
   });
@@ -1632,7 +1580,7 @@ export default function Messages() {
         body: JSON.stringify({ body }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["messages", selectedId] }),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(apiErrorText(e, t)),
   });
 
   const deleteMut = useMutation({
@@ -1650,7 +1598,7 @@ export default function Messages() {
         void qc.invalidateQueries({ queryKey: ["conversations-unread"] });
       }
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(apiErrorText(e, t)),
   });
 
   const pinMut = useMutation({
@@ -1660,7 +1608,7 @@ export default function Messages() {
       qc.invalidateQueries({ queryKey: ["messages", selectedId] });
       qc.invalidateQueries({ queryKey: ["pinned", selectedId] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(apiErrorText(e, t)),
   });
 
   const reactionMut = useMutation({
@@ -1670,7 +1618,7 @@ export default function Messages() {
         body: JSON.stringify({ emoji }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["messages", selectedId] }),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(apiErrorText(e, t)),
   });
 
   const createConvMut = useMutation({
@@ -1683,7 +1631,7 @@ export default function Messages() {
       qc.invalidateQueries({ queryKey: ["conversations"] });
       if (data?.id) navigate(`/messages/${data.id}`);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(apiErrorText(e, t)),
   });
 
   const forwardToConvMut = useMutation({
@@ -1697,7 +1645,7 @@ export default function Messages() {
       qc.invalidateQueries({ queryKey: ["conversations"] });
       navigate(`/messages/${convId}`);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(apiErrorText(e, t)),
   });
 
   /* ── pinned messages ─────────────────────────────────────────── */
@@ -1713,10 +1661,11 @@ export default function Messages() {
     deleteMut.mutate({ msgId: id, deletionType: "for_me" });
   }, [deleteMut]);
 
+  // Confirmed in a ConfirmModal (the native confirm() had browser-language buttons).
+  const [deleteEveryoneId, setDeleteEveryoneId] = useState<number | null>(null);
   const handleDeleteForEveryone = useCallback((id: number) => {
-    if (!confirm(t("confirmDeleteEveryone"))) return;
-    deleteMut.mutate({ msgId: id, deletionType: "for_everyone" });
-  }, [deleteMut, t]);
+    setDeleteEveryoneId(id);
+  }, []);
 
   const handlePin = useCallback((id: number, shouldPin: boolean) => {
     pinMut.mutate({ msgId: id, shouldPin });
@@ -1964,64 +1913,63 @@ export default function Messages() {
     { id: "announcement", label: t("tabBroadcasts") },
   ];
 
-  return (
-    <div className="-m-4 md:-m-5 lg:-m-6 xl:-m-8 h-[calc(100dvh-4rem)] min-h-[32rem] flex overflow-hidden bg-card border-y border-border/70 md:border md:rounded-xl">
+  const iconButton = "size-10 min-w-10 shrink-0 rounded-xl";
 
-      {/* ── Left panel ───────────────────────────────────────── */}
+  return (
+    <div className="-m-4 md:-m-5 lg:-m-6 xl:-m-8 h-[calc(100dvh-4rem)] min-h-[32rem] flex overflow-hidden bg-[var(--surface)] border-y border-[var(--border)] md:border md:rounded-xl">
+
+      {/* ── Conversation list ───────────────────────────────────── */}
       <div className={cn(
-        "flex flex-col bg-card border-e border-border/80",
+        "flex flex-col bg-[var(--surface)] border-e border-[var(--border)]",
         "w-full md:w-[clamp(18rem,24vw,22rem)] shrink-0",
         selectedId ? "hidden md:flex" : "flex",
       )}>
-        <div className="px-4 pt-3.5 pb-2.5 border-b border-border/80">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-                <MessageSquare className="h-3.5 w-3.5 text-primary-foreground" />
-              </div>
-              <h1 className="text-foreground text-xl font-semibold">{t("title")}</h1>
-            </div>
-            <Button onClick={() => setNewChatOpen(true)} size="sm" className="h-8 text-xs gap-1 shrink-0">
-              <Plus className="h-3.5 w-3.5" /> {t("newChat")}
-            </Button>
+        <div className="space-y-3 border-b border-[var(--border)] px-4 pb-2.5 pt-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="flex items-center gap-2 text-xl font-semibold">
+              <MessageSquare className="size-5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+              {t("title")}
+            </h1>
+            {/* Icon-only so the page title keeps one line in the narrow list. */}
+            <Tooltip delay={300}>
+              <Button isIconOnly onPress={() => setNewChatOpen(true)} size="sm" className="shrink-0" aria-label={t("newChat")}>
+                <Plus className="size-4" aria-hidden="true" />
+              </Button>
+              <Tooltip.Content>{t("newChat")}</Tooltip.Content>
+            </Tooltip>
           </div>
-          <div className="relative mb-3">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
-              aria-label={t("searchConversations")}
-              placeholder={t("searchConversations")}
-              className="w-full h-9 ps-9 pe-3 text-sm rounded-lg border border-border bg-muted/30 placeholder:text-muted-foreground/75 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary/50 transition" />
-          </div>
-          <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+          <SearchField aria-label={t("searchConversations")} value={searchQ} onChange={setSearchQ}>
+            <SearchField.Group>
+              <SearchField.SearchIcon />
+              <SearchField.Input placeholder={t("searchConversations")} />
+              <SearchField.ClearButton />
+            </SearchField.Group>
+          </SearchField>
+          <div className="scrollbar-hide -mx-1 flex gap-1 overflow-x-auto px-1 pb-1" role="group" aria-label={t("filterConversations")}>
             {TABS.map((tab) => (
-              <button key={tab.id} onClick={() => setFilterTab(tab.id)}
-                type="button" aria-pressed={filterTab === tab.id}
-                className={cn(
-                  "shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full border border-transparent text-xs font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                  filterTab === tab.id ? "bg-primary text-primary-foreground border-primary" : "bg-muted/35 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                )}>
+              <TogglePill key={tab.id} pressed={filterTab === tab.id} onPress={() => setFilterTab(tab.id)}>
                 {tab.label}
                 {(tab.badge ?? 0) > 0 && (
-                  <span className={cn("rounded-full text-xs px-1 leading-none",
-                    filterTab === tab.id ? "bg-white/20" : "bg-primary text-primary-foreground")}>
+                  <span className={cn("rounded-full px-1.5 text-[10px] leading-4 tabular-nums",
+                    filterTab === tab.id ? "bg-white/25" : "bg-[var(--accent)] text-[var(--accent-foreground)]")}>
                     {tab.badge}
                   </span>
                 )}
-              </button>
+              </TogglePill>
             ))}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {convsLoading ? (
-            <div className="divide-y divide-border/60">
+            <div className="divide-y divide-[var(--border)]" aria-hidden="true">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="flex items-center gap-3 px-3.5 py-2.5">
-                  <Skeleton className="h-9 w-9 rounded-full shrink-0" />
-                  <div className="flex-1 space-y-1.5 min-w-0">
-                    <Skeleton className="h-3.5 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="size-9 shrink-0 rounded-full" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-3/4 rounded-md" />
+                    <Skeleton className="h-3 w-1/2 rounded-md" />
                   </div>
-                  <Skeleton className="h-3 w-8 shrink-0" />
+                  <Skeleton className="h-3 w-8 shrink-0 rounded-md" />
                 </div>
               ))}
             </div>
@@ -2034,15 +1982,15 @@ export default function Messages() {
               compact
             />
           ) : convList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full py-12 text-center px-4">
+            <div className="flex h-full flex-col items-center justify-center px-4 py-12 text-center">
               {filterTab !== "all" || searchQ.trim()
-                ? <Search className="h-8 w-8 text-muted-foreground/35 mb-3" />
-                : <MessageSquare className="h-9 w-9 text-muted-foreground/35 mb-3" />}
-              <p className="text-sm font-medium text-muted-foreground">
+                ? <Search className="mb-3 size-8 text-[var(--muted)] opacity-40" aria-hidden="true" />
+                : <MessageSquare className="mb-3 size-9 text-[var(--muted)] opacity-40" aria-hidden="true" />}
+              <p className="text-sm font-medium text-[var(--muted)]">
                 {filterTab !== "all" || searchQ.trim() ? t("noFilteredConversations") : t("noConversations")}
               </p>
               {filterTab === "all" && !searchQ.trim() && (
-                <p className="text-xs text-muted-foreground/70 mt-1">{t("noConversationsHint")}</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">{t("noConversationsHint")}</p>
               )}
             </div>
           ) : (
@@ -2053,20 +2001,14 @@ export default function Messages() {
               ))}
               {moreConversationsError ? (
                 <div className="px-4 py-3 text-center">
-                  <p className="text-xs text-destructive mb-2">{t("errLoadMoreConversations")}</p>
-                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleFetchMoreConversations}>
+                  <p className="mb-2 text-xs text-[var(--danger)]">{t("errLoadMoreConversations")}</p>
+                  <Button size="sm" variant="tertiary" onPress={handleFetchMoreConversations}>
                     {t("loadMoreConversations")}
                   </Button>
                 </div>
               ) : hasMoreConversations ? (
-                <div className="p-2.5 flex justify-center border-t border-border/60">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 text-xs text-muted-foreground hover:text-foreground"
-                    disabled={isFetchingMoreConversations}
-                    onClick={handleFetchMoreConversations}
-                  >
+                <div className="flex justify-center border-t border-[var(--border)] p-2.5">
+                  <Button size="sm" variant="ghost" isPending={isFetchingMoreConversations} onPress={handleFetchMoreConversations}>
                     {isFetchingMoreConversations ? t("loadingMoreConversations") : t("loadMoreConversations")}
                   </Button>
                 </div>
@@ -2076,17 +2018,17 @@ export default function Messages() {
         </div>
       </div>
 
-      {/* ── Right panel: chat + gallery ────────────────────────── */}
+      {/* ── Chat + gallery ──────────────────────────────────────── */}
       {!selectedId ? (
-        <div className="hidden md:flex flex-1 items-center justify-center bg-muted/20">
-          <div className="text-center max-w-sm px-6">
-            <div className="h-14 w-14 rounded-xl border border-primary/10 bg-primary/5 flex items-center justify-center mx-auto mb-3">
-              <MessageSquare className="h-6 w-6 text-primary/45" />
+        <div className="hidden md:flex flex-1 items-center justify-center bg-[var(--background)]">
+          <div className="max-w-sm px-6 text-center">
+            <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-2xl bg-[var(--accent)]/10">
+              <MessageSquare className="size-6 text-[var(--accent)]" aria-hidden="true" />
             </div>
-            <p className="font-medium text-foreground">{t("selectConversation")}</p>
-            <p className="text-sm text-muted-foreground mt-1">{t("selectConversationHint")}</p>
-            <Button onClick={() => setNewChatOpen(true)} size="sm" className="mt-4 gap-1.5">
-              <Plus className="h-3.5 w-3.5" /> {t("newConversation")}
+            <p className="font-medium">{t("selectConversation")}</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">{t("selectConversationHint")}</p>
+            <Button onPress={() => setNewChatOpen(true)} size="sm" className="mt-4">
+              <Plus className="size-4" aria-hidden="true" /> {t("newConversation")}
             </Button>
           </div>
         </div>
@@ -2095,41 +2037,32 @@ export default function Messages() {
           {/* Chat window */}
           <div className={cn("flex flex-col flex-1 min-w-0 relative", selectedId ? "flex" : "hidden md:flex")}>
             {/* Chat header */}
-            <div className="flex items-center gap-3 px-4 py-2.5 min-h-16 bg-card/95 border-b border-border/80 shrink-0">
-              <Button variant="ghost" size="icon" className="md:hidden shrink-0 -ms-1 h-9 w-9" aria-label={t("backToConversations")} onClick={() => navigate("/messages")}>
-                <ArrowLeft className="h-5 w-5 rtl:rotate-180" />
+            <div className="flex items-center gap-3 px-4 py-2.5 min-h-16 bg-[var(--surface)] border-b border-[var(--border)] shrink-0">
+              <Button isIconOnly variant="ghost" className="md:hidden shrink-0 -ms-1 size-9 min-w-9" aria-label={t("backToConversations")} onPress={() => navigate("/messages")}>
+                <ArrowLeft className="size-5 rtl:rotate-180" aria-hidden="true" />
               </Button>
               {convDetail && (
                 <>
                   <div className="relative shrink-0">
-                    {convDetail.type === "direct" && convDetail.otherMemberName ? (
-                      <div className={cn("h-9 w-9 rounded-full flex items-center justify-center", avatarColor(convDetail.otherMemberId ?? convDetail.id))}>
-                        <span className="text-xs font-medium text-white">{initials(convDetail.otherMemberName)}</span>
-                      </div>
-                    ) : (
-                      <div className={cn("h-9 w-9 rounded-full flex items-center justify-center", avatarColor(convDetail.id))}>
-                        {(() => { const M = TYPE_META[convDetail.type] ?? TYPE_META.group; const Icon = M.icon; return <Icon className="h-4 w-4 text-white" />; })()}
-                      </div>
-                    )}
-                    {/* Online dot */}
+                    <ConvAvatar
+                      id={convDetail.type === "direct" ? convDetail.otherMemberId ?? convDetail.id : convDetail.id}
+                      name={convDetail.type === "direct" ? convDetail.otherMemberName : null}
+                      type={convDetail.type}
+                    />
                     {presence?.online && (
-                      <span className="absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full bg-success border-2 border-card" />
+                      <span className="absolute -bottom-0.5 -end-0.5 size-3 rounded-full border-2 border-[var(--surface)] bg-[var(--success)]" aria-hidden="true" />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <p className="font-medium text-sm text-foreground truncate" title={convName(convDetail, t)}>{convName(convDetail, t)}</p>
-                      {isAnnouncement && (
-                        <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
-                          {t("broadcast")}
-                        </span>
-                      )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p dir="auto" className="truncate text-sm font-medium text-page-start" title={convName(convDetail, t)}>{convName(convDetail, t)}</p>
+                      {isAnnouncement && <Chip size="sm" variant="soft" color="danger" className="shrink-0 text-[10px]">{t("broadcast")}</Chip>}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="truncate text-xs text-[var(--muted)]">
                       {convDetail.type === "direct"
                         ? presence
-                          ? <span className={cn("flex items-center gap-1", presence.online ? "text-success" : "")}>
-                              {presence.online && <CircleFill className="h-2 w-2 text-success" />}
+                          ? <span className={cn("flex items-center gap-1", presence.online ? "text-[var(--success)]" : "")}>
+                              {presence.online && <CircleFill className="size-2 text-[var(--success)]" aria-hidden="true" />}
                               {presence.online ? t("online") : presence.label}
                               {!presence.online && convSubtitle(convDetail) && ` · ${convSubtitle(convDetail)}`}
                             </span>
@@ -2138,20 +2071,19 @@ export default function Messages() {
                           <>
                             {t("memberCount", { count: convDetail.memberCount })}
                             {convDetail.members?.length > 0 && (
-                              <span className="ms-1">· {convDetail.members.slice(0, 3).map((m) => m.name.split(" ")[0]).join(", ")}</span>
+                              <span className="ms-1">· {convDetail.members.slice(0, 3).map((m) => m.name.split(" ")[0]).join("، ")}</span>
                             )}
                           </>
                         )}
                     </p>
                   </div>
-                  {/* Header actions */}
-                  <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-muted-foreground hover:text-primary"
-                    onClick={() => setGalleryOpen((v) => !v)} aria-label={t("mediaGallery")}>
-                    <GalleryHorizontal className="h-4 w-4" />
+                  <Chip size="sm" variant="tertiary" className="hidden shrink-0 sm:inline-flex">
+                    {t(`type_${convDetail.type}`)}
+                  </Chip>
+                  <Button isIconOnly variant="ghost" size="sm" className="shrink-0 text-[var(--muted)]" aria-pressed={galleryOpen}
+                    onPress={() => setGalleryOpen((v) => !v)} aria-label={t("mediaGallery")}>
+                    <GalleryHorizontal className="size-4" aria-hidden="true" />
                   </Button>
-                  <Badge variant="outline" className="shrink-0 capitalize text-[11px] hidden sm:inline-flex">
-                    {t(`type_${convDetail.type}`) || (TYPE_META[convDetail.type]?.label ?? convDetail.type)}
-                  </Badge>
                 </>
               )}
             </div>
@@ -2162,46 +2094,43 @@ export default function Messages() {
                 type="button"
                 aria-expanded={pinnedOpen}
                 aria-controls="pinned-messages-panel"
-                className="flex items-center gap-2 px-4 py-2 bg-warning/10 border-b border-warning/20 text-xs shrink-0 cursor-pointer hover:bg-warning/15 transition-colors text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-warning"
+                className="flex shrink-0 items-center gap-2 border-b border-[var(--warning)]/20 bg-[var(--warning)]/10 px-4 py-2 text-start text-xs transition-colors hover:bg-[var(--warning)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]"
                 onClick={() => setPinnedOpen((v) => !v)}>
-                <Pin className="h-3 w-3 text-warning shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-medium text-warning">{t("pinnedLabel")}: </span>
-                  <span className="text-warning/80 truncate">
-                    {pinnedMsgs[0].body?.slice(0, 70) || t("attachmentPlaceholder")}
+                <Pin className="size-3 shrink-0 text-[var(--warning)]" aria-hidden="true" />
+                <div className="min-w-0 flex-1 truncate">
+                  <span className="font-medium text-[var(--warning)]">{t("pinnedLabel")}: </span>
+                  <span dir="auto" className="text-[var(--foreground)]/80">
+                    {displayBody(pinnedMsgs[0].body, t).slice(0, 70) || t("attachmentPlaceholder")}
                   </span>
                 </div>
                 {pinnedMsgs.length > 1 && (
-                  <span className="text-warning font-medium shrink-0">{t("pinnedCount", { count: pinnedMsgs.length })}</span>
+                  <span className="shrink-0 font-medium text-[var(--warning)]">{t("pinnedCount", { count: pinnedMsgs.length })}</span>
                 )}
               </button>
             )}
 
-            {/* Pinned messages viewer panel (absolute overlay) */}
+            {/* Pinned messages panel (overlay on the inline end) */}
             {pinnedOpen && (
-              <div id="pinned-messages-panel" className="absolute inset-y-0 end-0 z-20 h-full w-full max-w-sm bg-card border-s border-border flex flex-col shadow-xl">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-primary text-primary-foreground shrink-0">
-                  <div className="flex items-center gap-2 font-medium text-sm">
-                    <Pin className="h-3.5 w-3.5" /> {t("pinnedMessages")}
-                    <span className="text-white/70 font-normal">({pinnedMsgs.length})</span>
+              <div id="pinned-messages-panel" className="absolute inset-y-0 end-0 z-20 h-full w-full max-w-sm bg-[var(--surface)] border-s border-[var(--border)] flex flex-col shadow-xl">
+                <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Pin className="size-4 text-[var(--warning)]" aria-hidden="true" /> {t("pinnedMessages")}
+                    <span className="font-normal tabular-nums text-[var(--muted)]">({pinnedMsgs.length})</span>
                   </div>
-                  <Button variant="ghost" size="icon"
-                    aria-label={t("closePinnedMessages")}
-                    className="h-7 w-7 text-white/70 hover:text-white hover:bg-white/10"
-                    onClick={() => setPinnedOpen(false)}>
-                    <X className="h-4 w-4" />
+                  <Button isIconOnly size="sm" variant="ghost" aria-label={t("closePinnedMessages")} onPress={() => setPinnedOpen(false)}>
+                    <X className="size-4" aria-hidden="true" />
                   </Button>
                 </div>
-                <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
                   {pinnedMsgs.length === 0 ? (
-                    <p className="text-center text-muted-foreground text-sm py-8">{t("noPinnedMessages")}</p>
+                    <p className="py-8 text-center text-sm text-[var(--muted)]">{t("noPinnedMessages")}</p>
                   ) : (
                     pinnedMsgs.map((p) => (
-                      <div key={p.id} className="p-3 rounded-xl border border-warning/20 bg-warning/5">
-                        <p className="text-xs font-medium text-warning mb-1 truncate" title={p.senderName}>{p.senderName}</p>
-                        <p className="text-sm text-foreground line-clamp-3 break-words [overflow-wrap:anywhere]">{p.body || t("attachmentPlaceholder")}</p>
-                        <p className="text-xs text-muted-foreground mt-1.5">
-                          {t("pinnedBy", { name: p.pinnedByName ?? t("someone") })} · {formatMsgTime(p.pinnedAt, i18n.language)}
+                      <div key={p.id} className="rounded-xl border border-[var(--warning)]/20 bg-[var(--warning)]/5 p-3">
+                        <p dir="auto" className="mb-1 truncate text-xs font-medium text-[var(--warning)] text-page-start" title={p.senderName}>{p.senderName}</p>
+                        <p dir="auto" className="line-clamp-3 text-sm break-words [overflow-wrap:anywhere] text-page-start">{displayBody(p.body, t) || t("attachmentPlaceholder")}</p>
+                        <p className="mt-1.5 text-xs text-[var(--muted)]">
+                          {t("pinnedBy", { name: p.pinnedByName ?? t("someone") })} · <bdi dir="ltr">{formatMsgTime(p.pinnedAt, i18n.language)}</bdi>
                         </p>
                       </div>
                     ))
@@ -2211,9 +2140,9 @@ export default function Messages() {
             )}
 
             {/* Messages area */}
-            <div ref={messagesScrollRef} className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-3.5 space-y-0.5 bg-muted/20">
+            <div ref={messagesScrollRef} className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-3.5 space-y-0.5 bg-[var(--background)]">
               {msgsLoading ? (
-                <div className="flex flex-col gap-3.5 py-2">
+                <div className="flex flex-col gap-3.5 py-2" aria-hidden="true">
                   {/* Alternating skeleton bubbles to simulate a real conversation */}
                   {[
                     { own: false, widths: ["w-48", "w-36"] },
@@ -2224,7 +2153,7 @@ export default function Messages() {
                     { own: true,  widths: ["w-60"] },
                   ].map((row, i) => (
                     <div key={i} className={cn("flex items-end gap-2", row.own ? "flex-row-reverse" : "flex-row")}>
-                      {!row.own && <Skeleton className="h-7 w-7 rounded-full shrink-0 mb-0.5" />}
+                      {!row.own && <Skeleton className="mb-0.5 size-7 shrink-0 rounded-full" />}
                       <div className={cn("flex flex-col gap-1", row.own ? "items-end" : "items-start")}>
                         {row.widths.map((w, j) => (
                           <Skeleton key={j} className={cn("h-9 rounded-2xl", w)} />
@@ -2234,7 +2163,7 @@ export default function Messages() {
                   ))}
                 </div>
               ) : msgsError ? (
-                <div className="flex items-center justify-center h-full">
+                <div className="flex h-full items-center justify-center">
                   <ErrorState
                     variant="server"
                     title={t("errLoadMessages")}
@@ -2243,24 +2172,18 @@ export default function Messages() {
                   />
                 </div>
               ) : grouped.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-                  <div className="h-11 w-11 rounded-xl border border-primary/10 bg-primary/5 flex items-center justify-center mx-auto mb-3">
-                    <MessageSquare className="h-5 w-5 text-primary/35" />
+                <div className="flex h-full flex-col items-center justify-center py-12 text-center">
+                  <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-xl bg-[var(--accent)]/10">
+                    <MessageSquare className="size-5 text-[var(--accent)]" aria-hidden="true" />
                   </div>
-                  <p className="text-sm font-medium text-foreground">{t("noMessages")}</p>
-                  <p className="text-xs text-muted-foreground/60 mt-0.5">{t("noMessagesHint")}</p>
+                  <p className="text-sm font-medium">{t("noMessages")}</p>
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">{t("noMessagesHint")}</p>
                 </div>
               ) : (
                 <>
                   {hasOlderMessages && (
                     <div className="flex justify-center py-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => void handleLoadOlderMessages()}
-                        disabled={isFetchingOlderMessages}
-                      >
+                      <Button variant="ghost" size="sm" isPending={isFetchingOlderMessages} onPress={() => void handleLoadOlderMessages()}>
                         {isFetchingOlderMessages ? t("loadingOlderMessages") : t("loadOlderMessages")}
                       </Button>
                     </div>
@@ -2298,63 +2221,63 @@ export default function Messages() {
 
             {/* Typing indicator */}
             {typingUsers.length > 0 && (
-              <div className="px-5 pb-1">
-                <span className="text-xs text-muted-foreground italic flex items-center gap-1.5">
-                  <span className="flex gap-0.5">
+              <div className="px-5 pb-1" aria-live="polite">
+                <span className="flex items-center gap-1.5 text-xs italic text-[var(--muted)]">
+                  <span className="flex gap-0.5" aria-hidden="true">
                     {[0, 150, 300].map((d) => (
-                      <span key={d} className="w-1 h-1 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                      <span key={d} className="size-1 animate-bounce rounded-full bg-[var(--muted)]" style={{ animationDelay: `${d}ms` }} />
                     ))}
                   </span>
                   {typingUsers.length === 1
                     ? t("typingOne", { names: typingUsers[0] })
-                    : t("typingMany", { names: typingUsers.slice(0, 2).join(", ") })}
+                    : t("typingMany", { names: typingUsers.slice(0, 2).join("، ") })}
                 </span>
               </div>
             )}
 
             {/* Reply / Edit preview bar */}
             {(replyTo || editingMsg) && (
-              <div className="px-4 py-2 bg-accent/20 border-t border-border flex items-start gap-3">
-                <div className={cn("w-0.5 rounded-full shrink-0 self-stretch", replyTo ? "bg-primary" : "bg-warning")} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-primary mb-0.5">
+              <div className="flex items-start gap-3 border-t border-[var(--border)] bg-[var(--default)] px-4 py-2">
+                <div className={cn("w-0.5 shrink-0 self-stretch rounded-full", replyTo ? "bg-[var(--accent)]" : "bg-[var(--warning)]")} />
+                <div className="min-w-0 flex-1">
+                  <p className={cn("mb-0.5 text-xs font-semibold", replyTo ? "text-[var(--accent)]" : "text-[var(--warning)]")}>
                     {replyTo ? t("replyingTo", { name: replyTo.senderName }) : t("editingMessage")}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">{replyTo ? replyTo.body : editingMsg?.body}</p>
+                  <p dir="auto" className="truncate text-xs text-[var(--muted)] text-page-start">{displayBody(replyTo ? replyTo.body : editingMsg?.body, t)}</p>
                 </div>
-                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0"
+                <Button isIconOnly size="sm" variant="ghost" className="size-6 min-w-6 shrink-0"
                   aria-label={t("cancelReplyOrEdit")}
-                  onClick={() => { setReplyTo(null); setEditingMsg(null); setEditBody(""); }}>
-                  <X className="h-3.5 w-3.5" />
+                  onPress={() => { setReplyTo(null); setEditingMsg(null); setEditBody(""); }}>
+                  <X className="size-3.5" aria-hidden="true" />
                 </Button>
               </div>
             )}
 
             {/* Pending files preview */}
             {pendingFiles.length > 0 && (
-              <div className="px-4 py-2 border-t border-border flex gap-2 flex-wrap bg-card" aria-label={t("pendingAttachments")}>
+              <div className="flex flex-wrap gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-2" aria-label={t("pendingAttachments")}>
                 {pendingFiles.map((f, i) => (
                   <div key={i} className="relative min-w-0">
                     {f.type === "image" && pendingImagePreviews[pendingFiles.filter((x,j) => j < i && x.type === "image").length] ? (
-                      <div className="relative h-14 w-14 rounded-lg overflow-hidden border border-border shadow-sm">
+                      <div className="relative size-14 overflow-hidden rounded-lg border border-[var(--border)] shadow-sm">
                         <img src={pendingImagePreviews[pendingFiles.filter((x,j) => j < i && x.type === "image").length]}
-                          alt={f.name} className="h-full w-full object-cover" />
-                        <button aria-label={t("removeAttachment", { name: f.name })} onClick={() => {
+                          alt={f.name} className="size-full object-cover" />
+                        <button type="button" aria-label={t("removeAttachment", { name: f.name })} onClick={() => {
                           const imgIdx = pendingFiles.slice(0, i).filter(x => x.type === "image").length;
                           setPendingFiles((p) => p.filter((_, j) => j !== i));
                           setPendingImagePreviews((p) => p.filter((_, j) => j !== imgIdx));
-                        }} className="absolute top-0.5 end-0.5 h-5 w-5 bg-black/60 rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                          <X className="h-2.5 w-2.5 text-white" />
+                        }} className="absolute end-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-black/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+                          <X className="size-2.5 text-white" aria-hidden="true" />
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-lg px-2.5 py-1.5 max-w-[min(15rem,calc(100vw-2rem))]">
-                        <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
-                        <span className="text-xs truncate max-w-40" title={f.name}>{f.name}</span>
-                        {f.size ? <span className="text-[10px] text-muted-foreground shrink-0">{formatFileSize(f.size)}</span> : null}
+                      <div className="flex max-w-[min(15rem,calc(100vw-2rem))] items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--default)] px-2.5 py-1.5">
+                        <FileTypeIcon name={f.name} className="size-3.5" />
+                        <span dir="ltr" className="max-w-40 truncate text-xs" title={f.name}>{f.name}</span>
+                        {f.size ? <span className="shrink-0 text-[10px] text-[var(--muted)]"><bdi dir="ltr">{formatFileSize(f.size)}</bdi></span> : null}
                         <button type="button" aria-label={t("removeAttachment", { name: f.name })} onClick={() => setPendingFiles((p) => p.filter((_, j) => j !== i))}
-                          className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                          <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                          className="shrink-0 rounded-full text-[var(--muted)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+                          <X className="size-3" aria-hidden="true" />
                         </button>
                       </div>
                     )}
@@ -2363,22 +2286,20 @@ export default function Messages() {
               </div>
             )}
 
-            {/* Input bar */}
+            {/* Composer */}
             {canSend ? (
-              <div className="px-3 sm:px-4 py-2.5 bg-card border-t border-border shrink-0 relative">
+              <div className="px-3 sm:px-4 py-2.5 bg-[var(--surface)] border-t border-[var(--border)] shrink-0 relative">
                 {/* @mentions typeahead overlay */}
                 {mentionQuery !== null && mentionOptions.length > 0 && (
-                  <div id="message-mention-options" role="listbox" aria-label={t("mentionSuggestions")} className="absolute bottom-full inset-x-4 mb-1 max-h-56 overflow-y-auto bg-card border border-border rounded-xl shadow-xl z-40">
+                  <div id="message-mention-options" role="listbox" aria-label={t("mentionSuggestions")} className="absolute inset-x-4 bottom-full z-40 mb-1 max-h-56 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--overlay)] shadow-xl">
                     {mentionOptions.map((m, index) => (
-                      <button id={`mention-option-${m.id}`} key={m.id}
+                      <button id={`mention-option-${m.id}`} key={m.id} type="button"
                         onMouseDown={(e) => { e.preventDefault(); selectMention(m); }}
                         role="option" aria-selected={index === mentionActiveIndex}
-                        className={cn("w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted/50 text-sm text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary", index === mentionActiveIndex && "bg-muted/50")}>
-                        <div className={cn("h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0", avatarColor(m.id))}>
-                          {initials(m.name)}
-                        </div>
-                        <span className="flex-1 font-medium text-foreground">{m.name}</span>
-                        <span className="text-xs text-muted-foreground">@{m.name.split(" ")[0]}</span>
+                        className={cn("flex w-full items-center gap-2.5 px-3 py-2 text-start text-sm transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]", index === mentionActiveIndex && "bg-[var(--default)]")}>
+                        <ConvAvatar id={m.id} name={m.name} size="sm" />
+                        <span dir="auto" className="flex-1 font-medium text-page-start">{m.name}</span>
+                        <span dir="ltr" className="text-xs text-[var(--muted)]">@{m.name.split(" ")[0]}</span>
                       </button>
                     ))}
                   </div>
@@ -2386,50 +2307,47 @@ export default function Messages() {
                 {editingMsg ? (
                   <div className="flex items-end gap-2">
                     <textarea ref={inputRef} value={editBody} onChange={(e) => setEditBody(e.target.value)}
-                      rows={1} placeholder={t("editMessagePlaceholder")}
-                      className="flex-1 resize-none rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[40px] max-h-32"
+                      rows={1} placeholder={t("editMessagePlaceholder")} aria-label={t("editingMessage")} dir={editBody ? "auto" : undefined}
+                      className="flex-1 resize-none rounded-xl border border-[var(--border)] bg-[var(--field-background)] px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] min-h-[40px] max-h-32"
                       onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEditSubmit(); }}} />
-                    <Button onClick={handleEditSubmit} disabled={!editBody.trim() || editMut.isPending}
-                      aria-label={t("saveEdit")}
-                      className="bg-warning hover:bg-warning/90 text-foreground h-10 w-10 rounded-xl p-0 shrink-0">
-                      <Check className="h-4 w-4" />
+                    <Button isIconOnly onPress={() => { void handleEditSubmit(); }} isDisabled={!editBody.trim()} isPending={editMut.isPending}
+                      aria-label={t("saveEdit")} className={iconButton}>
+                      <Check className="size-4" aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl shrink-0"
+                    <Button isIconOnly variant="ghost" className={iconButton}
                       aria-label={t("cancelEdit")}
-                      onClick={() => { setEditingMsg(null); setEditBody(""); }}>
-                      <X className="h-4 w-4" />
+                      onPress={() => { setEditingMsg(null); setEditBody(""); }}>
+                      <X className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
                 ) : voiceState === "recording" ? (
                   /* ─ Recording state ─ */
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0 flex items-center gap-2 bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-destructive animate-pulse shrink-0" />
-                      <span className="text-sm font-medium text-destructive truncate">{t("recording")}</span>
-                      <span className="ms-auto text-sm font-mono text-destructive tabular-nums">{formatDuration(recordingSeconds)}</span>
+                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[var(--danger)]/20 bg-[var(--danger)]/10 px-3 py-2.5" role="status">
+                      <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-[var(--danger)]" aria-hidden="true" />
+                      <span className="truncate text-sm font-medium text-[var(--danger)]">{t("recording")}</span>
+                      <span className="ms-auto font-mono text-sm tabular-nums text-[var(--danger)]"><bdi dir="ltr">{formatDuration(recordingSeconds)}</bdi></span>
                     </div>
-                    <Button onClick={stopVoiceRecording}
-                      aria-label={t("stopRecording")}
-                      className="bg-destructive hover:bg-destructive/90 text-destructive-foreground h-10 w-10 rounded-xl p-0 shrink-0">
-                      <StopCircle className="h-5 w-5" />
+                    <Button isIconOnly variant="danger" onPress={stopVoiceRecording}
+                      aria-label={t("stopRecording")} className={iconButton}>
+                      <StopCircle className="size-5" aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl shrink-0" aria-label={t("cancelRecording")} onClick={cancelVoiceRecording}>
-                      <X className="h-4 w-4" />
+                    <Button isIconOnly variant="ghost" className={iconButton} aria-label={t("cancelRecording")} onPress={cancelVoiceRecording}>
+                      <X className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
                 ) : voiceState === "preview" && voiceBlob ? (
                   /* ─ Voice preview state ─ */
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0 bg-accent/20 border border-border rounded-xl px-2 py-1.5">
-                      <VoicePlayer url={URL.createObjectURL(voiceBlob)} duration={voiceDuration} isOwn={false} />
+                    <div className="flex-1 min-w-0 bg-[var(--default)] border border-[var(--border)] rounded-xl px-2 py-1.5">
+                      <VoicePlayer url={voicePreviewUrl ?? ""} duration={voiceDuration} isOwn={false} />
                     </div>
-                    <Button onClick={sendVoiceMessage} disabled={!isOnline || uploadBusy || sendMut.isPending}
-                      aria-label={t("sendVoiceMessage")}
-                      className="h-10 w-10 rounded-xl p-0 shrink-0">
-                      {uploadBusy ? <span className="animate-spin text-lg">⟳</span> : <Send className="h-4 w-4" />}
+                    <Button isIconOnly onPress={() => { void sendVoiceMessage(); }} isDisabled={!isOnline || sendMut.isPending} isPending={uploadBusy}
+                      aria-label={t("sendVoiceMessage")} className={iconButton}>
+                      <Send className="size-4 rtl:-scale-x-100" aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl shrink-0" aria-label={t("discardVoiceMessage")} onClick={cancelVoiceRecording}>
-                      <X className="h-4 w-4" />
+                    <Button isIconOnly variant="ghost" className={iconButton} aria-label={t("discardVoiceMessage")} onPress={cancelVoiceRecording}>
+                      <X className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
                 ) : (
@@ -2438,7 +2356,7 @@ export default function Messages() {
                     {/* Emoji picker popup */}
                     {emojiPickerOpen && (
                       <div ref={emojiPickerRef}
-                        className="absolute bottom-full end-0 mb-2 z-30 w-[min(352px,calc(100vw-1.5rem))] max-h-[min(24rem,70dvh)] shadow-xl rounded-2xl overflow-hidden">
+                        className="absolute bottom-full end-0 z-30 mb-2 max-h-[min(24rem,70dvh)] w-[min(352px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl shadow-xl">
                         <EmojiPickerLib
                           onEmojiClick={(emojiData) => {
                             insertEmojiIntoText(emojiData.emoji);
@@ -2456,48 +2374,47 @@ export default function Messages() {
                           <input type="file" multiple ref={fileInputRef} className="hidden"
                             accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
                             onChange={handleFileChange} />
-                          <Button variant="ghost" size="icon"
-                            className="shrink-0 text-muted-foreground hover:text-primary h-10 w-10 rounded-xl focus-visible:ring-2 focus-visible:ring-primary"
-                            onClick={() => fileInputRef.current?.click()} disabled={!isOnline || uploadBusy} aria-label={t("attachFile")}
+                          <Button isIconOnly variant="ghost"
+                            className={cn(iconButton, "text-[var(--muted)] hover:text-[var(--accent)]")}
+                            onPress={() => fileInputRef.current?.click()} isDisabled={!isOnline} isPending={uploadBusy} aria-label={t("attachFile")}
                             aria-describedby={!isOnline ? "message-attachment-online-notice" : undefined}>
-                            <Paperclip className="h-4 w-4" />
+                            <Paperclip className="size-4" aria-hidden="true" />
                           </Button>
-                          <Button variant="ghost" size="icon"
-                            className="shrink-0 text-muted-foreground hover:text-destructive h-10 w-10 rounded-xl focus-visible:ring-2 focus-visible:ring-primary"
-                            onClick={startVoiceRecording} disabled={!isOnline || uploadBusy} aria-label={t("recordVoice")}
+                          <Button isIconOnly variant="ghost"
+                            className={cn(iconButton, "text-[var(--muted)] hover:text-[var(--danger)]")}
+                            onPress={() => { void startVoiceRecording(); }} isDisabled={!isOnline || uploadBusy} aria-label={t("recordVoice")}
                             aria-describedby={!isOnline ? "message-attachment-online-notice" : undefined}>
-                            <Mic className="h-4 w-4" />
+                            <Mic className="size-4" aria-hidden="true" />
                           </Button>
                         </>
                       )}
                       <textarea ref={inputRef} value={inputText}
                         onChange={handleInputChange}
                         onKeyDown={handleKeyDown}
+                        dir={inputText ? "auto" : undefined}
                         aria-label={isAnnouncement ? t("announcementFollowUpPlaceholder") : t("typeMessage")}
                         aria-expanded={mentionOptions.length > 0}
                         aria-controls={mentionOptions.length > 0 ? "message-mention-options" : undefined}
                         aria-activedescendant={mentionOptions[mentionActiveIndex] ? `mention-option-${mentionOptions[mentionActiveIndex].id}` : undefined}
                         rows={1} placeholder={isAnnouncement ? t("announcementFollowUpPlaceholder") : t("typeMessagePlaceholder")}
-                        className="flex-1 min-w-0 resize-none rounded-xl border border-border bg-muted/40 px-3 sm:px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition min-h-[40px] max-h-32" />
+                        className="flex-1 min-w-0 resize-none rounded-xl border border-[var(--border)] bg-[var(--field-background)] px-3 sm:px-4 py-2.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--focus)] min-h-[40px] max-h-32" />
                       {/* Emoji input button */}
-                      <Button variant="ghost" size="icon"
-                        className={cn(
-                          "shrink-0 h-10 w-10 rounded-xl transition-colors focus-visible:ring-2 focus-visible:ring-primary",
-                          emojiPickerOpen ? "text-warning bg-warning/10" : "text-muted-foreground hover:text-warning hover:bg-warning/10",
-                        )}
-                        onClick={() => setEmojiPickerOpen((v) => !v)}
+                      <Button isIconOnly variant="ghost"
+                        className={cn(iconButton, emojiPickerOpen ? "bg-[var(--warning)]/10 text-[var(--warning)]" : "text-[var(--muted)] hover:bg-[var(--warning)]/10 hover:text-[var(--warning)]")}
+                        onPress={() => setEmojiPickerOpen((v) => !v)}
+                        aria-expanded={emojiPickerOpen}
                         aria-label={t("insertEmoji")}>
-                        <Smile className="h-4 w-4" />
+                        <Smile className="size-4" aria-hidden="true" />
                       </Button>
-                      <Button onClick={handleSend}
-                        disabled={(!inputText.trim() && pendingFiles.length === 0) || (pendingFiles.length > 0 && !isOnline) || sendMut.isPending || uploadBusy}
+                      <Button isIconOnly onPress={() => { void handleSend(); }}
+                        isDisabled={(!inputText.trim() && pendingFiles.length === 0) || (pendingFiles.length > 0 && !isOnline) || sendMut.isPending || uploadBusy}
                         aria-label={t("sendMessage")}
-                        className="h-10 w-10 rounded-xl p-0 shrink-0 focus-visible:ring-2 focus-visible:ring-primary">
-                        <Send className="h-4 w-4" />
+                        className={iconButton}>
+                        <Send className="size-4 rtl:-scale-x-100" aria-hidden="true" />
                       </Button>
                     </div>
                     {!isOnline && canUploadAttachments && (
-                      <p id="message-attachment-online-notice" role="status" className="mt-2 text-xs text-muted-foreground">
+                      <p id="message-attachment-online-notice" role="status" className="mt-2 text-xs text-[var(--muted)]">
                         {t("attachmentOnlineRequired")}
                       </p>
                     )}
@@ -2505,9 +2422,9 @@ export default function Messages() {
                 )}
               </div>
             ) : (
-              <div className="px-4 py-3 bg-card border-t border-border flex items-center justify-center shrink-0">
-                <p className="text-xs text-muted-foreground italic flex items-center gap-1.5">
-                  <Megaphone className="h-3.5 w-3.5" />
+              <div className="flex shrink-0 items-center justify-center border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <p className="flex items-center gap-1.5 text-xs italic text-[var(--muted)]">
+                  <Megaphone className="size-3.5" aria-hidden="true" />
                   {t("announcementReadOnly")}
                 </p>
               </div>
@@ -2536,6 +2453,20 @@ export default function Messages() {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={deleteEveryoneId !== null}
+        title={t("deleteForEveryone")}
+        message={t("confirmDeleteEveryone")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("deleteForEveryone")}
+        isPending={deleteMut.isPending}
+        onCancel={() => setDeleteEveryoneId(null)}
+        onConfirm={() => {
+          if (deleteEveryoneId !== null) deleteMut.mutate({ msgId: deleteEveryoneId, deletionType: "for_everyone" });
+          setDeleteEveryoneId(null);
+        }}
+      />
 
       <NewConversationModal open={newChatOpen} onClose={() => setNewChatOpen(false)}
         onCreate={(body) => createConvMut.mutateAsync(body)} userRole={myRole} />

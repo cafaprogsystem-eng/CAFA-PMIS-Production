@@ -263,19 +263,22 @@ describe("Communication Centre upload controls", () => {
     await waitFor(() => expect(screen.getByLabelText("mediaGallery")).toBeInTheDocument());
     fireEvent.click(screen.getByLabelText("mediaGallery"));
 
+    // HeroUI Tabs generate the tab and panel ids; check that they are wired together.
     const tablist = await screen.findByRole("tablist", { name: "mediaGallery" });
     const tabs = screen.getAllByRole("tab");
     expect(tablist).toBeInTheDocument();
     expect(tabs).toHaveLength(3);
-    expect(tabs[0]).toHaveAttribute("aria-controls", "media-tabpanel-photos");
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
     expect(tabs[0]).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "media-tab-photos");
+    expect(tabs[0].getAttribute("aria-controls")).toBe(screen.getByRole("tabpanel").id);
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", tabs[0].id);
 
+    tabs[0].focus();
     fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
     await waitFor(() => expect(tabs[1]).toHaveAttribute("aria-selected", "true"));
     expect(tabs[1]).toHaveAttribute("tabindex", "0");
     await waitFor(() => expect(tabs[1]).toHaveFocus());
-    expect(screen.getByRole("tabpanel")).toHaveAttribute("id", "media-tabpanel-docs");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", tabs[1].id);
   });
 
   it("renders a retryable media error instead of a blank auxiliary panel", async () => {

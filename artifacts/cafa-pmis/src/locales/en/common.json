@@ -588,6 +588,7 @@
     "loading": "Loading record details",
     "projectTitle": "Project details",
     "planTitle": "Plan details",
+    "conversationTitle": "Conversation",
     "description": "Authorised record information and actions"
   },
   "output": "Output",

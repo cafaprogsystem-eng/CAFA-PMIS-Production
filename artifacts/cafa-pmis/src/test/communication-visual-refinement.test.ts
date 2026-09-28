@@ -18,8 +18,8 @@ describe("Communication Centre visual refinement — Phase 1", () => {
   it("COMM-VIS-01 keeps a compact, cohesive, viewport-aware workspace shell", async () => {
     const source = await messagesSource();
 
-    expect(source).toContain('h-[calc(100dvh-4rem)] min-h-[32rem] flex overflow-hidden bg-card');
-    expect(source).toContain("border-y border-border/70 md:border md:rounded-xl");
+    expect(source).toContain('h-[calc(100dvh-4rem)] min-h-[32rem] flex overflow-hidden bg-[var(--surface)]');
+    expect(source).toContain("border-y border-[var(--border)] md:border md:rounded-xl");
   });
 
   it("COMM-VIS-02 preserves the responsive sidebar and focused mobile conversation flow", async () => {
@@ -27,16 +27,16 @@ describe("Communication Centre visual refinement — Phase 1", () => {
 
     expect(source).toContain('md:w-[clamp(18rem,24vw,22rem)] shrink-0');
     expect(source).toContain('selectedId ? "hidden md:flex" : "flex"');
-    expect(source).toContain('className="hidden md:flex flex-1 items-center justify-center bg-muted/20"');
-    expect(source).toContain('className="md:hidden shrink-0 -ms-1 h-9 w-9"');
+    expect(source).toContain('className="hidden md:flex flex-1 items-center justify-center bg-[var(--background)]"');
+    expect(source).toContain('className="md:hidden shrink-0 -ms-1 size-9 min-w-9"');
   });
 
   it("COMM-VIS-03 uses compact, scannable conversation rows", async () => {
     const source = await messagesSource();
 
     expect(source).toContain('px-3.5 py-2.5 text-start transition-colors');
-    expect(source).toContain('shrink-0 h-9 w-9 rounded-full');
-    expect(source).toContain('text-[11px] text-muted-foreground shrink-0 ms-1 tabular-nums');
+    expect(source).toContain('<ConvAvatar id={avatarId}');
+    expect(source).toContain('text-[11px] text-[var(--muted)] shrink-0 ms-1 tabular-nums');
   });
 
   it("COMM-VIS-04 keeps long conversation names visually truncated with full-value access", async () => {
@@ -52,23 +52,23 @@ describe("Communication Centre visual refinement — Phase 1", () => {
 
     expect(source).toContain('const hasUnread = typeof conv.unreadCount === "number" && conv.unreadCount > 0;');
     expect(source).not.toContain("const unreadCount = conv.unreadCount ?? 0;");
-    expect(source).toContain('{hasUnread && (');
+    expect(source).toContain('{hasUnread && <UnreadCount');
   });
 
   it("COMM-VIS-06 keeps selected and keyboard conversation state explicit", async () => {
     const source = await messagesSource();
 
     expect(source).toContain('aria-current={selected ? "page" : undefined}');
-    expect(source).toContain("focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary");
-    expect(source).toContain('selected && "bg-primary/5 hover:bg-primary/5 border-primary"');
+    expect(source).toContain("focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]");
+    expect(source).toContain('selected && "bg-[var(--accent)]/5 hover:bg-[var(--accent)]/5 border-[var(--accent)]"');
   });
 
   it("COMM-VIS-07 uses a compact, truncation-safe active conversation header", async () => {
     const source = await messagesSource();
 
-    expect(source).toContain("min-h-16 bg-card/95 border-b border-border/80 shrink-0");
-    expect(source).toContain('className="font-medium text-sm text-foreground truncate"');
-    expect(source).toContain('className="shrink-0 capitalize text-[11px] hidden sm:inline-flex"');
+    expect(source).toContain("min-h-16 bg-[var(--surface)] border-b border-[var(--border)] shrink-0");
+    expect(source).toContain('className="truncate text-sm font-medium text-page-start"');
+    expect(source).toContain('className="hidden shrink-0 sm:inline-flex"');
   });
 
   it("COMM-VIS-08 wraps long message content safely within a readable maximum width", async () => {
@@ -82,9 +82,9 @@ describe("Communication Centre visual refinement — Phase 1", () => {
   it("COMM-VIS-09 keeps reply context visually subordinate to the message body", async () => {
     const source = await messagesSource();
 
-    expect(source).toContain('rounded-t-lg border-s-2 border-primary mb-0.5 max-w-full');
-    expect(source).toContain('? "bg-primary/10 text-primary hover:bg-primary/15"');
-    expect(source).toContain(': "bg-muted/70 text-foreground/70 hover:bg-muted"');
+    expect(source).toContain('rounded-t-lg border-s-2 border-[var(--accent)] mb-0.5 max-w-full');
+    expect(source).toContain('? "bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/15"');
+    expect(source).toContain(': "bg-[var(--default)] text-[var(--foreground)]/70 hover:bg-[var(--default-hover)]"');
   });
 
   it("COMM-VIS-10 retains focus-accessible and mobile-reachable message actions", async () => {
@@ -129,10 +129,10 @@ describe("Communication Centre interaction refinement — Phase 2", () => {
   it("COMM-FORM-VIS-01 keeps the composer compact, token-backed, and send-primary", async () => {
     const source = await messagesSource();
 
-    expect(source).toContain('px-3 sm:px-4 py-2.5 bg-card border-t border-border shrink-0 relative');
+    expect(source).toContain('px-3 sm:px-4 py-2.5 bg-[var(--surface)] border-t border-[var(--border)] shrink-0 relative');
     expect(source).toContain('min-h-[40px] max-h-32');
     expect(source).toContain('aria-label={t("sendMessage")}');
-    expect(source).toContain('disabled={(!inputText.trim() && pendingFiles.length === 0) || (pendingFiles.length > 0 && !isOnline) || sendMut.isPending || uploadBusy}');
+    expect(source).toContain('isDisabled={(!inputText.trim() && pendingFiles.length === 0) || (pendingFiles.length > 0 && !isOnline) || sendMut.isPending || uploadBusy}');
   });
 
   it("COMM-FORM-VIS-02 keeps pending attachments compact, private, and removable", async () => {
@@ -161,7 +161,7 @@ describe("Communication Centre interaction refinement — Phase 2", () => {
     expect(source).toContain('voiceState === "preview" && voiceBlob');
     expect(source).toContain('aria-label={t("sendVoiceMessage")}');
     expect(source).toContain('aria-label={t("discardVoiceMessage")}');
-    expect(source).toContain('min-w-0 bg-accent/20 border border-border rounded-xl');
+    expect(source).toContain('min-w-0 bg-[var(--default)] border border-[var(--border)] rounded-xl');
   });
 
   it("COMM-FORM-VIS-05 bounds and labels the keyboard mention picker", async () => {
@@ -184,9 +184,9 @@ describe("Communication Centre interaction refinement — Phase 2", () => {
   it("COMM-FORM-VIS-07 gives the creation flow a responsive, scrolling body and fixed action footer", async () => {
     const source = await messagesSource();
 
-    expect(source).toContain('w-[calc(100%-1.5rem)] sm:max-w-md max-h-[min(90vh,42rem)] flex flex-col gap-0 p-0 overflow-hidden');
-    expect(source).toContain('px-5 py-2 overflow-y-auto flex-1 min-h-0');
-    expect(source).toContain('DialogFooter className="px-5 py-4 border-t border-border/70 shrink-0"');
+    expect(source).toContain('w-[calc(100%-1.5rem)] sm:max-w-md max-h-[min(90vh,42rem)]');
+    expect(source).toContain('<Modal.Container size="md" scroll="inside">');
+    expect(source).toContain('<Modal.Footer>');
   });
 
   it("COMM-FORM-VIS-08 keeps creation controls type-specific and avoids raw role identifiers", async () => {
@@ -213,15 +213,15 @@ describe("Communication Centre interaction refinement — Phase 2", () => {
 
     expect(source).toContain('aria-controls="pinned-messages-panel"');
     expect(source).toContain('id="pinned-messages-panel"');
-    expect(source).toContain('w-full max-w-sm bg-card border-s border-border flex flex-col shadow-xl');
+    expect(source).toContain('w-full max-w-sm bg-[var(--surface)] border-s border-[var(--border)] flex flex-col shadow-xl');
     expect(source).toContain('break-words [overflow-wrap:anywhere]');
   });
 
   it("COMM-FORM-VIS-11 makes the media panel responsive with loading, empty, and error treatments", async () => {
     const source = await messagesSource();
 
-    expect(source).toContain('absolute inset-y-0 end-0 z-30 w-full max-w-sm bg-card border-s border-border shadow-xl flex flex-col');
-    expect(source).toContain('role="tablist" aria-label={t("mediaGallery")}');
+    expect(source).toContain('absolute inset-y-0 end-0 z-30 w-full max-w-sm bg-[var(--surface)] border-s border-[var(--border)] shadow-xl flex flex-col');
+    expect(source).toContain('<Tabs.List aria-label={t("mediaGallery")}');
     expect(source).toContain('role="status">{t("loading")}</div>');
     expect(source).toContain('t("errLoadMedia")');
     expect(source).toContain('void refetch()');
@@ -241,9 +241,9 @@ describe("Communication Centre final visual closure", () => {
   it("COMM-FINAL-VIS-01 retains one cohesive, token-backed Communication workspace", async () => {
     const source = await messagesSource();
 
-    expect(source).toContain('h-[calc(100dvh-4rem)] min-h-[32rem] flex overflow-hidden bg-card');
-    expect(source).toContain("border-y border-border/70 md:border md:rounded-xl");
-    expect(source).toContain('className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-3.5 space-y-0.5 bg-muted/20"');
+    expect(source).toContain('h-[calc(100dvh-4rem)] min-h-[32rem] flex overflow-hidden bg-[var(--surface)]');
+    expect(source).toContain("border-y border-[var(--border)] md:border md:rounded-xl");
+    expect(source).toContain('className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5 py-3.5 space-y-0.5 bg-[var(--background)]"');
   });
 
   it("COMM-FINAL-VIS-02 preserves compact, scannable density across lists and header entry", async () => {
@@ -281,8 +281,8 @@ describe("Communication Centre final visual closure", () => {
     const source = await messagesSource();
 
     expect(source).toContain('selectedId ? "hidden md:flex" : "flex"');
-    expect(source).toContain('className="md:hidden shrink-0 -ms-1 h-9 w-9"');
-    expect(source).toContain('absolute inset-y-0 end-0 z-30 w-full max-w-sm bg-card');
+    expect(source).toContain('className="md:hidden shrink-0 -ms-1 size-9 min-w-9"');
+    expect(source).toContain('absolute inset-y-0 end-0 z-30 w-full max-w-sm bg-[var(--surface)]');
     expect(source).toContain('w-[calc(100%-1.5rem)] sm:max-w-md max-h-[min(90vh,42rem)]');
   });
 
