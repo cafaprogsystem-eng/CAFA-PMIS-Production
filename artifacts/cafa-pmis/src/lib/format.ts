@@ -228,7 +228,7 @@ export const formatLocation = (opts: {
 }, language?: string): string => {
   // Infer type from stateId when locationType is absent (backward compat with pre-migration records).
   const lt = opts.locationType ?? (opts.stateId != null ? "state" : null);
-  if (lt === "hq") return "HQ";
+  if (lt === "hq") return language?.toLowerCase().startsWith("ar") ? "المقر الرئيسي" : "HQ";
   return language?.toLowerCase().startsWith("ar")
     ? opts.stateNameAr?.trim() || opts.stateName || "—"
     : opts.stateName ?? "—";

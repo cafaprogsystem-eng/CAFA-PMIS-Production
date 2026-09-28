@@ -40,7 +40,8 @@
     "cancelled": "ملغى",
     "in_progress": "قيد التنفيذ",
     "delayed": "متأخر",
-    "completed": "مكتمل"
+    "completed": "مكتمل",
+    "archived": "مؤرشف"
   },
   "filters": {
     "allStates": "كل الولايات",
@@ -174,7 +175,16 @@
     "noPlansAvailable": "لا توجد خطط متاحة",
     "clickToCreate": "انقر <strong>إنشاء خطة</strong> لإنشاء أول خطة.",
     "progressTooltip": "متوسط التقدم المسجل عبر الأنشطة في هذه الخطة.",
-    "ariaTable": "جدول الخطط"
+    "ariaTable": "جدول الخطط",
+    "budgetNotVerifiedTooltip": "تعذّر التحقق من الميزانية لأن هذه الخطة أُنشئت قبل أن تُحفظ قيم الميزانية الناقصة بشكل منفصل.",
+    "progressNoActivities": "لا توجد أنشطة لحساب التقدّم.",
+    "progressAverage": "متوسط تقدّم الأنشطة: {{pct}}%",
+    "progressBasedOn_zero": "بناءً على {{count}} نشاط",
+    "progressBasedOn_one": "بناءً على نشاط واحد",
+    "progressBasedOn_two": "بناءً على نشاطين",
+    "progressBasedOn_few": "بناءً على {{count}} أنشطة",
+    "progressBasedOn_many": "بناءً على {{count}} نشاطاً",
+    "progressBasedOn_other": "بناءً على {{count}} نشاط"
   },
   "pagination": {
     "noPlans": "لا توجد خطط",

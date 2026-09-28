@@ -15,44 +15,16 @@ import {
 } from "@workspace/api-client-react";
 import { CreatePlanRegistrationDialog } from "@/components/create-plan-registration-dialog";
 import type {
+  PlanSummary,
   PlanningDashboardTotals,
   PlanningDashboardUpcomingDeadlinesItem,
   PlanningDashboardDelayedActivitiesItem,
 } from "@workspace/api-client-react";
-import { Card, CardContent } from "@/components/ui/card";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { StatCard } from "@/components/ui/stat-card";
+  Button, Card, Chip, Dropdown, Label, Modal, SearchField, Separator, Skeleton, Tooltip,
+} from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
+import { KPI } from "@heroui-pro/react/kpi";
 import React from "react";
 import {
   CalendarClock,
@@ -60,21 +32,14 @@ import {
   Activity,
   CheckCircle2,
   Filter,
-  Search,
   X,
   FileText,
   Clock,
-  ChevronUp,
-  ChevronDown,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronLeft,
-  ChevronRight,
-  ArrowUpDown,
   MoreHorizontal,
   Trash2,
+  TriangleAlert,
 } from "@/components/icons";
-import { formatDate, formatStatusLabel, formatPlanType, hasPerm, statusBadgeVariant, formatLocation } from "@/lib/format";
+import { formatDate, formatPlanType, hasPerm, formatLocation } from "@/lib/format";
 import { AttachmentCountBadge } from "@/components/drive-attachment-panel";
 import { useViewMode } from "@/lib/view-modes";
 import { ViewModeSwitcher } from "@/components/view-modes/view-mode-switcher";
@@ -83,9 +48,12 @@ import { ListView } from "@/components/view-modes/list-view";
 import { CompactView } from "@/components/view-modes/compact-view";
 import { KanbanBoard } from "@/components/view-modes/kanban-board";
 import { CalendarGrid } from "@/components/view-modes/calendar-grid";
+import { statusTone } from "@/components/view-modes/shared";
 import type { ViewRecord } from "@/lib/view-modes";
 import type { KanbanColumn } from "@/components/view-modes/kanban-board";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
+import { SelectField } from "@/components/select-field";
+import { RegistryPagination } from "@/components/registry-pagination";
 
 /* ── Module-scope constants ────────────────────────────────────────────── */
 
@@ -135,84 +103,42 @@ function matchesPlanStatusFilter(statusValue: string, filter: string): boolean {
 
 const PLAN_VIEWS = ["table", "card", "list", "compact", "kanban", "calendar"] as const;
 
-// Column header colours mirror the semantic badge variants in badge.tsx.
-// Labels are replaced with translated strings at render time in PlansPage.
+// Kanban columns; labels are translated at render time in PlansPage.
 const PLAN_KANBAN_COL_KEYS = [
-  { key: "draft",                 statusKey: "draft",                  color: "border border-slate-200 bg-slate-50 text-slate-600" },
-  { key: "submitted",             statusKey: "submitted",              color: "border border-blue-200 bg-blue-50 text-blue-700" },
-  { key: "technically_approved",  statusKey: "technically_approved",   color: "border border-indigo-200 bg-indigo-50 text-indigo-700" },
-  { key: "coordination_approved", statusKey: "coordination_approved",  color: "border border-violet-200 bg-violet-50 text-violet-700" },
-  { key: "approved",              statusKey: "approved",               color: "border border-emerald-200 bg-emerald-50 text-emerald-700" },
-  { key: "active",                statusKey: "active",                 color: "border border-emerald-200 bg-emerald-50 text-emerald-700" },
-  { key: "in_progress",           statusKey: "in_progress",            color: "border border-sky-200 bg-sky-50 text-sky-700" },
-  { key: "delayed",               statusKey: "delayed",                color: "border border-amber-200 bg-amber-50 text-amber-700" },
-  { key: "completed",             statusKey: "completed",              color: "border border-indigo-200 bg-indigo-50 text-indigo-700" },
-  { key: "cancelled",             statusKey: "cancelled",              color: "border border-slate-200 bg-slate-100 text-slate-600" },
+  { key: "draft",                 statusKey: "draft" },
+  { key: "submitted",             statusKey: "submitted" },
+  { key: "technically_approved",  statusKey: "technically_approved" },
+  { key: "coordination_approved", statusKey: "coordination_approved" },
+  { key: "approved",              statusKey: "approved" },
+  { key: "active",                statusKey: "active" },
+  { key: "in_progress",           statusKey: "in_progress" },
+  { key: "delayed",               statusKey: "delayed" },
+  { key: "completed",             statusKey: "completed" },
+  { key: "cancelled",             statusKey: "cancelled" },
 ] as const;
 
 const PAGE_SIZES = [10, 20, 50] as const;
 
 /* ── Module-scope table helpers ────────────────────────────────────────── */
 
-/** Status badge using the verified Plan status taxonomy. */
+type PlanItem = PlanSummary;
+
+/** Plan workflow status as a HeroUI Chip, in the active language. */
 function PlanStatusBadge({ status }: { status: string }) {
-  const { variant, className } = statusBadgeVariant(status);
+  const { t } = useTranslation("planning");
   return (
-    <Badge variant={variant} className={className}>
-      {formatStatusLabel(status)}
-    </Badge>
+    <Chip size="sm" variant="soft" color={statusTone(status)} className="whitespace-nowrap">
+      {t(`status.${status}`, { defaultValue: status.replace(/_/g, " ") })}
+    </Chip>
   );
 }
 
-/** Sortable column header — defined at module scope to avoid re-creation. */
-function SortableHead({
-  field,
-  label,
-  sortField,
-  sortDir,
-  onSort,
-  className,
-}: {
-  field: string;
-  label: string;
-  sortField: string;
-  sortDir: "asc" | "desc";
-  onSort: (f: string) => void;
-  className?: string;
-}) {
-  const active = sortField === field;
-  return (
-    // scope="col" is applied via the TableHead element rendered below;
-    // the aria-sort attribute communicates current sort state to screen readers.
-    <TableHead
-      aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-      tabIndex={0}
-      aria-label={`Sort by ${label}${active ? `, currently ${sortDir === "asc" ? "ascending" : "descending"}` : ""}`}
-      className={["cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", className].filter(Boolean).join(" ")}
-      onClick={() => onSort(field)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSort(field);
-        }
-      }}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {active ? (
-          sortDir === "asc" ? (
-            <ChevronUp className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-          ) : (
-            <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-          )
-        ) : (
-          <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" aria-hidden="true" />
-        )}
-      </span>
-    </TableHead>
-  );
+function usePlanTypeLabel() {
+  const { t } = useTranslation("planning");
+  return (type?: string | null) => (type ? t(`planTypes.${type}_short`, { defaultValue: formatPlanType(type) }) : "—");
 }
 
+/** Plans registry footer (HeroUI Pagination). Exported for the RTL control tests. */
 export function PlanPagination({
   page,
   pageSize,
@@ -230,65 +156,36 @@ export function PlanPagination({
 }) {
   const { t } = useTranslation("planning");
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 border-t border-border/50 text-xs text-muted-foreground">
-      <span>
-        {totalCount === 0
-          ? t("pagination.noPlans")
-          : t("pagination.showing", {
-              from: (page - 1) * pageSize + 1,
-              to: Math.min(page * pageSize, totalCount),
-              total: totalCount,
-              item: totalCount === 1 ? t("pagination.plan") : t("pagination.plans"),
-            })}
-      </span>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <span className="hidden sm:inline">{t("pagination.rowsPerPage")}</span>
-          <Select
-            value={String(pageSize)}
-            onValueChange={(value) => onPageSizeChange(Number(value))}
-          >
-            <SelectTrigger className="h-7 w-16 text-xs" aria-label={t("pagination.rowsPerPageAria")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZES.map((size) => (
-                <SelectItem key={size} value={String(size)} className="text-xs">
-                  {size}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === 1} onClick={() => onPageChange(1)} aria-label={t("pagination.firstPage")}>
-            <ChevronsLeft className="h-3.5 w-3.5 rtl:rotate-180" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === 1} onClick={() => onPageChange(page - 1)} aria-label={t("pagination.previousPage")}>
-            <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" />
-          </Button>
-          <span className="px-2">{t("pagination.pageOf", { page, totalPages })}</span>
-          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === totalPages} onClick={() => onPageChange(page + 1)} aria-label={t("pagination.nextPage")}>
-            <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === totalPages} onClick={() => onPageChange(totalPages)} aria-label={t("pagination.lastPage")}>
-            <ChevronsRight className="h-3.5 w-3.5 rtl:rotate-180" />
-          </Button>
-        </div>
-      </div>
-    </div>
+    <RegistryPagination
+      className="px-4 py-3"
+      page={page}
+      totalPages={totalPages}
+      onPageChange={onPageChange}
+      pageSize={pageSize}
+      pageSizes={PAGE_SIZES}
+      onPageSizeChange={onPageSizeChange}
+      summary={totalCount === 0
+        ? t("pagination.noPlans")
+        : t("pagination.showing", {
+            from: (page - 1) * pageSize + 1,
+            to: Math.min(page * pageSize, totalCount),
+            total: totalCount,
+            item: totalCount === 1 ? t("pagination.plan") : t("pagination.plans"),
+          })}
+      labels={{
+        rowsPerPage: t("pagination.rowsPerPage"),
+        first: t("pagination.firstPage"),
+        previous: t("pagination.previousPage"),
+        next: t("pagination.nextPage"),
+        last: t("pagination.lastPage"),
+        pageOf: t("pagination.pageOf", { page, totalPages }),
+      }}
+    />
   );
 }
 
 /* ── Module-scope helpers ──────────────────────────────────────────────── */
 
-/**
- * Formats a plan-level budget amount using its explicit ISO currency code.
- * Never assumes a default currency — if currency is missing, shows the raw
- * number without a currency symbol so the data-quality issue is visible.
- *
- * Replaces formatCurrency() which hardcodes "$".
- */
 /**
  * Formats a plan-level budget amount for display in a string context (card/list/compact views).
  *
@@ -311,10 +208,6 @@ function formatPlanBudget(
   return cur ? `${cur} ${num}` : `${num} · ${tFn ? tFn("detail.missingCurrency") : "Missing Currency"}`;
 }
 
-/** The tooltip shown for legacy-unverified budget records. */
-const LEGACY_BUDGET_TOOLTIP =
-  "Budget information could not be verified because this Plan was created before missing Budget values were stored separately.";
-
 /* ── Extended types for new API fields ─────────────────────────────────── */
 // The generated schema predates the stateName, daysPastDue, and timingState
 // additions. Cast at usage sites until codegen is re-run.
@@ -331,30 +224,11 @@ type ExtendedDelayedItem = PlanningDashboardDelayedActivitiesItem & {
 
 /* ── Module-scope follow-up sub-components ─────────────────────────────── */
 // Defined at module scope (not inside PlansPage) so React never recreates
-// the component identity on each parent render, which would unmount/remount
-// the whole subtree and reset focus state.
+// the component identity on each parent render.
 
 /** Compact horizontal strip used for empty / error / loading states. */
-function FollowUpStrip({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={[
-        "flex items-center gap-3 px-4 rounded-xl border border-border/60 bg-card",
-        "min-h-[76px]",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {children}
-    </div>
-  );
+function FollowUpStrip({ children }: { children: React.ReactNode }) {
+  return <Card className="min-h-[64px] flex-row flex-wrap items-center gap-3 px-4 py-3">{children}</Card>;
 }
 
 function UpcomingDeadlines({
@@ -368,78 +242,64 @@ function UpcomingDeadlines({
 }) {
   const { t } = useTranslation("planning");
 
-  // Loading — compact skeleton strip so the page doesn't shift
   if (loading) {
     return (
       <FollowUpStrip>
         <Skeleton className="h-4 w-36 rounded" />
-        <Skeleton className="h-4 w-48 rounded ms-auto" />
+        <Skeleton className="ms-auto h-4 w-48 rounded" />
       </FollowUpStrip>
     );
   }
 
-  // Error — distinct from "no deadlines" so the user knows the data failed
   if (error) {
     return (
       <FollowUpStrip>
-        <CalendarClock className="h-4 w-4 text-muted-foreground/50 shrink-0" aria-hidden="true" />
-        <span className="text-sm font-medium text-muted-foreground">{t("followUp.upcomingDeadlines")}</span>
-        <span className="ms-auto text-xs text-destructive">{t("followUp.dataUnavailable")}</span>
+        <CalendarClock className="size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+        <span className="text-sm font-medium text-[var(--muted)]">{t("followUp.upcomingDeadlines")}</span>
+        <span className="ms-auto text-xs text-[var(--danger)]">{t("followUp.dataUnavailable")}</span>
       </FollowUpStrip>
     );
   }
 
-  // Empty — compact strip (~76 px), neutral, no decorative checkmark
   if (items.length === 0) {
     return (
       <FollowUpStrip>
-        <CalendarClock className="h-4 w-4 text-muted-foreground/50 shrink-0" aria-hidden="true" />
-        <div>
-          <span className="text-sm font-medium text-muted-foreground">{t("followUp.upcomingDeadlines")}</span>
-          <span className="mx-1.5 text-muted-foreground/40">·</span>
-          <span className="text-xs text-muted-foreground/60">{t("followUp.next30Days")}</span>
-        </div>
-        <span className="ms-auto text-xs text-muted-foreground/70">
-          {t("followUp.noDeadlines")}
+        <CalendarClock className="size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+        <span className="text-sm font-medium text-[var(--muted)]">
+          {t("followUp.upcomingDeadlines")} <span className="font-normal">· {t("followUp.next30Days")}</span>
         </span>
+        <span className="ms-auto text-xs text-[var(--muted)]">{t("followUp.noDeadlines")}</span>
       </FollowUpStrip>
     );
   }
 
-  // Has items — full card
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs font-medium text-muted-foreground mb-3">
-          {t("followUp.upcomingDeadlines")}
-          <span className="ms-1.5 font-normal text-muted-foreground/60">
-            · {t("followUp.next30Days")}
-          </span>
-        </p>
-        <ul className="divide-y divide-border/50">
-          {items.map((d) => (
-            <li
-              key={d.planId}
-              className="flex items-center justify-between gap-3 py-2.5 min-w-0"
+    <Card className="gap-2 p-4">
+      <p className="text-xs font-medium text-[var(--muted)]">
+        {t("followUp.upcomingDeadlines")}
+        <span className="ms-1.5 font-normal">· {t("followUp.next30Days")}</span>
+      </p>
+      <ul className="divide-y divide-[var(--border)]">
+        {items.map((d) => (
+          <li key={d.planId} className="flex min-w-0 items-center justify-between gap-3 py-2.5">
+            <Link
+              href={`/plans/${d.planId}`}
+              dir="auto"
+              className="min-w-0 break-words rounded-sm text-sm font-medium outline-none hover:underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+              aria-label={t("followUp.viewPlan", { title: d.title })}
             >
-              <Link
-                href={`/plans/${d.planId}`}
-                className="text-sm font-medium truncate hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                aria-label={t("followUp.viewPlan", { title: d.title })}
-              >
-                {d.title}
-              </Link>
-              <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
-                {d.daysRemaining != null
-                  ? d.daysRemaining <= 0
-                    ? t("followUp.dueToday")
-                    : t("followUp.inDays", { days: d.daysRemaining })
-                  : formatDate(d.endDate)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
+              {d.title}
+            </Link>
+            <span className="shrink-0 whitespace-nowrap text-xs text-[var(--muted)]">
+              {d.daysRemaining != null
+                ? d.daysRemaining <= 0
+                  ? t("followUp.dueToday")
+                  : t("followUp.inDays", { days: d.daysRemaining })
+                : <bdi dir="ltr">{formatDate(d.endDate)}</bdi>}
+            </span>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }
@@ -457,144 +317,183 @@ function DelayedActivities({
 }) {
   const { t, i18n } = useTranslation("planning");
   const [showAll, setShowAll] = useState(false);
-  // Cast to extended type — API now returns stateName + daysPastDue
   const items = rawItems as ExtendedDelayedItem[];
   const visible = showAll ? items : items.slice(0, DEFAULT_VISIBLE);
   const hasMore = items.length > DEFAULT_VISIBLE;
 
-  // Loading
   if (loading) {
     return (
-      <Card>
-        <CardContent className="p-4 space-y-2">
-          <Skeleton className="h-4 w-44 rounded" />
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-11 w-full rounded-md" />
-          ))}
-        </CardContent>
+      <Card className="gap-2 p-4">
+        <Skeleton className="h-4 w-44 rounded" />
+        {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}
       </Card>
     );
   }
 
-  // Error — must not prevent the Plans list from loading; error is isolated here
+  // Error must not prevent the Plans list from loading; it is isolated here
   if (error) {
     return (
       <FollowUpStrip>
-        <span className="text-sm font-medium text-muted-foreground">
-          {t("followUp.delayedOrOverdue")}
-        </span>
-        <span className="ms-auto text-xs text-destructive">{t("followUp.dataUnavailable")}</span>
+        <span className="text-sm font-medium text-[var(--muted)]">{t("followUp.delayedOrOverdue")}</span>
+        <span className="ms-auto text-xs text-[var(--danger)]">{t("followUp.dataUnavailable")}</span>
       </FollowUpStrip>
     );
   }
 
-  // Empty — compact strip, neutral
   if (items.length === 0) {
     return (
       <FollowUpStrip>
-        <CheckCircle2 className="h-4 w-4 text-emerald-500/70 shrink-0" aria-hidden="true" />
-        <span className="text-sm text-muted-foreground">
-          {t("followUp.noDelayed")}
-        </span>
+        <CheckCircle2 className="size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
+        <span className="text-sm text-[var(--muted)]">{t("followUp.noDelayed")}</span>
       </FollowUpStrip>
     );
   }
 
-  // Has items
+  const timingLabel = (a: ExtendedDelayedItem) => {
+    if (a.timingState === "delayed_and_overdue") {
+      return (a.daysPastDue ?? 0) > 0 ? t("followUp.delayedAndPastDue", { days: a.daysPastDue }) : t("followUp.delayedPastDue");
+    }
+    if (a.timingState === "overdue" && (a.daysPastDue ?? 0) > 0) return t("followUp.pastDue", { days: a.daysPastDue });
+    if (a.timingState === "delayed") return t("followUp.delayed");
+    return null;
+  };
+
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs font-medium text-muted-foreground mb-3">
-          {t("followUp.delayedOrOverdue")}
-          <span className="ms-1.5 font-normal text-muted-foreground/60">
-            ({items.length})
-          </span>
-        </p>
-        <ul className="divide-y divide-border/50" aria-label={t("followUp.delayedOrOverdue")}>
-          {visible.map((a) => (
-            <li
-              key={a.activityId}
-              className="flex items-start justify-between gap-3 py-2.5 min-h-[44px] min-w-0"
-            >
-              {/* Primary + secondary */}
-              <div className="flex-1 min-w-0">
+    <Card className="gap-2 p-4">
+      <p className="text-xs font-medium text-[var(--muted)]">
+        {t("followUp.delayedOrOverdue")}
+        <span className="ms-1.5 font-normal">({items.length})</span>
+      </p>
+      <ul className="divide-y divide-[var(--border)]" aria-label={t("followUp.delayedOrOverdue")}>
+        {visible.map((a) => {
+          const timing = timingLabel(a);
+          return (
+            <li key={a.activityId} className="flex min-h-[44px] min-w-0 items-start justify-between gap-3 py-2.5">
+              <div className="min-w-0 flex-1">
                 <Link
                   href={`/plans/${a.planId}`}
-                  className="text-sm font-medium truncate hover:underline underline-offset-2 block"
+                  dir="auto"
+                  className="inline-block max-w-full break-words text-sm font-medium hover:underline underline-offset-2 rtl:text-end"
                   aria-label={t("followUp.viewPlan", { title: a.planTitle })}
                   title={t("followUp.viewPlan", { title: a.planTitle })}
                 >
                   {a.title}
                 </Link>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">
-                  {a.planTitle}
-                  {a.stateName ? (
-                    <span className="text-muted-foreground/60"> · {getLinkedStateLabel(a, i18n.language)}</span>
-                  ) : null}
+                <p className="mt-0.5 break-words text-xs text-[var(--muted)]">
+                  <span dir="auto">{a.planTitle}</span>
+                  {a.stateName ? <span> · {getLinkedStateLabel(a, i18n.language)}</span> : null}
                 </p>
               </div>
               {/* Date + factual timing label + workflow status */}
-              <div className="shrink-0 text-end min-w-[90px]">
-                {a.endDate ? (
-                  <p className="text-xs text-muted-foreground">{formatDate(a.endDate)}</p>
-                ) : null}
-                {/* Timing label — derives from server-computed timingState */}
-                {a.timingState === "delayed_and_overdue" && (a.daysPastDue ?? 0) > 0 ? (
-                  // Explicitly delayed AND past due date
-                  <p
-                    className="text-xs text-amber-600 dark:text-amber-400 font-medium"
-                    aria-label={t("followUp.delayedAndPastDue", { days: a.daysPastDue })}
-                  >
-                    {t("followUp.delayedAndPastDue", { days: a.daysPastDue })}
-                  </p>
-                ) : a.timingState === "delayed_and_overdue" ? (
-                  // Delayed + overdue but daysPastDue not populated (edge case)
-                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                    {t("followUp.delayedPastDue")}
-                  </p>
-                ) : a.timingState === "overdue" && (a.daysPastDue ?? 0) > 0 ? (
-                  // Overdue by date, not explicitly delayed
-                  <p
-                    className="text-xs text-amber-600 dark:text-amber-400 font-medium"
-                    aria-label={t("followUp.pastDue", { days: a.daysPastDue })}
-                  >
-                    {t("followUp.pastDue", { days: a.daysPastDue })}
-                  </p>
-                ) : a.timingState === "delayed" ? (
-                  // Explicitly delayed but due date has not yet passed
-                  <p
-                    className="text-xs text-muted-foreground/80 font-medium"
-                    aria-label={t("followUp.delayed")}
-                  >
-                    {t("followUp.delayed")}
-                  </p>
-                ) : null}
-                {/* Workflow status — shown in muted text below timing label */}
+              <div className="flex min-w-[90px] shrink-0 flex-col items-end gap-1 text-end">
+                {a.endDate ? <span className="text-xs text-[var(--muted)]"><bdi dir="ltr">{formatDate(a.endDate)}</bdi></span> : null}
+                {timing && (
+                  <Chip size="sm" variant="soft" color={a.timingState === "delayed" ? "default" : "warning"}>{timing}</Chip>
+                )}
                 {a.status && a.timingState !== "delayed" && a.timingState !== "delayed_and_overdue" && (
-                  <p className="text-xs text-muted-foreground/60 capitalize mt-0.5">
-                    {a.status.replace(/_/g, " ")}
-                  </p>
+                  <span className="text-xs text-[var(--muted)]">{t(`status.${a.status}`, { defaultValue: a.status.replace(/_/g, " ") })}</span>
                 )}
               </div>
             </li>
-          ))}
-        </ul>
-        {hasMore && (
-          <div className="mt-3 pt-3 border-t border-border/50">
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline underline-offset-2 font-medium"
-              aria-expanded={showAll}
-              onClick={() => setShowAll((s) => !s)}
-            >
-              {showAll
-                ? t("followUp.showLess")
-                : t("followUp.showAll", { count: items.length })}
-            </button>
-          </div>
-        )}
-      </CardContent>
+          );
+        })}
+      </ul>
+      {hasMore && (
+        <div className="border-t border-[var(--border)] pt-3">
+          <Button size="sm" variant="ghost" aria-expanded={showAll} onPress={() => setShowAll((s) => !s)}>
+            {showAll ? t("followUp.showLess") : t("followUp.showAll", { count: items.length })}
+          </Button>
+        </div>
+      )}
     </Card>
+  );
+}
+
+/** A Pro KPI that doubles as a status filter toggle. */
+function FilterKpi({
+  icon: Icon, status, label, value, pressed, onToggle,
+}: {
+  icon: React.ElementType;
+  status?: "success" | "warning" | "danger";
+  label: string;
+  value: React.ReactNode;
+  pressed?: boolean;
+  onToggle?: () => void;
+}) {
+  const kpi = (
+    <KPI className={`h-full justify-start transition-shadow ${pressed ? "ring-2 ring-[var(--accent)]" : ""}`}>
+      <KPI.Header>
+        <KPI.Icon status={status}><Icon aria-hidden="true" /></KPI.Icon>
+        <KPI.Title>{label}</KPI.Title>
+      </KPI.Header>
+      <KPI.Content><dd className="kpi__value tabular-nums">{value}</dd></KPI.Content>
+    </KPI>
+  );
+  if (!onToggle) return kpi;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={!!pressed}
+      onClick={onToggle}
+      className="h-full rounded-[calc(var(--radius)*2.5)] text-start outline-none hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+    >
+      {kpi}
+    </button>
+  );
+}
+
+/** Confirms deleting a Plan (a HeroUI alert dialog instead of the browser's native prompt). */
+function DeletePlanModal({
+  plan, onCancel, onConfirm, isPending,
+}: {
+  plan: { id: number; title: string } | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  const { t } = useTranslation("planning");
+  const { t: tCommon } = useTranslation("common");
+  return (
+    <Modal isOpen={!!plan} onOpenChange={(open) => { if (!open) onCancel(); }}>
+      <Modal.Backdrop>
+        <Modal.Container size="sm">
+          <Modal.Dialog role="alertdialog">
+            <Modal.Header>
+              <Modal.Icon className="bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] text-[var(--danger)]">
+                <TriangleAlert className="size-5" aria-hidden="true" />
+              </Modal.Icon>
+              <Modal.Heading>{t("detail.deletePlanMenu")}</Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("detail.deletePlanConfirm")}</p>
+              {plan && <p dir="auto" className="text-sm font-medium">{plan.title}</p>}
+            </Modal.Header>
+            <Modal.Footer>
+              <Button variant="secondary" autoFocus onPress={onCancel} isDisabled={isPending}>{tCommon("cancel")}</Button>
+              <Button variant="danger" onPress={onConfirm} isPending={isPending}>{t("detail.deletePlanMenu")}</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
+/** Row actions: HeroUI Dropdown with Delete. */
+function PlanActionsMenu({ label, onDelete }: { label: string; onDelete: () => void }) {
+  const { t } = useTranslation("planning");
+  return (
+    <Dropdown>
+      <Button isIconOnly size="sm" variant="ghost" aria-label={label}>
+        <MoreHorizontal className="size-4" aria-hidden="true" />
+      </Button>
+      <Dropdown.Popover placement="bottom end" className="min-w-40">
+        <Dropdown.Menu aria-label={label} onAction={(key) => { if (key === "delete") onDelete(); }}>
+          <Dropdown.Item id="delete" textValue={t("detail.deletePlanMenu")} variant="danger">
+            <Trash2 className="size-4" aria-hidden="true" /><Label>{t("detail.deletePlanMenu")}</Label>
+          </Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   );
 }
 
@@ -625,18 +524,18 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
   // every list/board/calendar view instead of only the full detail page.
   const canDelete = hasPerm(me?.permissions, "*") || hasPerm(me?.permissions, "plans.delete");
   const qc = useQueryClient();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const deleteMutation = useDeletePlan({
     mutation: {
-      onSuccess: () => { toast.success(t("toast.planDeleted")); qc.invalidateQueries(); },
+      onSuccess: () => { toast.success(t("toast.planDeleted")); qc.invalidateQueries(); setDeleteTarget(null); },
       onError: (e: Error) => toast.error(e.message),
     },
   });
   const handleDeletePlan = useCallback(
-    (p: { id: number; title: string }) => {
-      if (confirm(t("detail.deletePlanConfirm"))) deleteMutation.mutate({ planId: p.id });
-    },
-    [deleteMutation, t],
+    (p: { id: number; title: string }) => setDeleteTarget({ id: p.id, title: p.title }),
+    [],
   );
+  const planTypeLabel = usePlanTypeLabel();
 
   const moduleKey = lockedType ? `plans_${lockedType}` : "plans";
   const [viewMode, setViewMode] = useViewMode(moduleKey, [...PLAN_VIEWS], "table");
@@ -750,7 +649,7 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
           subtitle: getLinkedStateLabel(p, i18n.language),
           status: p.status,
           statusBadge: <PlanStatusBadge status={p.status} />,
-          tag: p.planType,
+          tag: planTypeLabel(p.planType),
           date: formatDate(p.startDate),
           date2: formatDate(p.endDate),
           meta: [
@@ -773,28 +672,12 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
                     onClick={() => continueEdit(p.id)}
                   />
                 )}
-                {canDelete && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("table.actionsAria")}>
-                        <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem
-                        onClick={() => handleDeletePlan(p)}
-                        className="gap-2 text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> {t("detail.deletePlanMenu")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                {canDelete && <PlanActionsMenu label={t("table.actionsAria")} onDelete={() => handleDeletePlan(p)} />}
               </div>
             ) : undefined,
         };
       }),
-    [paginatedPlans, t, i18n.language, openRecord, canEditDrafts, continueEdit, canDelete, handleDeletePlan],
+    [paginatedPlans, t, i18n.language, openRecord, canEditDrafts, continueEdit, canDelete, handleDeletePlan, planTypeLabel],
   );
 
   // ── Derived values (useMemo before any conditional early return)
@@ -807,7 +690,6 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
     () => PLAN_KANBAN_COL_KEYS.map((col) => ({
       key: col.key,
       label: t(`status.${col.statusKey}`),
-      color: col.color,
     })),
     [t],
   );
@@ -819,29 +701,19 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
   const upcomingDeadlines = dashData?.upcomingDeadlines ?? [];
   const delayedActivities = dashData?.delayedActivities ?? [];
 
-  // Sort toggle — same field flips direction; new field defaults to asc
-  function toggleSort(field: string) {
-    if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
-      setSortDir("asc");
-    }
-  }
-
   const isFiltered =
     !!search || status !== "all" || stateId !== "all" || planType !== "all";
 
   // Shared empty node used by non-table view modes
   const emptyNode =
     totalCount === 0 && isFiltered ? (
-      <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground text-sm">
+      <div className="flex flex-col items-center gap-2 py-12 text-[var(--muted)] text-sm">
         <CalendarClock className="h-8 w-8 opacity-30" />
         <p className="font-medium">{t("plansPage.noPlansMatchFilters")}</p>
-        <button
-          type="button"
-          className="text-xs text-primary underline underline-offset-2"
-          onClick={() => {
+        <Button
+          size="sm"
+          variant="ghost"
+          onPress={() => {
             setSearch("");
             setStatus("all");
             setStateId("all");
@@ -849,10 +721,10 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
           }}
         >
           {t("filters.clearFilters")}
-        </button>
+        </Button>
       </div>
     ) : (
-      <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground text-sm">
+      <div className="flex flex-col items-center gap-2 py-12 text-[var(--muted)] text-sm">
         <CalendarClock className="h-8 w-8 opacity-30" />
         <p className="font-medium">{t("plansPage.noPlansAvailable")}</p>
         {canCreate && (
@@ -864,6 +736,100 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
       </div>
     );
 
+  // ── Table columns (Pro DataGrid; sorting stays client-side and controlled)
+  const clearFilters = () => {
+    setSearch("");
+    setStatus("all");
+    setStateId("all");
+    setPlanType(lockedType ?? "all");
+  };
+
+  const columns = useMemo<DataGridColumn<PlanItem>[]>(() => [
+    { id: "plan", header: t("table.plan"), isRowHeader: true, allowsSorting: true, width: 220, pinned: "start", headerClassName: "w-[220px]",
+      cell: (p) => (
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <Link
+            href={`/plans/${p.id}`}
+            dir="auto"
+            className="block whitespace-normal break-words font-medium leading-snug text-[var(--foreground)] line-clamp-3 rtl:text-end hover:underline underline-offset-2"
+            title={p.title}
+          >
+            {p.title}
+          </Link>
+          <div className="flex items-center gap-1.5">
+            <span className="truncate font-mono text-xs text-[var(--muted)]" title={p.code ?? undefined}><bdi dir="ltr">{p.code ?? "—"}</bdi></span>
+            <AttachmentCountBadge module="plans" recordId={p.id} />
+          </div>
+          {canEditDrafts && p.status === "draft" && (
+            <div className="mt-1"><ContinueEditingAction recordTitle={p.title} onClick={() => continueEdit(p.id)} /></div>
+          )}
+        </div>
+      ) },
+    { id: "type", header: t("table.type"), allowsSorting: true, width: 96, headerClassName: "w-[96px]",
+      cell: (p) => <span className="text-sm text-[var(--muted)]">{planTypeLabel(p.planType)}</span> },
+    { id: "status", header: t("table.status"), allowsSorting: true, width: 124, headerClassName: "w-[124px]",
+      cell: (p) => <PlanStatusBadge status={p.status} /> },
+    { id: "state", header: t("table.state"), allowsSorting: true, width: 104, headerClassName: "w-[104px]",
+      cell: (p) => <span className="text-sm text-[var(--muted)]" dir="auto">{formatLocation({ locationType: p.locationType, stateName: p.stateName, stateNameAr: p.stateNameAr }, i18n.language)}</span> },
+    { id: "responsible", header: t("table.responsible"), allowsSorting: true, width: 124, headerClassName: "w-[124px]",
+      cell: (p) => <span dir="auto" className="block whitespace-normal break-words text-sm text-[var(--muted)] line-clamp-2 rtl:text-end">{p.responsibleUserName ?? p.responsibleName ?? "—"}</span> },
+    { id: "period", header: t("table.period"), allowsSorting: true, width: 116, headerClassName: "w-[116px]",
+      cell: (p) => p.startDate || p.endDate ? (
+        <span className="text-xs leading-snug text-[var(--muted)]">
+          <bdi dir="ltr" className="block whitespace-nowrap">{formatDate(p.startDate)}</bdi>
+          <bdi dir="ltr" className="block whitespace-nowrap">– {formatDate(p.endDate)}</bdi>
+        </span>
+      ) : <span className="text-[var(--muted)]">—</span> },
+    // Budget: not sortable across mixed currencies
+    { id: "budget", header: t("table.budget"), align: "end", width: 120, headerClassName: "w-[120px]",
+      cell: (p) => {
+        if ((p as { budgetLegacyUnverified?: boolean }).budgetLegacyUnverified) {
+          return (
+            <Tooltip delay={300}>
+              <Tooltip.Trigger className="cursor-help border-b border-dashed border-[var(--muted)] text-xs text-[var(--muted)]">
+                {t("detail.budgetNotVerified")}
+              </Tooltip.Trigger>
+              <Tooltip.Content className="max-w-[280px]">{t("plansPage.budgetNotVerifiedTooltip")}</Tooltip.Content>
+            </Tooltip>
+          );
+        }
+        return <bdi dir="ltr" className="whitespace-nowrap text-sm font-medium tabular-nums">{formatPlanBudget(p.budgetPlanned, p.currency, false, t)}</bdi>;
+      } },
+    { id: "progress", header: t("table.progress"), allowsSorting: true, align: "end", width: 84, headerClassName: "w-[84px]",
+      cell: (p) => p.progressPct == null ? (
+        <Tooltip delay={300}>
+          <Tooltip.Trigger aria-label={t("plansPage.progressNoActivities")} className="cursor-help text-[var(--muted)]">—</Tooltip.Trigger>
+          <Tooltip.Content>{t("plansPage.progressNoActivities")}</Tooltip.Content>
+        </Tooltip>
+      ) : (
+        <Tooltip delay={300}>
+          <Tooltip.Trigger aria-label={t("plansPage.progressAverage", { pct: p.progressPct })} className="cursor-help text-sm font-medium tabular-nums">
+            <bdi dir="ltr">{p.progressPct}%</bdi>
+          </Tooltip.Trigger>
+          <Tooltip.Content className="text-center">
+            <p>{t("plansPage.progressAverage", { pct: p.progressPct })}</p>
+            {p.activitiesCount != null && <p className="opacity-80">{t("plansPage.progressBasedOn", { count: p.activitiesCount })}</p>}
+          </Tooltip.Content>
+        </Tooltip>
+      ) },
+    { id: "actions", header: <span className="sr-only">{t("table.actions")}</span>, align: "end", width: 56, pinned: "end", headerClassName: "w-[56px]",
+      cell: (p) => canDelete ? <PlanActionsMenu label={t("table.actionsAria")} onDelete={() => handleDeletePlan(p)} /> : null },
+  ], [t, i18n.language, canEditDrafts, continueEdit, planTypeLabel, canDelete, handleDeletePlan]);
+
+  const pagination = (
+    <PlanPagination
+      page={page}
+      pageSize={pageSize}
+      totalCount={totalCount}
+      totalPages={totalPages}
+      onPageChange={setPage}
+      onPageSizeChange={(size) => {
+        setPageSize(size);
+        setPage(1);
+      }}
+    />
+  );
+
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
@@ -874,74 +840,57 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
           <h1 className="text-foreground text-xl font-semibold">
             {isActionPlans ? t("headings.actionPlans") : t("plansPage.heading")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {isActionPlans
-              ? t("headings.actionPlansDesc")
-              : t("plansPage.headingDesc")}
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {isActionPlans ? t("headings.actionPlansDesc") : t("plansPage.headingDesc")}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <ViewModeSwitcher
-            available={[...PLAN_VIEWS]}
-            current={viewMode}
-            onChange={setViewMode}
-          />
-          {canCreate && (
-            <Button className="gap-1.5" onClick={() => setCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              {t("createPlan")}
-            </Button>
-          )}
-        </div>
+        {canCreate && (
+          <Button className="shrink-0" onPress={() => setCreateDialogOpen(true)}>
+            <Plus className="size-4" aria-hidden="true" />
+            {t("createPlan")}
+          </Button>
+        )}
       </div>
 
-      {/* ── Plan summary KPI strip (only for the main Plans workspace) ── */}
+      {/* ── Plan summary KPIs (main Plans workspace only); the status ones are filter toggles ── */}
       {!isActionPlans && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {dashLoading ? (
-            [...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-32 rounded-xl" />
-            ))
+            [...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 rounded-3xl" />)
           ) : dashError ? (
-            <div className="col-span-full rounded-xl border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-              {t("plansPage.summaryUnavailable")}
-            </div>
+            <Card className="col-span-full px-4 py-3 text-sm text-[var(--muted)]">{t("plansPage.summaryUnavailable")}</Card>
           ) : (
             <>
-              <StatCard icon={CalendarClock} iconBg="bg-slate-500" label={t("plansPage.totalPlans")} value={extTotals?.total ?? 0} />
-              <StatCard
+              <FilterKpi icon={CalendarClock} label={t("plansPage.totalPlans")} value={extTotals?.total ?? 0} />
+              <FilterKpi
                 icon={FileText}
-                iconBg="bg-slate-400"
                 label={t("plansPage.draftPlans")}
                 value={extTotals?.draft ?? 0}
-                secondary
-                onClick={() => setStatus(status === "draft" ? "all" : "draft")}
                 pressed={status === "draft"}
+                onToggle={() => setStatus(status === "draft" ? "all" : "draft")}
               />
-              <StatCard
+              <FilterKpi
                 icon={Clock}
-                iconBg="bg-amber-500"
+                status={(extTotals?.awaitingApproval ?? 0) > 0 ? "warning" : undefined}
                 label={t("plansPage.awaitingApproval")}
                 value={extTotals?.awaitingApproval ?? 0}
-                alert={!dashLoading && (extTotals?.awaitingApproval ?? 0) > 0}
-                onClick={() => setStatus(status === "awaiting_approval" ? "all" : "awaiting_approval")}
                 pressed={status === "awaiting_approval"}
+                onToggle={() => setStatus(status === "awaiting_approval" ? "all" : "awaiting_approval")}
               />
-              <StatCard
+              <FilterKpi
                 icon={Activity}
-                iconBg="bg-blue-500"
                 label={t("plansPage.activePlans")}
                 value={extTotals?.active ?? 0}
-                onClick={() => setStatus(status === "active_group" ? "all" : "active_group")}
                 pressed={status === "active_group"}
+                onToggle={() => setStatus(status === "active_group" ? "all" : "active_group")}
               />
-              <StatCard
+              <FilterKpi
                 icon={CheckCircle2}
-                iconBg="bg-emerald-500"
+                status="success"
                 label={t("plansPage.completedPlans")}
                 value={extTotals?.completed ?? 0}
-                onClick={() => setStatus(status === "completed" ? "all" : "completed")}
                 pressed={status === "completed"}
+                onToggle={() => setStatus(status === "completed" ? "all" : "completed")}
               />
             </>
           )}
@@ -956,396 +905,136 @@ export default function PlansPage({ lockedType }: { lockedType?: string } = {}) 
         </div>
       )}
 
-      {/* ── Filter toolbar ──────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
-        <Filter className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
-        <Separator orientation="vertical" className="h-5" />
-        {/* Search — title or code */}
-        <div className="relative">
-          <Search className="absolute start-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("filters.searchPlansByTitleOrCode")}
-            className="ps-7 pe-7 h-9 min-w-[8rem] w-full max-w-[13rem] text-sm"
+      {/* ── Control bar: filters (start) + view switcher (end), as on Projects ── */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 max-md:basis-full">
+          <div className="flex shrink-0 select-none items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
+            <Filter className="size-4" aria-hidden="true" />
+          </div>
+          <Separator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
+          <SearchField
             aria-label={t("filters.searchAriaLabel")}
+            value={search}
+            onChange={setSearch}
+            className="w-full min-w-[12rem] sm:w-[16rem]"
+          >
+            <SearchField.Group>
+              <SearchField.SearchIcon />
+              <SearchField.Input placeholder={t("filters.searchPlansByTitleOrCode")} />
+              <SearchField.ClearButton aria-label={t("filters.clearSearch")} />
+            </SearchField.Group>
+          </SearchField>
+          {!lockedType && (
+            <SelectField
+              aria-label={t("filters.type")}
+              value={planType}
+              onChange={setPlanType}
+              triggerClassName="h-10 min-w-[8rem]"
+              options={[{ value: "all", label: t("filters.allTypes_select") }, ...PLAN_TYPE_VALUES.map((val) => ({ value: val, label: t(`planTypes.${val}_short`) }))]}
+            />
+          )}
+          <SelectField
+            aria-label={t("filters.status")}
+            value={status}
+            onChange={setStatus}
+            triggerClassName="h-10 min-w-[9rem]"
+            options={[
+              { value: "all", label: t("filters.allStatuses_select") },
+              { value: "awaiting_approval", label: t("filters.awaitingApproval") },
+              { value: "active_group", label: t("filters.activeIncludingInProgress") },
+              ...STATUSES.map((s) => ({ value: s, label: t(`status.${s}`, { defaultValue: s }) })),
+            ]}
           />
-          {search && (
-            <button
-              type="button"
-              aria-label={t("filters.clearSearch")}
-              className="absolute end-2 top-2 text-muted-foreground hover:text-foreground"
-              onClick={() => setSearch("")}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+          <SelectField
+            aria-label={t("table.state")}
+            value={stateId}
+            onChange={setStateId}
+            triggerClassName="h-10 min-w-[8rem]"
+            options={[{ value: "all", label: t("filters.allStates_select") }, ...(states ?? []).map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }))]}
+          />
+          {isFiltered && (
+            <Button variant="ghost" size="sm" className="shrink-0" onPress={clearFilters}>
+              <X className="size-3.5" aria-hidden="true" />
+              {t("filters.clearFilters")}
+            </Button>
           )}
         </div>
-        {/* Type filter — hidden when a type is already locked by parent route */}
-        {!lockedType && (
-          <Select value={planType} onValueChange={setPlanType}>
-            <SelectTrigger className="h-9 min-w-[7rem] w-auto max-w-[11rem] text-sm">
-              <SelectValue placeholder={t("filters.allTypes_select")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allTypes_select")}</SelectItem>
-              {PLAN_TYPE_VALUES.map((val) => (
-                <SelectItem key={val} value={val}>{t(`planTypes.${val}_short`)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {/* Status filter — Title Case labels, raw enum values preserved */}
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-9 min-w-[7rem] w-auto max-w-[11rem] text-sm">
-            <SelectValue placeholder={t("filters.allStatuses_select")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("filters.allStatuses_select")}</SelectItem>
-            <SelectItem value="awaiting_approval">{t("filters.awaitingApproval")}</SelectItem>
-            <SelectItem value="active_group">{t("filters.activeIncludingInProgress")}</SelectItem>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>{formatStatusLabel(s)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {/* State filter */}
-        <Select value={stateId} onValueChange={setStateId}>
-          <SelectTrigger className="h-9 min-w-[7rem] w-auto max-w-[11rem] text-sm">
-            <SelectValue placeholder={t("filters.allStates_select")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("filters.allStates_select")}</SelectItem>
-            {states?.map((s) => (
-              <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {/* Clear Filters — only shown when one or more filters are active */}
-        {isFiltered && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 px-2.5 text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              setSearch("");
-              setStatus("all");
-              setStateId("all");
-              setPlanType(lockedType ?? "all");
-            }}
-          >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("filters.clearFilters")}
-          </Button>
-        )}
+        <Separator orientation="vertical" className="hidden h-6 shrink-0 md:block" />
+        <ViewModeSwitcher available={[...PLAN_VIEWS]} current={viewMode} onChange={setViewMode} />
       </div>
 
       {/* ── Plans list / views ──────────────────────────────────────────── */}
       {isLoading ? (
-        /* Loading skeleton — approximates final Plan cell + 7 columns */
-        <Card>
-          <CardContent className="p-0">
-            <div className="divide-y">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="flex items-center gap-4 px-6 py-3.5 min-h-[56px]">
-                  {/* Plan cell: title + code */}
-                  <div className="flex flex-col gap-1 flex-[3]">
-                    <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-5 w-28 rounded-full" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-32 whitespace-nowrap" />
-                  <Skeleton className="h-4 w-20 ms-auto" />
-                  <Skeleton className="h-4 w-10" />
+        <Card className="p-0">
+          <div className="divide-y divide-[var(--border)]">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex min-h-[56px] items-center gap-4 px-6 py-3.5">
+                <div className="flex flex-[3] flex-col gap-1">
+                  <Skeleton className="h-4 w-48 rounded" />
+                  <Skeleton className="h-3 w-20 rounded" />
                 </div>
-              ))}
-            </div>
-          </CardContent>
+                <Skeleton className="h-4 w-20 rounded" />
+                <Skeleton className="h-5 w-28 rounded-full" />
+                <Skeleton className="hidden h-4 w-24 rounded md:block" />
+                <Skeleton className="hidden h-4 w-24 rounded lg:block" />
+                <Skeleton className="ms-auto h-4 w-20 rounded" />
+              </div>
+            ))}
+          </div>
         </Card>
       ) : plansError ? (
-        /* Error state — section-isolated, does not crash the workspace */
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12">
-            <CalendarClock className="h-8 w-8 text-muted-foreground/40" />
-            <p className="text-sm font-medium text-muted-foreground">
-              {t("plansPage.unableToLoad")}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-              {t("plansPage.retry")}
-            </Button>
-          </CardContent>
+        <Card className="items-center gap-3 py-12">
+          <CalendarClock className="size-8 text-[var(--muted)]" aria-hidden="true" />
+          <p className="text-sm font-medium text-[var(--muted)]">{t("plansPage.unableToLoad")}</p>
+          <Button variant="outline" size="sm" onPress={() => window.location.reload()}>{t("plansPage.retry")}</Button>
         </Card>
       ) : viewMode === "table" ? (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto" role="region" aria-label={t("plansPage.ariaTable")}>
-              <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
-                  <TableRow>
-                    {/* Plan = Title (primary) + Code (secondary) — combined to prevent code wrapping */}
-                    <SortableHead field="plan" label={t("table.plan")} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="min-w-[220px]" />
-                    <SortableHead field="type" label={t("table.type")} sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableHead field="status" label={t("table.status")} sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableHead field="state" label={t("table.state")} sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableHead field="responsible" label={t("table.responsible")} sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableHead field="period" label={t("table.period")} sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                    {/* Budget: not sortable across mixed currencies — no sort indicator */}
-                    <TableHead className="text-end">{t("table.budget")}</TableHead>
-                    {/* Progress header — tooltip clarifies "Progress" = avg activity progress, not performance */}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <SortableHead field="progress" label={t("table.progress")} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="text-end cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[220px] text-center">
-                          {t("plansPage.progressTooltip")}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    {/* Actions — overflow menu; Delete now reaches the table view too (spec §23-parity) */}
-                    <TableHead className="w-10 text-end">{t("table.actions")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {/* Empty state — distinguishes filtered-empty from scope-empty */}
-                  {totalCount === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-10">
-                        {isFiltered ? (
-                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                            <CalendarClock className="h-8 w-8 opacity-30" />
-                            <p className="text-sm font-medium">{t("plansPage.noPlansMatchFilters")}</p>
-                            <button
-                              type="button"
-                              className="text-xs text-primary underline underline-offset-2"
-                              onClick={() => {
-                                setSearch("");
-                                setStatus("all");
-                                setStateId("all");
-                                setPlanType(lockedType ?? "all");
-                              }}
-                            >
-                              {t("filters.clearFilters")}
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                            <CalendarClock className="h-8 w-8 opacity-30" />
-                            <p className="text-sm font-medium">{t("plansPage.noPlansAvailable")}</p>
-                            {canCreate && (
-                              <p
-                                className="text-xs"
-                                dangerouslySetInnerHTML={{ __html: t("plansPage.clickToCreate") }}
-                              />
-                            )}
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {paginatedPlans.map((p) => {
-                    const progressPct = p.progressPct;
-                    return (
-                      <TableRow
-                        key={p.id}
-                        className="hover:bg-muted/50 transition-colors min-h-[52px]"
-                      >
-                        {/* Plan cell: Title (primary link) + Code (secondary, nowrap) */}
-                        <TableCell className="py-3">
-                          <div className="flex flex-col gap-0.5 min-w-0">
-                            <Link
-                              href={`/plans/${p.id}`}
-                              className="text-sm font-medium line-clamp-2 hover:underline underline-offset-2 leading-snug"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {p.title}
-                            </Link>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span
-                                className="font-mono text-xs text-muted-foreground whitespace-nowrap"
-                                title={p.code ?? undefined}
-                              >
-                                <bdi dir="ltr">{p.code ?? "—"}</bdi>
-                              </span>
-                              <AttachmentCountBadge module="plans" recordId={p.id} />
-                            </div>
-                            {/* Continue Editing shortcut for draft plans — spec §26 */}
-                            {canEditDrafts && p.status === "draft" && (
-                              <ContinueEditingAction
-                                recordTitle={p.title}
-                                onClick={() => continueEdit(p.id)}
-                              />
-                            )}
-                          </div>
-                        </TableCell>
-                        {/* Type — shared formatPlanType label */}
-                        <TableCell className="text-sm text-muted-foreground max-w-[120px]">
-                          <span className="truncate block">{formatPlanType(p.planType)}</span>
-                        </TableCell>
-                        {/* Status — verified Title Case badge */}
-                        <TableCell>
-                          <PlanStatusBadge status={p.status} />
-                        </TableCell>
-                        {/* State / Location — HQ or state name via formatLocation */}
-                        <TableCell className="text-sm text-muted-foreground max-w-[140px]">
-                          <span className="truncate block">{formatLocation({ locationType: p.locationType, stateName: p.stateName, stateNameAr: p.stateNameAr }, i18n.language)}</span>
-                        </TableCell>
-                        {/* Responsible — resolved user name (responsible_user_id → users.name)
-                            falling back to the free-text responsible_name for plans where
-                            the responsible person was recorded as text rather than a user account */}
-                        <TableCell className="text-sm text-muted-foreground max-w-[160px]">
-                          <span className="truncate block">{p.responsibleUserName ?? p.responsibleName ?? "—"}</span>
-                        </TableCell>
-                        {/* Period — British en-dash format, no fabricated dates */}
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {p.startDate || p.endDate
-                            ? `${formatDate(p.startDate)} – ${formatDate(p.endDate)}`
-                            : "—"}
-                        </TableCell>
-                        {/* Budget — ISO currency code; legacy-unverified records show translated label */}
-                        <TableCell className="text-end text-sm font-medium tabular-nums">
-                          {(() => {
-                            const legacyUnverified = !!(p as { budgetLegacyUnverified?: boolean }).budgetLegacyUnverified;
-                            if (legacyUnverified) {
-                              return (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="text-muted-foreground/70 text-xs cursor-help border-b border-dashed border-muted-foreground/40">
-                                        {t("detail.budgetNotVerified")}
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="max-w-[280px]">
-                                      {LEGACY_BUDGET_TOOLTIP}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              );
-                            }
-                            return formatPlanBudget(p.budgetPlanned, p.currency, false, t);
-                          })()}
-                        </TableCell>
-                        {/* Progress — avg activity progress; null = no activities; 0% = genuine zero */}
-                        <TableCell className="text-end text-sm font-medium tabular-nums">
-                          {progressPct == null ? (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-muted-foreground/60 cursor-help">—</span>
-                                </TooltipTrigger>
-                                <TooltipContent side="left">
-                                  No Activities available for Progress calculation.
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ) : (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span
-                                    aria-label={`Average Activity progress: ${progressPct}%`}
-                                    className="cursor-help"
-                                  >
-                                    <bdi dir="ltr">{progressPct}%</bdi>
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="left" className="text-center">
-                                  <p>Average Activity progress: <bdi dir="ltr">{progressPct}%</bdi></p>
-                                  {(p.activitiesCount as number | null) != null && (
-                                    <p className="text-primary-foreground/70">Based on {p.activitiesCount} {(p.activitiesCount as number) === 1 ? "Activity" : "Activities"}</p>
-                                  )}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </TableCell>
-                        {/* Actions — overflow menu; Delete now reaches the table view too (spec §23-parity) */}
-                        <TableCell className="text-end" onClick={(e) => e.stopPropagation()}>
-                          {canDelete && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("table.actionsAria")}>
-                                  <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-40">
-                                <DropdownMenuItem
-                                  onClick={() => handleDeletePlan(p)}
-                                  className="gap-2 text-destructive focus:text-destructive"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" /> {t("detail.deletePlanMenu")}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-
-            <PlanPagination
-              page={page}
-              pageSize={pageSize}
-              totalCount={totalCount}
-              totalPages={totalPages}
-              onPageChange={setPage}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                setPage(1);
-              }}
-            />
-          </CardContent>
+        <Card className="gap-0 overflow-hidden p-0">
+          <DataGrid
+            aria-label={t("plansPage.ariaTable")}
+            data={paginatedPlans}
+            columns={columns}
+            getRowId={(p) => p.id}
+            onRowAction={(key) => openRecord("plan", Number(key))}
+            contentClassName="min-w-[1044px] table-fixed"
+            verticalAlign="middle"
+            sortDescriptor={sortField === "created" ? undefined : { column: sortField, direction: sortDir === "asc" ? "ascending" : "descending" }}
+            onSortChange={(d) => { setSortField(String(d.column)); setSortDir(d.direction === "ascending" ? "asc" : "desc"); }}
+            renderEmptyState={() => emptyNode}
+          />
+          <div className="border-t border-[var(--border)]">{pagination}</div>
         </Card>
       ) : viewMode === "card" ? (
         <CardGrid items={viewRecords} empty={emptyNode} />
       ) : viewMode === "list" ? (
-        <Card>
-          <CardContent className="p-0">
-            <ListView items={viewRecords} empty={emptyNode} />
-          </CardContent>
+        <Card className="p-2">
+          <ListView items={viewRecords} empty={emptyNode} />
         </Card>
       ) : viewMode === "compact" ? (
-        <Card>
-          <CardContent className="p-0">
-            <CompactView items={viewRecords} empty={emptyNode} />
-          </CardContent>
+        <Card className="p-0">
+          <CompactView items={viewRecords} empty={emptyNode} />
         </Card>
       ) : viewMode === "kanban" ? (
-        <div className="p-1">
-          <KanbanBoard items={viewRecords} columns={planKanbanCols} empty={emptyNode} />
-        </div>
+        <KanbanBoard items={viewRecords} columns={planKanbanCols} empty={emptyNode} />
       ) : viewMode === "calendar" ? (
-        <Card>
-          <CardContent className="p-4">
-            <CalendarGrid items={viewRecords} empty={emptyNode} />
-          </CardContent>
+        <Card className="p-4">
+          <CalendarGrid items={viewRecords} empty={emptyNode} />
         </Card>
       ) : null}
-      {!isLoading && !plansError && viewMode !== "table" && (
-        <PlanPagination
-          page={page}
-          pageSize={pageSize}
-          totalCount={totalCount}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(1);
-          }}
-        />
-      )}
+      {!isLoading && !plansError && viewMode !== "table" && pagination}
 
       {/* ── Create Plan modal (replaces /plans/new full-page form) ──────── */}
       <CreatePlanRegistrationDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         defaultPlanType={lockedType}
+      />
+
+      <DeletePlanModal
+        plan={deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => { if (deleteTarget) deleteMutation.mutate({ planId: deleteTarget.id }); }}
+        isPending={deleteMutation.isPending}
       />
     </div>
   );

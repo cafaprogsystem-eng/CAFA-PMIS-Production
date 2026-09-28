@@ -23,9 +23,12 @@ describe("PLANS-DELETE-PARITY: delete is wired into the shared viewRecords actio
     expect(src).toContain("qc.invalidateQueries()");
   });
 
-  it("gates the delete action behind a confirm() dialog using the shared confirmation copy", () => {
-    expect(src).toContain('confirm(t("detail.deletePlanConfirm"))');
-    expect(src).toContain("deleteMutation.mutate({ planId: p.id })");
+  it("gates the delete action behind a confirmation dialog using the shared confirmation copy", () => {
+    // A HeroUI alert dialog replaces the browser's native confirm().
+    expect(src).not.toContain("confirm(");
+    expect(src).toContain('role="alertdialog"');
+    expect(src).toContain('{t("detail.deletePlanConfirm")}');
+    expect(src).toContain("deleteMutation.mutate({ planId: deleteTarget.id })");
   });
 
   it("the shared viewRecords.actions slot (Card/List/Compact/Kanban/Calendar) renders the delete dropdown when canDelete is true", () => {
@@ -33,25 +36,24 @@ describe("PLANS-DELETE-PARITY: delete is wired into the shared viewRecords actio
     // not just for the pre-existing Continue Editing (draft-only) condition.
     expect(src).toMatch(/actions:\s*\n\s*\(canEditDrafts && p\.status === "draft"\) \|\| canDelete \? \(/);
     expect(src).toContain("<Trash2");
-    expect(src).toContain("onClick={() => handleDeletePlan(p)}");
+    expect(src).toContain("onDelete={() => handleDeletePlan(p)}");
   });
 
   it("the Table view (a separate inline render, not driven by viewRecords) also has its own Actions column and delete cell", () => {
     expect(src).toContain('{t("table.actions")}');
-    // Empty-state colSpan must have been widened from 8 to 9 for the new column.
-    expect(src).toContain("colSpan={9}");
-    expect(src).not.toContain("colSpan={8}");
+    // The DataGrid has an explicit actions column rendering the same menu.
+    expect(src).toMatch(/\{ id: "actions",[\s\S]*?<PlanActionsMenu label=\{t\("table\.actionsAria"\)\} onDelete=\{\(\) => handleDeletePlan\(p\)\} \/>/);
   });
 
   it("both the card/list/etc actions slot and the Table cell use the same aria-label and delete menu item", () => {
-    const ariaMatches = src.match(/aria-label=\{t\("table\.actionsAria"\)\}/g) ?? [];
-    const deleteItemMatches = src.match(/\{t\("detail\.deletePlanMenu"\)\}/g) ?? [];
-    // One instance in the shared viewRecords actions slot, one in the Table view's own cell.
-    expect(ariaMatches.length).toBe(2);
-    expect(deleteItemMatches.length).toBe(2);
+    // Both surfaces render the one PlanActionsMenu (same label, same delete item).
+    const menuUses = src.match(/<PlanActionsMenu label=\{t\("table\.actionsAria"\)\}/g) ?? [];
+    expect(menuUses.length).toBe(2);
+    expect(src.match(/function PlanActionsMenu/g) ?? []).toHaveLength(1);
+    expect(src).toContain('<Label>{t("detail.deletePlanMenu")}</Label>');
   });
 
   it("viewRecords memo dependency array includes canDelete and handleDeletePlan (regression guard against stale closures)", () => {
-    expect(src).toMatch(/\[paginatedPlans, t, i18n\.language, openRecord, canEditDrafts, continueEdit, canDelete, handleDeletePlan\]/);
+    expect(src).toMatch(/\[paginatedPlans, t, i18n\.language, openRecord, canEditDrafts, continueEdit, canDelete, handleDeletePlan, planTypeLabel\]/);
   });
 });

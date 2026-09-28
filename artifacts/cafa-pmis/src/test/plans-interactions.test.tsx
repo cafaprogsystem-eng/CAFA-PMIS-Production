@@ -281,7 +281,7 @@ describe("Plans workspace interaction contract", () => {
     }
   });
 
-  it("resets a later page when a status subset is selected and supports keyboard sorting", () => {
+  it("resets a later page when a status subset is selected and supports keyboard sorting", async () => {
     apiState.plans = [
       plan(1, "draft", "Draft Plan"),
       ...Array.from({ length: 20 }, (_, index) => plan(index + 2, "completed", `Completed ${index + 2}`)),
@@ -294,9 +294,10 @@ describe("Plans workspace interaction contract", () => {
     expect(screen.getByText("1 / 1")).toBeInTheDocument();
     expect(screen.getByText("Draft Plan")).toBeInTheDocument();
 
-    const statusHead = screen.getByRole("columnheader", { name: /Sort by Status/i });
+    // Pro DataGrid: sortable column headers sort from the keyboard.
+    const statusHead = screen.getByRole("columnheader", { name: /Status/ });
     statusHead.focus();
-    fireEvent.keyDown(statusHead, { key: "Enter" });
+    await userEvent.keyboard("{Enter}");
     expect(statusHead).toHaveAttribute("aria-sort", "ascending");
   });
 

@@ -40,7 +40,8 @@
     "cancelled": "Cancelled",
     "in_progress": "In Progress",
     "delayed": "Delayed",
-    "completed": "Completed"
+    "completed": "Completed",
+    "archived": "Archived"
   },
   "filters": {
     "allStates": "All states",
@@ -174,7 +175,12 @@
     "noPlansAvailable": "No Plans Available",
     "clickToCreate": "Click <strong>Create Plan</strong> to create the first one.",
     "progressTooltip": "Average progress recorded across Activities in this Plan.",
-    "ariaTable": "Plans table"
+    "ariaTable": "Plans table",
+    "budgetNotVerifiedTooltip": "Budget information could not be verified because this Plan was created before missing Budget values were stored separately.",
+    "progressNoActivities": "No Activities available for Progress calculation.",
+    "progressAverage": "Average Activity progress: {{pct}}%",
+    "progressBasedOn_one": "Based on {{count}} Activity",
+    "progressBasedOn_other": "Based on {{count}} Activities"
   },
   "pagination": {
     "noPlans": "No plans",

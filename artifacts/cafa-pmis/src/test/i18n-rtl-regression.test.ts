@@ -652,7 +652,7 @@ describe("Business-module RTL production guardrails", () => {
     expect(projectDetail).toContain('<bdi dir="ltr">{formatDate(a.plannedStart)} – {formatDate(a.plannedEnd)}</bdi>');
     expect(users).toContain('<bdi dir="ltr">{u.email ?? "—"}</bdi>');
     expect(budget).toContain('<bdi dir="ltr">{fmtMoney(b[field], b.currency)}</bdi>');
-    expect(plans).toContain('<bdi dir="ltr">{progressPct}%</bdi>');
+    expect(plans).toContain('<bdi dir="ltr">{p.progressPct}%</bdi>');
     expect(cardGrid).toContain("<BidiIsolate>{item.code}</BidiIsolate>");
     expect(cardGrid).toContain('<bdi dir="ltr">{pct}%</bdi>');
     expect(cardGrid).toContain('<bdi dir="ltr">{item.date}</bdi>');
