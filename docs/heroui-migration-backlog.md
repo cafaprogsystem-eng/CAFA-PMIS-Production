@@ -25,8 +25,13 @@ batch; only data-sourced values like those above are deferred.
 
 ## Other deferred items
 
-- **Tooltips:** still on the shadcn Tooltip across the app; to be moved to the
-  HeroUI Tooltip in one pass rather than per screen.
+- **Tooltips:** still on the shadcn Tooltip across most of the app; to be moved
+  to the HeroUI Tooltip in one pass rather than per screen. A Radix tooltip
+  wrapped around a HeroUI button opens on hover but not on keyboard focus, so
+  migrated screens whose tooltip trigger is a HeroUI button (project
+  registration form, project details documents and blocked workflow actions)
+  already use the HeroUI Tooltip; other screens should do the same as their
+  buttons move to HeroUI.
 - **Arabic plural forms:** about 37 keys fall back to the `_other` form in
   Arabic; they could each get exact zero/one/two/few/many forms.
 - **Unused pages:** `password-resets.tsx` and `planning-dashboard.tsx` are not
