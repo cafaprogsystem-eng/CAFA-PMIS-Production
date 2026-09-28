@@ -1050,7 +1050,7 @@ export default function RisksPage() {
   }, [risks, openRiskDetail]);
 
   const columns = useMemo<DataGridColumn<Risk>[]>(() => [
-    { id: "title", header: t("table.riskTitle"), isRowHeader: true, width: 260, pinned: "start", headerClassName: "w-[260px]",
+    { id: "title", header: t("table.riskTitle"), isRowHeader: true, width: 240, pinned: "start", headerClassName: "w-[240px]",
       cell: (r) => (
         <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex min-w-0 items-start gap-1.5">
@@ -1060,9 +1060,9 @@ export default function RisksPage() {
           {r.description && <span dir="auto" className="line-clamp-1 whitespace-normal text-xs text-[var(--muted)] rtl:text-end">{r.description}</span>}
         </div>
       ) },
-    { id: "level", header: t("table.riskLevel"), width: 104, headerClassName: "w-[104px]",
+    { id: "level", header: t("table.riskLevel"), width: 96, headerClassName: "w-[96px]",
       cell: (r) => <RiskLevelChip level={r.riskLevel ?? ""} /> },
-    { id: "status", header: t("table.status"), width: 124, headerClassName: "w-[124px]",
+    { id: "status", header: t("table.status"), width: 116, headerClassName: "w-[116px]",
       cell: (r) => <StatusBadge status={r.status} /> },
     { id: "dueDate", header: t("table.dueDate"), width: 112, headerClassName: "w-[112px]",
       cell: (r) => {
@@ -1075,7 +1075,7 @@ export default function RisksPage() {
           </span>
         );
       } },
-    { id: "assessment", header: `${t("table.probability")} / ${t("table.impact")}`, width: 128, headerClassName: "w-[128px]",
+    { id: "assessment", header: `${t("table.probability")} / ${t("table.impact")}`, width: 120, headerClassName: "w-[120px]",
       cell: (r) => {
         const impact = (r as Risk & { impact?: string | null }).impact || r.severity;
         return (
@@ -1086,21 +1086,18 @@ export default function RisksPage() {
           </span>
         );
       } },
-    { id: "category", header: t("table.category"), width: 104, headerClassName: "w-[104px]",
+    { id: "category", header: t("table.category"), width: 96, headerClassName: "w-[96px]",
       cell: (r) => <span className="text-sm">{r.category ? t(`presentation.categories.${r.category}`, { defaultValue: displayCategory(r.category) }) : "—"}</span> },
-    { id: "state", header: t("table.state"), width: 108, headerClassName: "w-[108px]",
+    { id: "state", header: t("table.state"), width: 100, headerClassName: "w-[100px]",
       cell: (r) => <span className="text-sm">{formatLocation({ locationType: r.locationType, stateName: r.stateName, stateNameAr: r.stateNameAr }, i18n.language)}</span> },
-    { id: "project", header: t("table.project"), width: 150, headerClassName: "w-[150px]",
+    { id: "project", header: t("table.project"), width: 136, headerClassName: "w-[136px]",
       cell: (r) => (
-        <span dir="auto" className="line-clamp-2 whitespace-normal break-words text-sm text-[var(--muted)] rtl:text-end">
+        <span dir="auto" title={r.projectTitle ?? undefined} className="line-clamp-2 whitespace-normal break-words text-sm text-[var(--muted)] rtl:text-end">
           {r.projectTitle || (r.projectId ? t("projectRemoved", { defaultValue: "[Project removed]" }) : "—")}
         </span>
       ) },
     { id: "responsible", header: t("table.responsible"), width: 120, headerClassName: "w-[120px]",
       cell: (r) => <span dir="auto" className="line-clamp-2 whitespace-normal text-sm text-[var(--muted)] rtl:text-end">{r.assignedToName || "—"}</span> },
-    { id: "identified", header: t("table.identified"), width: 108, headerClassName: "w-[108px]",
-      cell: (r) => <bdi dir="ltr" className="whitespace-nowrap text-sm text-[var(--muted)]">{formatDate(r.identifiedAt)}</bdi> },
-
   ], [t, i18n.language]);
 
   const totalPages = (risksRaw as { totalPages?: number } | undefined)?.totalPages ?? 1;
@@ -1533,14 +1530,15 @@ export default function RisksPage() {
           </div>
         ) : (
           <div ref={gridRef} role="region" aria-label={t("accessibility.registerRegion")}>
-            {/* Rows open the risk on click or Enter (t("accessibility.openRisk") names the action). */}
+            {/* Rows open the risk on click or Enter (t("accessibility.openRisk") names the action).
+            The identification date lives in the record view, not the table. */}
             <DataGrid
               aria-label={t("accessibility.registerRegion")}
               data={risks ?? []}
               columns={columns}
               getRowId={(r) => r.id}
               onRowAction={openRiskRow}
-              contentClassName="min-w-[1218px] table-fixed"
+              contentClassName="min-w-[1036px] table-fixed"
               verticalAlign="middle"
               renderEmptyState={() => emptyPresentation}
             />
