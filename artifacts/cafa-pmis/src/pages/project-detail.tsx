@@ -32,14 +32,13 @@ import { ErrorState } from "@/components/ui/error-state";
 import { CommentsPanel, useUnresolvedRequiredCorrections } from "@/components/comments-panel";
 import { EditProjectDialog } from "@/components/project-registration-form";
 import { DeleteProjectDialog } from "@/components/delete-project-dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { VoiceNotePanel } from "@/components/voice-note-panel";
 import { PmrCompletenessPanel } from "@/components/pmr-completeness-panel";
 import { useTranslation } from "react-i18next";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { StateLabel } from "@/components/state-label";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
-import { Alert, Button as HButton, Card as HCard, Separator as HSeparator, Chip, ProgressBar as HProgressBar, Tabs, Input as HInput, Label as HLabel, Link as HLink, Modal, TextArea as HTextArea, TextField } from "@heroui/react";
+import { Alert, Button as HButton, Card as HCard, Separator as HSeparator, Chip, ProgressBar as HProgressBar, Tabs, Input as HInput, Label as HLabel, Link as HLink, Modal, TextArea as HTextArea, TextField, Tooltip as HTooltip } from "@heroui/react";
 import { KPI } from "@heroui-pro/react/kpi";
 import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import { SelectField } from "@/components/select-field";
@@ -984,10 +983,10 @@ export default function ProjectDetailPage({
               );
               if (!blocked) return btn;
               return (
-                <Tooltip key={a.action}>
-                  <TooltipTrigger asChild><span>{btn}</span></TooltipTrigger>
-                  <TooltipContent>{t("detail.errors.unresolvedCorrections", { count: unresolvedRC })}</TooltipContent>
-                </Tooltip>
+                <HTooltip key={a.action} delay={300}>
+                  <HTooltip.Trigger className="inline-flex">{btn}</HTooltip.Trigger>
+                  <HTooltip.Content>{t("detail.errors.unresolvedCorrections", { count: unresolvedRC })}</HTooltip.Content>
+                </HTooltip>
               );
             })}
           {/* Delete Project — visible to users with projects.delete permission */}
@@ -2052,9 +2051,8 @@ export default function ProjectDetailPage({
                           </HButton>
                         )}
                         {docGate === "operational" && isDocOverrideActor && hasPerm(me?.permissions, "documents.upload") && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <HButton
+                          <HTooltip delay={300}>
+                            <HButton
                                 isIconOnly size="sm" variant="ghost" className="text-[var(--warning)]"
                                 onPress={() => {
                                   setOverrideDeleteDialog({ docId: doc.id, fileName: doc.fileName });
@@ -2065,19 +2063,16 @@ export default function ProjectDetailPage({
                               >
                                 <Trash2 className="size-3.5" aria-hidden="true" />
                               </HButton>
-                            </TooltipTrigger>
-                            <TooltipContent>{t("detail.docs.overrideTooltip")}</TooltipContent>
-                          </Tooltip>
+                            <HTooltip.Content>{t("detail.docs.overrideTooltip")}</HTooltip.Content>
+                          </HTooltip>
                         )}
                         {docGate === "operational" && !isDocOverrideActor && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex size-7 items-center justify-center text-[var(--muted)]" aria-label={t("detail.documentLockedAria")}>
-                                <Lock className="size-3.5" aria-hidden="true" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>{t("detail.docs.lockedTooltip")}</TooltipContent>
-                          </Tooltip>
+                          <HTooltip delay={300}>
+                            <HTooltip.Trigger className="inline-flex size-7 items-center justify-center rounded-full text-[var(--muted)]" aria-label={t("detail.documentLockedAria")}>
+                              <Lock className="size-3.5" aria-hidden="true" />
+                            </HTooltip.Trigger>
+                            <HTooltip.Content>{t("detail.docs.lockedTooltip")}</HTooltip.Content>
+                          </HTooltip>
                         )}
                       </>
                     ) },
