@@ -54,9 +54,11 @@ describe("BUD-DETAIL-02 monetary figures use the Project ISO currency", () => {
     expect(out).not.toContain("$");
   });
   it("ProjectBudgetView KPI cards use the null-aware fmtMoney with projectInfo currency", () => {
-    expect(budgetSrc).toMatch(/fmtMoney\(data\.total, projectInfo\?\.currency\)/);
-    expect(budgetSrc).toMatch(/fmtMoney\(data\.spent, projectInfo\?\.currency\)/);
-    expect(budgetSrc).toMatch(/fmtMoney\(data\.remaining, projectInfo\?\.currency\)/);
+    // <Money> renders fmtMoney(value, currency) inside an LTR isolate.
+    expect(budgetSrc).toContain('<bdi dir="ltr" className={className}>{fmtMoney(value, currency)}</bdi>');
+    expect(budgetSrc).toMatch(/<Money value=\{data\.total\} currency=\{projectInfo\?\.currency\} \/>/);
+    expect(budgetSrc).toMatch(/<Money value=\{data\.spent\} currency=\{projectInfo\?\.currency\} \/>/);
+    expect(budgetSrc).toMatch(/<Money value=\{data\.remaining\} currency=\{projectInfo\?\.currency\} \/>/);
   });
 });
 
@@ -65,7 +67,8 @@ describe("BUD-DETAIL-03 no hardcoded $ in Budget tab amounts or chart axes", () 
     expect(budgetSrc).not.toMatch(/\$\$\{/); // `$${...}k` template
     expect(budgetSrc).toContain("const displayCurrency = resolveProjectCurrency(projectInfo?.currency);");
     expect(budgetSrc).toContain('displayCurrency ? `${displayCurrency} ${(v / 1000).toFixed(0)}k` : "—"');
-    expect(budgetSrc).toMatch(/formatter=\{\(v: number\) => fmtMoney\(v, projectInfo\?\.currency\)\}/);
+    // Pro ChartTooltip: each value is formatted in the project's currency.
+    expect(budgetSrc).toContain("<ChartTooltip.Value>{fmtMoney(Number(entry.value), projectInfo?.currency)}</ChartTooltip.Value>");
   });
   it("project-detail budget sections contain no literal dollar-prefixed amounts", () => {
     expect(detailSrc).not.toMatch(/\$\$\{/);

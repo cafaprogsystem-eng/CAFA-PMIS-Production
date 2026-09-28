@@ -7,14 +7,16 @@ import { KPI } from "@heroui-pro/react/kpi";
  * (Plans, Risks) so their summary strips look and behave the same.
  */
 export function FilterKpi({
-  icon: Icon, status, label, value, sub, pressed, onToggle,
+  icon: Icon, status, label, value, sub, footer, pressed, onToggle,
 }: {
   icon: ElementType;
   status?: "success" | "warning" | "danger";
   label: string;
   value: ReactNode;
-  /** Short caption under the value. */
+  /** Short caption beside the value. */
   sub?: ReactNode;
+  /** Full-width content under the value, e.g. a progress bar. */
+  footer?: ReactNode;
   pressed?: boolean;
   onToggle?: () => void;
 }) {
@@ -26,8 +28,9 @@ export function FilterKpi({
       </KPI.Header>
       <KPI.Content>
         <dd className="kpi__value tabular-nums">{value}</dd>
-        {sub ? <p className="mt-1 text-xs text-[var(--muted)]">{sub}</p> : null}
+        {sub ? <div className="mt-1 text-xs text-[var(--muted)]">{sub}</div> : null}
       </KPI.Content>
+      {footer ? <div className="w-full">{footer}</div> : null}
     </KPI>
   );
   if (!onToggle) return kpi;

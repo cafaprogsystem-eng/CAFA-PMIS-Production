@@ -1,7 +1,8 @@
 import { forwardRef, type ComponentProps, type ReactNode } from "react";
 import { parseDate, type CalendarDate } from "@internationalized/date";
 import {
-  Calendar, Checkbox, DateField, DatePicker, Input, Label, ListBox, Select, Tag, TagGroup, TextArea,
+  Calendar, Checkbox, DateField, DatePicker, DateRangePicker, Input, Label, ListBox, RangeCalendar, Select,
+  Tag, TagGroup, TextArea,
 } from "@heroui/react";
 import { useFormField } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
@@ -165,6 +166,66 @@ export function DateInput({
         </Calendar>
       </DatePicker.Popover>
     </DatePicker>
+  );
+}
+
+/**
+ * HeroUI DateRangePicker reading and writing "YYYY-MM-DD" strings. Choosing
+ * a range sets both ends; clearing sets both to "". Pass `label` for a
+ * visible label or `aria-label` for a compact filter.
+ */
+export function DateRangeInput({
+  label, "aria-label": ariaLabel, start, end, onChange, className,
+}: {
+  label?: ReactNode;
+  "aria-label"?: string;
+  start: string;
+  end: string;
+  onChange: (start: string, end: string) => void;
+  className?: string;
+}) {
+  const s = toCalendarDate(start);
+  const e = toCalendarDate(end);
+  return (
+    <DateRangePicker
+      aria-label={ariaLabel}
+      value={s && e ? { start: s, end: e } : null}
+      onChange={(r) => onChange(r ? r.start.toString() : "", r ? r.end.toString() : "")}
+      className={cn("w-full", className)}
+    >
+      {label ? <Label>{label}</Label> : null}
+      <DateField.Group fullWidth>
+        <DateField.Input slot="start">{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
+        <DateRangePicker.RangeSeparator />
+        <DateField.Input slot="end">{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
+        <DateField.Suffix>
+          <DateRangePicker.Trigger>
+            <DateRangePicker.TriggerIndicator />
+          </DateRangePicker.Trigger>
+        </DateField.Suffix>
+      </DateField.Group>
+      <DateRangePicker.Popover className="w-[22rem] max-w-[calc(100vw-2rem)]">
+        <RangeCalendar className="w-full" aria-label={ariaLabel}>
+          <RangeCalendar.Header>
+            <RangeCalendar.YearPickerTrigger>
+              <RangeCalendar.YearPickerTriggerHeading />
+              <RangeCalendar.YearPickerTriggerIndicator />
+            </RangeCalendar.YearPickerTrigger>
+            <RangeCalendar.NavButton slot="previous" />
+            <RangeCalendar.NavButton slot="next" />
+          </RangeCalendar.Header>
+          <RangeCalendar.Grid>
+            <RangeCalendar.GridHeader>{(day) => <RangeCalendar.HeaderCell>{day}</RangeCalendar.HeaderCell>}</RangeCalendar.GridHeader>
+            <RangeCalendar.GridBody>{(date) => <RangeCalendar.Cell date={date} />}</RangeCalendar.GridBody>
+          </RangeCalendar.Grid>
+          <RangeCalendar.YearPickerGrid>
+            <RangeCalendar.YearPickerGridBody>
+              {({ year }) => <RangeCalendar.YearPickerCell year={year} />}
+            </RangeCalendar.YearPickerGridBody>
+          </RangeCalendar.YearPickerGrid>
+        </RangeCalendar>
+      </DateRangePicker.Popover>
+    </DateRangePicker>
   );
 }
 

@@ -1,6 +1,14 @@
 {
   "title": "Budgets",
-  "overview": "Budget Overview",
+  "overview": {
+    "scope": "Scope",
+    "selectCurrency": "Select display currency",
+    "mixedCurrencyNotice": "Figures span multiple currencies — values cannot be combined. Select a currency above for comparable totals.",
+    "summaryLoadError": "Summary figures could not be loaded. Financial values remain unavailable until the request succeeds.",
+    "donorLoadError": "Donor portfolio data could not be loaded.",
+    "noDataForScope": "No budget data is available for this scope.",
+    "tryAgain": "Try again"
+  },
   "allocation": "Budget Allocation",
   "expenditure": "Expenditure",
   "remaining": "Remaining",
@@ -63,7 +71,8 @@
     "periodHelp": "Filters projects whose implementation period overlaps the selected dates",
     "from": "From",
     "to": "To",
-    "clear": "Clear"
+    "clear": "Clear",
+    "toolbar": "Budget filters"
   },
   "export": {
     "exportBudget": "Export Budget Report",
@@ -88,15 +97,6 @@
     "accessRestrictedDesc": "You don't have permission to view budget information.",
     "tabOverview": "Overview",
     "tabSector": "Sector Budget"
-  },
-  "overview": {
-    "scope": "Scope",
-    "selectCurrency": "Select display currency",
-    "mixedCurrencyNotice": "Figures span multiple currencies — values cannot be combined. Select a currency above for comparable totals.",
-    "summaryLoadError": "Summary figures could not be loaded. Financial values remain unavailable until the request succeeds.",
-    "donorLoadError": "Donor portfolio data could not be loaded.",
-    "noDataForScope": "No budget data is available for this scope.",
-    "tryAgain": "Try again"
   },
   "project": {
     "alerts": "Alerts",
@@ -239,5 +239,12 @@
     "overallocatedBadge": "{{count}} overallocated",
     "projectCount_one": "{{count}} project",
     "projectCount_other": "{{count}} projects"
+  },
+  "alertLevels": {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "warning": "Warning",
+    "low": "Low"
   }
 }

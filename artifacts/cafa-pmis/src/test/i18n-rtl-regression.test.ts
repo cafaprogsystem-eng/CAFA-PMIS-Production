@@ -659,7 +659,8 @@ describe("Business-module RTL production guardrails", () => {
     expect(listView).toContain('<bdi dir="ltr">{item.date}</bdi>');
     expect(listView).toContain('<bdi dir="ltr">{pct}%</bdi>');
     expect(budget).toContain('<bdi dir="ltr">{formatPercent(burnRate)}</bdi>');
-    expect(budget).toContain('<bdi dir="ltr">{fmtMoney(activeCurrEntry.activitySpent, activeCurrEntry.currency)}</bdi>');
+    expect(budget).toContain('<bdi dir="ltr" className={className}>{fmtMoney(value, currency)}</bdi>');
+    expect(budget).toContain("<Money value={activeCurrEntry.activitySpent} currency={activeCurrEntry.currency} />");
     expect(source("pages/dashboard.tsx")).toContain('<bdi dir="ltr">{fmtMoney(row.spent, row.currency)}</bdi>');
     expect(source("components/hq-sector-report-form.tsx")).toContain('p.budgetUtilizationPct == null ? t("hqForm.unavailable")');
     expect(source("components/consolidated-report-view.tsx")).toContain('<bdi dir="ltr">{formatDateTime(r.submittedAt)}</bdi>');

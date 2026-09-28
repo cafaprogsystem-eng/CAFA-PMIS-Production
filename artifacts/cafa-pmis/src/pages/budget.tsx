@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocationContext } from "@/contexts/location-context";
 import { useTranslation } from "react-i18next";
-import { StateLabel } from "@/components/state-label";
+import { StateLabel, getStateLabel } from "@/components/state-label";
 import i18n from "@/i18n";
 import writeExcelFile from "write-excel-file/browser";
 import {
@@ -21,18 +21,17 @@ import {
   type ProjectBudgetPerformanceEntry,
 } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { StatCard } from "@/components/ui/stat-card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Empty, EmptyTitle, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import {
+  Alert, Button, Card, Chip, Drawer, ProgressBar, Separator, Skeleton, Tabs,
+} from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
+import { LineChart as ProLineChart } from "@heroui-pro/react/line-chart";
+import { ChartTooltip } from "@heroui-pro/react/chart-tooltip";
+import { EmptyState } from "@heroui-pro/react/empty-state";
+import { SelectField } from "@/components/select-field";
+import { DateRangeInput } from "@/components/form-controls";
+import { FilterKpi } from "@/components/filter-kpi";
+import { statusTone } from "@/components/view-modes/shared";
 import {
   AlertTriangle, DollarSign, TrendingUp, PiggyBank, Lock,
   AlertCircle, Download, Filter, X, Info,
@@ -52,8 +51,6 @@ import {
   buildSectorBudgetWorkbook,
   type BudgetWorkbookSheet,
 } from "@/lib/budget-workbook";
-import { ProgressBar } from "./projects";
-import { Button } from "@/components/ui/button";
 import { DonorPortfolioTable, ProjectBudgetPerformanceTable } from "./dashboard";
 
 // ── PDF export ────────────────────────────────────────────────────────────────
@@ -300,10 +297,17 @@ function useQueryParam(name: string): string | undefined {
   return sp.get(name) || undefined;
 }
 
-function alertColor(level: string) {
-  if (level === "critical" || level === "high") return "border-destructive bg-destructive/10 text-destructive";
-  if (level === "medium" || level === "warning") return "border-warning bg-warning/10 text-warning";
-  return "border-success bg-success/10 text-success";
+
+/** Alert tone for a budget alert level. */
+function alertStatus(level: string): "danger" | "warning" | "success" {
+  if (level === "critical" || level === "high") return "danger";
+  if (level === "medium" || level === "warning") return "warning";
+  return "success";
+}
+
+/** Money in an LTR isolate so "USD -60,000" keeps its sign next to the number in Arabic. */
+function Money({ value, currency, className }: { value: number | null | undefined; currency: string | null | undefined; className?: string }) {
+  return <bdi dir="ltr" className={className}>{fmtMoney(value, currency)}</bdi>;
 }
 
 type BudgetLine = {
@@ -317,30 +321,40 @@ type BudgetLine = {
   children?: BudgetLine[];
 };
 
-function BudgetLineRow({ line, depth = 0, currency }: { line: BudgetLine; depth?: number; currency?: string }) {
-  const children = (line.children as typeof line[] | undefined) || [];
-  const burnRate = projectBurnRate(line.planned, line.burnRatePct);
+/** Output → activity lines flattened for the grid, keeping each line's depth for indentation. */
+type FlatBudgetLine = BudgetLine & { depth: number; key: string };
+function flattenLines(lines: BudgetLine[], depth = 0): FlatBudgetLine[] {
+  return lines.flatMap((l) => [
+    { ...l, depth, key: `${depth}-${l.id}` },
+    ...flattenLines((l.children as BudgetLine[] | undefined) ?? [], depth + 1),
+  ]);
+}
+
+/** Burn-rate bar: red above 90% of plan. */
+function BurnRate({ planned, rate, label }: { planned: number; rate: number; label: string }) {
+  const burnRate = projectBurnRate(planned, rate);
+  if (burnRate == null) return <span className="text-xs text-[var(--muted)]">—</span>;
+  const over = burnRate > 90;
   return (
-    <>
-      <TableRow>
-        <TableCell style={{ paddingInlineStart: `${depth * 24 + 16}px` }} className="font-medium">
-          <span className="text-xs text-muted-foreground me-2">{formatBudgetLineLevel(line.level)}</span>
-          {line.label}
-        </TableCell>
-        <TableCell className="text-end tabular-nums"><bdi dir="ltr">{formatProjectBudgetMoney(line.planned, currency)}</bdi></TableCell>
-        <TableCell className="text-end tabular-nums"><bdi dir="ltr">{formatProjectBudgetMoney(line.spent, currency)}</bdi></TableCell>
-        <TableCell className="text-end tabular-nums"><bdi dir="ltr">{formatProjectBudgetMoney(line.remaining, currency)}</bdi></TableCell>
-        <TableCell className="w-[140px]">
-          <div className="flex items-center gap-2">
-            {burnRate == null ? <span className="text-xs w-10 text-end text-muted-foreground">—</span> : <>
-              <ProgressBar value={burnRate} max={100} color={burnRate > 90 ? "bg-destructive" : "bg-primary"} />
-              <span className={burnRate > 90 ? "text-xs w-10 text-end text-destructive font-medium" : "text-xs w-10 text-end"}><bdi dir="ltr">{formatPercent(burnRate)}</bdi></span>
-            </>}
-          </div>
-        </TableCell>
-      </TableRow>
-      {children.map((c) => <BudgetLineRow key={c.id} line={c} depth={depth + 1} currency={currency} />)}
-    </>
+    <ProgressBar aria-label={label} value={Math.min(burnRate, 100)} color={over ? "danger" : "accent"} size="sm" className="w-full gap-1">
+      <div className="flex justify-end text-xs">
+        <span className={over ? "font-medium text-[var(--danger)]" : ""}><bdi dir="ltr">{formatPercent(burnRate)}</bdi></span>
+      </div>
+      <ProgressBar.Track><ProgressBar.Fill /></ProgressBar.Track>
+    </ProgressBar>
+  );
+}
+
+function ChartLegend({ items }: { items: { label: string; color: string }[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-center gap-1.5">
+          <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: item.color }} aria-hidden="true" />
+          <span className="text-xs text-[var(--muted)]">{item.label}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -351,8 +365,27 @@ function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; proj
   const { data, isLoading } = useGetProjectBudget(projectId);
   const { data: stateAllocations } = useListProjectStateAllocations(projectId);
 
+  const flatLines = useMemo(() => flattenLines((data?.lines ?? []) as BudgetLine[]), [data?.lines]);
+  const lineColumns = useMemo<DataGridColumn<FlatBudgetLine>[]>(() => [
+    { id: "label", header: t("project.lineItem"), isRowHeader: true, width: 320, headerClassName: "w-[320px]",
+      cell: (line) => (
+        <div style={{ paddingInlineStart: `${line.depth * 24}px` }} className={line.depth === 0 ? "font-medium" : "text-[var(--muted)]"}>
+          <span className="me-2 text-xs text-[var(--muted)]">{formatBudgetLineLevel(line.level)}</span>
+          <span dir="auto">{line.label}</span>
+        </div>
+      ) },
+    { id: "planned", header: t("project.planned"), align: "end", width: 140,
+      cell: (line) => <Money value={line.planned} currency={projectInfo?.currency} className="tabular-nums" /> },
+    { id: "spent", header: t("project.spent"), align: "end", width: 140,
+      cell: (line) => <Money value={line.spent} currency={projectInfo?.currency} className="tabular-nums" /> },
+    { id: "remaining", header: t("project.remaining"), align: "end", width: 140,
+      cell: (line) => <Money value={line.remaining} currency={projectInfo?.currency} className={`tabular-nums ${line.remaining < 0 ? "text-[var(--danger)]" : ""}`} /> },
+    { id: "burn", header: t("project.burnRate"), width: 160,
+      cell: (line) => <BurnRate planned={line.planned} rate={line.burnRatePct} label={`${t("project.burnRate")}: ${line.label}`} /> },
+  ], [t, projectInfo?.currency]);
+
   if (isLoading || !data) {
-    return <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
+    return <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>;
   }
 
   const pdfData: BudgetPdfData = {
@@ -365,112 +398,129 @@ function ProjectBudgetView({ projectId, projectInfo }: { projectId: number; proj
   };
   const burnRate = projectBurnRate(data.total, data.burnRatePct);
   const displayCurrency = resolveProjectCurrency(projectInfo?.currency);
+  const plannedLabel = t("project.planned");
+  const actualLabel = t("sector.actual");
 
   return (
     <div className="space-y-6">
       {/* Export toolbar */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-foreground tracking-tight">
-          {projectInfo?.code ?? t("project.fallbackName", { id: projectId })}
-        </h2>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => exportProjectCsv(pdfData)}>
-            <Download className="h-3.5 w-3.5" /> {t("export.exportCsv")}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-tight">
+            <bdi dir="ltr">{projectInfo?.code ?? t("project.fallbackName", { id: projectId })}</bdi>
+          </h2>
+          {projectInfo?.title && <p dir="auto" className="text-sm text-[var(--muted)] rtl:text-end">{projectInfo.title}</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onPress={() => exportProjectCsv(pdfData)}>
+            <Download className="size-3.5" aria-hidden="true" /> {t("export.exportCsv")}
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => exportBudgetExcel({
+          <Button variant="outline" size="sm" onPress={() => exportBudgetExcel({
             projectCode: pdfData.projectCode, projectTitle: pdfData.projectTitle,
             donor: pdfData.donor, sector: pdfData.sector, currency: pdfData.currency, data: pdfData,
             stateAllocations,
           })}>
-            <FileSpreadsheet className="h-3.5 w-3.5 text-success" /> {t("export.exportExcel")}
+            <FileSpreadsheet className="size-3.5 text-[var(--success)]" aria-hidden="true" /> {t("export.exportExcel")}
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => printBudgetPdf(pdfData)}>
-            <FileText className="h-3.5 w-3.5 text-destructive" /> {t("export.exportPdf")}
+          <Button variant="outline" size="sm" onPress={() => printBudgetPdf(pdfData)}>
+            <FileText className="size-3.5 text-[var(--danger)]" aria-hidden="true" /> {t("export.exportPdf")}
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {/* BUD-006: always format in the project's ISO currency — no USD fallback */}
-        <StatCard icon={DollarSign} iconBg="bg-slate-500" label={t("stats.total")} value={fmtMoney(data.total, projectInfo?.currency)} />
-        <StatCard icon={TrendingUp} iconBg="bg-blue-500" label={t("stats.spent")} value={fmtMoney(data.spent, projectInfo?.currency)} />
-        <StatCard icon={PiggyBank} iconBg="bg-emerald-500" label={t("stats.remaining")} value={fmtMoney(data.remaining, projectInfo?.currency)} />
-        <StatCard
+        <FilterKpi icon={DollarSign} label={t("stats.total")} value={<Money value={data.total} currency={projectInfo?.currency} />} />
+        <FilterKpi icon={TrendingUp} label={t("stats.spent")} value={<Money value={data.spent} currency={projectInfo?.currency} />} />
+        <FilterKpi icon={PiggyBank} status="success" label={t("stats.remaining")} value={<Money value={data.remaining} currency={projectInfo?.currency} />} />
+        <FilterKpi
           icon={Activity}
-          iconBg={burnRate != null && burnRate > 90 ? "bg-destructive" : "bg-slate-500"}
+          status={burnRate != null && burnRate > 90 ? "danger" : undefined}
           label={t("stats.burnRate")}
-          value={<bdi dir="ltr">{formatPercent(burnRate)}</bdi>}
-          sub={burnRate != null
-            ? <ProgressBar value={burnRate} max={100} color={burnRate > 90 ? "bg-destructive" : "bg-secondary"} />
-            : undefined}
-          alert={burnRate != null && burnRate > 90}
+          value={<bdi dir="ltr" className={burnRate != null && burnRate > 90 ? "text-[var(--danger)]" : ""}>{formatPercent(burnRate)}</bdi>}
+          footer={burnRate != null ? (
+            <ProgressBar aria-label={t("stats.burnRate")} value={Math.min(burnRate, 100)} color={burnRate > 90 ? "danger" : "accent"} size="sm" className="w-full">
+              <ProgressBar.Track><ProgressBar.Fill /></ProgressBar.Track>
+            </ProgressBar>
+          ) : undefined}
         />
       </div>
 
       {data.alerts.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">{t("project.alerts")}</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
+          <Card.Header><Card.Title className="text-base">{t("project.alerts")}</Card.Title></Card.Header>
+          <Card.Content className="space-y-2">
             {data.alerts.map((a, i) => (
-              <div key={i} className={`flex items-start gap-2 border-l-4 rounded p-3 ${alertColor(a.level)}`}>
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <div className="text-sm">
-                  <div className="font-medium uppercase text-xs">{a.level}</div>
-                  <div>{a.message}</div>
-                </div>
-              </div>
+              <Alert key={i} status={alertStatus(a.level)}>
+                <Alert.Indicator />
+                <Alert.Content>
+                  <Alert.Title className="text-xs">{t(`alertLevels.${a.level}`, { defaultValue: a.level })}</Alert.Title>
+                  <Alert.Description dir="auto" className="rtl:text-end">{a.message}</Alert.Description>
+                </Alert.Content>
+              </Alert>
             ))}
-          </CardContent>
+          </Card.Content>
         </Card>
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>{t("project.monthlyChart")}</CardTitle>
-          <CardDescription>{t("project.monthlyChartDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent className="h-[320px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.monthly}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--cafa-border))" />
-              <XAxis dataKey="month" stroke="hsl(var(--cafa-muted-foreground))" fontSize={12} tickFormatter={(value) => formatMonthLabel(value, i18n.language)} />
+        <Card.Header className="flex-row flex-wrap items-start justify-between gap-2">
+          <div>
+            <Card.Title>{t("project.monthlyChart")}</Card.Title>
+            <Card.Description>{t("project.monthlyChartDesc")}</Card.Description>
+          </div>
+          <ChartLegend items={[{ label: plannedLabel, color: "var(--chart-1)" }, { label: actualLabel, color: "var(--chart-3)" }]} />
+        </Card.Header>
+        <Card.Content>
+          {/* Time runs forward along the axis in both languages (dir="ltr"), as on the dashboard. */}
+          <div dir="ltr">
+            <ProLineChart data={data.monthly} height={300}>
+              <ProLineChart.Grid vertical={false} />
+              <ProLineChart.XAxis dataKey="month" tickMargin={8} tickFormatter={(value: string) => formatMonthLabel(value, i18n.language)} />
               {/* BUD-006: currency-aware axis/tooltip — no hardcoded "$" */}
-              <YAxis
-                stroke="hsl(var(--cafa-muted-foreground))"
-                fontSize={12}
-                tickFormatter={(v) => displayCurrency ? `${displayCurrency} ${(v / 1000).toFixed(0)}k` : "—"}
+              <ProLineChart.YAxis
+                width={84}
+                tickFormatter={(v: number) => displayCurrency ? `${displayCurrency} ${(v / 1000).toFixed(0)}k` : "—"}
               />
-              <Tooltip
-                contentStyle={{ backgroundColor: 'hsl(var(--cafa-card))', borderColor: 'hsl(var(--cafa-border))' }}
-                labelFormatter={(label) => formatMonthLabel(label, i18n.language)}
-                formatter={(v: number) => fmtMoney(v, projectInfo?.currency)}
+              <ProLineChart.Line dataKey="planned" name={plannedLabel} type="monotone" stroke="var(--chart-1)" strokeWidth={2} dot={false} strokeDasharray="5 3" />
+              <ProLineChart.Line dataKey="actual" name={actualLabel} type="monotone" stroke="var(--chart-3)" strokeWidth={2} dot={false} />
+              <ProLineChart.Tooltip
+                content={({ active, label, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  return (
+                    <ChartTooltip>
+                      <ChartTooltip.Header>{formatMonthLabel(String(label), i18n.language)}</ChartTooltip.Header>
+                      {payload.map((entry) => (
+                        <ChartTooltip.Item key={String(entry.dataKey)}>
+                          <ChartTooltip.Indicator color={entry.color ?? entry.stroke} />
+                          <ChartTooltip.Label>{String(entry.name ?? "")}</ChartTooltip.Label>
+                          <ChartTooltip.Value>{fmtMoney(Number(entry.value), projectInfo?.currency)}</ChartTooltip.Value>
+                        </ChartTooltip.Item>
+                      ))}
+                    </ChartTooltip>
+                  );
+                }}
               />
-              <Legend />
-              <Line type="monotone" dataKey="planned" stroke="hsl(var(--cafa-primary))" strokeWidth={2} />
-              <Line type="monotone" dataKey="actual" stroke="hsl(var(--cafa-secondary))" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
+            </ProLineChart>
+          </div>
+        </Card.Content>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>{t("project.budgetBreakdown")}</CardTitle><CardDescription>{t("project.budgetBreakdownDesc")}</CardDescription></CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto" role="region" aria-label={t("project.lineItemsRegion")}>
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>{t("project.lineItem")}</TableHead>
-                <TableHead className="text-end">{t("project.planned")}</TableHead>
-                <TableHead className="text-end">{t("project.spent")}</TableHead>
-                <TableHead className="text-end">{t("project.remaining")}</TableHead>
-                <TableHead>{t("project.burnRate")}</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {data.lines.map(l => <BudgetLineRow key={l.id} line={l} currency={projectInfo?.currency} />)}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
+      <Card className="gap-0 overflow-hidden p-0">
+        <Card.Header className="px-5 pt-5 pb-3">
+          <Card.Title>{t("project.budgetBreakdown")}</Card.Title>
+          <Card.Description>{t("project.budgetBreakdownDesc")}</Card.Description>
+        </Card.Header>
+        <div role="region" aria-label={t("project.lineItemsRegion")}>
+          <DataGrid
+            aria-label={t("project.lineItemsRegion")}
+            data={flatLines}
+            columns={lineColumns}
+            getRowId={(line) => line.key}
+            contentClassName="min-w-[900px] table-fixed"
+            verticalAlign="middle"
+          />
+        </div>
       </Card>
     </div>
   );
@@ -491,28 +541,28 @@ function BudgetFactualFlags({ entry }: { entry: SectorBudgetCurrencyEntry | null
   return (
     <div className="flex flex-wrap gap-1">
       {entry.overspentProjectCount > 0 && (
-        <Badge variant="rejected" className="gap-1 text-xs">
-          <AlertCircle className="h-3 w-3" />
+        <Chip size="sm" variant="soft" color="danger">
+          <AlertCircle className="size-3" aria-hidden="true" />
           {entry.overspentProjectCount === 1 ? t("sector.overspentCountOne") : t("sector.overspentCountN", { count: entry.overspentProjectCount })}
-        </Badge>
+        </Chip>
       )}
       {entry.overallocatedProjectCount > 0 && (
-        <Badge variant="returned" className="gap-1 text-xs">
-          <AlertTriangle className="h-3 w-3" />
+        <Chip size="sm" variant="soft" color="warning">
+          <AlertTriangle className="size-3" aria-hidden="true" />
           {entry.overallocatedProjectCount === 1 ? t("sector.overallocatedCountOne") : t("sector.overallocatedCountN", { count: entry.overallocatedProjectCount })}
-        </Badge>
+        </Chip>
       )}
     </div>
   );
 }
 
-function BudgetProgressBar({ value, isOver }: { value: number; isOver: boolean }) {
-  const capped = Math.min(value, 100);
-  const color = isOver ? "bg-destructive" : value >= 75 ? "bg-warning" : "bg-success";
+/** Utilisation bar: red over 100%, amber from 75%. */
+function BudgetProgressBar({ value, isOver, label }: { value: number; isOver: boolean; label: string }) {
+  const color = isOver ? "danger" : value >= 75 ? "warning" : "success";
   return (
-    <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
-      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${capped}%` }} />
-    </div>
+    <ProgressBar aria-label={label} value={Math.min(value, 100)} color={color} size="sm" className="w-full">
+      <ProgressBar.Track><ProgressBar.Fill /></ProgressBar.Track>
+    </ProgressBar>
   );
 }
 
@@ -535,7 +585,7 @@ function BudgetFilters({
   onChange: (f: BudgetFiltersState) => void;
   projects?: Array<{ donor?: string }>;
 }) {
-  const { t } = useTranslation("budget");
+  const { t, i18n } = useTranslation("budget");
   const { data: states } = useListStates();
   const donors = useMemo(() => {
     const s = new Set<string>();
@@ -546,79 +596,66 @@ function BudgetFilters({
   const hasFilters = Object.values(filters).some(Boolean);
 
   return (
-    <div className="grid grid-cols-1 gap-2 rounded-xl border border-border/60 bg-muted/30 p-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center">
-      <div className="hidden items-center gap-2 xl:flex">
-        <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
-        <Separator orientation="vertical" className="h-4 mx-0.5" />
+    <Card className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2 xl:flex xl:flex-row xl:flex-wrap xl:items-center" role="group" aria-label={t("filters.toolbar", { defaultValue: "Budget filters" })}>
+      <div className="hidden items-center gap-2 px-1 xl:flex">
+        <Filter className="size-3.5 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+        <Separator orientation="vertical" className="mx-0.5 h-4" />
       </div>
 
-      <Select value={filters.donor || "all"} onValueChange={v => onChange({ ...filters, donor: v === "all" ? "" : v })}>
-        <SelectTrigger className="h-8 w-full min-w-0 text-xs sm:min-w-[9rem] xl:w-auto" aria-label={t("filters.donor")}>
-          <SelectValue placeholder={t("filters.allDonors")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t("filters.allDonors")}</SelectItem>
-          {donors.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-        </SelectContent>
-      </Select>
+      <SelectField
+        aria-label={t("filters.donor")}
+        value={filters.donor || "all"}
+        onChange={v => onChange({ ...filters, donor: v === "all" ? "" : v })}
+        className="w-full xl:w-auto"
+        triggerClassName="sm:min-w-[9rem]"
+        options={[{ value: "all", label: t("filters.allDonors") }, ...donors.map(d => ({ value: d, label: d }))]}
+      />
+      <SelectField
+        aria-label={t("filters.state")}
+        value={filters.stateId || "all"}
+        onChange={v => onChange({ ...filters, stateId: v === "all" ? "" : v })}
+        className="w-full xl:w-auto"
+        triggerClassName="sm:min-w-[9rem]"
+        options={[
+          { value: "all", label: t("filters.allStates") },
+          ...(states ?? []).map(s => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: getStateLabel(s, i18n.language) })),
+        ]}
+      />
+      <SelectField
+        aria-label={t("filters.sector")}
+        value={filters.sector || "all"}
+        onChange={v => onChange({ ...filters, sector: v === "all" ? "" : v })}
+        className="w-full xl:w-auto"
+        triggerClassName="sm:min-w-[9rem]"
+        options={[{ value: "all", label: t("filters.allSectors") }, ...MAIN_SECTORS.map(s => ({ value: s, label: s }))]}
+      />
+      <SelectField
+        aria-label={t("filters.projectStatus")}
+        value={filters.status || "all"}
+        onChange={v => onChange({ ...filters, status: v === "all" ? "" : v })}
+        className="w-full xl:w-auto"
+        triggerClassName="sm:min-w-[10rem]"
+        options={[{ value: "all", label: t("filters.allStatuses") }, ...PROJECT_STATUSES.map(s => ({ value: s, label: t(`statusLabels.${s}`) }))]}
+      />
 
-      <Select value={filters.stateId || "all"} onValueChange={v => onChange({ ...filters, stateId: v === "all" ? "" : v })}>
-        <SelectTrigger className="h-8 w-full min-w-0 text-xs sm:min-w-[9rem] xl:w-auto" aria-label={t("filters.state")}>
-          <SelectValue placeholder={t("filters.allStates")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t("filters.allStates")}</SelectItem>
-          {states?.map(s => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}
-        </SelectContent>
-      </Select>
-
-      <Select value={filters.sector || "all"} onValueChange={v => onChange({ ...filters, sector: v === "all" ? "" : v })}>
-        <SelectTrigger className="h-8 w-full min-w-0 text-xs sm:min-w-[9rem] xl:w-auto" aria-label={t("filters.sector")}>
-          <SelectValue placeholder={t("filters.allSectors")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t("filters.allSectors")}</SelectItem>
-          {MAIN_SECTORS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-        </SelectContent>
-      </Select>
-
-      <Select value={filters.status || "all"} onValueChange={v => onChange({ ...filters, status: v === "all" ? "" : v })}>
-        <SelectTrigger className="h-8 w-full min-w-0 text-xs sm:min-w-[10rem] xl:w-auto" aria-label={t("filters.projectStatus")}>
-          <SelectValue placeholder={t("filters.allStatuses")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t("filters.allStatuses")}</SelectItem>
-          {PROJECT_STATUSES.map(s => <SelectItem key={s} value={s}>{t(`statusLabels.${s}`)}</SelectItem>)}
-        </SelectContent>
-      </Select>
-
-      {/* Project Period — labelled group kept as a single visual unit */}
-      <div
-        className="grid h-8 grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 rounded-md border border-border/60 bg-background px-2 sm:col-span-2 xl:min-w-[18rem]"
-        title={t("filters.periodHelp")}
-      >
-        <span className="text-xs text-muted-foreground whitespace-nowrap">{t("filters.period")}</span>
-        <Input
-          type="date" className="h-6 min-w-0 w-full border-0 p-0 text-xs shadow-none focus-visible:ring-0"
-          value={filters.dateFrom}
-          onChange={e => onChange({ ...filters, dateFrom: e.target.value })}
-          aria-label={t("filters.from")}
-        />
-        <span className="text-xs text-muted-foreground">–</span>
-        <Input
-          type="date" className="h-6 min-w-0 w-full border-0 p-0 text-xs shadow-none focus-visible:ring-0"
-          value={filters.dateTo}
-          onChange={e => onChange({ ...filters, dateTo: e.target.value })}
-          aria-label={t("filters.to")}
+      {/* Project Period — one range picker; projects whose period overlaps it are kept */}
+      <div className="flex min-w-0 items-center gap-2 sm:col-span-2 xl:min-w-[20rem]" title={t("filters.periodHelp")}>
+        <span className="shrink-0 text-xs text-[var(--muted)]">{t("filters.period")}</span>
+        <DateRangeInput
+          aria-label={`${t("filters.period")}: ${t("filters.from")} – ${t("filters.to")}`}
+          start={filters.dateFrom}
+          end={filters.dateTo}
+          onChange={(dateFrom, dateTo) => onChange({ ...filters, dateFrom, dateTo })}
+          className="min-w-0 flex-1"
         />
       </div>
 
       {hasFilters && (
-        <Button variant="ghost" size="sm" className="h-8 w-full px-2 text-xs text-muted-foreground hover:text-foreground sm:w-auto xl:ms-auto" onClick={() => onChange(EMPTY_FILTERS)} aria-label={t("filters.clear")}>
-          <X className="h-3 w-3" aria-hidden="true" /> {t("filters.clear")}
+        <Button variant="ghost" size="sm" className="w-full text-[var(--muted)] sm:w-auto xl:ms-auto" onPress={() => onChange(EMPTY_FILTERS)} aria-label={t("filters.clear")}>
+          <X className="size-3" aria-hidden="true" /> {t("filters.clear")}
         </Button>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -633,19 +670,41 @@ function SectorBudgetDetail({
   open: boolean;
   onClose: () => void;
   selectedCurrency: string;
-  projects?: Array<{ id: number; code?: string; title: string; sector?: string; budgetTotal?: number; donor?: string; status?: string }>;
+  projects?: Array<{ id: number; code?: string; title: string; sector?: string; budgetTotal?: number; donor?: string; status?: string; currency?: string }>;
 }) {
-  const { t } = useTranslation("budget");
+  const { t, i18n } = useTranslation("budget");
   const activeCurrEntry = useMemo<SectorBudgetCurrencyEntry | null>(() => {
     if (!entry || !entry.budgetByCurrency.length) return null;
     if (selectedCurrency === "all" || !entry.currencyMixed) return null;
     return entry.budgetByCurrency.find(c => c.currency === selectedCurrency) ?? null;
   }, [entry, selectedCurrency]);
+  type SectorProject = NonNullable<typeof projects>[number];
+  const projectColumns = useMemo<DataGridColumn<SectorProject>[]>(() => [
+    { id: "project", header: t("sector.tableProject"), isRowHeader: true,
+      cell: (p) => (
+        <div className="min-w-0">
+          <div dir="auto" className="whitespace-normal text-sm font-medium rtl:text-end">{p.title}</div>
+          {p.code && <div className="text-xs text-[var(--muted)]"><bdi dir="ltr">{p.code}</bdi></div>}
+        </div>
+      ) },
+    { id: "donor", header: t("sector.tableDonor"), cell: (p) => <span dir="auto" className="text-sm text-[var(--muted)]">{p.donor ?? "—"}</span> },
+    { id: "status", header: t("sector.tableStatus"),
+      cell: (p) => p.status
+        ? <Chip size="sm" variant="soft" color={statusTone(p.status)}>{t(`status.${p.status}`, { ns: "projects", defaultValue: p.status.replace(/_/g, " ") })}</Chip>
+        : <span className="text-[var(--muted)]">—</span> },
+    { id: "budget", header: t("sector.tableBudget"), align: "end",
+      cell: (p) => <span className="text-sm font-medium tabular-nums">
+        {p.budgetTotal != null
+          ? (p.currency ? <Money value={p.budgetTotal} currency={p.currency} /> : <bdi dir="ltr">{p.budgetTotal.toLocaleString("en-US", { maximumFractionDigits: 0 })}</bdi>)
+          : "—"}
+      </span> },
+  ], [t]);
   if (!entry) return null;
   const meta = getSectorMeta(entry.sector);
   const Icon = meta.icon;
   const sectorProjects = projects?.filter(p => p.sector === entry.sector) ?? [];
   const showMulti = entry.currencyMixed && selectedCurrency === "all";
+  const isRtl = i18n.dir?.() === "rtl";
 
   const activityLabel = entry.totalActivityCount === null
     ? t("sector.noActivitiesRecorded")
@@ -670,146 +729,121 @@ function SectorBudgetDetail({
     a.click();
   };
 
+  const figure = (label: string, value: React.ReactNode, strong = false, negative = false) => (
+    <div>
+      <p className="text-xs text-[var(--muted)]">{label}</p>
+      <p className={`${strong ? "font-bold" : "font-medium"} ${negative ? "text-[var(--danger)]" : ""}`}>{value}</p>
+    </div>
+  );
   const renderCurrencyCard = (c: SectorBudgetCurrencyEntry) => (
-    <div key={c.currency} className="rounded-lg border p-4">
-      <div className="flex items-center justify-between mb-3">
-        <span className="font-medium text-sm">{c.currency}</span>
+    <Card key={c.currency} variant="secondary" className="gap-3 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium"><bdi dir="ltr">{c.currency}</bdi></span>
         <BudgetFactualFlags entry={c} />
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 text-sm mb-3">
-        <div>
-          <p className="text-xs text-muted-foreground">{t("sector.totalBudget")}</p>
-          <p className="font-bold">{fmtMoney(c.budgetTotal, c.currency)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{t("sector.activityPlanned")}</p>
-          <p className="font-medium">{fmtMoney(c.activityPlanned, c.currency)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{t("sector.unallocatedBudget")}</p>
-          <p className="font-medium">{fmtMoney(c.unallocated, c.currency)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{t("sector.spent")}</p>
-          <p className="font-medium">{fmtMoney(c.activitySpent, c.currency)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{t("sector.remainingBudget")}</p>
-          <p className={`font-medium ${(c.remaining ?? 0) < 0 ? "text-destructive" : ""}`}>{fmtMoney(c.remaining, c.currency)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{t("sector.utilisation")}</p>
-          <p className="font-medium">{c.utilisationPct == null ? "—" : <bdi dir="ltr">{formatPercent(c.utilisationPct)}</bdi>}</p>
-        </div>
+      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+        {figure(t("sector.totalBudget"), <Money value={c.budgetTotal} currency={c.currency} />, true)}
+        {figure(t("sector.activityPlanned"), <Money value={c.activityPlanned} currency={c.currency} />)}
+        {figure(t("sector.unallocatedBudget"), <Money value={c.unallocated} currency={c.currency} />, false, (c.unallocated ?? 0) < 0)}
+        {figure(t("sector.spent"), <Money value={c.activitySpent} currency={c.currency} />)}
+        {figure(t("sector.remainingBudget"), <Money value={c.remaining} currency={c.currency} />, false, (c.remaining ?? 0) < 0)}
+        {figure(t("sector.utilisation"), c.utilisationPct == null ? "—" : <bdi dir="ltr">{formatPercent(c.utilisationPct)}</bdi>)}
       </div>
       {c.utilisationPct != null && (
-        <BudgetProgressBar value={c.utilisationPct} isOver={c.utilisationPct > 100} />
+        <BudgetProgressBar value={c.utilisationPct} isOver={c.utilisationPct > 100} label={`${t("sector.utilisation")} ${c.currency}`} />
       )}
-    </div>
+    </Card>
   );
 
   return (
-    <Sheet open={open} onOpenChange={v => !v && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <div className={`p-2.5 rounded-lg ${meta.bg} ${meta.border} border`}>
-              <Icon className={`h-5 w-5 ${meta.color}`} />
-            </div>
-            <div>
-              <SheetTitle className="text-xl">{entry.sector}</SheetTitle>
-              <SheetDescription>{t("sector.detailDesc")}</SheetDescription>
-            </div>
-          </div>
-        </SheetHeader>
+    <Drawer>
+      <Drawer.Backdrop isOpen={open} onOpenChange={v => { if (!v) onClose(); }}>
+        {/* Slides in from the reading-end edge: right in English, left in Arabic. */}
+        <Drawer.Content placement={isRtl ? "left" : "right"}>
+          <Drawer.Dialog className="h-full w-screen max-w-full sm:w-[44rem]">
+            <Drawer.CloseTrigger />
+            <Drawer.Header>
+              <div className="flex items-center gap-3">
+                <div className={`rounded-xl border p-2.5 ${meta.bg} ${meta.border}`}>
+                  <Icon className={`size-5 ${meta.color}`} aria-hidden="true" />
+                </div>
+                <div>
+                  <Drawer.Heading className="text-xl">{entry.sector}</Drawer.Heading>
+                  <p className="text-sm text-[var(--muted)]">{t("sector.detailDesc")}</p>
+                </div>
+              </div>
+            </Drawer.Header>
 
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border bg-muted/30 p-3 flex items-center gap-3">
-              <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Drawer.Body className="space-y-6">
+              <div className="grid grid-cols-2 gap-3">
+                <Card variant="secondary" className="flex-row items-center gap-3 p-3">
+                  <FolderOpen className="size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">{t("sector.projects")}</p>
+                    <p className="text-lg font-bold tabular-nums">{entry.projectCount}</p>
+                  </div>
+                </Card>
+                <Card variant="secondary" className="flex-row items-center gap-3 p-3">
+                  <Activity className="size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+                  <div>
+                    <p className="text-xs text-[var(--muted)]">{t("sector.incompleteActivities")}</p>
+                    <p className="text-lg font-bold tabular-nums">
+                      {entry.totalActivityCount === null ? "—" : (entry.incompleteActivityCount ?? 0)}
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">{activityLabel}</p>
+                  </div>
+                </Card>
+              </div>
+
               <div>
-                <p className="text-xs text-muted-foreground">{t("sector.projects")}</p>
-                <p className="text-lg font-bold">{entry.projectCount}</p>
+                <h3 className="mb-3 text-sm font-semibold">{t("sector.financialSummary")}</h3>
+                <div className="space-y-3">
+                  {showMulti || !activeCurrEntry
+                    ? entry.budgetByCurrency.map(renderCurrencyCard)
+                    : renderCurrencyCard(activeCurrEntry)}
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3 flex items-center gap-3">
-              <Activity className="h-4 w-4 text-muted-foreground shrink-0" />
+
+              <Alert status="warning">
+                <Alert.Indicator />
+                <Alert.Content><Alert.Description className="text-xs">{t("sector.sectorAttribution")}</Alert.Description></Alert.Content>
+              </Alert>
+
               <div>
-                <p className="text-xs text-muted-foreground">{t("sector.incompleteActivities")}</p>
-                <p className="text-lg font-bold">
-                  {entry.totalActivityCount === null ? "—" : (entry.incompleteActivityCount ?? 0)}
-                </p>
-                <p className="text-xs text-muted-foreground">{activityLabel}</p>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">{t("sector.projectsInSector")}</h3>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button size="sm" variant="outline" onPress={exportCsv}>
+                      <Download className="size-3" aria-hidden="true" /> {t("export.exportCsv")}
+                    </Button>
+                    <Button size="sm" variant="outline" onPress={() => exportSectorExcel(entry, sectorProjects)}>
+                      <FileSpreadsheet className="size-3 text-[var(--success)]" aria-hidden="true" /> {t("export.exportExcel")}
+                    </Button>
+                    <Button size="sm" variant="outline" onPress={() => printSectorPdf(entry, sectorProjects)}>
+                      <FileText className="size-3 text-[var(--danger)]" aria-hidden="true" /> {t("export.exportPdf")}
+                    </Button>
+                  </div>
+                </div>
+                {sectorProjects.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-[var(--muted)]">{t("sector.noProjectData")}</p>
+                ) : (
+                  <div role="region" aria-label={t("sector.projectsRegion")}>
+                    <DataGrid
+                      aria-label={t("sector.projectsRegion")}
+                      data={sectorProjects}
+                      columns={projectColumns}
+                      getRowId={(p) => p.id}
+                      contentClassName="min-w-[520px]"
+                      verticalAlign="middle"
+                    />
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-sm mb-3">{t("sector.financialSummary")}</h3>
-            <div className="space-y-3">
-              {showMulti || !activeCurrEntry
-                ? entry.budgetByCurrency.map(renderCurrencyCard)
-                : renderCurrencyCard(activeCurrEntry)}
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground flex items-start gap-1.5 rounded-lg bg-muted/30 border px-3 py-2">
-            <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
-            {t("sector.sectorAttribution")}
-          </p>
-
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-sm">{t("sector.projectsInSector")}</h3>
-              <div className="flex items-center gap-1.5">
-                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={exportCsv}>
-                  <Download className="h-3 w-3" /> {t("export.exportCsv")}
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={() => exportSectorExcel(entry, sectorProjects)}>
-                  <FileSpreadsheet className="h-3 w-3 text-success" /> {t("export.exportExcel")}
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={() => printSectorPdf(entry, sectorProjects)}>
-                  <FileText className="h-3 w-3 text-destructive" /> {t("export.exportPdf")}
-                </Button>
-              </div>
-            </div>
-            {sectorProjects.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">{t("sector.noProjectData")}</p>
-            ) : (
-              <div className="rounded-lg border overflow-hidden overflow-x-auto" role="region" aria-label={t("sector.projectsRegion")}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("sector.tableProject")}</TableHead>
-                      <TableHead>{t("sector.tableDonor")}</TableHead>
-                      <TableHead>{t("sector.tableStatus")}</TableHead>
-                      <TableHead className="text-end">{t("sector.tableBudget")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sectorProjects.map(p => (
-                      <TableRow key={p.id}>
-                        <TableCell>
-                          <div className="font-medium text-sm">{p.title}</div>
-                          {p.code && <div className="text-xs text-muted-foreground"><bdi dir="ltr">{p.code}</bdi></div>}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{p.donor ?? "—"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs capitalize">{p.status?.replace(/_/g, " ") ?? "—"}</Badge>
-                        </TableCell>
-                        <TableCell className="text-end font-medium text-sm">
-                          <bdi dir="ltr">{p.budgetTotal != null ? p.budgetTotal.toLocaleString("en-US", { maximumFractionDigits: 0 }) : "—"}</bdi>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+            </Drawer.Body>
+          </Drawer.Dialog>
+        </Drawer.Content>
+      </Drawer.Backdrop>
+    </Drawer>
   );
 }
 
@@ -846,110 +880,106 @@ function SectorBudgetCard({
     : t("sector.nIncomplete", { n: entry.incompleteActivityCount });
 
   const borderClass = hasOverspent
-    ? "border-destructive/30"
+    ? "border-[color-mix(in_oklab,var(--danger)_35%,transparent)]"
     : hasOverallocated
-    ? "border-amber-300/50"
-    : "border-border";
+    ? "border-[color-mix(in_oklab,var(--warning)_45%,transparent)]"
+    : "border-transparent";
 
   return (
     <button
       type="button"
       onClick={() => onClick(entry)}
-      className={`group text-start w-full h-full flex flex-col rounded-xl border bg-card px-4 py-4 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary/20 ${borderClass}`}
+      className={`group flex h-full w-full flex-col rounded-[calc(var(--radius)*2.5)] border bg-[var(--surface)] px-4 py-4 text-start shadow-[var(--surface-shadow)] outline-none transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--focus)] ${borderClass}`}
     >
       {/* ── Icon + badges row ─────────────────────────────────────────── */}
-      <div className="flex items-start justify-between mb-3">
-        <div className={`p-2 rounded-lg ${meta.bg} ${meta.border} border shrink-0`}>
-          <Icon className={`h-4 w-4 ${meta.color}`} />
+      <div className="mb-3 flex items-start justify-between">
+        <div className={`shrink-0 rounded-lg border p-2 ${meta.bg} ${meta.border}`}>
+          <Icon className={`size-4 ${meta.color}`} aria-hidden="true" />
         </div>
-        <div className="flex items-center gap-1 flex-wrap justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-1">
           {hasOverspent && (
-            <Badge variant="rejected" className="gap-0.5 text-[10px] px-1.5 py-0">
-              <AlertCircle className="h-2.5 w-2.5" /> {t("sector.overspent")}
-            </Badge>
+            <Chip size="sm" variant="soft" color="danger">
+              <AlertCircle className="size-3" aria-hidden="true" /> {t("sector.overspent")}
+            </Chip>
           )}
           {hasOverallocated && (
-            <Badge variant="returned" className="gap-0.5 text-[10px] px-1.5 py-0">
-              <AlertTriangle className="h-2.5 w-2.5" /> {t("sector.overallocated")}
-            </Badge>
+            <Chip size="sm" variant="soft" color="warning">
+              <AlertTriangle className="size-3" aria-hidden="true" /> {t("sector.overallocated")}
+            </Chip>
           )}
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity rtl:rotate-180" />
+          <ChevronRight className="size-3.5 text-[var(--muted)] opacity-0 transition-opacity group-hover:opacity-100 rtl:rotate-180" aria-hidden="true" />
         </div>
       </div>
 
       {/* ── Stable title + metadata block — min-height keeps financial metrics aligned ── */}
-      <div className="min-h-[3.5rem] mb-3">
-        <h3 className="font-semibold text-sm text-foreground leading-snug mb-1">{entry.sector}</h3>
+      <div className="mb-3 min-h-[3.5rem]">
+        <h3 className="mb-1 text-sm font-semibold leading-snug">{entry.sector}</h3>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <span className="text-xs text-muted-foreground flex items-center gap-0.5 tabular-nums">
-            <FolderOpen className="h-3 w-3 shrink-0" />{entry.projectCount} {entry.projectCount === 1 ? t("sector.oneProject") : t("sector.nProjects")}
+          <span className="flex items-center gap-1 text-xs text-[var(--muted)] tabular-nums">
+            <FolderOpen className="size-3 shrink-0" aria-hidden="true" />{entry.projectCount} {entry.projectCount === 1 ? t("sector.oneProject") : t("sector.nProjects")}
           </span>
-          <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-            <Activity className="h-3 w-3 shrink-0" />{activityLabel}
+          <span className="flex items-center gap-1 text-xs text-[var(--muted)]">
+            <Activity className="size-3 shrink-0" aria-hidden="true" />{activityLabel}
           </span>
         </div>
       </div>
 
       {/* ── Financial content — grows to fill remaining card height ───── */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex flex-1 flex-col">
         {showMulti ? (
-          <div className="space-y-1.5 pt-2 border-t border-dashed flex-1">
-            <p className="text-xs text-muted-foreground mb-1">{t("sector.totalBudgetByCurrency")}</p>
+          <div className="flex-1 space-y-1.5 border-t border-dashed border-[var(--border)] pt-2">
+            <p className="mb-1 text-xs text-[var(--muted)]">{t("sector.totalBudgetByCurrency")}</p>
             {entry.budgetByCurrency.map(c => (
               <div key={c.currency} className="flex items-baseline justify-between">
-                <span className="text-xs text-muted-foreground">{c.currency}</span>
-                <span className="text-sm font-medium tabular-nums">{fmtMoney(c.budgetTotal, c.currency)}</span>
+                <span className="text-xs text-[var(--muted)]"><bdi dir="ltr">{c.currency}</bdi></span>
+                <Money value={c.budgetTotal} currency={c.currency} className="text-sm font-medium tabular-nums" />
               </div>
             ))}
           </div>
         ) : activeCurrEntry ? (
-          <div className="flex flex-col gap-3 flex-1">
+          <div className="flex flex-1 flex-col gap-3">
             {/* Total Budget — primary hierarchy */}
             <div>
-              <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-xs text-muted-foreground">{t("sector.totalBudget")}</span>
-                <span className="text-sm font-semibold tabular-nums">{fmtMoney(activeCurrEntry.budgetTotal, activeCurrEntry.currency)}</span>
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <span className="text-xs text-[var(--muted)]">{t("sector.totalBudget")}</span>
+                <Money value={activeCurrEntry.budgetTotal} currency={activeCurrEntry.currency} className="text-sm font-semibold tabular-nums" />
               </div>
-              {/* Progress track */}
               <BudgetProgressBar
                 value={activeCurrEntry.utilisationPct ?? 0}
                 isOver={(activeCurrEntry.utilisationPct ?? 0) > 100}
+                label={`${t("sector.utilisation")}: ${entry.sector}`}
               />
               {/* Spent + utilisation */}
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {t("sector.spent")}: <span className="text-foreground/80 font-medium"><bdi dir="ltr">{fmtMoney(activeCurrEntry.activitySpent, activeCurrEntry.currency)}</bdi></span>
+              <div className="mt-1 flex items-baseline justify-between">
+                <span className="text-xs text-[var(--muted)] tabular-nums">
+                  {t("sector.spent")}: <span className="font-medium text-[var(--foreground)]"><Money value={activeCurrEntry.activitySpent} currency={activeCurrEntry.currency} /></span>
                 </span>
-                <span className={`text-xs font-medium tabular-nums ${(activeCurrEntry.utilisationPct ?? 0) > 100 ? "text-destructive" : "text-muted-foreground"}`}>
+                <span className={`text-xs font-medium tabular-nums ${(activeCurrEntry.utilisationPct ?? 0) > 100 ? "text-[var(--danger)]" : "text-[var(--muted)]"}`}>
                   {activeCurrEntry.utilisationPct == null ? "—" : <bdi dir="ltr">{formatPercent(activeCurrEntry.utilisationPct)}</bdi>}
                 </span>
               </div>
             </div>
 
             {/* Secondary financial metrics — one coherent section */}
-            <div className="pt-2 border-t border-dashed mt-auto">
+            <div className="mt-auto border-t border-dashed border-[var(--border)] pt-2">
               <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{t("sector.activityPlanned")}</p>
-                  <p className="text-xs font-medium tabular-nums">{fmtMoney(activeCurrEntry.activityPlanned, activeCurrEntry.currency)}</p>
+                  <p className="mb-0.5 text-[11px] text-[var(--muted)]">{t("sector.activityPlanned")}</p>
+                  <Money value={activeCurrEntry.activityPlanned} currency={activeCurrEntry.currency} className="text-xs font-medium tabular-nums" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{t("sector.remaining")}</p>
-                  <p className={`text-xs font-medium tabular-nums ${(activeCurrEntry.remaining ?? 0) < 0 ? "text-destructive" : ""}`}>
-                    {fmtMoney(activeCurrEntry.remaining, activeCurrEntry.currency)}
-                  </p>
+                  <p className="mb-0.5 text-[11px] text-[var(--muted)]">{t("sector.remaining")}</p>
+                  <Money value={activeCurrEntry.remaining} currency={activeCurrEntry.currency} className={`text-xs font-medium tabular-nums ${(activeCurrEntry.remaining ?? 0) < 0 ? "text-[var(--danger)]" : ""}`} />
                 </div>
               </div>
               <div className="mt-2">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{t("sector.unallocated")}</p>
-                <p className={`text-xs font-medium tabular-nums ${(activeCurrEntry.unallocated ?? 0) < 0 ? "text-destructive" : ""}`}>
-                  {fmtMoney(activeCurrEntry.unallocated, activeCurrEntry.currency)}
-                </p>
+                <p className="mb-0.5 text-[11px] text-[var(--muted)]">{t("sector.unallocated")}</p>
+                <Money value={activeCurrEntry.unallocated} currency={activeCurrEntry.currency} className={`text-xs font-medium tabular-nums ${(activeCurrEntry.unallocated ?? 0) < 0 ? "text-[var(--danger)]" : ""}`} />
               </div>
             </div>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground pt-2 border-t border-dashed">{t("sector.noFinancialData")}</p>
+          <p className="border-t border-dashed border-[var(--border)] pt-2 text-xs text-[var(--muted)]">{t("sector.noFinancialData")}</p>
         )}
       </div>
     </button>
@@ -1052,79 +1082,78 @@ function SectorBudgetView({ userRole, userSectors }: { userRole?: string; userSe
       <BudgetFilters filters={filters} onChange={setFilters} projects={projects} />
 
       {/* Attribution methodology note — neutral informational, not a warning */}
-      <div className="flex items-start gap-1.5 text-xs text-muted-foreground/80">
-        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground/60" />
+      <p className="flex items-start gap-1.5 text-xs text-[var(--muted)]">
+        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
         <span>
           {t("sector.spo.attribution")}
           {isSpoRole && (
             <> &nbsp;·&nbsp; {t("sector.spo.scopeNote")}</>
           )}
         </span>
-      </div>
+      </p>
 
       {unresolvedSectorProjects > 0 && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div>
-            <span className="font-medium">
-              {unresolvedSectorProjects === 1
-                ? t("sector.unresolvedOne")
-                : t("sector.unresolvedN", { count: unresolvedSectorProjects })}
-            </span>
-            {" — "}
-            <span>
-              {Object.entries(unresolvedBudgetByCurrency)
-                .map(([cur, amt]) => `${cur} ${amt.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`)
-                .join(", ")}{" "}
+        <Alert status="warning">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Description>
+              <span className="font-medium">
+                {unresolvedSectorProjects === 1
+                  ? t("sector.unresolvedOne")
+                  : t("sector.unresolvedN", { count: unresolvedSectorProjects })}
+              </span>
+              {" — "}
+              {Object.entries(unresolvedBudgetByCurrency).map(([cur, amt], i) => (
+                <span key={cur}>{i > 0 ? ", " : ""}<bdi dir="ltr">{`${cur} ${amt.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}</bdi></span>
+              ))}{" "}
               {t("sector.unresolvedBudget")}.
-            </span>
-          </div>
-        </div>
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
       )}
 
       {/* Currency selector — only shown when data is available */}
       {availableCurrencies.length > 1 && (
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          <span className="text-xs text-muted-foreground">{t("filters.currency")}</span>
-          <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
-            <SelectTrigger className="h-8 min-w-[10rem] flex-1 text-sm sm:w-auto sm:flex-none" aria-label={t("filters.currency")}>
-              <SelectValue placeholder={t("filters.allCurrencies")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allCurrencies")}</SelectItem>
-              {availableCurrencies.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <span className="text-xs text-[var(--muted)]">{t("filters.currency")}</span>
+          <SelectField
+            aria-label={t("filters.currency")}
+            value={selectedCurrency}
+            onChange={setSelectedCurrency}
+            className="flex-1 sm:flex-none"
+            triggerClassName="min-w-[10rem]"
+            options={[{ value: "all", label: t("filters.allCurrencies") }, ...availableCurrencies.map(c => ({ value: c, label: c }))]}
+          />
         </div>
       )}
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52 rounded-xl" />)}
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52 rounded-2xl" />)}
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center">
-          <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+        <Card className="items-center gap-3 border border-dashed border-[var(--border)] py-16 text-center">
+          <AlertCircle className="size-8 text-[var(--danger)]" aria-hidden="true" />
           <div>
-            <p className="text-sm font-medium text-foreground">{t("sector.loadError")}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{t("sector.loadErrorDesc")}</p>
+            <p className="text-sm font-medium">{t("sector.loadError")}</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">{t("sector.loadErrorDesc")}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => { void refetch(); }}>{t("overview.tryAgain")}</Button>
-        </div>
+          <Button variant="outline" size="sm" onPress={() => { void refetch(); }}>{t("overview.tryAgain")}</Button>
+        </Card>
       ) : !visibleSectors?.length ? (
-        <div className="rounded-xl border border-dashed py-16 text-center">
-          <Filter className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
-          <p className="text-sm font-medium text-muted-foreground">{t("sector.noDataForSector")}</p>
-          <p className="text-xs text-muted-foreground mt-1">{t("sector.noDataDesc")}</p>
-        </div>
+        <Card className="items-center border border-dashed border-[var(--border)] py-16 text-center">
+          <Filter className="mx-auto mb-3 size-10 text-[var(--muted)] opacity-40" aria-hidden="true" />
+          <p className="text-sm font-medium text-[var(--muted)]">{t("sector.noDataForSector")}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t("sector.noDataDesc")}</p>
+        </Card>
       ) : (
         <>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-[var(--muted)]">
               {visibleSectors.length !== 1 ? t("sector.sectorsWithDataPlural", { count: visibleSectors.length }) : t("sector.sectorsWithData", { count: visibleSectors.length })}
             </p>
-            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={exportAllCsv}>
-              <Download className="h-3.5 w-3.5" /> {t("export.exportAll")}
+            <Button size="sm" variant="outline" onPress={exportAllCsv}>
+              <Download className="size-3.5" aria-hidden="true" /> {t("export.exportAll")}
             </Button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -1251,128 +1280,107 @@ function OverviewView() {
 
   // Multi-currency renderers for KPI card values
   const multiValue = (field: "totalBudget" | "totalSpent" | "budgetRemaining") => (
-    <div className="space-y-0.5">
+    <span className="flex flex-col gap-0.5">
       {budgetByCurrency.map(b => (
-        <div key={b.currency} className="text-sm font-semibold leading-snug">
+        <span key={b.currency} className="text-base font-semibold leading-snug">
           <bdi dir="ltr">{fmtMoney(b[field], b.currency)}</bdi>
-        </div>
+        </span>
       ))}
-    </div>
+    </span>
   );
 
   const multiUtil = () => (
-    <div className="space-y-0.5">
+    <span className="flex flex-col gap-0.5">
       {budgetByCurrency.map(b => (
-        <div key={b.currency} className="text-sm font-semibold leading-snug">
-          <span className="text-xs text-muted-foreground me-1"><bdi dir="ltr">{b.currency}</bdi></span>
+        <span key={b.currency} className="text-base font-semibold leading-snug">
+          <span className="me-1 text-xs text-[var(--muted)]"><bdi dir="ltr">{b.currency}</bdi></span>
           <bdi dir="ltr">{formatPercent(b.utilisationRate)}</bdi>
-        </div>
+        </span>
       ))}
-    </div>
+    </span>
   );
+  const loadingValue = <Skeleton className="h-6 w-28 rounded-md" />;
+  const single = (v: number | null | undefined) => <bdi dir="ltr">{fmtMoney(v, kpiData?.currency)}</bdi>;
 
   return (
     <div className="space-y-4">
       {/* Scope is contextual; the Donor Portfolio registry owns the shared currency control. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {scopeLabel && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>{t("overview.scope")}:</span>
-            <span className="rounded-md border border-border/60 bg-muted/50 px-2 py-0.5 font-medium text-foreground">
-              {scopeLabel}
-            </span>
-          </div>
-        )}
-      </div>
+      {scopeLabel && (
+        <div className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+          <span>{t("overview.scope")}:</span>
+          <Chip size="sm" variant="secondary">{scopeLabel}</Chip>
+        </div>
+      )}
 
       {/* Mixed-currency notice */}
       {showMultiCurrency && (
-        <div className="flex items-center gap-2 rounded-lg border border-info/30 bg-info/10 px-3 py-2 text-xs text-muted-foreground">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-info" />
-          {t("overview.mixedCurrencyNotice")}
-        </div>
+        <Alert status="accent">
+          <Alert.Indicator />
+          <Alert.Content><Alert.Description className="text-xs">{t("overview.mixedCurrencyNotice")}</Alert.Description></Alert.Content>
+        </Alert>
       )}
 
       {sError && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-muted-foreground" role="alert">
-          <span>{t("overview.summaryLoadError")}</span>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { void refetchSummary(); }}>{t("overview.tryAgain")}</Button>
-        </div>
+        <Alert status="danger" role="alert">
+          <Alert.Indicator />
+          <Alert.Content><Alert.Description className="text-xs">{t("overview.summaryLoadError")}</Alert.Description></Alert.Content>
+          <Button variant="outline" size="sm" onPress={() => { void refetchSummary(); }}>{t("overview.tryAgain")}</Button>
+        </Alert>
       )}
 
       {/* KPI cards — compact enterprise density */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={DollarSign} iconBg="bg-slate-500" label={t("totalBudget")}
-          className="p-4 min-h-[100px]"
-          value={sLoading ? <Skeleton className="h-5 w-28" />
-            : sError ? "—"
-            : showMultiCurrency ? multiValue("totalBudget")
-            : fmtMoney(kpiData?.totalBudget, kpiData?.currency)} />
-        <StatCard icon={TrendingUp} iconBg="bg-blue-500" label={t("totalSpent")}
-          className="p-4 min-h-[100px]"
-          value={sLoading ? <Skeleton className="h-5 w-28" />
-            : sError ? "—"
-            : showMultiCurrency ? multiValue("totalSpent")
-            : fmtMoney(kpiData?.totalSpent, kpiData?.currency)} />
-        <StatCard icon={PiggyBank} iconBg="bg-emerald-500" label={t("remaining")}
-          className="p-4 min-h-[100px]"
-          value={sLoading ? <Skeleton className="h-5 w-28" />
-            : sError ? "—"
-            : showMultiCurrency ? multiValue("budgetRemaining")
-            : fmtMoney(kpiData?.budgetRemaining, kpiData?.currency)} />
-        <StatCard
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <FilterKpi icon={DollarSign} label={t("totalBudget")}
+          value={sLoading ? loadingValue : sError ? "—" : showMultiCurrency ? multiValue("totalBudget") : single(kpiData?.totalBudget)} />
+        <FilterKpi icon={TrendingUp} label={t("totalSpent")}
+          value={sLoading ? loadingValue : sError ? "—" : showMultiCurrency ? multiValue("totalSpent") : single(kpiData?.totalSpent)} />
+        <FilterKpi icon={PiggyBank} status="success" label={t("remaining")}
+          value={sLoading ? loadingValue : sError ? "—" : showMultiCurrency ? multiValue("budgetRemaining") : single(kpiData?.budgetRemaining)} />
+        <FilterKpi
           icon={Activity}
-          iconBg="bg-slate-500"
+          status={(kpiData?.utilisationRate ?? 0) > 90 ? "danger" : undefined}
           label={t("sector.budgetUtilisation")}
-          className="p-4 min-h-[100px]"
-          value={sLoading ? <Skeleton className="h-5 w-16" />
+          value={sLoading ? loadingValue
             : sError ? "—"
             : showMultiCurrency ? multiUtil()
             : <bdi dir="ltr">{formatPercent(kpiData?.utilisationRate)}</bdi>}
-          sub={!sLoading && !showMultiCurrency && kpiData?.utilisationRate != null
+          footer={!sLoading && !showMultiCurrency && kpiData?.utilisationRate != null
             ? (
-              <div className="mt-1.5 h-1.5 w-full rounded-full bg-border overflow-hidden">
-                <div
-                  className={`h-1.5 rounded-full ${(kpiData.utilisationRate ?? 0) > 90 ? "bg-destructive" : "bg-secondary"}`}
-                  style={{ width: `${Math.min(100, kpiData.utilisationRate ?? 0)}%` }}
-                />
-              </div>
+              <ProgressBar aria-label={t("sector.budgetUtilisation")} value={Math.min(100, kpiData.utilisationRate ?? 0)} color={(kpiData.utilisationRate ?? 0) > 90 ? "danger" : "accent"} size="sm" className="w-full">
+                <ProgressBar.Track><ProgressBar.Fill /></ProgressBar.Track>
+              </ProgressBar>
             ) : undefined}
         />
       </div>
 
       {/* Donor Portfolio */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle>{t("donor.portfolio")}</CardTitle>
-          <CardDescription>{t("donor.portfolioDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <DonorPortfolioTable
-            data={allDonors}
-            isLoading={dLoading}
-            isError={dError}
-            onRetry={() => { void refetchDonors(); }}
-            activeCurrency={selectedCurrency}
-            onActiveCurrencyChange={setSelectedCurrency}
-          />
-        </CardContent>
+      <Card className="gap-0 p-0">
+        <Card.Header className="px-5 pt-5 pb-3">
+          <Card.Title>{t("donor.portfolio")}</Card.Title>
+          <Card.Description>{t("donor.portfolioDesc")}</Card.Description>
+        </Card.Header>
+        <DonorPortfolioTable
+          data={allDonors}
+          isLoading={dLoading}
+          isError={dError}
+          onRetry={() => { void refetchDonors(); }}
+          activeCurrency={selectedCurrency}
+          onActiveCurrencyChange={setSelectedCurrency}
+        />
       </Card>
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle>{t("dashboard:budgetWorkspace.projectPerformanceTitle")}</CardTitle>
-          <CardDescription>{t("dashboard:budgetWorkspace.projectPerformanceDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ProjectBudgetPerformanceTable
-            data={projectBudgetPerformance}
-            isLoading={pLoading}
-            isError={pError}
-            onRetry={() => { void refetchProjectBudgetPerformance(); }}
-            role={role ?? ""}
-            spoStateId={(me?.user as unknown as Record<string, unknown>)?.stateId}
-          />
-        </CardContent>
+      <Card className="gap-0 p-0">
+        <Card.Header className="px-5 pt-5 pb-3">
+          <Card.Title>{t("dashboard:budgetWorkspace.projectPerformanceTitle")}</Card.Title>
+          <Card.Description>{t("dashboard:budgetWorkspace.projectPerformanceDescription")}</Card.Description>
+        </Card.Header>
+        <ProjectBudgetPerformanceTable
+          data={projectBudgetPerformance}
+          isLoading={pLoading}
+          isError={pError}
+          onRetry={() => { void refetchProjectBudgetPerformance(); }}
+          role={role ?? ""}
+          spoStateId={(me?.user as unknown as Record<string, unknown>)?.stateId}
+        />
       </Card>
     </div>
   );
@@ -1408,13 +1416,13 @@ export default function BudgetPage() {
 
   if (!canView) {
     return (
-      <Empty>
-        <EmptyHeader>
-          <Lock className="h-10 w-10 text-muted-foreground" />
-          <EmptyTitle>{t("page.accessRestricted")}</EmptyTitle>
-          <EmptyDescription>{t("page.accessRestrictedDesc")}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <EmptyState className="py-16">
+        <EmptyState.Header>
+          <EmptyState.Media variant="icon"><Lock aria-hidden="true" /></EmptyState.Media>
+          <EmptyState.Title>{t("page.accessRestricted")}</EmptyState.Title>
+          <EmptyState.Description>{t("page.accessRestrictedDesc")}</EmptyState.Description>
+        </EmptyState.Header>
+      </EmptyState>
     );
   }
 
@@ -1423,40 +1431,47 @@ export default function BudgetPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-foreground text-xl font-semibold">{t("page.heading")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("page.description")}</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">{t("page.description")}</p>
         </div>
         {/* All Projects selector — hidden when Sector Budgets tab is active (inert on that tab) */}
         {overviewTab !== "sector" && (
-          <div className="w-full sm:w-72">
-            <Select value={selectedProject || "all"} onValueChange={(v) => setSelectedProject(v === "all" ? "" : v)}>
-              <SelectTrigger aria-label={t("page.selectProject")}><SelectValue placeholder={t("page.selectProject")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("page.allProjects")}</SelectItem>
-                {projects?.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.code} — {p.title}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          <SelectField
+            aria-label={t("page.selectProject")}
+            value={selectedProject || "all"}
+            onChange={(v) => setSelectedProject(v === "all" ? "" : v)}
+            className="w-full sm:w-80"
+            options={[
+              { value: "all", label: t("page.allProjects") },
+              ...(projects ?? []).map(p => ({
+                value: String(p.id),
+                label: <span className="flex min-w-0 items-baseline gap-1.5"><bdi dir="ltr" className="shrink-0 font-mono text-xs text-[var(--muted)]">{p.code}</bdi><span dir="auto" className="truncate">{p.title}</span></span>,
+                textValue: `${p.code} ${p.title}`,
+              })),
+            ]}
+          />
         )}
       </div>
 
       {isViewOnly && (
-        <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">
-          <AlertCircle className="h-4 w-4 shrink-0 text-warning" />
-          <span>
-            <strong>{t("page.viewOnly")}</strong> — {t("page.viewOnlyDesc")}
-          </span>
-        </div>
+        <Alert status="warning">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Description><strong>{t("page.viewOnly")}</strong> — {t("page.viewOnlyDesc")}</Alert.Description>
+          </Alert.Content>
+        </Alert>
       )}
       {isSectorRestricted && (
-        <div className="flex items-center gap-3 rounded-lg border border-info/30 bg-info/10 px-4 py-3 text-sm text-foreground">
-          <AlertCircle className="h-4 w-4 shrink-0 text-info" />
-          <span>
-            <strong>{t("page.sectorRestricted")}</strong> — {t("page.sectorRestrictedDesc")}
-            {userSectors && userSectors.length > 0 && (
-              <> ({userSectors.map(s => <Badge key={s} variant="secondary" className="ms-1 text-xs">{s}</Badge>)})</>
-            )} {t("page.sectorRestrictedOnly")}
-          </span>
-        </div>
+        <Alert status="accent">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Description>
+              <strong>{t("page.sectorRestricted")}</strong> — {t("page.sectorRestrictedDesc")}
+              {userSectors && userSectors.length > 0 && (
+                <> {userSectors.map(s => <Chip key={s} size="sm" variant="secondary" className="ms-1">{s}</Chip>)}</>
+              )} {t("page.sectorRestrictedOnly")}
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
       )}
 
       {projectIdNum ? (
@@ -1465,19 +1480,20 @@ export default function BudgetPage() {
           projectInfo={projects?.find(p => p.id === projectIdNum) as ProjectInfo | undefined}
         />
       ) : (
-        <div className="space-y-4">
-          <Tabs value={overviewTab} onValueChange={v => setOverviewTab(v as typeof overviewTab)}>
-            <TabsList>
-              <TabsTrigger value="overview">{t("page.tabOverview")}</TabsTrigger>
-              <TabsTrigger value="sector">{t("page.tabSector")}</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {overviewTab === "overview" ? (
-            <OverviewView />
-          ) : (
-            <SectorBudgetView userRole={userRole} userSectors={userSectors} />
-          )}
-        </div>
+        <Tabs
+          selectedKey={overviewTab}
+          onSelectionChange={(k) => setOverviewTab(k === "sector" ? "sector" : "overview")}
+          aria-label={t("page.heading")}
+        >
+          <Tabs.ListContainer className="w-fit max-w-full">
+            <Tabs.List aria-label={t("page.heading")}>
+              <Tabs.Tab id="overview" className="whitespace-nowrap">{t("page.tabOverview")}<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id="sector" className="whitespace-nowrap">{t("page.tabSector")}<Tabs.Indicator /></Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+          <Tabs.Panel id="overview" className="pt-4"><OverviewView /></Tabs.Panel>
+          <Tabs.Panel id="sector" className="pt-4"><SectorBudgetView userRole={userRole} userSectors={userSectors} /></Tabs.Panel>
+        </Tabs>
       )}
     </div>
   );
