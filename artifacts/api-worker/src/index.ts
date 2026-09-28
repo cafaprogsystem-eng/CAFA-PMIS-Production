@@ -35,6 +35,7 @@ import { historicalStorageImportRoutes } from "./routes/historical-storage-impor
 import { manualRoutes } from "./routes/manual";
 import { conversationsRoutes } from "./routes/conversations";
 import { auditRoutes } from "./routes/audit";
+import { dashboardRoutes } from "./routes/dashboard";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -348,6 +349,7 @@ app.route("/", historicalStorageImportRoutes);
 app.route("/", manualRoutes);
 app.route("/", conversationsRoutes);
 app.route("/", auditRoutes);
+app.route("/", dashboardRoutes);
 
 /**
  * Ported from artifacts/api-server/src/lib/error-handler.ts's
