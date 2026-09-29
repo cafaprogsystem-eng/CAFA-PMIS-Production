@@ -37,6 +37,40 @@ export function mailerSupportsIdempotentDelivery(env: Bindings): boolean {
   return !cfg.enabled || cfg.provider === "resend";
 }
 
+/**
+ * Server-side-only check of the current FROM domain's verification status
+ * with the configured provider. The raw API key never leaves the Worker —
+ * only a status string reaches the caller. Resend-only for now (SendGrid
+ * has no equivalent single-domain lookup used elsewhere in this file).
+ */
+export async function checkFromDomainVerification(env: Bindings): Promise<
+  { domain: string; provider: string; status: string; region?: string } | { domain: string; provider: string; error: string }
+> {
+  const cfg = config(env);
+  const domain = cfg.fromAddress.split("@")[1] ?? cfg.fromAddress;
+  if (cfg.provider !== "resend") {
+    return { domain, provider: cfg.provider, error: "domain_status_not_supported_for_provider" };
+  }
+  if (!cfg.apiKey) {
+    return { domain, provider: cfg.provider, error: "no_api_key_configured" };
+  }
+  try {
+    const res = await fetch("https://api.resend.com/domains", {
+      headers: { Authorization: `Bearer ${cfg.apiKey}` },
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => "unknown");
+      return { domain, provider: cfg.provider, error: `HTTP ${res.status}: ${err}` };
+    }
+    const data = (await res.json().catch(() => ({}))) as { data?: Array<{ name: string; status: string; region?: string }> };
+    const match = (data.data ?? []).find((d) => d.name.toLowerCase() === domain.toLowerCase());
+    if (!match) return { domain, provider: cfg.provider, error: "domain_not_found_in_provider" };
+    return { domain, provider: cfg.provider, status: match.status, region: match.region };
+  } catch (e) {
+    return { domain, provider: cfg.provider, error: e instanceof Error ? e.message : "unknown_error" };
+  }
+}
+
 function config(env: Bindings) {
   return {
     enabled: String(env.EMAIL_ENABLED ?? "").toLowerCase() === "true",
