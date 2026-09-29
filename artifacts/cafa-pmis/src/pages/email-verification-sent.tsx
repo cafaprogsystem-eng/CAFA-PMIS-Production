@@ -97,7 +97,7 @@ export default function EmailVerificationSentPage() {
               </p>
               <div className="w-12 h-px bg-white/25 mb-6" />
               <p className="text-white font-bold text-base leading-snug mb-2">{t("cafaProgrammeManagementSystem")}</p>
-              <p className="text-white/60 text-sm leading-snug">{t("common:programmeManagementSystem")}</p>
+              <p className="text-white/60 text-sm leading-snug">{t("internalSystemLabel")}</p>
             </div>
           </div>
         </div>
