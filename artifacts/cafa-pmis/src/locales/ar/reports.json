@@ -118,7 +118,8 @@
     "filterByYear": "تصفية حسب السنة",
     "filterByAuthor": "تصفية حسب المُعِدّ",
     "searchPlaceholder": "بحث في التقارير…",
-    "clearFilters": "مسح التصفية"
+    "clearFilters": "مسح التصفية",
+    "groupLabel": "عوامل التصفية"
   },
   "approval": {
     "approve": "اعتماد",
@@ -138,7 +139,25 @@
     "coordinationReview": "مراجعة التنسيق",
     "returnForRevision": "إعادة للمراجعة",
     "programmeManagerApprove": "اعتماد مدير البرنامج",
-    "archive": "أرشفة"
+    "archive": "أرشفة",
+    "workflowPaths": {
+      "state_authored": "مسار مُعدّ من الولاية",
+      "technical_authored": "مسار مُعدّ تقنياً",
+      "spc_fallback": "مسار بديل عبر منسق البرنامج الأول"
+    },
+    "historyActions": {
+      "submit": "تم التقديم",
+      "state_review": "مراجعة الولاية",
+      "technical_review": "المراجعة التقنية",
+      "technical_approve": "الموافقة التقنية",
+      "coordination_review": "مراجعة التنسيق",
+      "coordination_approve": "موافقة التنسيق",
+      "final_approve": "الاعتماد النهائي",
+      "approve": "معتمد",
+      "request_revision": "أُعيد للمراجعة",
+      "reject": "مرفوض",
+      "archive": "مؤرشف"
+    }
   },
   "kpi": {
     "total": "إجمالي التقارير",
@@ -178,7 +197,10 @@
     "next": "التالي",
     "pageOf": "الصفحة {{page}} من {{total}}",
     "showing": "عرض {{from}}–{{to}} من {{total}} {{type}}",
-    "totalCount": "{{total}} {{type}}"
+    "totalCount": "{{total}} {{type}}",
+    "first": "الصفحة الأولى",
+    "last": "الصفحة الأخيرة",
+    "region": "التنقل بين الصفحات"
   },
   "export": {
     "id": "المعرّف",
@@ -366,7 +388,21 @@
     "override": "تجاوز",
     "overrideReason": "سبب التجاوز",
     "overrideDescription": "أنت مؤلف هذا التقرير. بصفتك مراجعاً لديه صلاحية التجاوز، يجب أن تقدم سبباً لإجراء المراجعة الذاتية. يُسجل ذلك في مسار التدقيق.",
-    "overridePlaceholder": "اشرح سبب مراجعتك لتقرير قمت بتأليفه (مطلوب لمسار التدقيق)"
+    "overridePlaceholder": "اشرح سبب مراجعتك لتقرير قمت بتأليفه (مطلوب لمسار التدقيق)",
+    "discardTitle": "تجاهل التغييرات غير المحفوظة؟",
+    "discardDescription": "لديك تغييرات لم تُحفظ. هل تريد تجاهلها وإغلاق النموذج؟",
+    "keepEditing": "متابعة التحرير",
+    "discard": "تجاهل",
+    "removeSectionTitle": "إزالة هذا القسم؟",
+    "removeSectionDescription": "سيتم تجاهل النص الذي أدخلته. لا يمكن التراجع عن ذلك إلا إذا أغلقت دون حفظ.",
+    "removeSection": "إزالة",
+    "activityStatusValues": {
+      "planned": "مخطط",
+      "inProgress": "قيد التنفيذ",
+      "completed": "مكتمل",
+      "delayed": "متأخر",
+      "cancelled": "ملغى"
+    }
   },
   "formExtra": {
     "reportIdentification": "تعريف التقرير",
@@ -543,7 +579,11 @@
     "deleteDraft": "حذف المسودة",
     "cancel": "إلغاء",
     "activityReport": "تقرير النشاط",
-    "activityReportViewerDescription": "تفاصيل تقرير النشاط ومراجعته"
+    "activityReportViewerDescription": "تفاصيل تقرير النشاط ومراجعته",
+    "reportDetail": "تفاصيل التقرير",
+    "confirm": "تأكيد",
+    "comment": "تعليق",
+    "deleteDraftDescription": "سيتم حذف مسودة التقرير نهائياً. لا يمكن التراجع عن ذلك، ولا يؤثر على أي سجلات معتمدة."
   },
   "stateForm": {
     "heading": "تقارير برنامج الولاية",

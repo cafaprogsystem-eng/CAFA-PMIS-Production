@@ -46,7 +46,10 @@ describe("RecordDetailModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open record" }));
 
     const dialog = screen.getByRole("dialog", { name: "Quarterly Project Report" });
-    expect(dialog).toHaveAttribute("aria-modal", "true");
+    // HeroUI (React Aria) makes the dialog modal by hiding the rest of the page
+    // from assistive technology rather than with aria-modal.
+    expect(screen.getByRole("button", { name: "Open record", hidden: true }).closest("[aria-hidden='true']")).not.toBeNull();
+    expect(dialog).toHaveAccessibleDescription("Project report detail and review");
     expect(dialog.className).toContain("w-[92vw]");
     expect(dialog.className).toContain("max-w-[1400px]");
     expect(dialog.className).not.toContain("max-w-[1180px]");
@@ -54,9 +57,10 @@ describe("RecordDetailModal", () => {
     expect(dialog.className).toContain("max-sm:w-full");
     expect(dialog.className).toContain("overflow-hidden");
     expect(dialog.className).not.toContain("overflow-y-auto");
-    // Physical centre + transform remains correctly centred in both LTR and RTL.
-    expect(dialog.className).toContain("left-1/2");
+    // The HeroUI Modal container centres the dialog, so no physical offsets are needed.
+    expect(dialog.className).not.toContain("left-1/2");
     expect(dialog.className).not.toContain("start-1/2");
+    expect(dialog.closest(".modal__container")).not.toBeNull();
 
     const header = dialog.querySelector("header");
     const footer = dialog.querySelector("footer");

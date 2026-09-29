@@ -54,7 +54,7 @@ describe("REP-FINAL-VIS-02: Status/workflow values routed through displayStatus"
   });
 
   it("table status badge uses displayStatus(r.status)", () => {
-    const tableSection = reportsSrc.slice(reportsSrc.indexOf("TableBody"));
+    const tableSection = reportsSrc.slice(reportsSrc.indexOf("const reportColumns"));
     expect(tableSection).toMatch(/displayStatus\(r\.status,\s*t\)/);
   });
 
@@ -164,8 +164,9 @@ describe("REP-FINAL-VIS-08: Authoring submit/draft controls disabled during muta
 
 describe("REP-FINAL-VIS-09: Report detail lists render in bounded cells with safe truncation", () => {
   it("table cells retain max-w + truncate", () => {
-    expect(reportsSrc).toContain("max-w-[160px] truncate");
-    expect(reportsSrc).toMatch(/max-w-\[\d+px\] truncate/);
+    // DataGrid columns have fixed widths; long text wraps to two lines or truncates.
+    expect(reportsSrc).toContain('contentClassName={cn(isActivity ? "min-w-[1060px]" : "min-w-[960px]", "table-fixed")}');
+    expect(reportsSrc).toMatch(/line-clamp-2 whitespace-normal/);
   });
 
   it("break-words or truncation used in detail content", () => {
@@ -190,9 +191,9 @@ describe("REP-FINAL-VIS-10: Final visual closure contract", () => {
 
   it("only the documented intentional uppercase workflow-tag/banner labels remain", () => {
     const remaining = reportsSrc.match(/uppercase tracking/g) ?? [];
-    // Lines 203, 218, 838, 3309, 3388 — documented NOT A DEFECT in
-    // docs/audit-reports/reports-visual-refinement-final-closure.md
-    expect(remaining.length).toBe(5);
+    // The landing, list header and viewer no longer uppercase anything (Arabic
+    // has no letter case); only the form's workflow tag remains until Stage 4h.
+    expect(remaining.length).toBeLessThanOrEqual(1);
   });
 
   it("SPR/HQSR/activity viewer/detail files remain free of uppercase tracking", () => {

@@ -118,7 +118,8 @@
     "filterByYear": "Filter by year",
     "filterByAuthor": "Filter by author",
     "searchPlaceholder": "Search reports…",
-    "clearFilters": "Clear Filters"
+    "clearFilters": "Clear Filters",
+    "groupLabel": "Filters"
   },
   "approval": {
     "approve": "Approve",
@@ -138,7 +139,25 @@
     "coordinationReview": "Coordination Review",
     "returnForRevision": "Return for Revision",
     "programmeManagerApprove": "Programme Manager Approve",
-    "archive": "Archive"
+    "archive": "Archive",
+    "workflowPaths": {
+      "state_authored": "State-authored workflow",
+      "technical_authored": "Technical-authored workflow",
+      "spc_fallback": "SPC fallback workflow"
+    },
+    "historyActions": {
+      "submit": "Submitted",
+      "state_review": "State review",
+      "technical_review": "Technical review",
+      "technical_approve": "Technical approval",
+      "coordination_review": "Coordination review",
+      "coordination_approve": "Coordination approval",
+      "final_approve": "Final approval",
+      "approve": "Approved",
+      "request_revision": "Returned for revision",
+      "reject": "Rejected",
+      "archive": "Archived"
+    }
   },
   "kpi": {
     "total": "Total Reports",
@@ -178,7 +197,10 @@
     "next": "Next",
     "pageOf": "Page {{page}} of {{total}}",
     "showing": "Showing {{from}}–{{to}} of {{total}} {{type}}",
-    "totalCount": "{{total}} {{type}}"
+    "totalCount": "{{total}} {{type}}",
+    "first": "First page",
+    "last": "Last page",
+    "region": "Pagination"
   },
   "export": {
     "id": "ID",
@@ -366,7 +388,21 @@
     "override": "Override",
     "overrideReason": "Override Reason",
     "overrideDescription": "You are the author of this report. As a reviewer with override access, you must provide a reason for this self-review action. This is recorded in the audit trail.",
-    "overridePlaceholder": "Explain why you are reviewing a report you authored (required for audit trail)"
+    "overridePlaceholder": "Explain why you are reviewing a report you authored (required for audit trail)",
+    "discardTitle": "Discard unsaved changes?",
+    "discardDescription": "You have unsaved changes. Discard them and close the form?",
+    "keepEditing": "Keep editing",
+    "discard": "Discard",
+    "removeSectionTitle": "Remove this section?",
+    "removeSectionDescription": "The text you entered will be discarded. This cannot be undone unless you close without saving.",
+    "removeSection": "Remove",
+    "activityStatusValues": {
+      "planned": "Planned",
+      "inProgress": "In progress",
+      "completed": "Completed",
+      "delayed": "Delayed",
+      "cancelled": "Cancelled"
+    }
   },
   "formExtra": {
     "reportIdentification": "Report Identification",
@@ -536,7 +572,11 @@
     "deleteDraft": "Delete Draft",
     "cancel": "Cancel",
     "activityReport": "Activity Report",
-    "activityReportViewerDescription": "Activity report detail and review"
+    "activityReportViewerDescription": "Activity report detail and review",
+    "reportDetail": "Report detail",
+    "confirm": "Confirm",
+    "comment": "Comment",
+    "deleteDraftDescription": "This permanently deletes the draft report. It cannot be undone and does not affect any approved records."
   },
   "stateForm": {
     "heading": "State programme reports",

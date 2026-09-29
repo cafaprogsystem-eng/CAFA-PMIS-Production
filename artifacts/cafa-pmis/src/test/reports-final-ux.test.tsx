@@ -50,7 +50,7 @@ describe("REP-UX-01: Landing page renders type switcher, KPI row, filter toolbar
   });
 
   it("create report button present (setCreateOpen)", () => {
-    expect(reportsSrc).toMatch(/onClick.*setCreateOpen\(true\)/);
+    expect(reportsSrc).toMatch(/on(?:Click|Press)=\{\(\) => setCreateOpen\(true\)\}/);
     expect(reportsSrc).toMatch(/newReport|Create.*[Rr]eport/);
   });
 });
@@ -142,7 +142,8 @@ describe("REP-UX-06: Approval history override row shows reason text", () => {
   });
 
   it("override block uses amber styling distinguishable from normal approvals", () => {
-    expect(reportsSrc).toMatch(/amber[\s\S]{0,120}t\("form\.override"\)/);
+    // Warning-toned (HeroUI --warning) block, distinct from normal approvals.
+    expect(reportsSrc).toMatch(/--warning[\s\S]{0,160}t\("form\.override"\)/);
   });
 });
 
@@ -233,26 +234,26 @@ describe("REP-A11Y-01: report sections use a named, clickable HeroUI Pro Stepper
 // REP-A11Y-02: Override dialog — Radix handles focus management
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("REP-A11Y-02: Override dialog — focus managed by Radix Dialog", () => {
-  it("override dialog uses Radix Dialog (DialogContent, DialogTitle)", () => {
-    expect(reportsSrc).toContain("DialogTitle");
-    expect(reportsSrc).toContain("DialogDescription");
-    // Radix Dialog traps and returns focus automatically
-    expect(reportsSrc).toMatch(/<Dialog open=\{!!transitionOpen\}/);
+describe("REP-A11Y-02: Override dialog — focus managed by the HeroUI (React Aria) Modal", () => {
+  it("transition dialog uses the HeroUI Modal with a heading", () => {
+    // The Modal traps focus and returns it to the trigger automatically.
+    expect(reportsSrc).toMatch(/<Modal isOpen=\{!!transitionOpen\}/);
+    expect(reportsSrc).toContain("<Modal.Heading>{transitionOpen?.label}</Modal.Heading>");
   });
 
   it("no manual document.querySelector focus calls in the transition dialog", () => {
     // No ad-hoc focus management should fight Radix
     const dialogBlock = reportsSrc.slice(
-      reportsSrc.indexOf("<Dialog open={!!transitionOpen}"),
-      reportsSrc.indexOf("</Dialog>", reportsSrc.indexOf("<Dialog open={!!transitionOpen}")) + 200,
+      reportsSrc.indexOf("<Modal isOpen={!!transitionOpen}"),
+      reportsSrc.indexOf("</Modal>", reportsSrc.indexOf("<Modal isOpen={!!transitionOpen}")) + 200,
     );
+    expect(dialogBlock.length).toBeGreaterThan(200);
     expect(dialogBlock).not.toContain("document.querySelector");
     expect(dialogBlock).not.toContain(".focus()");
   });
 
-  it("discard-changes AlertDialog also uses Radix for focus management", () => {
-    expect(reportsSrc).toMatch(/<AlertDialog open=\{showDiscardConfirm\}/);
+  it("discard-changes confirmation uses the shared ConfirmModal (alertdialog, focus managed)", () => {
+    expect(reportsSrc).toMatch(/<ConfirmModal\s+isOpen=\{showDiscardConfirm\}/);
   });
 });
 
@@ -349,8 +350,8 @@ describe("REP-A11Y-05: Revision banner and override badge have text labels (not 
   });
 
   it("override badge reason text is also rendered as text (not tooltip-only)", () => {
-    // The override reason is in a sibling <span> with amber styling (same amber block)
-    expect(reportsSrc).toMatch(/text-amber-[\s\S]{0,300}overrideReason/);
+    // The override reason is in a sibling <span> within the same warning block.
+    expect(reportsSrc).toMatch(/text-\[var\(--warning\)\][\s\S]{0,300}overrideReason/);
   });
 });
 

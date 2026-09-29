@@ -105,7 +105,7 @@ describe("HQSR-LOC-FE-02 — detail header hides State/Project for hq_sector", (
 
   it("the live guard exists in pages/reports.tsx source", () => {
     const src = readFileSync(resolve(here, "../pages/reports.tsx"), "utf8");
-    expect(src).toContain('selected.reportType !== "hq_sector" && selected.projectTitle');
+    expect(src).toContain('selected.reportType !== "hq_sector" ? selected.projectTitle : null');
     expect(src).toContain('selected.reportType !== "hq_sector" && (selected.locationType || selected.stateName)');
   });
 });

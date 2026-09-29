@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { RegistryPagination } from "@/components/registry-pagination";
 
 type ReportPaginationFooterProps = {
   total: number;
@@ -9,6 +9,8 @@ type ReportPaginationFooterProps = {
   label: string;
   onPrev: () => void;
   onNext: () => void;
+  /** Jump to a page (first/last); falls back to stepping when omitted. */
+  onPageChange?: (page: number) => void;
   className: string;
   /** The `reports` namespace `t` from the calling page — kept as a prop
    *  rather than its own useTranslation call so every view mode shares
@@ -17,10 +19,9 @@ type ReportPaginationFooterProps = {
 };
 
 /**
- * §21–22: Result count — always visible; pagination controls appear only
- * when there is more than one page. Previously this exact block (result
- * count + prev/next buttons) was hand-duplicated across all four Reports
- * view modes (Table/Card/List/Compact); Kanban has no pagination footer.
+ * §21–22: Result count — always visible; page controls appear only when
+ * there is more than one page. Shared by the Table/Card/List/Compact views
+ * (Kanban has no pagination footer) on the HeroUI registry pagination.
  */
 export function ReportPaginationFooter({
   total,
@@ -30,27 +31,37 @@ export function ReportPaginationFooter({
   label,
   onPrev,
   onNext,
+  onPageChange,
   className,
   t,
 }: ReportPaginationFooterProps) {
+  const summary = totalPages > 1
+    ? t("pagination.showing", { from: (page - 1) * pageSize + 1, to: Math.min(page * pageSize, total), total, type: label })
+    : t("pagination.totalCount", { total, type: label });
+  if (totalPages <= 1) {
+    return <div className={className}><span className="tabular-nums text-xs text-[var(--muted)]" aria-live="polite">{summary}</span></div>;
+  }
+  const go = (next: number) => {
+    if (onPageChange) onPageChange(next);
+    else if (next < page) onPrev();
+    else if (next > page) onNext();
+  };
   return (
     <div className={className}>
-      <span className="tabular-nums">
-        {totalPages > 1
-          ? t("pagination.showing", { from: (page - 1) * pageSize + 1, to: Math.min(page * pageSize, total), total, type: label })
-          : t("pagination.totalCount", { total, type: label })}
-      </span>
-      {totalPages > 1 && (
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={onPrev}>
-            {t("pagination.previous")}
-          </Button>
-          <span className="text-xs">{t("pagination.pageOf", { page, total: totalPages })}</span>
-          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={onNext}>
-            {t("pagination.next")}
-          </Button>
-        </div>
-      )}
+      <RegistryPagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={go}
+        summary={summary}
+        labels={{
+          region: t("pagination.region"),
+          first: t("pagination.first"),
+          previous: t("pagination.previous"),
+          next: t("pagination.next"),
+          last: t("pagination.last"),
+          pageOf: t("pagination.pageOf", { page, total: totalPages }),
+        }}
+      />
     </div>
   );
 }

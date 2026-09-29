@@ -111,7 +111,7 @@ describe("Button labelled-action contract", () => {
 describe("Migrated labelled action surfaces", () => {
   it("keeps report page actions in a wrapping group with primitive-owned icon spacing", () => {
     expect(reportsSource).toContain('className="flex flex-wrap gap-2 items-center"');
-    expect(reportsSource).toContain('<Download className="h-4 w-4" />');
+    expect(reportsSource).toContain('<Download className="size-4" aria-hidden /> {t("exportCsv")}');
     expect(reportsSource).not.toContain('<Download className="me-2 h-4 w-4" />');
     expect(reportsSource).not.toContain('<Send className="me-2 h-4 w-4"');
   });

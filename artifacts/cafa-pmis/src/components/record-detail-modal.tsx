@@ -6,25 +6,17 @@
  * existing authorised data, actions, and workflow handling.
  *
  * Contract:
- * - wide, centred, viewport-constrained dialog on desktop
+ * - wide, centred, viewport-constrained HeroUI Modal ("cover" size) on desktop
  * - near/full-screen fallback on small screens
  * - fixed header and optional footer around one independently scrolling body
  * - logical (RTL-safe) alignment and close placement
  * - optional safe loading, unavailable, and retryable-error presentations
- * - optional focus restoration for list/card triggers that are not DialogTrigger
+ * - optional focus restoration for list/card triggers that are not the trigger
  */
 import * as React from "react";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { X } from "@/components/icons";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button, Modal } from "@heroui/react";
+import { X } from "@/components/icons";
 import { ErrorState } from "@/components/ui/error-state";
 import { cn } from "@/lib/utils";
 
@@ -69,10 +61,10 @@ function RecordDetailState({
   if (state === "loading") {
     return (
       <div className="space-y-4 px-1 py-2" aria-busy="true" aria-label={t("recordDetails.loading")}>
-        <div className="h-5 w-2/5 animate-pulse rounded bg-muted" />
-        <div className="h-4 w-full animate-pulse rounded bg-muted" />
-        <div className="h-4 w-5/6 animate-pulse rounded bg-muted" />
-        <div className="h-32 w-full animate-pulse rounded-lg bg-muted" />
+        <div className="h-5 w-2/5 animate-pulse rounded bg-[var(--default)]" />
+        <div className="h-4 w-full animate-pulse rounded bg-[var(--default)]" />
+        <div className="h-4 w-5/6 animate-pulse rounded bg-[var(--default)]" />
+        <div className="h-32 w-full animate-pulse rounded-lg bg-[var(--default)]" />
       </div>
     );
   }
@@ -80,15 +72,25 @@ function RecordDetailState({
   return (
     <ErrorState
       variant={state === "unavailable" ? "not-found" : "server"}
-      title={title ?? (state === "unavailable" ? "Record unavailable" : "Could not load record")}
+      title={title ?? (state === "unavailable" ? t("recordDetails.unavailable") : t("recordDetails.error"))}
       description={description ?? (
-        state === "unavailable"
-          ? "This record is unavailable or you no longer have access to it."
-          : "The record could not be loaded. Please try again."
+        state === "unavailable" ? t("recordDetails.unavailableDescription") : t("recordDetails.errorDescription")
       )}
+      retryLabel={t("recordDetails.retry")}
       onRetry={state === "error" ? onRetry : undefined}
     />
   );
+}
+
+/**
+ * Rendered inside the dialog: it unmounts only after the exit animation has
+ * finished, which is when focus can be restored and follow-up overlays opened.
+ */
+function CloseCompleteSentinel({ onUnmount }: { onUnmount: () => void }) {
+  const latest = React.useRef(onUnmount);
+  latest.current = onUnmount;
+  React.useEffect(() => () => latest.current(), []);
+  return null;
 }
 
 export function RecordDetailModal({
@@ -110,91 +112,77 @@ export function RecordDetailModal({
   bodyClassName,
 }: RecordDetailModalProps) {
   const { t } = useTranslation("common");
+  const descriptionId = React.useId();
+  const afterClose = React.useCallback(() => {
+    restoreFocusRef?.current?.focus();
+    onCloseComplete?.();
+  }, [onCloseComplete, restoreFocusRef]);
+
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
-      <DialogPortal>
-        <DialogOverlay />
-        <DialogPrimitive.Content
-          role="dialog"
-          aria-modal="true"
-          className={cn(
-            // Physical left + translate-x centring is direction-independent. Do
-            // not replace left with logical start here: start resolves to right
-            // in RTL while translate-x remains a physical leftward movement.
-            "fixed left-1/2 top-1/2 z-50 flex h-[calc(100dvh-3rem)] max-h-[calc(100dvh-3rem)] w-[92vw] max-w-[1400px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-card-border bg-card text-start shadow-xl outline-none",
-            "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-            "max-sm:h-[100dvh] max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:rounded-none",
-            className,
-          )}
-          data-record-detail-modal
-          onCloseAutoFocus={(event) => {
-            if (!restoreFocusRef?.current) return;
-            event.preventDefault();
-            restoreFocusRef.current.focus();
-          }}
-          onAnimationEnd={(event) => {
-            if (
-              event.target === event.currentTarget
-              && event.currentTarget.getAttribute("data-state") === "closed"
-            ) {
-              onCloseComplete?.();
-            }
-          }}
-        >
-          <header className="shrink-0 border-b bg-card px-5 py-3 sm:px-8">
-            <div className="flex min-w-0 flex-wrap items-start gap-3">
-              <div className="min-w-0 flex-[1_1_16rem]">
-                <DialogTitle className="break-words text-base font-medium leading-snug text-foreground sm:text-lg">
-                  {title}
-                </DialogTitle>
-                {description ? (
-                  <DialogDescription className="mt-1 break-words text-start">
-                    {description}
-                  </DialogDescription>
-                ) : (
-                  <DialogDescription className="sr-only">{t("recordDetails.title")}</DialogDescription>
-                )}
-                {metadata && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {metadata}
+    <Modal isOpen={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <Modal.Backdrop isDismissable>
+        <Modal.Container size="cover" scroll="inside" className="max-sm:p-0">
+          <Modal.Dialog
+            aria-describedby={descriptionId}
+            className={cn(
+              "flex h-[calc(100dvh-3rem)] max-h-[calc(100dvh-3rem)] w-[92vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0 text-start",
+              "max-sm:h-[100dvh] max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:rounded-none",
+              className,
+            )}
+            data-record-detail-modal
+          >
+            <CloseCompleteSentinel onUnmount={afterClose} />
+            <header className="shrink-0 border-b border-[var(--border)] px-5 py-3 sm:px-8">
+              <div className="flex min-w-0 flex-wrap items-start gap-3">
+                <div className="min-w-0 flex-[1_1_16rem]">
+                  <Modal.Heading className="break-words text-base font-medium leading-snug sm:text-lg">
+                    {title}
+                  </Modal.Heading>
+                  <p id={descriptionId} className={description ? "mt-1 break-words text-sm text-[var(--muted)]" : "sr-only"}>
+                    {description ?? t("recordDetails.title")}
+                  </p>
+                  {metadata && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {metadata}
+                    </div>
+                  )}
+                </div>
+                {headerActions && (
+                  <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+                    {headerActions}
                   </div>
                 )}
-              </div>
-              {headerActions && (
-                <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-                  {headerActions}
-                </div>
-              )}
-              <DialogPrimitive.Close asChild>
                 <Button
+                  slot="close"
+                  isIconOnly
+                  size="sm"
                   variant="ghost"
-                  size="icon"
-                  className="ms-auto h-8 w-8 shrink-0"
+                  className="ms-auto shrink-0"
                   aria-label={t("recordDetails.close")}
                 >
-                  <X className="h-4 w-4" aria-hidden="true" />
+                  <X className="size-4" aria-hidden="true" />
                 </Button>
-              </DialogPrimitive.Close>
-            </div>
-          </header>
-
-          <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", bodyClassName)}>
-            <div className="w-full px-5 py-6 sm:px-8">
-              {state === "ready"
-                ? children
-                : <RecordDetailState state={state} title={stateTitle} description={stateDescription} onRetry={onRetry} />}
-            </div>
-          </div>
-
-          {footer && (
-            <footer className="shrink-0 border-t bg-card px-5 py-3 sm:px-8">
-              <div className="flex w-full flex-wrap items-center gap-2">
-                {footer}
               </div>
-            </footer>
-          )}
-        </DialogPrimitive.Content>
-      </DialogPortal>
-    </Dialog>
+            </header>
+
+            <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", bodyClassName)} data-record-detail-body>
+              <div className="w-full px-5 py-6 sm:px-8">
+                {state === "ready"
+                  ? children
+                  : <RecordDetailState state={state} title={stateTitle} description={stateDescription} onRetry={onRetry} />}
+              </div>
+            </div>
+
+            {footer && (
+              <footer className="shrink-0 border-t border-[var(--border)] px-5 py-3 sm:px-8" data-record-detail-footer>
+                <div className="flex w-full flex-wrap items-center gap-2">
+                  {footer}
+                </div>
+              </footer>
+            )}
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }

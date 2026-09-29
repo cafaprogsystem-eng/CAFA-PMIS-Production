@@ -17,9 +17,10 @@ describe("REPORT-PAGINATION-FOOTER-DEDUP: reports.tsx uses the shared component 
     expect(reportsSrc).toContain('import { ReportPaginationFooter } from "@/components/report-pagination-footer";');
   });
 
-  it("renders it in exactly 4 places (Table/Card/List/Compact; Kanban has none)", () => {
+  it("renders it in exactly 3 places (Table, Card, and the shared List/Compact card; Kanban has none)", () => {
     const usages = [...reportsSrc.matchAll(/<ReportPaginationFooter/g)];
-    expect(usages.length).toBe(4);
+    expect(usages.length).toBe(3);
+    expect(reportsSrc).toContain('viewMode === "list" || viewMode === "compact"');
   });
 
   it("no view mode still inlines its own pagination.showing/pagination.totalCount JSX", () => {
@@ -29,7 +30,7 @@ describe("REPORT-PAGINATION-FOOTER-DEDUP: reports.tsx uses the shared component 
 
   it("each call site passes the same PAGE_SIZE and meta.label", () => {
     const calls = [...reportsSrc.matchAll(/<ReportPaginationFooter[\s\S]*?\/>/g)];
-    expect(calls.length).toBe(4);
+    expect(calls.length).toBe(3);
     for (const [call] of calls) {
       expect(call).toContain("total={reportsRaw.total}");
       expect(call).toContain("totalPages={reportsRaw.totalPages}");
@@ -48,7 +49,8 @@ describe("REPORT-PAGINATION-FOOTER-DEDUP: the shared component itself", () => {
 
   it("shows the from/to/total sentence plus prev/next controls when there is more than one page", () => {
     expect(footerSrc).toContain('t("pagination.showing", { from: (page - 1) * pageSize + 1, to: Math.min(page * pageSize, total), total, type: label })');
-    expect(footerSrc).toContain("disabled={page <= 1}");
-    expect(footerSrc).toContain("disabled={page >= totalPages}");
+    // First/previous/next/last controls come from the shared HeroUI RegistryPagination.
+    expect(footerSrc).toContain("<RegistryPagination");
+    expect(footerSrc).toContain("if (totalPages <= 1) {");
   });
 });

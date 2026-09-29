@@ -14,37 +14,37 @@ import { resolve } from "node:path";
 const src = readFileSync(resolve(__dirname, "../pages/reports.tsx"), "utf8");
 
 describe("REPORT-VIEW-ACTIONS-PARITY: viewRecords.actions matches the Table row's action set", () => {
-  const viewRecordsMatch = src.match(
-    /const viewRecords: ViewRecord\[\] = useMemo\(\s*\(\) =>[\s\S]*?\n {4}\[reports, lockedType, openReportDetail, perms, me\?\.user, startDraftEditing, t, i18n\.language, handleDirectSubmit, handleDuplicateReport\],\s*\n {2}\);/,
-  );
+  // Table and alternate views share one renderer, so they cannot drift apart.
+  const renderStart = src.indexOf("const renderRowActions = useCallback((r: Report, inMenu = false) => {");
+  const block = renderStart >= 0 ? src.slice(renderStart, src.indexOf("const viewRecords", renderStart)) : "";
 
-  it("the viewRecords memo exists and is captured for inspection", () => {
-    expect(viewRecordsMatch).not.toBeNull();
+  it("the shared row-actions renderer exists and feeds viewRecords", () => {
+    expect(renderStart).toBeGreaterThan(-1);
+    expect(src).toContain("actions: renderRowActions(r),");
   });
-
-  const block = viewRecordsMatch ? viewRecordsMatch[0] : "";
 
   it("the outer visibility gate is widened to either resume or delete permission", () => {
-    expect(block).toContain(
-      "actions: (canResumeReportDraft(r, perms, me?.user) || canDeleteReportDraft(r, perms, me?.user)) ? (",
-    );
+    expect(block).toContain("if (!canResume && !canDelete) return undefined;");
   });
 
-  it("Submit and Duplicate are exposed via a DropdownMenu, gated by canResumeReportDraft", () => {
+  it("Submit and Duplicate are exposed via the row menu, gated by canResumeReportDraft", () => {
+    expect(block).toContain("const canResume = canResumeReportDraft(r, perms, me?.user);");
     expect(block).toContain("handleDirectSubmit(r)");
     expect(block).toContain("handleDuplicateReport(r)");
-    expect(block).toContain('{t("list.submit")}');
-    expect(block).toContain('{t("list.duplicate")}');
+    expect(block).toContain('t("list.submit")');
+    expect(block).toContain('t("list.duplicate")');
   });
 
-  it("Delete is exposed via the DropdownMenu, gated independently by canDeleteReportDraft", () => {
-    expect(block).toContain("canDeleteReportDraft(r, perms, me?.user) && (");
+  it("Delete is exposed via the row menu, gated independently by canDeleteReportDraft", () => {
+    expect(block).toContain("const canDelete = canDeleteReportDraft(r, perms, me?.user);");
+    expect(block).toContain("...(canDelete ? [{ id: \"delete\"");
     expect(block).toContain("setDeleteTarget(r)");
-    expect(block).toContain('{t("list.deleteDraft")}');
+    expect(block).toContain('t("list.deleteDraft")');
   });
 
-  it("ContinueEditingAction is still rendered alongside the dropdown, not replaced by it", () => {
+  it("ContinueEditingAction is still rendered alongside the menu in the card/list views", () => {
     expect(block).toContain("<ContinueEditingAction");
+    expect(block).toContain("{canResume && !inMenu && (");
   });
 
   it("all four non-table view modes (Card/List/Compact/Kanban) consume the same viewRecords array", () => {

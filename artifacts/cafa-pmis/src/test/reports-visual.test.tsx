@@ -49,8 +49,9 @@ describe("REP-VIS-01: Report type labels are human-readable in the landing navig
 
   it("landing card hover uses restrained shadow treatment (shadow-sm, not shadow-md)", () => {
     // Should use subtle hover, not heavy shadow-md
-    expect(reportsSrc).not.toMatch(/hover:shadow-md.*hover:border-primary\/40.*hover:-translate-y-px/);
-    expect(reportsSrc).toMatch(/hover:shadow-sm.*hover:ring-1.*hover:ring-border\/60/);
+    // HeroUI Card: a single shadow lift on hover — no border flash or jump.
+    expect(reportsSrc).not.toMatch(/hover:-translate-y-px/);
+    expect(reportsSrc).toContain("transition-shadow group-hover:shadow-md");
   });
 });
 
@@ -73,7 +74,7 @@ describe("REP-VIS-02: Report status rendered via displayStatus — no raw enum s
     // Status badge is created through the localized displayStatus helper.
     expect(reportsSrc).toMatch(/displayStatus\(r\.status, t\)/g);
     // The table badge uses displayStatus
-    const tableSection = reportsSrc.slice(reportsSrc.indexOf("TableBody"));
+    const tableSection = reportsSrc.slice(reportsSrc.indexOf("const reportColumns"));
     expect(tableSection).toMatch(/displayStatus\(r\.status, t\)/);
   });
 
@@ -131,10 +132,14 @@ describe("REP-I18N-01: Arabic inline report forms use the Reports namespace", ()
 
 describe("REP-VIS-03: Draft report renders Continue Editing; non-draft does not", () => {
   it("Continue Editing is gated by the shared draft eligibility helper in the table actions cell", () => {
-    const tableSection = reportsSrc.slice(reportsSrc.indexOf("TableBody"));
+    // One row-actions renderer serves the table and every other view mode.
+    const actionsSection = reportsSrc.slice(reportsSrc.indexOf("const renderRowActions"), reportsSrc.indexOf("const viewRecords"));
     expect(reportsSrc).toContain("function canResumeReportDraft");
-    expect(tableSection).toContain("canResumeReportDraft(r, perms, me?.user)");
-    expect(tableSection).toContain("<ContinueEditingAction");
+    expect(actionsSection).toContain("canResumeReportDraft(r, perms, me?.user)");
+    expect(actionsSection).toContain("<ContinueEditingAction");
+    // The table folds Continue editing into the row menu to keep the column narrow.
+    expect(actionsSection).toContain('{ id: "continue", label: t("continueEditing", { ns: "common" })');
+    expect(reportsSrc).toContain("renderRowActions(r, true)");
   });
 
   it("the shared eligibility helper rejects non-drafts before it considers permissions", () => {
@@ -175,24 +180,23 @@ describe("REP-VIS-04: Review actions are permission-controlled", () => {
 
 describe("REP-VIS-05: Filter and view-mode controls retain functional behaviour after visual changes", () => {
   it("all filter selects have onValueChange handlers wired to state setters", () => {
-    expect(reportsSrc).toContain("onValueChange={setDisplayStatusFilter}");
-    expect(reportsSrc).toContain("onValueChange={setKindFilter}");
-    expect(reportsSrc).toContain("onValueChange={setStateId}");
-    expect(reportsSrc).toContain("onValueChange={setSector}");
-    expect(reportsSrc).toContain("onValueChange={setProjectId}");
-    expect(reportsSrc).toContain("onValueChange={setAuthorId}");
-    expect(reportsSrc).toContain("onValueChange={setReportingYear}");
+    expect(reportsSrc).toContain("onChange={setDisplayStatusFilter}");
+    expect(reportsSrc).toContain("onChange={setKindFilter}");
+    expect(reportsSrc).toContain("onChange={setStateId}");
+    expect(reportsSrc).toContain("onChange={setSector}");
+    expect(reportsSrc).toContain("onChange={setProjectId}");
+    expect(reportsSrc).toContain("onChange={setAuthorId}");
+    expect(reportsSrc).toContain("onChange={setReportingYear}");
   });
 
   it("toolbar wrapper uses flex-wrap so filters wrap on narrow screens", () => {
-    expect(reportsSrc).toMatch(/flex flex-wrap items-center gap-2.*rounded-xl.*border/);
+    expect(reportsSrc).toMatch(/flex flex-wrap items-center gap-2 rounded-3xl/);
   });
 
   it("filter widths use flexible min-w/max-w pattern instead of fixed w-36", () => {
-    // Fixed w-36 should not appear in SelectTrigger elements
-    expect(reportsSrc).not.toMatch(/SelectTrigger.*className="h-8 w-36/);
-    // Flexible pattern present
-    expect(reportsSrc).toMatch(/min-w-\[7rem\] w-auto max-w-\[10rem\]/);
+    // Filters keep one width from sm up and stay full width (two per row) on phones.
+    expect(reportsSrc).not.toMatch(/className="h-8 w-36/);
+    expect(reportsSrc).toContain('const filterTrigger = "whitespace-nowrap sm:w-40"');
   });
 
   it("view-mode switcher is present via ViewModeSwitcher component", () => {
@@ -206,21 +210,27 @@ describe("REP-VIS-05: Filter and view-mode controls retain functional behaviour 
 
 describe("REP-VIS-06: Long project name in a report card does not clip the actions button", () => {
   it("Project cell has max-w and truncate to prevent overflow", () => {
-    // The table Project cell has truncation applied (className may span lines)
-    expect(reportsSrc).toContain("max-w-[160px] truncate");
-    expect(reportsSrc).toMatch(/max-w-\[160px\] truncate[\s\S]{0,300}projectTitle/);
+    // Long project titles wrap onto two lines inside a fixed-width column.
+    const columns = reportsSrc.slice(reportsSrc.indexOf("const reportColumns"));
+    expect(columns).toContain('{ id: "project", header: t("list.project"), width: 200');
+    expect(columns).toContain('className="line-clamp-2 whitespace-normal leading-snug text-page-start" title={r.projectTitle}');
   });
 
   it("State cell has max-w and truncate to prevent long location names overflowing", () => {
-    expect(reportsSrc).toMatch(/max-w-\[120px\] truncate.*formatLocation/);
+    // The location sits under the project and truncates.
+    expect(reportsSrc).toMatch(/const location = formatLocation[\s\S]{0,600}\{location && <p className="mt-0\.5 truncate text-xs/);
   });
 
   it("Sector cell has max-w and truncate", () => {
-    expect(reportsSrc).toMatch(/max-w-\[130px\] truncate.*displaySector/);
+    expect(reportsSrc).toContain('{ id: "sector", header: t("list.sector"), width: 110');
+    expect(reportsSrc).toContain('className="line-clamp-2 whitespace-normal text-sm text-[var(--muted)]" title={(r.effectiveSector ?? r.sector) || undefined}');
   });
 
   it("actions column has explicit click stop-propagation to keep it accessible", () => {
-    expect(reportsSrc).toContain("e.stopPropagation()");
+    // The DataGrid keeps pressing a cell's own buttons separate from the row
+    // action; the actions column stays pinned to the end edge.
+    expect(reportsSrc).toContain('{ id: "actions", header: <span className="sr-only">{t("list.actions")}</span>, width: 64, pinned: "end"');
+    expect(reportsSrc).toContain("onRowAction={(key) => {");
   });
 });
 
@@ -258,16 +268,14 @@ describe("REP-VIS-07: Filtered empty state text differs from global empty state 
 
 describe("REP-VIS-08: Loading skeleton renders without layout shift — toolbar structure stable", () => {
   it("table skeleton rows match the expected column count pattern", () => {
-    // Table skeleton has multiple Skeleton elements per row
-    expect(reportsSrc).toMatch(/isLoading[\s\S]{0,200}<div className="divide-y">/);
-    expect(reportsSrc).toMatch(/Skeleton className="h-4 flex-\[3\]"/);
+    // Six full-width row placeholders while the first page loads.
+    expect(reportsSrc).toMatch(/isLoading \? \([\s\S]{0,200}\[\.\.\.Array\(6\)\]\.map\(\(_, i\) => <HSkeleton key=\{i\} className="h-10 w-full rounded-lg" \/>\)/);
   });
 
   it("KPI loading skeleton uses Skeleton component with fixed height", () => {
-    // KPI skeleton for landing
-    expect(reportsSrc).toMatch(/Skeleton.*className="h-28"/);
-    // KPI skeleton for sub-type pages
-    expect(reportsSrc).toMatch(/Skeleton.*className="h-\[120px\]"/);
+    // Landing and sub-type KPIs keep their card and show a value placeholder.
+    expect(reportsSrc).toContain('value={summaryLoading ? <HSkeleton className="h-7 w-10 rounded-md" /> : (c.value ?? 0)}');
+    expect(reportsSrc).toContain('const value = (n: number | undefined) => isLoading ? <HSkeleton className="h-7 w-10 rounded-md" /> : (n ?? 0);');
   });
 
   it("toolbar is rendered unconditionally (not inside isLoading guard) so it stays stable", () => {
@@ -337,16 +345,13 @@ describe("REP-VIS-10: Zero-residual structural invariants preserved after visual
   });
 
   it("compound Report cell includes period display inline (not a separate column)", () => {
-    // Period is now shown in the title cell as a secondary line
-    expect(reportsSrc).toMatch(/line-clamp-1.*leading-snug[\s\S]{0,200}formatPeriodOnly\(rKind, r\.period, i18n\.language\)/);
-    // The standalone Period TableHead column is removed
-    const tableHeadSection = reportsSrc.slice(
-      reportsSrc.indexOf("§26: Table columns"),
-      reportsSrc.indexOf("TableBody"),
-    );
-    // The list.period column header should no longer appear in the table head
-    // (it was w-[90px] before; now period info is in the compound cell)
-    expect(tableHeadSection).not.toMatch(/TableHead.*w-\[90px\].*list\.period/);
+    // Period (and frequency) are a secondary line in the title cell.
+    expect(reportsSrc).toContain("[frequency, formatPeriodOnly(rKind, r.period, i18n.language)].filter(Boolean).join(\" · \")");
+    expect(reportsSrc).toContain("{periodLine(r)}");
+    // No standalone period or frequency column.
+    const columns = reportsSrc.slice(reportsSrc.indexOf("const reportColumns"), reportsSrc.indexOf("return (", reportsSrc.indexOf("const reportColumns")));
+    expect(columns).not.toContain('{ id: "period"');
+    expect(columns).not.toContain('{ id: "frequency"');
   });
 
   it("icon-only dropdown trigger has aria-label", () => {
@@ -354,7 +359,7 @@ describe("REP-VIS-10: Zero-residual structural invariants preserved after visual
   });
 
   it("all filter SelectTrigger elements have aria-label attributes", () => {
-    const triggerMatches = reportsSrc.match(/SelectTrigger[^>]*aria-label=\{t\("filters\.filterBy/g) ?? [];
+    const triggerMatches = reportsSrc.match(/aria-label=\{t\("filters\.filterBy/g) ?? [];
     // Should have at least 7 filter selects with aria-label (all except conditionals)
     expect(triggerMatches.length).toBeGreaterThanOrEqual(7);
   });
@@ -381,7 +386,7 @@ describe("REP-DETAIL-VIS-01: Report type label and status badge are human-readab
   it("modal header uses meta.label and displayStatus, never raw enum text", () => {
     expect(detailModalSrc).toContain("meta.label");
     expect(detailModalSrc).toMatch(/displayStatus\(selected\.status, t\)/);
-    expect(detailModalSrc).toMatch(/statusBadgeVariant\(selected\.status\)/);
+    expect(detailModalSrc).toContain("<ReportStatusChip status={selected.status}");
   });
 
   it("metadata grid labels no longer use uppercase tracking-wide", () => {
@@ -389,7 +394,7 @@ describe("REP-DETAIL-VIS-01: Report type label and status badge are human-readab
     const gridEnd = detailModalSrc.indexOf("WorkflowBlock");
     const grid = detailModalSrc.slice(gridStart, gridEnd);
     expect(grid).not.toContain("uppercase tracking-wide");
-    expect(grid).toContain('className="text-xs text-muted-foreground mb-0.5"');
+    expect(grid).toContain('className="mb-0.5 text-xs text-[var(--muted)]"');
   });
 
   it("Current Project Reference Data divider label no longer uppercases", () => {
@@ -398,7 +403,7 @@ describe("REP-DETAIL-VIS-01: Report type label and status badge are human-readab
   });
 
   it("detail metadata uses one column on small screens, two on medium, and four on wide screens", () => {
-    expect(detailModalSrc).toContain("grid-cols-1 gap-3 text-sm rounded-lg border bg-muted/20 p-4 sm:grid-cols-2 xl:grid-cols-4");
+    expect(detailModalSrc).toContain("grid grid-cols-1 gap-4 rounded-2xl bg-[var(--default)] p-4 text-sm sm:grid-cols-2 xl:grid-cols-4");
     expect(detailModalSrc).toContain('className="col-span-full"');
   });
 });
@@ -416,7 +421,7 @@ describe("REP-I18N-01: Historical Activity Report status values fail safely", ()
 
 describe("REP-DETAIL-VIS-02: Type-specific context in metadata", () => {
   it("PMR/non-HQSR shows Project and State context in the modal description", () => {
-    expect(detailModalSrc).toMatch(/selected\.reportType !== "hq_sector" && selected\.projectTitle/);
+    expect(detailModalSrc).toMatch(/selected\.reportType !== "hq_sector" \? selected\.projectTitle : null/);
     expect(detailModalSrc).toMatch(/formatLocation\(\{ locationType: selected\.locationType, stateName: selected\.stateName, stateNameAr: selected\.stateNameAr \}, i18n\.language\)/);
   });
 

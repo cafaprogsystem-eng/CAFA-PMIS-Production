@@ -11102,7 +11102,7 @@ describe("Activity Report Viewer — Final Visual Polish (FP)", () => {
     // Scan the detail source: report.title should not appear inside a <h1>, <h2>, or <p className="font-semibold">.
     expect(DETAIL_SRC).not.toMatch(/<h1[^>]*>.*report\.title/s);
     expect(VIEWER_SRC).toContain("RecordDetailModal");
-    expect(RECORD_DETAIL_MODAL_SRC).toContain("<DialogTitle");
+    expect(RECORD_DETAIL_MODAL_SRC).toContain("<Modal.Heading");
     expect(RECORD_DETAIL_MODAL_SRC).toContain("break-words");
   });
 

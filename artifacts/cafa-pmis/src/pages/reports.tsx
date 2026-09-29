@@ -1,81 +1,38 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import type { ReactNode } from "react";
+import { Alert, Button as HButton, Card as HCard, Chip, Dropdown, Label as HLabel, Modal, Skeleton as HSkeleton, TextArea as HTextArea } from "@heroui/react";
+import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
+import { FilterKpi } from "@/components/filter-kpi";
+import { SelectField } from "@/components/select-field";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { ReportStatusChip } from "@/components/report-status-chip";
 import { Segment } from "@heroui-pro/react/segment";
 import { Stepper } from "@heroui-pro/react/stepper";
 import { FormStepIndicator } from "@/components/form-step-indicator";
 import { useLocationContext } from "@/contexts/location-context";
-import {
-  validateActivityForSubmission,
-  validateActivityBasicInfo,
-  validateActivityImplementation,
-  validateActivityResults,
-  validateActivityChallenges,
-  validateActivityLessons,
-  type ActivityValidationContext,
-  type ActivityFormValues,
-} from "@/lib/activityReportValidation";
+import { validateActivityForSubmission, validateActivityBasicInfo, validateActivityImplementation, validateActivityResults, validateActivityChallenges, validateActivityLessons, type ActivityValidationContext, type ActivityFormValues } from "@/lib/activityReportValidation";
 import { getProjectActivityWorkflow, REPORT_WORKFLOWS, getRevisionPerm } from "@workspace/report-transitions";
 import { useTranslation } from "react-i18next";
 import { StateLabel } from "@/components/state-label";
 import { useForm } from "react-hook-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import {
-  useListReports,
-  useListReportAuthors,
-  useListProjects,
-  useListStates,
-  useCreateReport,
-  useTransitionReport,
-  useGetMe,
-  useGetReportAggregates,
-  useGetReportsSummary,
-  useGetReportsStats,
-  type ListReportsQueryResult,
-  type ListRisksQueryResult,
-  type ExportReportsParams,
-} from "@workspace/api-client-react";
+import { useListReports, useListReportAuthors, useListProjects, useListStates, useCreateReport, useTransitionReport, useGetMe, useGetReportAggregates, useGetReportsSummary, useGetReportsStats, type ListReportsQueryResult, type ListRisksQueryResult, type ExportReportsParams } from "@workspace/api-client-react";
 import { TransitionReportBody } from "@workspace/api-zod";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  FileText, Plus, CheckCircle2, XCircle, ArrowRight, RotateCcw,
-  Users, DollarSign, Target, AlertTriangle, Clock, Archive, Info, Trash2,
-  Download, Building2, MapPin, FolderKanban, Send, TrendingUp, TrendingDown, Minus,
-  AlertCircle, Paperclip, Filter, X, MoreHorizontal, Pencil, Copy, ChevronRight,
-  Lock, Loader2, ChevronLeft, PlusCircle,
-} from "@/components/icons";
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from "@/components/ui/command";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { FileText, Plus, CheckCircle2, XCircle, ArrowRight, RotateCcw, Users, DollarSign, Target, AlertTriangle, Clock, Archive, Info, Trash2, Download, Building2, MapPin, FolderKanban, Send, TrendingUp, TrendingDown, Minus, AlertCircle, Paperclip, Filter, X, MoreHorizontal, Pencil, Copy, ChevronRight, Lock, Loader2, ChevronLeft, PlusCircle } from "@/components/icons";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ErrorState } from "@/components/ui/error-state";
 import { Separator } from "@/components/ui/separator";
-import { formatDate, formatDateTime, formatCurrency, hasPerm, statusBadgeVariant, formatStatusLabel, severityBadgeVariant, formatLocation } from "@/lib/format";
+import { formatDate, formatDateTime, formatCurrency, hasPerm, formatStatusLabel, severityBadgeVariant, formatLocation } from "@/lib/format";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { LocationSelector } from "@/components/location-selector";
 import { getGeographicScope, canAuthorHqSectorReport, canAuthorProgramStateReport, hasFullOperationalAccess } from "@/lib/permissions";
@@ -100,12 +57,7 @@ import { ActivityReportViewer } from "@/components/activity-report-viewer";
 import { RecordDetailModal } from "@/components/record-detail-modal";
 import { ContinueEditingAction } from "@/components/continue-editing-action";
 import { ReportPaginationFooter } from "@/components/report-pagination-footer";
-import {
-  OfflineReportDraftStatus,
-  reportDraftKey,
-  useOfflineReportDraft,
-  useOfflineReportDrafts,
-} from "@/lib/offline/report-drafts";
+import { OfflineReportDraftStatus, reportDraftKey, useOfflineReportDraft, useOfflineReportDrafts } from "@/lib/offline/report-drafts";
 import { isOfflineQueuedError } from "@/lib/offline/fetch-interceptor";
 import { useSyncContext } from "@/contexts/sync-context";
 
@@ -176,6 +128,10 @@ export function canDeleteReportDraft(
 const REPORT_EXPORT_MAX_ROWS = 5_000;
 
 const ACTIVITY_STATUS = ["Planned", "In Progress", "Completed", "Delayed", "Cancelled"] as const;
+// Activity status is stored as the English option text; this maps it to a locale key.
+const ACTIVITY_STATUS_KEYS: Record<string, string> = {
+  "Planned": "planned", "In Progress": "inProgress", "Completed": "completed", "Delayed": "delayed", "Cancelled": "cancelled",
+};
 
 // ── Workflow display types ───────────────────────────────────────────────────
 // "chain"  — single approval path; abbrs are shown inline; roles exposed via <abbr title>.
@@ -266,21 +222,30 @@ const TYPE_META: Record<string, {
 // ── WorkflowBlock helpers ─────────────────────────────────────────────────────
 // WorkflowChainRow is defined at module scope (not inside a parent component) to
 // satisfy the react/no-unstable-nested-components rule and avoid remounting on render.
+// Approval-chain abbreviation → role key in the users namespace, so the
+// tooltip names the role in the active language.
+const WORKFLOW_ROLE_KEYS: Record<string, string> = {
+  SPO: "state_program_officer",
+  TC: "technical_coordinator",
+  SPC: "senior_program_coordinator",
+  PM: "program_manager",
+};
+
 function WorkflowChainRow({ abbrs, roles }: { abbrs: string[]; roles: string[] }) {
+  const { t } = useTranslation("users");
   return (
-    <div className="flex items-center gap-1 flex-wrap">
-      {abbrs.map((abbr, i) => (
-        <span key={`${abbr}-${i}`} className="flex items-center gap-1">
-          {i > 0 && <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/50 shrink-0 rtl:rotate-180" aria-hidden />}
-          <abbr
-            title={roles[i]}
-            aria-label={roles[i]}
-            className="text-xs font-medium text-foreground/80 no-underline cursor-help"
-          >
-            {abbr}
-          </abbr>
-        </span>
-      ))}
+    <div className="flex flex-wrap items-center gap-1">
+      {abbrs.map((abbr, i) => {
+        const roleName = WORKFLOW_ROLE_KEYS[abbr] ? t(`roles.${WORKFLOW_ROLE_KEYS[abbr]}`, { defaultValue: roles[i] }) : roles[i];
+        return (
+          <span key={`${abbr}-${i}`} className="flex items-center gap-1">
+            {i > 0 && <ChevronRight className="size-2.5 shrink-0 text-[var(--muted)] opacity-60 rtl:rotate-180" aria-hidden />}
+            <abbr title={roleName} aria-label={roleName} className="cursor-help text-xs font-medium no-underline">
+              <bdi dir="ltr">{abbr}</bdi>
+            </abbr>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -293,12 +258,12 @@ function WorkflowBlock({ workflow }: { workflow: WorkflowDisplay }) {
   if (workflow.kind === "dual") {
     return (
       <div className="space-y-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+        <p className="text-[11px] font-medium text-[var(--muted)]">
           {t("approval.approvalPaths")}
         </p>
         {workflow.paths.map((path) => (
-          <div key={path.label}>
-            <p className="text-[10px] text-muted-foreground/60 mb-0.5">{t(path.labelKey)}</p>
+          <div key={path.label} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <p className="text-[11px] text-[var(--muted)]">{t(path.labelKey)}:</p>
             <WorkflowChainRow abbrs={path.abbrs} roles={path.roles} />
           </div>
         ))}
@@ -307,9 +272,9 @@ function WorkflowBlock({ workflow }: { workflow: WorkflowDisplay }) {
   }
 
   return (
-    <div className="space-y-1">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-        {t("approval.approvalPath")}
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      <p className="text-[11px] font-medium text-[var(--muted)]">
+        {t("approval.approvalPath")}:
       </p>
       <WorkflowChainRow abbrs={workflow.abbrs} roles={workflow.roles} />
     </div>
@@ -905,11 +870,11 @@ export function ReportsLanding() {
   const { data: summary, isLoading: summaryLoading, isError: summaryError } = useGetReportsSummary();
 
   const kpiCards = [
-    { label: t("kpi.total"),              value: summary?.total,                      icon: FileText,      iconBg: "bg-primary"     },
-    { label: t("kpi.draft"),              value: summary?.draft,                      icon: Pencil,        iconBg: "bg-slate-400"   },
-    { label: t("kpi.awaitingApproval"),   value: summary?.awaitingApproval,           icon: Clock,         iconBg: "bg-amber-400"   },
-    { label: t("kpi.approved"),           value: summary?.approved,                   icon: CheckCircle2,  iconBg: "bg-emerald-500" },
-    { label: t("kpi.awaitingOver14Days"), value: summary?.awaitingApprovalOver14Days, icon: AlertTriangle, iconBg: "bg-red-500"     },
+    { key: "total",    label: t("kpi.total"),              value: summary?.total,                      icon: FileText },
+    { key: "draft",    label: t("kpi.draft"),              value: summary?.draft,                      icon: Pencil },
+    { key: "awaiting", label: t("kpi.awaitingApproval"),   value: summary?.awaitingApproval,           icon: Clock,         status: "warning" as const },
+    { key: "approved", label: t("kpi.approved"),           value: summary?.approved,                   icon: CheckCircle2,  status: "success" as const },
+    { key: "overdue",  label: t("kpi.awaitingOver14Days"), value: summary?.awaitingApprovalOver14Days, icon: AlertTriangle, status: "danger" as const },
   ];
 
   // Data quality metadata from the reports-summary endpoint (HQ users only).
@@ -925,103 +890,68 @@ export function ReportsLanding() {
     unresolvedLegacyCount > 0 || (dqn?.migrationDuplicateCount ?? 0) > 0 || (dqn?.unverifiedCount ?? 0) > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* ── Page header ───────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
-          <FileText className="size-5 text-primary" aria-hidden /> {t("dashboard")}
+      <header className="border-b border-[var(--border)] pb-4">
+        <h1 className="flex items-center gap-2 text-xl font-semibold">
+          <FileText className="size-5 text-[var(--accent)]" aria-hidden /> {t("dashboard")}
         </h1>
-        <p className="text-muted-foreground mt-2">{t("dashboardDesc")}</p>
-      </div>
+        <p className="mt-1 text-sm text-[var(--muted)]">{t("dashboardDesc")}</p>
+      </header>
 
-      {/* ── Historical Data Notice — one compact panel when relevant ──── */}
-      {/* Records excluded from operational KPIs are surfaced here only.  */}
-      {/* No destructive/warning semantics — purely informational.        */}
+      {/* ── Historical Data Notice — one compact, informational panel ──── */}
+      {/* Records excluded from operational KPIs are surfaced here only.   */}
       {!summaryLoading && showDataQualityPanel && (
-        <div
-          className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50/70 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-900/15"
-          role="note"
-          aria-label={t("historicalDataNotice")}
-        >
-          <Info className="h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400 mt-0.5" aria-hidden />
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold text-blue-800 dark:text-blue-300 mb-1 uppercase tracking-wide">
-              {t("historicalDataNotice")}
-            </p>
-            {dqn && dqn.migrationDuplicateCount > 0 && (
-              <p className="text-xs text-blue-700 dark:text-blue-400 leading-snug">
-                {t(
-                  dqn.migrationDuplicateCount === 1
-                    ? "dataQualityNotice_migrationDuplicate_one"
-                    : "dataQualityNotice_migrationDuplicate_other",
-                  { count: dqn.migrationDuplicateCount },
-                )}
-              </p>
-            )}
-            {dqn && dqn.unverifiedCount > 0 && (
-              <p className="text-xs text-blue-700 dark:text-blue-400 leading-snug">
-                {t(
-                  dqn.unverifiedCount === 1
-                    ? "dataQualityNotice_unverified_one"
-                    : "dataQualityNotice_unverified_other",
-                  { count: dqn.unverifiedCount },
-                )}
-              </p>
-            )}
-            {unresolvedLegacyCount > 0 && (
-              <p className="text-xs text-blue-700 dark:text-blue-400 leading-snug">
-                {t(
-                  unresolvedLegacyCount === 1
-                    ? "unresolvedLegacyNotice_one"
-                    : "unresolvedLegacyNotice_other",
-                  { count: unresolvedLegacyCount },
-                )}
-              </p>
-            )}
-          </div>
-        </div>
+        <Alert status="accent" role="note" aria-label={t("historicalDataNotice")}>
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>{t("historicalDataNotice")}</Alert.Title>
+            <Alert.Description className="space-y-0.5">
+              {dqn && dqn.migrationDuplicateCount > 0 && (
+                <span className="block">
+                  {t(dqn.migrationDuplicateCount === 1 ? "dataQualityNotice_migrationDuplicate_one" : "dataQualityNotice_migrationDuplicate_other", { count: dqn.migrationDuplicateCount })}
+                </span>
+              )}
+              {dqn && dqn.unverifiedCount > 0 && (
+                <span className="block">
+                  {t(dqn.unverifiedCount === 1 ? "dataQualityNotice_unverified_one" : "dataQualityNotice_unverified_other", { count: dqn.unverifiedCount })}
+                </span>
+              )}
+              {unresolvedLegacyCount > 0 && (
+                <span className="block">
+                  {t(unresolvedLegacyCount === 1 ? "unresolvedLegacyNotice_one" : "unresolvedLegacyNotice_other", { count: unresolvedLegacyCount })}
+                </span>
+              )}
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
       )}
 
-      {/* ── Overview KPI cards ────────────────────────────────────────── */}
+      {/* ── Overview KPIs ─────────────────────────────────────────────── */}
       {summaryError ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
-          {t("loadError")}
-        </div>
+        <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Description>{t("loadError")}</Alert.Description></Alert.Content></Alert>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {kpiCards.map((c) =>
-            summaryLoading ? (
-              <Skeleton key={c.label} className="h-28" />
-            ) : (
-              <StatCard
-                key={c.label}
-                icon={c.icon}
-                iconBg={c.iconBg}
-                label={c.label}
-                value={c.value ?? 0}
-              />
-            )
-          )}
-        </div>
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-label={t("dashboard")}>
+          {kpiCards.map((c) => (
+            <FilterKpi key={c.key} icon={c.icon} status={c.status} label={c.label}
+              value={summaryLoading ? <HSkeleton className="h-7 w-10 rounded-md" /> : (c.value ?? 0)} />
+          ))}
+        </section>
       )}
 
       {/* Empty state */}
       {!summaryLoading && !summaryError && summary?.total === 0 && (
-        <p className="text-sm text-muted-foreground">{t("noReportsScope")}</p>
+        <p className="text-sm text-[var(--muted)]">{t("noReportsScope")}</p>
       )}
 
       {/* ── Report Type navigation cards ──────────────────────────────── */}
       {/* Each card is a keyboard-accessible link to the Report Type list. */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3">{t("reportTypes")}</h2>
+      <section className="space-y-3" aria-labelledby="report-types-heading">
+        <h2 id="report-types-heading" className="text-base font-semibold">{t("reportTypes")}</h2>
         {statsError ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
-            {t("loadError")}
-          </div>
+          <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Description>{t("loadError")}</Alert.Description></Alert.Content></Alert>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {(["project", "activity", "program_state", "hq_sector"] as const).map((typeKey) => {
               const rawMeta = TYPE_META[typeKey];
               const meta = {
@@ -1038,86 +968,55 @@ export function ReportsLanding() {
                 <Link
                   key={typeKey}
                   href={href}
-                  className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-full"
+                  className="group block h-full rounded-3xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
                   aria-label={meta.label}
                 >
-                  <Card className="group h-full flex flex-col cursor-pointer transition-all duration-150 hover:shadow-sm hover:ring-1 hover:ring-border/60 hover:border-primary/30">
-                    {/* Icon + Title + Chevron */}
-                    <CardHeader className="pb-2">
+                  <HCard className="h-full gap-3 transition-shadow group-hover:shadow-md">
+                    <HCard.Header className="gap-2">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="rounded-md bg-primary/10 p-1.5 shrink-0">
-                            <meta.icon className="h-4 w-4 text-primary" aria-hidden />
-                          </div>
-                          <CardTitle className="text-base leading-tight">{meta.label}</CardTitle>
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)]/10">
+                            <meta.icon className="size-4 text-[var(--accent)]" aria-hidden />
+                          </span>
+                          <HCard.Title className="text-base leading-tight">{meta.label}</HCard.Title>
                         </div>
-                        <ChevronRight
-                          className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors rtl:rotate-180"
-                          aria-hidden
-                        />
+                        <ChevronRight className="mt-1 size-4 shrink-0 text-[var(--muted)] transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" aria-hidden />
                       </div>
-                      {/* Description */}
-                      <CardDescription className="mt-2 text-xs leading-relaxed">
-                        {meta.description}
-                      </CardDescription>
-                    </CardHeader>
+                      <HCard.Description className="text-xs leading-relaxed">{meta.description}</HCard.Description>
+                    </HCard.Header>
 
-                    <CardContent className="flex flex-col flex-1 gap-3 pt-0">
+                    <HCard.Content className="flex flex-1 flex-col gap-3">
                       {/* Status summary strip */}
                       {statsLoading ? (
-                        <Skeleton className="h-14" />
+                        <HSkeleton className="h-14 rounded-xl" />
                       ) : (
-                        <div className="grid grid-cols-4 gap-1 text-center">
+                        <dl className="grid grid-cols-4 gap-1 text-center">
                           {[
-                            {
-                              label: t("kpi.totalShort"),
-                              value: s?.total ?? 0,
-                              cls: "text-foreground",
-                            },
-                            {
-                              label: t("kpi.draftShort"),
-                              value: s?.draft ?? 0,
-                              cls: "text-muted-foreground",
-                            },
-                            {
-                              label: t("kpi.awaitingShort"),
-                              value: awaiting,
-                              cls: awaiting > 0
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-muted-foreground",
-                            },
-                            {
-                              label: t("kpi.approvedShort"),
-                              value: approved,
-                              cls: approved > 0
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-muted-foreground",
-                            },
+                            { label: t("kpi.totalShort"), value: s?.total ?? 0, cls: "" },
+                            { label: t("kpi.draftShort"), value: s?.draft ?? 0, cls: "text-[var(--muted)]" },
+                            { label: t("kpi.awaitingShort"), value: awaiting, cls: awaiting > 0 ? "text-[var(--warning)]" : "text-[var(--muted)]" },
+                            { label: t("kpi.approvedShort"), value: approved, cls: approved > 0 ? "text-[var(--success)]" : "text-[var(--muted)]" },
                           ].map((stat) => (
-                            <div key={stat.label} className="rounded border bg-muted/40 px-1 py-1.5">
-                              <p className="text-[10px] text-muted-foreground leading-none mb-0.5">
-                                {stat.label}
-                              </p>
-                              <p className={cn("text-sm font-semibold tabular-nums", stat.cls)}>
-                                {stat.value}
-                              </p>
+                            <div key={stat.label} className="rounded-xl bg-[var(--default)] px-1 py-1.5">
+                              <dt className="mb-0.5 text-[10px] leading-none text-[var(--muted)]">{stat.label}</dt>
+                              <dd className={cn("text-sm font-semibold tabular-nums", stat.cls)}>{stat.value}</dd>
                             </div>
                           ))}
-                        </div>
+                        </dl>
                       )}
 
                       {/* Workflow block — always at the bottom of each card */}
-                      <div className="mt-auto pt-2 border-t border-border/40">
+                      <div className="mt-auto border-t border-[var(--border)] pt-2">
                         <WorkflowBlock workflow={meta.workflow} />
                       </div>
-                    </CardContent>
-                  </Card>
+                    </HCard.Content>
+                  </HCard>
                 </Link>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
@@ -1132,39 +1031,33 @@ function SummaryCards({ lockedType }: { lockedType: string }) {
   const { t } = useTranslation("reports");
   const { data: stats, isLoading, isError } = useGetReportsStats();
   const s = stats?.[lockedType];
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-[120px]" />)}
-      </div>
-    );
-  }
   if (isError) {
-    return (
-      <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
-        <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
-        {t("loadError")}
-      </div>
-    );
+    return <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Description>{t("loadError")}</Alert.Description></Alert.Content></Alert>;
   }
-  const cards = [
-    { label: t("kpi.total"),              value: s?.total ?? 0,                      icon: FileText,      iconBg: "bg-primary"     },
-    { label: t("kpi.draft"),              value: s?.draft ?? 0,                      icon: Pencil,        iconBg: "bg-slate-400"   },
-    { label: t("kpi.awaitingApproval"),   value: s?.awaitingApproval ?? 0,           icon: Clock,         iconBg: "bg-amber-400"   },
-    { label: t("kpi.approved"),           value: s?.approved ?? 0,                   icon: CheckCircle2,  iconBg: "bg-emerald-500" },
-    { label: t("kpi.awaitingOver14Days"), value: s?.awaitingApprovalOver14Days ?? 0, icon: AlertTriangle, iconBg: "bg-red-500"     },
-  ];
+  const value = (n: number | undefined) => isLoading ? <HSkeleton className="h-7 w-10 rounded-md" /> : (n ?? 0);
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-      {cards.map((c) => (
-        <StatCard
-          key={c.label}
-          icon={c.icon}
-          iconBg={c.iconBg}
-          label={c.label}
-          value={c.value}
-        />
-      ))}
+    <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-label={t("dashboard")}>
+      <FilterKpi icon={FileText} label={t("kpi.total")} value={value(s?.total)} />
+      <FilterKpi icon={Pencil} label={t("kpi.draft")} value={value(s?.draft)} />
+      <FilterKpi icon={Clock} status="warning" label={t("kpi.awaitingApproval")} value={value(s?.awaitingApproval)} />
+      <FilterKpi icon={CheckCircle2} status="success" label={t("kpi.approved")} value={value(s?.approved)} />
+      <FilterKpi icon={AlertTriangle} status="danger" label={t("kpi.awaitingOver14Days")} value={value(s?.awaitingApprovalOver14Days)} />
+    </section>
+  );
+}
+
+/** Number in the active language's grouping, isolated so it never reorders. */
+function Num({ value }: { value: number | null | undefined }) {
+  // Western digits in both languages, like the rest of the app.
+  return <bdi dir="ltr" className="tabular-nums">{value == null ? "—" : value.toLocaleString("en-GB")}</bdi>;
+}
+
+/** Label/value tile used by the viewer's summary grids. */
+function StatTile({ label, children, className }: { label: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <div className={cn("rounded-xl bg-[var(--default)] p-2 text-center", className)}>
+      <p className="text-xs text-[var(--muted)]">{label}</p>
+      <p className="mt-0.5 text-sm font-medium">{children}</p>
     </div>
   );
 }
@@ -1172,11 +1065,11 @@ function SummaryCards({ lockedType }: { lockedType: string }) {
 function ReportAggregatesView({ reportId }: { reportId: number }) {
   const { t } = useTranslation("reports");
   const { data, isLoading, isError } = useGetReportAggregates(reportId);
-  if (isLoading) return <Skeleton className="h-32" />;
+  if (isLoading) return <HSkeleton className="h-32 rounded-xl" />;
   if (isError) {
     return (
-      <div className="flex items-center gap-2 rounded border border-dashed p-3 text-xs text-muted-foreground">
-        <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+      <div className="flex items-center gap-2 rounded-xl border border-dashed border-[var(--border)] p-3 text-xs text-[var(--muted)]">
+        <AlertCircle className="size-4 shrink-0" aria-hidden />
         {t("aggregates.loadError")}
       </div>
     );
@@ -1185,31 +1078,32 @@ function ReportAggregatesView({ reportId }: { reportId: number }) {
   const b = data.beneficiaries;
   const bg = data.budget;
   return (
-    <Card className="bg-muted/20 border-dashed">
-      <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Info className="h-4 w-4" /> {t("aggregates.refDataTitle")}</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
+    <HCard variant="secondary" className="gap-4">
+      <HCard.Header>
+        <HCard.Title className="flex items-center gap-2 text-sm"><Info className="size-4 text-[var(--muted)]" aria-hidden /> {t("aggregates.refDataTitle")}</HCard.Title>
+      </HCard.Header>
+      <HCard.Content className="space-y-4">
         <div>
-          <p className="text-xs font-medium mb-1 flex items-center gap-1"><Users className="h-3 w-3" /> {t("aggregates.beneficiaryRegister")}</p>
-          <div className="grid grid-cols-5 gap-2 text-center text-xs">
-            {[["M", b.male], ["F", b.female], ["B", b.boys], ["G", b.girls], ["Σ", b.total]].map(([k, v]) => (
-              <div key={k as string} className="rounded border bg-background p-1.5">
-                <p className="text-muted-foreground">{k}</p>
-                <p className="font-medium"><bdi dir="ltr">{(v as number).toLocaleString()}</bdi></p>
-              </div>
-            ))}
+          <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><Users className="size-3.5" aria-hidden /> {t("aggregates.beneficiaryRegister")}</p>
+          <div className="grid grid-cols-5 gap-2">
+            <StatTile label={t("detail.male")}><Num value={b.male} /></StatTile>
+            <StatTile label={t("detail.female")}><Num value={b.female} /></StatTile>
+            <StatTile label={t("detail.boys")}><Num value={b.boys} /></StatTile>
+            <StatTile label={t("detail.girls")}><Num value={b.girls} /></StatTile>
+            <StatTile label={t("detail.total")}><Num value={b.total} /></StatTile>
           </div>
         </div>
         <div>
-          <p className="text-xs font-medium mb-1 flex items-center gap-1"><DollarSign className="h-3 w-3" /> {t("aggregates.budgetTracker")}</p>
-          <div className="grid grid-cols-4 gap-2 text-center text-xs">
-            <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.planned")}</p><p className="font-medium"><bdi dir="ltr">{formatCurrency(bg.planned)}</bdi></p></div>
-            <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.spent")}</p><p className="font-medium"><bdi dir="ltr">{formatCurrency(bg.actual)}</bdi></p></div>
-            <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.remaining")}</p><p className="font-medium"><bdi dir="ltr">{formatCurrency(bg.remaining)}</bdi></p></div>
-            <div className="rounded border bg-background p-1.5"><p className="text-muted-foreground">{t("aggregates.burn")}</p><p className="font-medium"><bdi dir="ltr">{bg.burnRatePct == null ? "—" : `${bg.burnRatePct}%`}</bdi></p></div>
+          <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><DollarSign className="size-3.5" aria-hidden /> {t("aggregates.budgetTracker")}</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <StatTile label={t("aggregates.planned")}><bdi dir="ltr">{formatCurrency(bg.planned)}</bdi></StatTile>
+            <StatTile label={t("aggregates.spent")}><bdi dir="ltr">{formatCurrency(bg.actual)}</bdi></StatTile>
+            <StatTile label={t("aggregates.remaining")}><bdi dir="ltr">{formatCurrency(bg.remaining)}</bdi></StatTile>
+            <StatTile label={t("aggregates.burn")}><bdi dir="ltr">{bg.burnRatePct == null ? "—" : `${bg.burnRatePct}%`}</bdi></StatTile>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </HCard.Content>
+    </HCard>
   );
 }
 
@@ -3573,10 +3467,53 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
   const moduleKey = `reports_${lockedType}`;
   const [viewMode, setViewMode] = useViewMode(moduleKey, [...REPORT_VIEWS], "table");
 
+  // Submit / Duplicate / Delete for a draft (and Continue editing), shared by
+  // the table and every other view mode so they stay in step.
+  // `inMenu` (the table) folds Continue editing into the menu so the actions
+  // column stays narrow; the card/list views keep it as a visible button.
+  const renderRowActions = useCallback((r: Report, inMenu = false) => {
+    const canResume = canResumeReportDraft(r, perms, me?.user);
+    const canDelete = canDeleteReportDraft(r, perms, me?.user);
+    if (!canResume && !canDelete) return undefined;
+    const menu = [
+      ...(canResume && inMenu ? [{ id: "continue", label: t("continueEditing", { ns: "common" }), icon: Pencil, run: () => startDraftEditing(r) }] : []),
+      ...(canResume ? [
+        { id: "submit", label: t("list.submit"), icon: Send, run: () => handleDirectSubmit(r) },
+        { id: "duplicate", label: t("list.duplicate"), icon: Copy, run: () => handleDuplicateReport(r) },
+      ] : []),
+      // reports.delete is a dedicated permission — never inferred from reports.update.
+      ...(canDelete ? [{ id: "delete", label: t("list.deleteDraft"), icon: Trash2, danger: true, run: () => setDeleteTarget(r) }] : []),
+    ];
+    return (
+      <div className="flex items-center gap-1">
+        {canResume && !inMenu && (
+          <ContinueEditingAction
+            recordTitle={r.title}
+            onClick={() => startDraftEditing(r)}
+          />
+        )}
+        <Dropdown>
+          <HButton isIconOnly size="sm" variant="ghost" aria-label={t("formExtra.moreActions")}>
+            <MoreHorizontal className="size-4" aria-hidden />
+          </HButton>
+          <Dropdown.Popover placement="bottom end" className="min-w-44">
+            <Dropdown.Menu onAction={(key) => menu.find((m) => m.id === key)?.run()}>
+              {menu.map((m) => (
+                <Dropdown.Item key={m.id} id={m.id} textValue={m.label} variant={"danger" in m && m.danger ? "danger" : undefined}>
+                  <m.icon className={cn("size-4 shrink-0", "danger" in m && m.danger ? "text-[var(--danger)]" : "text-[var(--muted)]")} aria-hidden />
+                  <HLabel>{m.label}</HLabel>
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
+      </div>
+    );
+  }, [perms, me?.user, t, handleDirectSubmit, handleDuplicateReport, startDraftEditing]);
+
   const viewRecords: ViewRecord[] = useMemo(
     () =>
       (reports ?? []).map((r) => {
-        const sb = statusBadgeVariant(r.status);
         // Use effectiveSector (COALESCE r.sector, p.sector) for all display purposes
         const displaySector = r.effectiveSector ?? r.sector ?? undefined;
         const preparedBy = r.authorName ?? r.submittedByName ?? "—";
@@ -3585,7 +3522,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
           title: r.title,
           subtitle: r.projectTitle ?? undefined,
           status: r.status,
-          statusBadge: <Badge variant={sb.variant} className={sb.className}>{displayStatus(r.status, t)}</Badge>,
+          statusBadge: <ReportStatusChip status={r.status} label={displayStatus(r.status, t)} />,
           tag: displaySector,
           // §15: format period with frequency context ("Monthly · Jun 2026" etc.)
           // Activity Reports: compatibility 'monthly' is internal — not user-selected.
@@ -3611,49 +3548,10 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
           // Submit/Duplicate/Delete now reach every view mode (Card/List/Compact/
           // Kanban), not just the Table view — matching the same parity fix
           // already applied to Projects and Plans.
-          actions: (canResumeReportDraft(r, perms, me?.user) || canDeleteReportDraft(r, perms, me?.user)) ? (
-            <div className="flex items-center gap-1">
-              {canResumeReportDraft(r, perms, me?.user) && (
-                <ContinueEditingAction
-                  recordTitle={r.title}
-                  onClick={() => startDraftEditing(r)}
-                />
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("formExtra.moreActions")}>
-                    <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  {canResumeReportDraft(r, perms, me?.user) && (
-                    <>
-                      <DropdownMenuItem onClick={() => handleDirectSubmit(r)} className="gap-2">
-                        <Send className="h-3.5 w-3.5" /> {t("list.submit")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDuplicateReport(r)} className="gap-2">
-                        <Copy className="h-3.5 w-3.5" /> {t("list.duplicate")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {canDeleteReportDraft(r, perms, me?.user) && (
-                    <>
-                      {canResumeReportDraft(r, perms, me?.user) && <DropdownMenuSeparator />}
-                      <DropdownMenuItem
-                        onClick={() => setDeleteTarget(r)}
-                        className="gap-2 text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> {t("list.deleteDraft")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ) : undefined,
+          actions: renderRowActions(r),
         };
       }),
-    [reports, lockedType, openReportDetail, perms, me?.user, startDraftEditing, t, i18n.language, handleDirectSubmit, handleDuplicateReport],
+    [reports, lockedType, openReportDetail, t, i18n.language, renderRowActions],
   );
 
   const yearOptions = useMemo(() => {
@@ -3678,26 +3576,109 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     draft.status !== "synced" && draft.serverReportId === null,
   );
 
+  const filterTrigger = "whitespace-nowrap sm:w-40";
+  const activityStatusLabel = (value: unknown) => {
+    const raw = String(value ?? "—");
+    return ACTIVITY_STATUS_KEYS[raw] ? t(`form.activityStatusValues.${ACTIVITY_STATUS_KEYS[raw]}`) : raw;
+  };
+  const clearAllFilters = () => {
+    setDisplayStatusFilter("all"); setKindFilter("all"); setStateId("all"); setSector("all");
+    setProjectId("all"); setReportingMonth("all"); setReportingYear("all");
+    setQuarterFilter("all"); setAuthorId("all"); setActivityFilter("all");
+  };
+
+  // §24: Empty state — distinguish scope-empty from filter-empty (all view modes).
+  const emptyRegistry = (
+    <div className="flex flex-col items-center gap-3 px-4 py-10 text-center text-[var(--muted)]">
+      <meta.icon className="size-8 opacity-40" aria-hidden />
+      <p className="text-sm font-medium">
+        {!hasActiveFilters ? t("list.noScopeEmpty", { type: meta.label }) : t("list.noFilterMatch", { type: meta.label })}
+      </p>
+      {canCreate && !hasActiveFilters ? (
+        <HButton size="sm" variant="tertiary" onPress={() => setCreateOpen(true)}>
+          <Plus className="size-4" aria-hidden /> {t("newReport")}
+        </HButton>
+      ) : hasActiveFilters ? (
+        <HButton variant="ghost" size="sm" onPress={clearAllFilters}>
+          <X className="size-3.5" aria-hidden /> {t("filters.clearFilters")}
+        </HButton>
+      ) : null}
+    </div>
+  );
+
+  const periodLine = (r: Report) => {
+    const rKind = (r as unknown as Record<string, unknown>).kind as string | undefined;
+    // Activity Reports: "monthly" is a compatibility default, not a user choice — show the period only.
+    const frequency = (isActivity && rKind === "monthly") || !rKind ? null : displayFrequency(rKind, t);
+    return [frequency, formatPeriodOnly(rKind, r.period, i18n.language)].filter(Boolean).join(" · ");
+  };
+  const reportColumns: DataGridColumn<Report>[] = [
+    { id: "title", header: t("list.title"), isRowHeader: true, width: isActivity ? 250 : 290, pinned: "start", headerClassName: isActivity ? "w-[250px]" : "w-[290px]",
+      cell: (r) => (
+        <div className="min-w-0">
+          <p dir="auto" className="line-clamp-2 whitespace-normal text-sm font-medium leading-snug text-page-start" title={r.title}>{r.title}</p>
+          <p className="mt-0.5 text-[11px] tabular-nums text-[var(--muted)]">{periodLine(r)}</p>
+        </div>
+      ) },
+    { id: "status", header: t("list.status"), width: 136, headerClassName: "w-[136px]",
+      cell: (r) => <ReportStatusChip status={r.status} label={displayStatus(r.status, t)} /> },
+    ...(isActivity ? [{ id: "activity", header: t("list.activity"), width: 190, headerClassName: "w-[190px]",
+      cell: (r: Report) => {
+        const rr = r as unknown as Record<string, unknown>;
+        const aTitle = rr.activityTitle as string | undefined;
+        const aCode = rr.activityCode as string | undefined;
+        return aTitle ? (
+          <div className="min-w-0">
+            <p dir="auto" className="line-clamp-2 whitespace-normal text-sm leading-snug text-page-start" title={aTitle}>{aTitle}</p>
+            {aCode && <p className="mt-0.5 text-[11px] text-[var(--muted)]"><bdi dir="ltr">{aCode}</bdi></p>}
+          </div>
+        ) : <span className="text-sm text-[var(--muted)]">—</span>;
+      } }] : []),
+    { id: "project", header: t("list.project"), width: 200, headerClassName: "w-[200px]",
+      cell: (r) => {
+        const location = formatLocation({ locationType: r.locationType, stateName: r.stateName, stateNameAr: r.stateNameAr }, i18n.language);
+        return (
+          <div className="min-w-0 text-sm">
+            {r.projectTitle
+              ? <p dir="auto" className="line-clamp-2 whitespace-normal leading-snug text-page-start" title={r.projectTitle}>{r.projectTitle}</p>
+              : <p className="italic text-[var(--muted)]">{isActivity ? t("list.standalone") : "—"}</p>}
+            {location && <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{location}</p>}
+          </div>
+        );
+      } },
+    { id: "sector", header: t("list.sector"), width: 110, headerClassName: "w-[110px]",
+      cell: (r) => <span className="line-clamp-2 whitespace-normal text-sm text-[var(--muted)]" title={(r.effectiveSector ?? r.sector) || undefined}>{r.effectiveSector ?? r.sector ?? "—"}</span> },
+    { id: "preparedBy", header: t("list.preparedBy"), width: 140, headerClassName: "w-[140px]",
+      cell: (r) => <span dir="auto" className="line-clamp-2 whitespace-normal text-sm text-[var(--muted)] text-page-start">{r.authorName ?? r.submittedByName}</span> },
+    { id: "actions", header: <span className="sr-only">{t("list.actions")}</span>, width: 64, pinned: "end", headerClassName: "w-[64px]",
+      cell: (r) => r.status === "rejected" ? (
+        // Rejected is terminal — no PATCH. "Duplicate as Draft" starts a replacement.
+        <HButton size="sm" variant="tertiary" onPress={() => handleDuplicateReport(r)} aria-label={t("list.duplicateAsDraft")}>
+          <Copy className="size-3.5" aria-hidden />
+        </HButton>
+      ) : (renderRowActions(r, true) ?? null) },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-foreground text-xl font-semibold flex items-center gap-2">
-            <meta.icon className="size-5 text-primary" /> {meta.label}
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-xl font-semibold">
+            <meta.icon className="size-5 text-[var(--accent)]" aria-hidden /> {meta.label}
           </h1>
-          <p className="text-muted-foreground mt-2">{meta.description}</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">{meta.description}</p>
           {/* §2: Compact structured approval paths — dual paths shown inline with separator */}
           <div className="mt-2 flex flex-wrap items-start gap-x-4 gap-y-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80 mt-0.5 shrink-0">
+            <span className="mt-0.5 shrink-0 text-[11px] font-medium text-[var(--muted)]">
               {t("approval.approvalPaths")}
             </span>
             {meta.workflow.kind === "dual" ? (
               meta.workflow.paths.map((path, idx) => (
-                <span key={path.label} className="flex items-center gap-1.5 flex-wrap">
+                <span key={path.label} className="flex flex-wrap items-center gap-1.5">
                   {idx > 0 && (
-                    <span className="text-muted-foreground/40 hidden sm:inline" aria-hidden>·</span>
+                    <span className="hidden text-[var(--muted)] opacity-50 sm:inline" aria-hidden>·</span>
                   )}
-                  <span className="text-[11px] font-medium text-muted-foreground/80">{t(path.labelKey)}:</span>
+                  <span className="text-[11px] text-[var(--muted)]">{t(path.labelKey)}:</span>
                   <WorkflowChainRow abbrs={path.abbrs} roles={path.roles} />
                 </span>
               ))
@@ -3712,9 +3693,9 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
             current={viewMode}
             onChange={setViewMode}
           />
-          <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={isLoading}>
-            <Download className="h-4 w-4" /> {t("exportCsv")}
-          </Button>
+          <HButton variant="tertiary" onPress={handleExportCsv} isDisabled={isLoading}>
+            <Download className="size-4" aria-hidden /> {t("exportCsv")}
+          </HButton>
           {canCreate && (
             <Dialog open={createOpen} onOpenChange={(o) => {
                 if (!o) {
@@ -6381,93 +6362,92 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
       </div>
 
       {recoverableDeviceDraft && canCreate && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-4 py-3" role="status">
-          <div className="space-y-1">
-            <p className="text-sm font-medium">{t("sync.status.local-draft", { ns: "common" })}: {recoverableDeviceDraft.title || t("sync.untitledDraft", { ns: "common" })}</p>
-            <p className="text-xs text-muted-foreground">{t("sync.draftRecovery", { ns: "common" })}</p>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
-            {t("continueEditing")}
-          </Button>
-        </div>
+        <Alert status="accent" role="status">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>{t("sync.status.local-draft", { ns: "common" })}: {recoverableDeviceDraft.title || t("sync.untitledDraft", { ns: "common" })}</Alert.Title>
+            <Alert.Description>{t("sync.draftRecovery", { ns: "common" })}</Alert.Description>
+          </Alert.Content>
+          <HButton size="sm" variant="tertiary" onPress={() => setCreateOpen(true)}>
+            {t("continueEditing", { ns: "common" })}
+          </HButton>
+        </Alert>
       )}
 
       <SummaryCards lockedType={lockedType} />
 
       {/* §5–6: Filter toolbar — enterprise order: Status · Frequency · State · Sector · Project · Period · Author */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
-        <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-        <Separator orientation="vertical" className="h-5" />
+      <div className="flex flex-wrap items-center gap-2 rounded-3xl bg-[var(--surface)] p-3 shadow-[var(--surface-shadow)]" role="group" aria-label={t("filters.groupLabel")}>
+        <Filter className="size-4 shrink-0 text-[var(--muted)]" aria-hidden />
 
         {/* Status */}
-        <Select value={displayStatusFilter} onValueChange={setDisplayStatusFilter}>
-          <SelectTrigger aria-label={t("filters.filterByStatus")} className="h-8 min-w-[7rem] w-auto max-w-[10rem] text-sm"><SelectValue placeholder={t("filters.allStatuses")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("filters.allStatuses")}</SelectItem>
-            {Object.keys(STATUS_GROUPS).map((s) => <SelectItem key={s} value={s}>{t(`status.${s}`)}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <SelectField
+          aria-label={t("filters.filterByStatus")}
+          value={displayStatusFilter}
+          onChange={setDisplayStatusFilter}
+          triggerClassName={filterTrigger}
+          options={[{ value: "all", label: t("filters.allStatuses") }, ...Object.keys(STATUS_GROUPS).map((st) => ({ value: st, label: t(`status.${st}`) }))]}
+        />
 
         {/* Frequency — hidden for Activity Reports (no user-selected frequency; internal default only) */}
         {!isActivity && (
-          <Select value={kindFilter} onValueChange={setKindFilter}>
-            <SelectTrigger aria-label={t("filters.filterByFrequency")} className="h-8 min-w-[7rem] w-auto max-w-[10rem] text-sm"><SelectValue placeholder={t("filters.allFrequencies")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allFrequencies")}</SelectItem>
-              <SelectItem value="monthly">{t("frequency.monthly")}</SelectItem>
-              <SelectItem value="quarterly">{t("frequency.quarterly")}</SelectItem>
-              <SelectItem value="annual">{t("frequency.annual")}</SelectItem>
-              <SelectItem value="on_demand">{t("frequency.on_demand")}</SelectItem>
-            </SelectContent>
-          </Select>
+          <SelectField
+            aria-label={t("filters.filterByFrequency")}
+            value={kindFilter}
+            onChange={setKindFilter}
+            triggerClassName={filterTrigger}
+            options={[
+              { value: "all", label: t("filters.allFrequencies") },
+              { value: "monthly", label: t("frequency.monthly") },
+              { value: "quarterly", label: t("frequency.quarterly") },
+              { value: "annual", label: t("frequency.annual") },
+              { value: "on_demand", label: t("frequency.on_demand") },
+            ]}
+          />
         )}
 
         {/* State — hidden for HQ Sector reports (no state scope) */}
         {!isHqSector && (
-          <Select value={stateId} onValueChange={setStateId}>
-            <SelectTrigger aria-label={t("filters.filterByState")} className="h-8 min-w-[7rem] w-auto max-w-[10rem] text-sm"><SelectValue placeholder={t("filters.allStates")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allStates")}</SelectItem>
-              {states?.map((s) => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SelectField
+            aria-label={t("filters.filterByState")}
+            value={stateId}
+            onChange={setStateId}
+            triggerClassName={filterTrigger}
+            options={[{ value: "all", label: t("filters.allStates") }, ...(states ?? []).map((st) => ({ value: String(st.id), label: <StateLabel state={st} />, textValue: st.name }))]}
+          />
         )}
 
         {/* Sector */}
-        <Select value={sector} onValueChange={setSector}>
-          <SelectTrigger aria-label={t("filters.filterBySector")} className="h-8 min-w-[7rem] w-auto max-w-[10rem] text-sm"><SelectValue placeholder={t("filters.allSectors")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("filters.allSectors")}</SelectItem>
-            {SECTORS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <SelectField
+          aria-label={t("filters.filterBySector")}
+          value={sector}
+          onChange={setSector}
+          triggerClassName={filterTrigger}
+          options={[{ value: "all", label: t("filters.allSectors") }, ...SECTORS.map((sec) => ({ value: sec, label: sec }))]}
+        />
 
-        {/* Project */}
-        <Select value={projectId} onValueChange={setProjectId}>
-          <SelectTrigger aria-label={t("filters.filterByProject")} className="h-8 min-w-[7rem] w-auto max-w-[11rem] text-sm"><SelectValue placeholder={t("filters.allProjects")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("filters.allProjects")}</SelectItem>
-            {/* Standalone Activities sentinel — activity reports tab only */}
-            {isActivity && (
-              <SelectItem value="standalone">{t("filters.standaloneActivities")}</SelectItem>
-            )}
-            {projects?.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.code}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {/* Project — Standalone Activities sentinel on the activity reports tab only */}
+        <SelectField
+          aria-label={t("filters.filterByProject")}
+          value={projectId}
+          onChange={setProjectId}
+          triggerClassName={filterTrigger}
+          options={[
+            { value: "all", label: t("filters.allProjects") },
+            ...(isActivity ? [{ value: "standalone", label: t("filters.standaloneActivities") }] : []),
+            ...(projects ?? []).map((pr) => ({ value: String(pr.id), label: <bdi dir="ltr">{pr.code}</bdi>, textValue: pr.code })),
+          ]}
+        />
 
         {/* Activity — only shown for Activity Reports (scoped to accessible population) */}
         {isActivity && (
-          <Select value={activityFilter} onValueChange={setActivityFilter}>
-            <SelectTrigger aria-label={t("filters.filterByActivity")} className="h-8 min-w-[8rem] w-auto max-w-[12rem] text-sm"><SelectValue placeholder={t("filters.allActivities")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allActivities")}</SelectItem>
-              {activityFacetOptions.map((a) => (
-                <SelectItem key={a.id} value={String(a.id)}>
-                  {a.code ? `${a.code} — ${a.title}` : a.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectField
+            aria-label={t("filters.filterByActivity")}
+            value={activityFilter}
+            onChange={setActivityFilter}
+            triggerClassName="whitespace-nowrap sm:w-52"
+            options={[{ value: "all", label: t("filters.allActivities") }, ...activityFacetOptions.map((a) => ({ value: String(a.id), label: a.code ? `${a.code} — ${a.title}` : a.title }))]}
+          />
         )}
 
         {/* §4: Frequency-aware period controls ─────────────────────────────────
@@ -6477,287 +6457,90 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
             Annual          → Year only
             On-Demand       → no period controls (date embedded in period string) */}
         {kindFilter === "quarterly" && (
-          <Select value={quarterFilter} onValueChange={setQuarterFilter}>
-            <SelectTrigger aria-label={t("filters.filterByQuarter")} className="h-8 min-w-[6rem] w-auto max-w-[8rem] text-sm"><SelectValue placeholder={t("filters.allQuarters")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allQuarters")}</SelectItem>
-              <SelectItem value="1">Q1</SelectItem>
-              <SelectItem value="2">Q2</SelectItem>
-              <SelectItem value="3">Q3</SelectItem>
-              <SelectItem value="4">Q4</SelectItem>
-            </SelectContent>
-          </Select>
+          <SelectField
+            aria-label={t("filters.filterByQuarter")}
+            value={quarterFilter}
+            onChange={setQuarterFilter}
+            triggerClassName="whitespace-nowrap sm:w-32"
+            options={[{ value: "all", label: t("filters.allQuarters") }, ...[1, 2, 3, 4].map((q) => ({ value: String(q), label: <bdi dir="ltr">Q{q}</bdi>, textValue: `Q${q}` }))]}
+          />
         )}
         {/* Month control: Activity Reports always use YYYY-MM periods so always show Month.
             For other report types, show only when Frequency = Monthly. */}
         {(lockedType === "activity" || kindFilter === "monthly") && (
-          <Select value={reportingMonth} onValueChange={setReportingMonth}>
-            <SelectTrigger aria-label={t("filters.filterByMonth")} className="h-8 min-w-[6rem] w-auto max-w-[8rem] text-sm"><SelectValue placeholder={t("filters.allMonths")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allMonths")}</SelectItem>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <SelectItem key={m} value={String(m)}>
-                  {new Date(2000, m - 1, 1).toLocaleString(i18n.language === "ar" ? "ar" : "en", { month: "short" })}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectField
+            aria-label={t("filters.filterByMonth")}
+            value={reportingMonth}
+            onChange={setReportingMonth}
+            triggerClassName="whitespace-nowrap sm:w-32"
+            options={[{ value: "all", label: t("filters.allMonths") }, ...Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({
+              value: String(m),
+              label: new Date(2000, m - 1, 1).toLocaleString(i18n.language === "ar" ? "ar" : "en-GB", { month: "long" }),
+            }))]}
+          />
         )}
         {/* Year control: all frequencies except On-Demand */}
         {kindFilter !== "on_demand" && (
-          <Select value={reportingYear} onValueChange={setReportingYear}>
-            <SelectTrigger aria-label={t("filters.filterByYear")} className="h-8 min-w-[5rem] w-auto max-w-[7rem] text-sm"><SelectValue placeholder={t("filters.allYears")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filters.allYears")}</SelectItem>
-              {yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SelectField
+            aria-label={t("filters.filterByYear")}
+            value={reportingYear}
+            onChange={setReportingYear}
+            triggerClassName="whitespace-nowrap sm:w-32"
+            options={[{ value: "all", label: t("filters.allYears") }, ...yearOptions.map((y) => ({ value: String(y), label: String(y) }))]}
+          />
         )}
 
         {/* Author — sourced from /reports/authors (population-scoped, not page-scoped) */}
-        <Select value={authorId} onValueChange={setAuthorId}>
-          <SelectTrigger aria-label={t("filters.filterByAuthor")} className="h-8 min-w-[7rem] w-auto max-w-[11rem] text-sm"><SelectValue placeholder={t("filters.allAuthors")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("filters.allAuthors")}</SelectItem>
-            {authorOptions.map((a) => (
-              <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SelectField
+          aria-label={t("filters.filterByAuthor")}
+          value={authorId}
+          onChange={setAuthorId}
+          triggerClassName={filterTrigger}
+          options={[{ value: "all", label: t("filters.allAuthors") }, ...authorOptions.map((a) => ({ value: String(a.id), label: a.name }))]}
+        />
 
         {/* §23: Clear Filters — only visible when at least one filter is non-default */}
         {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              setDisplayStatusFilter("all"); setKindFilter("all"); setStateId("all"); setSector("all");
-              setProjectId("all"); setReportingMonth("all"); setReportingYear("all");
-              setQuarterFilter("all"); setAuthorId("all"); setActivityFilter("all");
-            }}
-          >
-            <X className="h-3.5 w-3.5" /> {t("filters.clearFilters")}
-          </Button>
+          <HButton variant="ghost" size="sm" onPress={clearAllFilters}>
+            <X className="size-3.5" aria-hidden /> {t("filters.clearFilters")}
+          </HButton>
         )}
       </div>
 
       {viewMode === "table" ? (
-        <Card>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="divide-y">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 px-6 py-3">
-                    <Skeleton className="h-4 flex-[3]" />
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-4 w-28" />
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-5 w-24 rounded-full" />
-                  </div>
-                ))}
-              </div>
-            ) : isError ? (
+        <HCard className="gap-0 overflow-hidden p-0">
+          {isLoading ? (
+            <div className="space-y-3 p-4" aria-hidden>
+              {[...Array(6)].map((_, i) => <HSkeleton key={i} className="h-10 w-full rounded-lg" />)}
+            </div>
+          ) : isError ? (
+            <div className="p-4">
               <ErrorState
                 variant="server"
                 title={t("loadError")}
                 description={t("loadErrorDesc")}
                 onRetry={() => refetch()}
               />
-            ) : (
-              <div className="overflow-x-auto" role="region" aria-label={t("list.tableAriaLabel")}>
-                <Table>
-                  <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_0_0_hsl(var(--cafa-border))]">
-                    {/* §26: Table columns — Report (title+period) · Status · [Activity] · Project · State · Sector · Frequency · Prepared By · Actions */}
-                    <TableRow>
-                      <TableHead className="min-w-[220px]">{t("list.title")}</TableHead>
-                      <TableHead className="w-[138px]">{t("list.status")}</TableHead>
-                      {isActivity && <TableHead className="min-w-[180px] max-w-[220px]">{t("list.activity")}</TableHead>}
-                      <TableHead className="min-w-[130px] max-w-[180px]">{t("list.project")}</TableHead>
-                      <TableHead className="w-[110px]">{t("list.state")}</TableHead>
-                      <TableHead className="w-[120px]">{t("list.sector")}</TableHead>
-                      <TableHead className="w-[90px]">{t("list.frequency")}</TableHead>
-                      <TableHead className="min-w-[110px] max-w-[150px]">{t("list.preparedBy")}</TableHead>
-                      <TableHead className="w-[130px]">{t("list.actions")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {/* §24: Empty state — distinguish scope-empty from filter-empty */}
-                    {reports?.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={isActivity ? 9 : 8} className="text-center py-10">
-                          <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                            <meta.icon className="h-8 w-8 opacity-30" aria-hidden />
-                            {!hasActiveFilters ? (
-                              <>
-                                <p className="text-sm font-medium">{t("list.noScopeEmpty", { type: meta.label })}</p>
-                                {canCreate && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="gap-1.5"
-                                    onClick={() => setCreateOpen(true)}
-                                  >
-                                    <Plus className="h-3.5 w-3.5" /> {t("newReport")}
-                                  </Button>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <p className="text-sm font-medium">{t("list.noFilterMatch", { type: meta.label })}</p>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="gap-1 text-muted-foreground hover:text-foreground"
-                                  onClick={() => {
-                                    setDisplayStatusFilter("all"); setKindFilter("all"); setStateId("all"); setSector("all");
-                                    setProjectId("all"); setReportingMonth("all"); setReportingYear("all");
-                                    setQuarterFilter("all"); setAuthorId("all"); setActivityFilter("all");
-                                  }}
-                                >
-                                  <X className="h-3.5 w-3.5" /> {t("filters.clearFilters")}
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    {reports?.map((r) => {
-                      const sb = statusBadgeVariant(r.status);
-                      const displaySector = r.effectiveSector ?? r.sector;
-                      const rKind = (r as unknown as Record<string, unknown>).kind as string | undefined;
-                      return (
-                        <TableRow
-                          key={r.id}
-                          onClick={(event) => openReportDetail(r, event.currentTarget)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              openReportDetail(r, event.currentTarget);
-                            }
-                          }}
-                          tabIndex={0}
-                          role="button"
-                          aria-label={t("formExtra.openReportAria", { title: r.title })}
-                          className="cursor-pointer hover:bg-muted/50 transition-colors"
-                        >
-                          {/* §26 column order: Report (title+period) · Status · [Activity] · Project · State · Sector · Frequency · Prepared By */}
-                          <TableCell className="font-medium max-w-xs">
-                            <span className="line-clamp-1 leading-snug" title={r.title}>{r.title}</span>
-                            <span className="block text-[11px] text-muted-foreground tabular-nums mt-0.5">
-                              {formatPeriodOnly(rKind, r.period, i18n.language)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={sb.variant} className={sb.className}>{displayStatus(r.status, t)}</Badge>
-                          </TableCell>
-                          {isActivity && (
-                            <TableCell className="max-w-[200px]">
-                              {(() => {
-                                const aTitle = (r as unknown as Record<string, unknown>).activityTitle as string | undefined;
-                                const aCode  = (r as unknown as Record<string, unknown>).activityCode  as string | undefined;
-                                return aTitle ? (
-                                  <div>
-                                    <p className="text-sm font-medium leading-snug truncate" title={aTitle}>{aTitle}</p>
-                                    {aCode && <p className="text-[11px] text-muted-foreground mt-0.5">{aCode}</p>}
-                                  </div>
-                                ) : <span className="text-sm text-muted-foreground">—</span>;
-                              })()}
-                            </TableCell>
-                          )}
-                          <TableCell
-                            className="text-sm text-muted-foreground max-w-[160px] truncate"
-                            title={r.projectTitle ?? (isActivity ? t("list.standalone") : undefined)}
-                          >
-                            {r.projectTitle ?? (isActivity ? (
-                              <span className="italic text-muted-foreground/60">{t("list.standalone")}</span>
-                            ) : "—")}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate" title={formatLocation({ locationType: r.locationType, stateName: r.stateName, stateNameAr: r.stateNameAr }, i18n.language) || undefined}>{formatLocation({ locationType: r.locationType, stateName: r.stateName, stateNameAr: r.stateNameAr }, i18n.language)}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground max-w-[130px] truncate" title={displaySector || undefined}>{displaySector || "—"}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground capitalize whitespace-nowrap">
-                            {/* For Activity Reports: "monthly" is a compatibility default (not user-selected);
-                                show "—" to avoid implying the user chose a frequency.
-                                Historical quarterly/annual/on_demand rows retain their displayed value. */}
-                            {(isActivity && rKind === "monthly")
-                              ? "—"
-                              : rKind === "on_demand"
-                                ? displayFrequency(rKind, t)
-                                : rKind
-                                  ? displayFrequency(rKind, t)
-                                  : "—"}
-                          </TableCell>
-
-                          <TableCell
-                            className="text-sm text-muted-foreground max-w-[140px] truncate"
-                            title={r.authorName ?? r.submittedByName ?? undefined}
-                          >{r.authorName ?? r.submittedByName}</TableCell>
-                          <TableCell onClick={(e) => e.stopPropagation()} className="py-2">
-                            {(canResumeReportDraft(r, perms, me?.user) || canDeleteReportDraft(r, perms, me?.user)) && (
-                              <div className="flex items-center gap-1">
-                                {canResumeReportDraft(r, perms, me?.user) && (
-                                  <ContinueEditingAction
-                                    recordTitle={r.title}
-                                    onClick={() => startDraftEditing(r)}
-                                  />
-                                )}
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("formExtra.moreActions")}>
-                                      <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-40">
-                                    {canResumeReportDraft(r, perms, me?.user) && (
-                                      <>
-                                        <DropdownMenuItem onClick={() => handleDirectSubmit(r)} className="gap-2">
-                                          <Send className="h-3.5 w-3.5" /> {t("list.submit")}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleDuplicateReport(r)} className="gap-2">
-                                          <Copy className="h-3.5 w-3.5" /> {t("list.duplicate")}
-                                        </DropdownMenuItem>
-                                      </>
-                                    )}
-                                    {/* reports.delete is a dedicated permission — never inferred from
-                                        reports.update — so this item is gated independently. */}
-                                    {canDeleteReportDraft(r, perms, me?.user) && (
-                                      <>
-                                        {canResumeReportDraft(r, perms, me?.user) && <DropdownMenuSeparator />}
-                                        <DropdownMenuItem
-                                          onClick={() => setDeleteTarget(r)}
-                                          className="gap-2 text-destructive focus:text-destructive"
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" /> {t("list.deleteDraft")}
-                                        </DropdownMenuItem>
-                                      </>
-                                    )}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            )}
-                            {r.status === "rejected" && (
-                              /* Rejected is terminal. No PATCH allowed. Use "Duplicate as Draft" for a replacement. */
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-xs gap-1"
-                                onClick={() => handleDuplicateReport(r)}
-                              >
-                                <Copy className="h-3 w-3" /> {t("list.duplicateAsDraft")}
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
+            </div>
+          ) : (
+            <div role="region" aria-label={t("list.tableAriaLabel")}>
+              {/* §26: Report (title · period · frequency) · Status · [Activity] · Project (location) · Sector · Prepared By · Actions.
+                  Rows open the viewer on click or Enter (t("formExtra.openReportAria") names the action). */}
+              <DataGrid
+                aria-label={t("list.tableAriaLabel")}
+                data={reports ?? []}
+                columns={reportColumns}
+                getRowId={(r) => r.id}
+                onRowAction={(key) => {
+                  const r = (reports ?? []).find((row) => row.id === key);
+                  if (r) openReportDetail(r, document.activeElement instanceof HTMLElement ? document.activeElement : null);
+                }}
+                contentClassName={cn(isActivity ? "min-w-[1060px]" : "min-w-[960px]", "table-fixed")}
+                verticalAlign="middle"
+                renderEmptyState={() => emptyRegistry}
+              />
+            </div>
+          )}
           {/* §21–22: Result count — always visible; pagination controls appear only when > 1 page */}
           {reportsRaw && reportsRaw.total > 0 && (
             <ReportPaginationFooter
@@ -6768,54 +6551,21 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
               label={meta.label}
               onPrev={() => setPage((p) => p - 1)}
               onNext={() => setPage((p) => p + 1)}
-              className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground"
+              onPageChange={setPage}
+              className="border-t border-[var(--border)] px-4 py-3"
               t={t}
             />
           )}
-        </Card>
+        </HCard>
       ) : isLoading ? (
-        <Card>
-          <CardContent className="p-0">
-            <div className="divide-y">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="flex items-center gap-4 px-6 py-3">
-                  <Skeleton className="h-4 flex-[3]" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-5 w-24 rounded-full" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <HCard className="gap-0 p-0">
+          <div className="space-y-3 p-4" aria-hidden>
+            {[...Array(6)].map((_, i) => <HSkeleton key={i} className="h-10 w-full rounded-lg" />)}
+          </div>
+        </HCard>
       ) : viewMode === "card" ? (
         <>
-          <CardGrid
-            items={viewRecords}
-            empty={
-              <div className="flex flex-col items-center gap-3 text-muted-foreground py-10">
-                <meta.icon className="h-8 w-8 opacity-30" aria-hidden />
-                <p className="text-sm font-medium">
-                  {!hasActiveFilters
-                    ? t("list.noScopeEmpty", { type: meta.label })
-                    : t("list.noFilterMatch", { type: meta.label })}
-                </p>
-                {canCreate && !hasActiveFilters ? (
-                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" /> {t("newReport")}
-                  </Button>
-                ) : hasActiveFilters ? (
-                  <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground"
-                    onClick={() => { setDisplayStatusFilter("all"); setKindFilter("all"); setStateId("all"); setSector("all"); setProjectId("all"); setReportingMonth("all"); setReportingYear("all"); setQuarterFilter("all"); setAuthorId("all"); setActivityFilter("all"); }}>
-                    <X className="h-3.5 w-3.5" /> {t("filters.clearFilters")}
-                  </Button>
-                ) : null}
-              </div>
-            }
-          />
+          <CardGrid items={viewRecords} empty={emptyRegistry} />
           {/* §21–22: Result count + pagination for card view */}
           {reportsRaw && reportsRaw.total > 0 && (
             <ReportPaginationFooter
@@ -6826,40 +6576,17 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
               label={meta.label}
               onPrev={() => setPage((p) => p - 1)}
               onNext={() => setPage((p) => p + 1)}
-              className="flex items-center justify-between text-sm text-muted-foreground pt-1"
+              onPageChange={setPage}
+              className="pt-1"
               t={t}
             />
           )}
         </>
-      ) : viewMode === "list" ? (
-        <>
-          <Card>
-            <CardContent className="p-0">
-              <ListView
-                items={viewRecords}
-                empty={
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground py-10">
-                    <meta.icon className="h-8 w-8 opacity-30" aria-hidden />
-                    <p className="text-sm font-medium">
-                      {!hasActiveFilters
-                        ? t("list.noScopeEmpty", { type: meta.label })
-                        : t("list.noFilterMatch", { type: meta.label })}
-                    </p>
-                    {canCreate && !hasActiveFilters ? (
-                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-                        <Plus className="h-3.5 w-3.5" /> {t("newReport")}
-                      </Button>
-                    ) : hasActiveFilters ? (
-                      <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground"
-                        onClick={() => { setDisplayStatusFilter("all"); setKindFilter("all"); setStateId("all"); setSector("all"); setProjectId("all"); setReportingMonth("all"); setReportingYear("all"); setQuarterFilter("all"); setAuthorId("all"); setActivityFilter("all"); }}>
-                        <X className="h-3.5 w-3.5" /> {t("filters.clearFilters")}
-                      </Button>
-                    ) : null}
-                  </div>
-                }
-              />
-            </CardContent>
-          </Card>
+      ) : viewMode === "list" || viewMode === "compact" ? (
+        <HCard className="gap-0 overflow-hidden p-0">
+          {viewMode === "list"
+            ? <ListView items={viewRecords} empty={emptyRegistry} />
+            : <CompactView items={viewRecords} empty={emptyRegistry} />}
           {reportsRaw && reportsRaw.total > 0 && (
             <ReportPaginationFooter
               total={reportsRaw.total}
@@ -6869,80 +6596,15 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
               label={meta.label}
               onPrev={() => setPage((p) => p - 1)}
               onNext={() => setPage((p) => p + 1)}
-              className="flex items-center justify-between text-sm text-muted-foreground"
+              onPageChange={setPage}
+              className="border-t border-[var(--border)] px-4 py-3"
               t={t}
             />
           )}
-        </>
-      ) : viewMode === "compact" ? (
-        <>
-          <Card>
-            <CardContent className="p-0">
-              <CompactView
-                items={viewRecords}
-                empty={
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground py-10">
-                    <meta.icon className="h-8 w-8 opacity-30" aria-hidden />
-                    <p className="text-sm font-medium">
-                      {!hasActiveFilters
-                        ? t("list.noScopeEmpty", { type: meta.label })
-                        : t("list.noFilterMatch", { type: meta.label })}
-                    </p>
-                    {canCreate && !hasActiveFilters ? (
-                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-                        <Plus className="h-3.5 w-3.5" /> {t("newReport")}
-                      </Button>
-                    ) : hasActiveFilters ? (
-                      <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground"
-                        onClick={() => { setDisplayStatusFilter("all"); setKindFilter("all"); setStateId("all"); setSector("all"); setProjectId("all"); setReportingMonth("all"); setReportingYear("all"); setQuarterFilter("all"); setAuthorId("all"); setActivityFilter("all"); }}>
-                        <X className="h-3.5 w-3.5" /> {t("filters.clearFilters")}
-                      </Button>
-                    ) : null}
-                  </div>
-                }
-              />
-            </CardContent>
-          </Card>
-          {reportsRaw && reportsRaw.total > 0 && (
-            <ReportPaginationFooter
-              total={reportsRaw.total}
-              totalPages={reportsRaw.totalPages}
-              page={page}
-              pageSize={PAGE_SIZE}
-              label={meta.label}
-              onPrev={() => setPage((p) => p - 1)}
-              onNext={() => setPage((p) => p + 1)}
-              className="flex items-center justify-between text-sm text-muted-foreground"
-              t={t}
-            />
-          )}
-        </>
+        </HCard>
       ) : viewMode === "kanban" ? (
         <div className="p-1">
-          <KanbanBoard
-            items={viewRecords}
-            columns={REPORT_KANBAN_COLS}
-            empty={
-              <div className="flex flex-col items-center gap-3 text-muted-foreground py-10">
-                <meta.icon className="h-8 w-8 opacity-30" aria-hidden />
-                <p className="text-sm font-medium">
-                  {!hasActiveFilters
-                    ? t("list.noScopeEmpty", { type: meta.label })
-                    : t("list.noFilterMatch", { type: meta.label })}
-                </p>
-                {canCreate && !hasActiveFilters ? (
-                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" /> {t("newReport")}
-                  </Button>
-                ) : hasActiveFilters ? (
-                  <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground"
-                    onClick={() => { setDisplayStatusFilter("all"); setKindFilter("all"); setStateId("all"); setSector("all"); setProjectId("all"); setReportingMonth("all"); setReportingYear("all"); setQuarterFilter("all"); setAuthorId("all"); setActivityFilter("all"); }}>
-                    <X className="h-3.5 w-3.5" /> {t("filters.clearFilters")}
-                  </Button>
-                ) : null}
-              </div>
-            }
-          />
+          <KanbanBoard items={viewRecords} columns={REPORT_KANBAN_COLS} empty={emptyRegistry} />
         </div>
       ) : null}
 
@@ -6974,15 +6636,21 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
         onClose={() => setSelected(null)}
         onCloseComplete={completeReportViewerClose}
         restoreFocusRef={detailTriggerRef}
-        title={selected?.title ?? "Report detail"}
+        title={selected?.title ?? t("detail.reportDetail")}
         description={selected
-          ? `${meta.label}${selected.reportType !== "hq_sector" && selected.projectTitle ? ` · ${selected.projectTitle}` : ""}${selected.reportType !== "hq_sector" && (selected.locationType || selected.stateName) ? ` · ${formatLocation({ locationType: selected.locationType, stateName: selected.stateName, stateNameAr: selected.stateNameAr }, i18n.language)}` : ""}`
-          : "Report detail"}
+          ? [
+              meta.label,
+              selected.reportType !== "hq_sector" ? selected.projectTitle : null,
+              selected.reportType !== "hq_sector" && (selected.locationType || selected.stateName)
+                ? formatLocation({ locationType: selected.locationType, stateName: selected.stateName, stateNameAr: selected.stateNameAr }, i18n.language)
+                : null,
+            ].filter(Boolean).join(" · ")
+          : t("detail.reportDetail")}
         metadata={selected ? (
           <>
-            <Badge variant={statusBadgeVariant(selected.status).variant} className={statusBadgeVariant(selected.status).className}>{displayStatus(selected.status, t)}</Badge>
+            <ReportStatusChip status={selected.status} label={displayStatus(selected.status, t)} />
             {(selected.effectiveSector ?? selected.sector) && (
-              <Badge variant="outline" className="text-xs">{selected.effectiveSector ?? selected.sector}</Badge>
+              <Chip size="sm" variant="tertiary">{selected.effectiveSector ?? selected.sector}</Chip>
             )}
           </>
         ) : undefined}
@@ -6995,573 +6663,502 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
         footer={selected && transitions.length > 0 ? transitions.map((tr) => {
           const blocked = tr.action === "final_approve" && reportUnresolvedRC > 0;
           return (
-            <Button
+            <HButton
               key={tr.action}
               size="sm"
-              variant={tr.variant || "default"}
-              disabled={blocked}
-              title={blocked ? t("detail.unresolvedRC_other", { count: reportUnresolvedRC }) : undefined}
-              onClick={() => setTransitionOpen({ action: tr.action, label: tr.label })}
+              variant={tr.variant === "destructive" ? "danger" : tr.variant === "outline" ? "tertiary" : "primary"}
+              isDisabled={blocked}
+              aria-describedby={blocked ? "report-final-approve-blocked" : undefined}
+              onPress={() => setTransitionOpen({ action: tr.action, label: tr.label })}
             >
-              <tr.icon className="h-4 w-4" />{tr.label}
-            </Button>
+              <tr.icon className="size-4" aria-hidden />{tr.label}
+            </HButton>
           );
-        }) : undefined}
+        }).concat(transitions.some((tr) => tr.action === "final_approve") && reportUnresolvedRC > 0
+          ? [<p key="blocked" id="report-final-approve-blocked" className="text-xs text-[var(--warning)]">{t("detail.unresolvedRC_other", { count: reportUnresolvedRC })}</p>]
+          : []) : undefined}
       >
           {selected && (
-            <>
-              <div className="min-w-0 space-y-5">
-                {/* ── Non-activity reports: generic section renderer ──────── */}
-                <>
-                    {/* Metadata grid */}
-                    <div className="grid grid-cols-1 gap-3 text-sm rounded-lg border bg-muted/20 p-4 sm:grid-cols-2 xl:grid-cols-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-0.5">{t("detail.period")}</p>
-                        <p className="font-medium">{selected.period}</p>
-                      </div>
-                      {selected.periodStart && (
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-0.5">{t("detail.dateRange")}</p>
-                          <p className="font-medium">{formatDate(selected.periodStart)}{selected.periodEnd ? ` → ${formatDate(selected.periodEnd)}` : ""}</p>
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-0.5">{t("detail.preparedBy")}</p>
-                        <p className="font-medium">{selected.authorName ?? selected.submittedByName}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-0.5">{t("detail.submitted")}</p>
-                        <p className="font-medium">{formatDateTime(selected.submittedAt)}</p>
-                      </div>
-                       {selected.submittedTo && (
-                         <div className="col-span-full">
-                          <p className="text-xs text-muted-foreground mb-0.5">{t("detail.submittedTo")}</p>
-                          <p className="font-medium">{selected.submittedTo}</p>
-                        </div>
-                      )}
-                      {(() => {
-                        const wp = (selected as unknown as Record<string, unknown>).workflowPath as string | null | undefined;
-                        if (!wp) return null;
-                        const label = wp === "technical_authored" ? "Technical Authored Workflow"
-                          : wp === "state_authored" ? "State Authored Workflow"
-                          : wp === "spc_fallback" ? "SPC Fallback Workflow"
-                          : wp.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-                        return (
-                           <div className="col-span-full">
-                            <p className="text-xs text-muted-foreground mb-0.5">{t("form.approvalWorkflow")}</p>
-                            <p className="font-medium">{label}</p>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* §2: Structured approval paths in detail sheet */}
-                    <div className="rounded-lg border bg-muted/10 px-4 py-3">
-                      <WorkflowBlock workflow={meta.workflow} />
-                    </div>
-
-                    {/* Key Achievements / Progress */}
-                    {selected.sections && selected.reportType !== "program_state" && selected.reportType !== "hq_sector" && sectionsCfg.progress.length > 0 && (
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-semibold mb-2">{t("detail.narrative")}</h4>
-                        {sectionsCfg.progress.map((s) => {
-                          const val = (selected.sections as Record<string, string> | null | undefined)?.[s.key];
-                          if (!val) return null;
-                          return (
-                            <div key={s.key}>
-                              <p className="text-xs font-medium text-muted-foreground mb-1">{s.label.replace(" *", "")}</p>
-                              <p className="text-sm whitespace-pre-wrap">{val}</p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Activities — expandable cards */}
-                    {Array.isArray(selected.activities) && selected.activities.length > 0 && selected.reportType !== "hq_sector" && selected.reportType !== "program_state" && (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2">{t("detail.activitiesImplemented")}</h4>
-                        <div className="space-y-2">
-                          {(selected.activities as Array<Record<string, unknown>>).map((a, i) => (
-                            <details key={i} className="rounded border text-xs group">
-                              <summary className="flex items-center justify-between p-2 cursor-pointer list-none select-none">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <ChevronRight className="h-3 w-3 flex-shrink-0 transition-transform group-open:rotate-90" aria-hidden />
-                                  <p className="font-medium truncate">{String(a.name ?? "—")}</p>
-                                  {!!a.isUnplanned && (
-                                    <Badge variant="secondary" className="text-xs flex-shrink-0">{t("form.unplanned")}</Badge>
-                                  )}
-                                </div>
-                                <Badge variant="outline" className="text-xs flex-shrink-0 ms-2">{String(a.status ?? "—")} · {String(a.percent ?? 0)}%</Badge>
-                              </summary>
-                              <div className="px-3 pb-3 pt-1 space-y-2 border-t bg-muted/10">
-                                <p className="text-muted-foreground">
-                                  {t("detail.output")} {String(a.output ?? "—")} · {t("detail.milestone")} {String(a.milestone ?? "—")}
-                                  {a.budget != null && <> · {t("detail.budget")} {formatCurrency(Number(a.budget))}</>}
-                                  {a.beneficiaries != null && <> · {t("detail.beneficiaries")} {Number(a.beneficiaries).toLocaleString()}</>}
-                                </p>
-                                {/* Per-activity financials (project reports) */}
-                                {(a.plannedBudget != null || (a.actualExpenditure != null && a.actualExpenditure !== "")) && (
-                                  <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                                    <div className="rounded border p-1">
-                                       <p className="text-muted-foreground">{t("detail.planned")}</p>
-                                      <p className="font-medium">{a.plannedBudget != null ? formatCurrency(Number(a.plannedBudget)) : "—"}</p>
-                                    </div>
-                                    <div className="rounded border p-1">
-                                       <p className="text-muted-foreground">{t("detail.actualExpenditure")}</p>
-                                      <p className="font-medium">{a.actualExpenditure != null && a.actualExpenditure !== "" ? formatCurrency(Number(a.actualExpenditure)) : "—"}</p>
-                                    </div>
-                                  </div>
-                                )}
-                                {/* Unplanned reason */}
-                                {!!a.isUnplanned && !!a.unplannedReason && (
-                                  <div>
-                                    <p className="font-medium text-muted-foreground mb-0.5">{t("form.exceptionReason")}</p>
-                                    <p className="whitespace-pre-wrap">{String(a.unplannedReason)}</p>
-                                  </div>
-                                )}
-                                {!!a.achievementSummary && (
-                                  <div>
-                                    <p className="font-medium text-muted-foreground mb-0.5">{t("form.achievementSummary")}</p>
-                                    <p className="whitespace-pre-wrap">{String(a.achievementSummary)}</p>
-                                  </div>
-                                )}
-                                {(a.beneficiariesMen != null || a.beneficiariesWomen != null || a.beneficiariesBoys != null || a.beneficiariesGirls != null) && (
-                                  <div>
-                                    <p className="font-medium text-muted-foreground mb-1">
-                                       {selected.reportType === "project" ? t("form.beneficiaryReachPeriod") : t("form.beneficiaryBreakdown")}
-                                    </p>
-                                    <div className="grid grid-cols-4 gap-2 text-center">
-                                       {([[t("detail.male"), a.beneficiariesMen], [t("detail.female"), a.beneficiariesWomen], [t("detail.boys"), a.beneficiariesBoys], [t("detail.girls"), a.beneficiariesGirls]] as [string, unknown][]).map(([label, val]) => (
-                                        <div key={label} className="rounded border p-1">
-                                          <p className="text-muted-foreground">{label}</p>
-                                          <p className="font-medium">{val != null ? Number(val).toLocaleString() : "—"}</p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                                {!!a.challenges && (
-                                  <div>
-                                    <p className="font-medium text-muted-foreground mb-0.5">{t("fields.challenges")}</p>
-                                    <p className="whitespace-pre-wrap">{String(a.challenges)}</p>
-                                  </div>
-                                )}
-                                {!!a.mitigationMeasures && (
-                                  <div>
-                                    <p className="font-medium text-muted-foreground mb-0.5">{t("form.fieldLabels.mitigationMeasures")}</p>
-                                    <p className="whitespace-pre-wrap">{String(a.mitigationMeasures)}</p>
-                                  </div>
-                                )}
-                                {!!a.nextSteps && (
-                                  <div>
-                                    <p className="font-medium text-muted-foreground mb-0.5">{t("fields.nextSteps")}</p>
-                                    <p className="whitespace-pre-wrap">{String(a.nextSteps)}</p>
-                                  </div>
-                                )}
-                                {!!a.varianceReason && (
-                                  <div>
-                                    <p className="font-medium text-muted-foreground mb-0.5">{t("form.varianceReason")}</p>
-                                    <p className="whitespace-pre-wrap">{String(a.varianceReason)}</p>
-                                  </div>
-                                )}
-                              </div>
-                            </details>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Indicator Progress */}
-                    {Array.isArray((selected as unknown as Record<string, unknown>).indicatorProgress) &&
-                      ((selected as unknown as Record<string, unknown>).indicatorProgress as unknown[]).length > 0 ? (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2">{t("fields.indicators")}</h4>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs border-collapse">
-                            <thead>
-                              <tr className="border-b text-muted-foreground">
-                                <th className="text-start py-1 pe-3 font-medium">{t("form.indicator")}</th>
-                                <th className="text-end py-1 pe-3 font-medium">{t("form.target")}</th>
-                                <th className="text-end py-1 pe-3 font-medium">{t("form.cumulative")}</th>
-                                <th className="text-end py-1 pe-3 font-medium">{t("form.thisPeriod")}</th>
-                                <th className="text-start py-1 font-medium">{t("form.remarks")}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {((selected as unknown as Record<string, unknown>).indicatorProgress as Array<Record<string, unknown>>).map((ind, i) => (
-                                <tr key={i} className="border-b last:border-0">
-                                  <td className="py-1 pe-3">{String(ind.name ?? "—")}</td>
-                                  <td className="text-end py-1 pe-3">{ind.target != null ? String(ind.target) : "—"}</td>
-                                  <td className="text-end py-1 pe-3">{ind.cumAchieved != null ? String(ind.cumAchieved) : "—"}</td>
-                                  <td className="text-end py-1 pe-3">{ind.currentAchievement != null ? String(ind.currentAchievement) : "—"}</td>
-                                  <td className="py-1 text-muted-foreground">{ind.remarks ? String(ind.remarks) : ""}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : (selected as unknown as Record<string, unknown>).indicatorProgress !== undefined &&
-                        Array.isArray((selected as unknown as Record<string, unknown>).indicatorProgress) &&
-                        ((selected as unknown as Record<string, unknown>).indicatorProgress as unknown[]).length === 0 ? (
-                      <p className="text-xs text-muted-foreground">{t("form.noIndicatorProgress")}</p>
-                    ) : null}
-
-                    {/* Beneficiaries */}
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><Users className="h-4 w-4" />{" "}
-                        {selected.reportType === "project"
-                          ? t("detail.projectBeneficiarySummary")
-                          : t("detail.beneficiarySummary")}
-                      </h4>
-                      <div className="grid grid-cols-5 gap-2 text-center text-xs">
-                        {[
-                          [t("detail.male"), selected.beneficiariesMale ?? 0],
-                          [t("detail.female"), selected.beneficiariesFemale ?? 0],
-                          [t("detail.boys"), selected.beneficiariesBoys ?? 0],
-                          [t("detail.girls"), selected.beneficiariesGirls ?? 0],
-                          [t("detail.total"), (selected.beneficiariesMale ?? 0) + (selected.beneficiariesFemale ?? 0) + (selected.beneficiariesBoys ?? 0) + (selected.beneficiariesGirls ?? 0)],
-                        ].map(([k, val]) => (
-                          <div key={k as string} className="rounded border p-2">
-                            <p className="text-muted-foreground">{k}</p>
-                            <p className="text-base font-medium">{(val as number).toLocaleString()}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Financial Summary */}
-                    {selected.reportType === "project" && (selected.plannedBudget != null || selected.actualExpenditure != null) && (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><DollarSign className="h-4 w-4" /> {t("detail.financialSummary")}</h4>
-                        {(() => {
-                          const selCur = (selected as unknown as Record<string, unknown>).currency as string | undefined;
-                          const selPlanned = selected.plannedBudget != null ? Number(selected.plannedBudget) : null;
-                          const selActual = Number(selected.actualExpenditure ?? 0);
-                          const selVariance = selPlanned != null ? selPlanned - selActual : null;
-                          const selUtil = selPlanned != null && selPlanned > 0 ? Math.round((selActual / selPlanned) * 100) : null;
-                          return (
-                            <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                              <div className="rounded border p-2"><p className="text-muted-foreground">{t("detail.planned")}</p><p className="text-sm font-medium">{selPlanned != null ? formatCurrency(selPlanned, selCur) : "—"}</p></div>
-                              <div className="rounded border p-2"><p className="text-muted-foreground">{t("detail.actualExpenditure")}</p><p className="text-sm font-medium">{formatCurrency(selActual, selCur)}</p></div>
-                              <div className="rounded border p-2"><p className="text-muted-foreground">{t("detail.variance")}</p><p className="text-sm font-medium text-foreground">{selVariance != null ? (selVariance === 0 ? t("detail.onBudget") : `${selVariance > 0 ? t("detail.underspend") : t("detail.overspend")}: ${formatCurrency(Math.abs(selVariance), selCur)}`) : "—"}</p></div>
-                              <div className="rounded border p-2"><p className="text-muted-foreground">{t("detail.utilisation")}</p><p className="text-sm font-medium">{selUtil != null ? `${selUtil}%` : "—"}</p></div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* Challenges & Mitigation */}
-                    {selected.sections && selected.reportType !== "program_state" && selected.reportType !== "hq_sector" && sectionsCfg.challenges.length > 0 && (
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-semibold mb-2">{t("form.tabChallengesActions")}</h4>
-                        {sectionsCfg.challenges.map((s) => {
-                          const val = (selected.sections as Record<string, string> | null | undefined)?.[s.key];
-                          if (!val) return null;
-                          return (
-                            <div key={s.key}>
-                              <p className="text-xs font-medium text-muted-foreground mb-1">{configuredFieldLabel(s)}</p>
-                              <p className="text-sm whitespace-pre-wrap">{val}</p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Lessons & Recommendations (narrative section) */}
-                    {selected.sections && selected.reportType !== "program_state" && selected.reportType !== "hq_sector" && sectionsCfg.narrative && sectionsCfg.narrative.length > 0 && (
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-semibold mb-2">{t("form.tabLessonsRecommendations")}</h4>
-                        {sectionsCfg.narrative.map((s) => {
-                          const val = (selected.sections as Record<string, string> | null | undefined)?.[s.key];
-                          if (!val) return null;
-                          return (
-                            <div key={s.key}>
-                              <p className="text-xs font-medium text-muted-foreground mb-1">{configuredFieldLabel(s)}</p>
-                              <p className="text-sm whitespace-pre-wrap">{val}</p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Supporting Attachments */}
-                    {(
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><Paperclip className="h-4 w-4" /> {t("form.supportingAttachments")}</h4>
-                        {detailAttachmentsLoading ? (
-                          <p className="text-xs text-muted-foreground">{t("form.loading")}</p>
-                        ) : detailAttachmentsError ? (
-                          <p className="text-xs text-destructive">{t("form.attachmentLoadFailed")}</p>
-                        ) : detailAttachments.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">{t("form.noAttachments")}</p>
-                        ) : (
-                          <div className="space-y-0.5">
-                            {detailAttachments.map((att) => (
-                              <div key={att.id} className="flex items-center justify-between py-1.5 border-b last:border-0 text-xs gap-3">
-                                <span className="truncate" title={att.fileName}>{att.fileName}</span>
-                                <a
-                                  href={attachmentDownloadUrl(selected.id, att.id)}
-                                  className="text-primary underline flex-shrink-0"
-                                  aria-label={t("form.downloadFile", { fileName: att.fileName })}
-                                >{t("form.download")}</a>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Voice Notes */}
-                    {(
-                      <div>
-                        <h4 className="text-sm font-semibold mb-2">{t("form.voiceNotes")}</h4>
-                        <VoiceNotePanel entityType="report" entityId={selected.id} readOnly />
-                      </div>
-                    )}
-
-                    {selected.reportType === "program_state" && selected.sections && (
-                      <ProgramStateSectionsView
-                        sections={selected.sections as Record<string, unknown>}
-                        activities={Array.isArray(selected.activities) ? (selected.activities as Array<Record<string, unknown>>) : undefined}
-                        projects={projects?.map((p) => ({ id: p.id, code: p.code, title: p.title }))}
-                        periodStart={selected.periodStart ?? null}
-                        periodEnd={selected.periodEnd ?? null}
-                        onAddComment={hasPerm(perms, "comments.create")
-                          ? (section) => setCommentPreset((p) => ({ section, nonce: (p?.nonce ?? 0) + 1 }))
-                          : undefined}
-                      />
-                    )}
-
-                    {selected.reportType === "hq_sector" && selected.sections && (
-                      <HqSectorSectionsView sections={selected.sections as Record<string, unknown>} />
-                    )}
-
-                    {/* Divider + Live Reference Data */}
-                    {selected.reportType !== "program_state" && selected.reportType !== "hq_sector" && (
-                      <>
-                        <div className="border-t pt-2">
-                          <p className="text-xs text-muted-foreground font-medium">{t("form.currentProjectReference")}</p>
-                        </div>
-                        <ReportAggregatesView reportId={selected.id} />
-                      </>
-                    )}
-                  </>
-
-                {hasPerm(perms, "comments.create") && (
+            <div className="min-w-0 space-y-6">
+              {/* ── Non-activity reports: generic section renderer ──────── */}
+              {/* Metadata grid */}
+              <dl className="grid grid-cols-1 gap-4 rounded-2xl bg-[var(--default)] p-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <dt className="mb-0.5 text-xs text-[var(--muted)]">{t("detail.period")}</dt>
+                  <dd className="font-medium">{formatReportPeriod((selected as unknown as Record<string, unknown>).kind as string | undefined, selected.period, t, i18n.language)}</dd>
+                </div>
+                {selected.periodStart && (
                   <div>
-                    <h4 className="text-sm font-semibold mb-2">{t("detail.commentsRevisions")}</h4>
-                    <CommentsPanel
-                      entityType="report"
-                      entityId={selected.id}
-                      sections={selected.reportType === "program_state"
-                        ? [...SPR_SECTION_KEYS]
-                        : ["narrative", "activities", "beneficiaries", "budget", "challenges", "lessons"]}
-                      sectionLabels={selected.reportType === "program_state"
-                        ? SPR_SECTION_LABELS
-                        : {
-                            narrative: t("detail.narrative"),
-                            activities: t("detail.activitiesImplemented"),
-                            beneficiaries: t("detail.beneficiarySummary"),
-                            budget: t("detail.budget"),
-                            challenges: t("fields.challenges"),
-                            lessons: t("form.tabLessons"),
-                          }}
-                      presetSection={selected.reportType === "program_state" ? commentPreset : null}
-                      currentUserId={me?.user?.id ?? null}
-                      currentUserRole={me?.user?.role ?? null}
-                    />
+                    <dt className="mb-0.5 text-xs text-[var(--muted)]">{t("detail.dateRange")}</dt>
+                    <dd className="font-medium"><bdi dir="ltr">{formatDate(selected.periodStart)}{selected.periodEnd ? ` → ${formatDate(selected.periodEnd)}` : ""}</bdi></dd>
                   </div>
                 )}
-
-                {selected.approvalHistory && selected.approvalHistory.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" /> {t("detail.approvalHistory")}
-                    </h4>
-                    <div className="space-y-0">
-                      {selected.approvalHistory.map((h: ReportHistoryItem, idx: number) => {
-                        const isApprove = h.action.includes("approve") || h.action.includes("final");
-                        const isReject = h.action.includes("reject");
-                        const isRevision = h.action.includes("revision");
-                        const dotColor = isApprove ? "bg-success" : isReject ? "bg-destructive" : isRevision ? "bg-warning" : "bg-primary";
-                        return (
-                          <div key={h.id} className="flex gap-3 text-sm">
-                            <div className="flex flex-col items-center">
-                              <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${dotColor}`} />
-                              {idx < selected.approvalHistory!.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
-                            </div>
-                            <div className="flex-1 pb-4">
-                              <p className="font-medium capitalize">{h.action.replace(/_/g, " ")}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {displayStatus(h.fromStatus, t)} <ArrowRight className="inline h-3 w-3 mx-0.5 rtl:rotate-180" /> {displayStatus(h.toStatus, t)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {h.actorName} · {h.actorRole?.replace(/_/g, " ")} · {formatDateTime(h.timestamp)}
-                              </p>
-                              {!!h.usedOverride && (
-                                <p className="text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-2 mt-1 flex items-start gap-1.5">
-                                  <span className="font-semibold text-amber-700 dark:text-amber-400 shrink-0">{t("form.override")}</span>
-                                  <span className="text-amber-700 dark:text-amber-400 italic">{h.overrideReason ?? ""}</span>
-                                </p>
-                              )}
-                              {h.comment && (
-                                <p className="text-xs bg-muted/40 rounded p-2 mt-1 italic border-l-2 border-primary/30">"{h.comment}"</p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                <div>
+                  <dt className="mb-0.5 text-xs text-[var(--muted)]">{t("detail.preparedBy")}</dt>
+                  <dd dir="auto" className="font-medium text-page-start">{selected.authorName ?? selected.submittedByName}</dd>
+                </div>
+                <div>
+                  <dt className="mb-0.5 text-xs text-[var(--muted)]">{t("detail.submitted")}</dt>
+                  <dd className="font-medium"><bdi dir="ltr">{formatDateTime(selected.submittedAt)}</bdi></dd>
+                </div>
+                {selected.submittedTo && (
+                  <div className="col-span-full">
+                    <dt className="mb-0.5 text-xs text-[var(--muted)]">{t("detail.submittedTo")}</dt>
+                    <dd dir="auto" className="font-medium text-page-start">{selected.submittedTo}</dd>
                   </div>
                 )}
+                {(() => {
+                  const wp = (selected as unknown as Record<string, unknown>).workflowPath as string | null | undefined;
+                  if (!wp) return null;
+                  return (
+                    <div className="col-span-full">
+                      <dt className="mb-0.5 text-xs text-[var(--muted)]">{t("form.approvalWorkflow")}</dt>
+                      <dd className="font-medium">{t(`approval.workflowPaths.${wp}`, { defaultValue: wp.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") })}</dd>
+                    </div>
+                  );
+                })()}
+              </dl>
+
+              {/* §2: Structured approval paths in the viewer */}
+              <div className="rounded-2xl border border-[var(--border)] px-4 py-3">
+                <WorkflowBlock workflow={meta.workflow} />
               </div>
-            </>
+
+              {/* Key Achievements / Progress */}
+              {selected.sections && selected.reportType !== "program_state" && selected.reportType !== "hq_sector" && sectionsCfg.progress.length > 0 && (
+                <ViewerSection title={t("detail.narrative")}>
+                  {sectionsCfg.progress.map((sec) => {
+                    const val = (selected.sections as Record<string, string> | null | undefined)?.[sec.key];
+                    if (!val) return null;
+                    return <ViewerField key={sec.key} label={configuredFieldLabel(sec)} value={val} />;
+                  })}
+                </ViewerSection>
+              )}
+
+              {/* Activities — expandable */}
+              {Array.isArray(selected.activities) && selected.activities.length > 0 && selected.reportType !== "hq_sector" && selected.reportType !== "program_state" && (
+                <ViewerSection title={t("detail.activitiesImplemented")}>
+                  <div className="space-y-2">
+                    {(selected.activities as Array<Record<string, unknown>>).map((a, i) => (
+                      <details key={i} className="group rounded-xl border border-[var(--border)] text-xs">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 outline-none select-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <ChevronRight className="size-3.5 shrink-0 transition-transform group-open:rotate-90 rtl:rotate-180 rtl:group-open:rotate-90" aria-hidden />
+                            <p dir="auto" className="truncate text-sm font-medium text-page-start">{String(a.name ?? "—")}</p>
+                            {!!a.isUnplanned && <Chip size="sm" variant="soft" color="warning" className="shrink-0">{t("form.unplanned")}</Chip>}
+                          </div>
+                          <Chip size="sm" variant="tertiary" className="shrink-0">
+                            {activityStatusLabel(a.status)} · <bdi dir="ltr">{String(a.percent ?? 0)}%</bdi>
+                          </Chip>
+                        </summary>
+                        <div className="space-y-3 border-t border-[var(--border)] px-3 pb-3 pt-2">
+                          <p className="text-[var(--muted)]">
+                            {t("detail.output")} <bdi dir="ltr">{String(a.output ?? "—")}</bdi> · {t("detail.milestone")} {String(a.milestone ?? "—")}
+                            {a.budget != null && <> · {t("detail.budget")} <bdi dir="ltr">{formatCurrency(Number(a.budget))}</bdi></>}
+                            {a.beneficiaries != null && <> · {t("detail.beneficiaries")} <Num value={Number(a.beneficiaries)} /></>}
+                          </p>
+                          {/* Per-activity financials (project reports) */}
+                          {(a.plannedBudget != null || (a.actualExpenditure != null && a.actualExpenditure !== "")) && (
+                            <div className="grid grid-cols-2 gap-2">
+                              <StatTile label={t("detail.planned")}>{a.plannedBudget != null ? <bdi dir="ltr">{formatCurrency(Number(a.plannedBudget))}</bdi> : "—"}</StatTile>
+                              <StatTile label={t("detail.actualExpenditure")}>{a.actualExpenditure != null && a.actualExpenditure !== "" ? <bdi dir="ltr">{formatCurrency(Number(a.actualExpenditure))}</bdi> : "—"}</StatTile>
+                            </div>
+                          )}
+                          {/* Unplanned reason */}
+                          {!!a.isUnplanned && !!a.unplannedReason && <ViewerField label={t("form.exceptionReason")} value={String(a.unplannedReason)} small />}
+                          {!!a.achievementSummary && <ViewerField label={t("form.achievementSummary")} value={String(a.achievementSummary)} small />}
+                          {(a.beneficiariesMen != null || a.beneficiariesWomen != null || a.beneficiariesBoys != null || a.beneficiariesGirls != null) && (
+                            <div>
+                              <p className="mb-1 font-medium text-[var(--muted)]">
+                                {selected.reportType === "project" ? t("form.beneficiaryReachPeriod") : t("form.beneficiaryBreakdown")}
+                              </p>
+                              <div className="grid grid-cols-4 gap-2">
+                                {([[t("detail.male"), a.beneficiariesMen], [t("detail.female"), a.beneficiariesWomen], [t("detail.boys"), a.beneficiariesBoys], [t("detail.girls"), a.beneficiariesGirls]] as [string, unknown][]).map(([label, val]) => (
+                                  <StatTile key={label} label={label}>{val != null ? <Num value={Number(val)} /> : "—"}</StatTile>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {!!a.challenges && <ViewerField label={t("fields.challenges")} value={String(a.challenges)} small />}
+                          {!!a.mitigationMeasures && <ViewerField label={t("form.fieldLabels.mitigationMeasures")} value={String(a.mitigationMeasures)} small />}
+                          {!!a.nextSteps && <ViewerField label={t("fields.nextSteps")} value={String(a.nextSteps)} small />}
+                          {!!a.varianceReason && <ViewerField label={t("form.varianceReason")} value={String(a.varianceReason)} small />}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </ViewerSection>
+              )}
+
+              {/* Indicator Progress */}
+              {Array.isArray((selected as unknown as Record<string, unknown>).indicatorProgress) &&
+                ((selected as unknown as Record<string, unknown>).indicatorProgress as unknown[]).length > 0 ? (
+                <ViewerSection title={t("fields.indicators")}>
+                  <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+                    <table className="w-full border-collapse text-xs">
+                      <thead className="bg-[var(--default)] text-[var(--muted)]">
+                        <tr>
+                          <th className="px-3 py-2 text-start font-medium">{t("form.indicator")}</th>
+                          <th className="px-3 py-2 text-end font-medium">{t("form.target")}</th>
+                          <th className="px-3 py-2 text-end font-medium">{t("form.cumulative")}</th>
+                          <th className="px-3 py-2 text-end font-medium">{t("form.thisPeriod")}</th>
+                          <th className="px-3 py-2 text-start font-medium">{t("form.remarks")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {((selected as unknown as Record<string, unknown>).indicatorProgress as Array<Record<string, unknown>>).map((ind, i) => (
+                          <tr key={i} className="border-t border-[var(--border)]">
+                            <td dir="auto" className="px-3 py-2 text-page-start">{String(ind.name ?? "—")}</td>
+                            <td className="px-3 py-2 text-end"><Num value={ind.target != null ? Number(ind.target) : null} /></td>
+                            <td className="px-3 py-2 text-end"><Num value={ind.cumAchieved != null ? Number(ind.cumAchieved) : null} /></td>
+                            <td className="px-3 py-2 text-end"><Num value={ind.currentAchievement != null ? Number(ind.currentAchievement) : null} /></td>
+                            <td dir="auto" className="px-3 py-2 text-[var(--muted)] text-page-start">{ind.remarks ? String(ind.remarks) : ""}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </ViewerSection>
+              ) : (selected as unknown as Record<string, unknown>).indicatorProgress !== undefined &&
+                  Array.isArray((selected as unknown as Record<string, unknown>).indicatorProgress) &&
+                  ((selected as unknown as Record<string, unknown>).indicatorProgress as unknown[]).length === 0 ? (
+                <p className="text-xs text-[var(--muted)]">{t("form.noIndicatorProgress")}</p>
+              ) : null}
+
+              {/* Beneficiaries */}
+              <ViewerSection icon={Users} title={selected.reportType === "project" ? t("detail.projectBeneficiarySummary") : t("detail.beneficiarySummary")}>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {[
+                    [t("detail.male"), selected.beneficiariesMale ?? 0],
+                    [t("detail.female"), selected.beneficiariesFemale ?? 0],
+                    [t("detail.boys"), selected.beneficiariesBoys ?? 0],
+                    [t("detail.girls"), selected.beneficiariesGirls ?? 0],
+                    [t("detail.total"), (selected.beneficiariesMale ?? 0) + (selected.beneficiariesFemale ?? 0) + (selected.beneficiariesBoys ?? 0) + (selected.beneficiariesGirls ?? 0)],
+                  ].map(([k, val]) => (
+                    <StatTile key={k as string} label={k as string} className="p-3"><span className="text-base"><Num value={val as number} /></span></StatTile>
+                  ))}
+                </div>
+              </ViewerSection>
+
+              {/* Financial Summary */}
+              {selected.reportType === "project" && (selected.plannedBudget != null || selected.actualExpenditure != null) && (
+                <ViewerSection icon={DollarSign} title={t("detail.financialSummary")}>
+                  {(() => {
+                    const selCur = (selected as unknown as Record<string, unknown>).currency as string | undefined;
+                    const selPlanned = selected.plannedBudget != null ? Number(selected.plannedBudget) : null;
+                    const selActual = Number(selected.actualExpenditure ?? 0);
+                    const selVariance = selPlanned != null ? selPlanned - selActual : null;
+                    const selUtil = selPlanned != null && selPlanned > 0 ? Math.round((selActual / selPlanned) * 100) : null;
+                    return (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <StatTile label={t("detail.planned")} className="p-3">{selPlanned != null ? <bdi dir="ltr">{formatCurrency(selPlanned, selCur)}</bdi> : "—"}</StatTile>
+                        <StatTile label={t("detail.actualExpenditure")} className="p-3"><bdi dir="ltr">{formatCurrency(selActual, selCur)}</bdi></StatTile>
+                        <StatTile label={t("detail.variance")} className="p-3">
+                          {selVariance != null
+                            ? (selVariance === 0 ? t("detail.onBudget") : <>{selVariance > 0 ? t("detail.underspend") : t("detail.overspend")}: <bdi dir="ltr">{formatCurrency(Math.abs(selVariance), selCur)}</bdi></>)
+                            : "—"}
+                        </StatTile>
+                        <StatTile label={t("detail.utilisation")} className="p-3"><bdi dir="ltr">{selUtil != null ? `${selUtil}%` : "—"}</bdi></StatTile>
+                      </div>
+                    );
+                  })()}
+                </ViewerSection>
+              )}
+
+              {/* Challenges & Mitigation */}
+              {selected.sections && selected.reportType !== "program_state" && selected.reportType !== "hq_sector" && sectionsCfg.challenges.length > 0 && (
+                <ViewerSection title={t("form.tabChallengesActions")}>
+                  {sectionsCfg.challenges.map((sec) => {
+                    const val = (selected.sections as Record<string, string> | null | undefined)?.[sec.key];
+                    if (!val) return null;
+                    return <ViewerField key={sec.key} label={configuredFieldLabel(sec)} value={val} />;
+                  })}
+                </ViewerSection>
+              )}
+
+              {/* Lessons & Recommendations (narrative section) */}
+              {selected.sections && selected.reportType !== "program_state" && selected.reportType !== "hq_sector" && sectionsCfg.narrative && sectionsCfg.narrative.length > 0 && (
+                <ViewerSection title={t("form.tabLessonsRecommendations")}>
+                  {sectionsCfg.narrative.map((sec) => {
+                    const val = (selected.sections as Record<string, string> | null | undefined)?.[sec.key];
+                    if (!val) return null;
+                    return <ViewerField key={sec.key} label={configuredFieldLabel(sec)} value={val} />;
+                  })}
+                </ViewerSection>
+              )}
+
+              {/* Supporting Attachments */}
+              <ViewerSection icon={Paperclip} title={t("form.supportingAttachments")}>
+                {detailAttachmentsLoading ? (
+                  <p className="text-xs text-[var(--muted)]" role="status">{t("form.loading")}</p>
+                ) : detailAttachmentsError ? (
+                  <p className="text-xs text-[var(--danger)]" role="alert">{t("form.attachmentLoadFailed")}</p>
+                ) : detailAttachments.length === 0 ? (
+                  <p className="text-xs text-[var(--muted)]">{t("form.noAttachments")}</p>
+                ) : (
+                  <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
+                    {detailAttachments.map((att) => (
+                      <li key={att.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                        <span dir="ltr" className="flex min-w-0 items-center gap-2 rtl:justify-end">
+                          <FileText className="size-4 shrink-0 text-[var(--muted)]" aria-hidden />
+                          <span className="truncate" title={att.fileName}>{att.fileName}</span>
+                        </span>
+                        <a
+                          href={attachmentDownloadUrl(selected.id, att.id)}
+                          className="flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--accent)] hover:underline"
+                          aria-label={t("form.downloadFile", { fileName: att.fileName })}
+                        ><Download className="size-3.5" aria-hidden />{t("form.download")}</a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </ViewerSection>
+
+              {/* Voice Notes */}
+              <ViewerSection title={t("form.voiceNotes")}>
+                <VoiceNotePanel entityType="report" entityId={selected.id} readOnly />
+              </ViewerSection>
+
+              {selected.reportType === "program_state" && selected.sections && (
+                <ProgramStateSectionsView
+                  sections={selected.sections as Record<string, unknown>}
+                  activities={Array.isArray(selected.activities) ? (selected.activities as Array<Record<string, unknown>>) : undefined}
+                  projects={projects?.map((p) => ({ id: p.id, code: p.code, title: p.title }))}
+                  periodStart={selected.periodStart ?? null}
+                  periodEnd={selected.periodEnd ?? null}
+                  onAddComment={hasPerm(perms, "comments.create")
+                    ? (section) => setCommentPreset((p) => ({ section, nonce: (p?.nonce ?? 0) + 1 }))
+                    : undefined}
+                />
+              )}
+
+              {selected.reportType === "hq_sector" && selected.sections && (
+                <HqSectorSectionsView sections={selected.sections as Record<string, unknown>} />
+              )}
+
+              {/* Divider + Live Reference Data */}
+              {selected.reportType !== "program_state" && selected.reportType !== "hq_sector" && (
+                <div className="space-y-2 border-t border-[var(--border)] pt-4">
+                  <p className="text-xs font-medium text-[var(--muted)]">{t("form.currentProjectReference")}</p>
+                  <ReportAggregatesView reportId={selected.id} />
+                </div>
+              )}
+
+              {hasPerm(perms, "comments.create") && (
+                <ViewerSection title={t("detail.commentsRevisions")}>
+                  <CommentsPanel
+                    entityType="report"
+                    entityId={selected.id}
+                    sections={selected.reportType === "program_state"
+                      ? [...SPR_SECTION_KEYS]
+                      : ["narrative", "activities", "beneficiaries", "budget", "challenges", "lessons"]}
+                    sectionLabels={selected.reportType === "program_state"
+                      ? SPR_SECTION_LABELS
+                      : {
+                          narrative: t("detail.narrative"),
+                          activities: t("detail.activitiesImplemented"),
+                          beneficiaries: t("detail.beneficiarySummary"),
+                          budget: t("detail.budget"),
+                          challenges: t("fields.challenges"),
+                          lessons: t("form.tabLessons"),
+                        }}
+                    presetSection={selected.reportType === "program_state" ? commentPreset : null}
+                    currentUserId={me?.user?.id ?? null}
+                    currentUserRole={me?.user?.role ?? null}
+                  />
+                </ViewerSection>
+              )}
+
+              {selected.approvalHistory && selected.approvalHistory.length > 0 && (
+                <ViewerSection icon={Clock} title={t("detail.approvalHistory")}>
+                  <ol className="space-y-0">
+                    {selected.approvalHistory.map((h: ReportHistoryItem, idx: number) => {
+                      const isApprove = h.action.includes("approve") || h.action.includes("final");
+                      const isReject = h.action.includes("reject");
+                      const isRevision = h.action.includes("revision");
+                      const dotColor = isApprove ? "bg-[var(--success)]" : isReject ? "bg-[var(--danger)]" : isRevision ? "bg-[var(--warning)]" : "bg-[var(--accent)]";
+                      return (
+                        <li key={h.id} className="flex gap-3 text-sm">
+                          <div className="flex flex-col items-center">
+                            <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${dotColor}`} aria-hidden />
+                            {idx < selected.approvalHistory!.length - 1 && <span className="mt-1 w-px flex-1 bg-[var(--border)]" aria-hidden />}
+                          </div>
+                          <div className="flex-1 pb-4">
+                            <p className="font-medium">{t(`approval.historyActions.${h.action}`, { defaultValue: h.action.replace(/_/g, " ") })}</p>
+                            <p className="mt-0.5 text-xs text-[var(--muted)]">
+                              {displayStatus(h.fromStatus, t)} <ArrowRight className="mx-0.5 inline size-3 rtl:rotate-180" aria-hidden /> {displayStatus(h.toStatus, t)}
+                            </p>
+                            <p className="text-xs text-[var(--muted)]">
+                              <bdi>{h.actorName}</bdi> · {t(`roles.${h.actorRole}`, { ns: "users", defaultValue: h.actorRole?.replace(/_/g, " ") })} · <bdi dir="ltr">{formatDateTime(h.timestamp)}</bdi>
+                            </p>
+                            {!!h.usedOverride && (
+                              <p className="mt-1 flex items-start gap-1.5 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 p-2 text-xs">
+                                <span className="shrink-0 font-semibold text-[var(--warning)]">{t("form.override")}</span>
+                                <span dir="auto" className="italic">{h.overrideReason ?? ""}</span>
+                              </p>
+                            )}
+                            {h.comment && (
+                              <blockquote dir="auto" className="mt-1 rounded-lg border-s-2 border-[var(--accent)]/40 bg-[var(--default)] p-2 text-xs italic text-page-start">{h.comment}</blockquote>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </ViewerSection>
+              )}
+            </div>
           )}
       </RecordDetailModal>
 
-      <Dialog open={!!transitionOpen} onOpenChange={(o) => { if (!o) { setTransitionOpen(null); setComment(""); setOverrideReason(""); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{transitionOpen?.label}</DialogTitle>
-            <DialogDescription>
-              {isSelfReviewOverride
-                ? t("form.overrideDescription")
-                : transitionOpen?.action === "request_revision" || transitionOpen?.action === "reject"
-                  ? t("detail.transitionExplainReason")
-                  : t("detail.transitionOptionalComment")}
-            </DialogDescription>
-          </DialogHeader>
-          {!isOnline && (
-            <p id="report-transition-offline-notice" role="alert" className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-              <span className="font-medium">{t("sync.internetRequired", { ns: "common" })}.</span>{" "}
-              {t("sync.internetRequiredDescription", { ns: "common" })}
-            </p>
-          )}
-          {isSelfReviewOverride && (
-            <div className="space-y-1">
-              <label className="text-sm font-medium">{t("form.overrideReason")} <span className="text-destructive">*</span></label>
-              <Textarea
-                rows={3}
-                value={overrideReason}
-                onChange={(e) => setOverrideReason(e.target.value)}
-                placeholder={t("form.overridePlaceholder")}
-              />
-            </div>
-          )}
-          <Textarea
-            rows={4}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder={transitionOpen?.action === "request_revision" || transitionOpen?.action === "reject" ? t("detail.reasonRequired") : t("detail.commentOptional")}
-          />
-          <DialogFooter>
-            <Button
-              onClick={onTransition}
-              disabled={
-                !isOnline ||
-                transitionMutation.isPending ||
-                ((transitionOpen?.action === "request_revision" || transitionOpen?.action === "reject") && !comment.trim()) ||
-                (isSelfReviewOverride && !overrideReason.trim())
-              }
-              aria-describedby={!isOnline ? "report-transition-offline-notice" : undefined}
-            >
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <Modal isOpen={!!transitionOpen} onOpenChange={(o) => { if (!o) { setTransitionOpen(null); setComment(""); setOverrideReason(""); } }}>
+        <Modal.Backdrop isDismissable={!transitionMutation.isPending}>
+          <Modal.Container size="md">
+            <Modal.Dialog>
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{transitionOpen?.label}</Modal.Heading>
+                <p className="text-sm text-[var(--muted)]">
+                  {isSelfReviewOverride
+                    ? t("form.overrideDescription")
+                    : transitionOpen?.action === "request_revision" || transitionOpen?.action === "reject"
+                      ? t("detail.transitionExplainReason")
+                      : t("detail.transitionOptionalComment")}
+                </p>
+              </Modal.Header>
+              <Modal.Body className="space-y-4">
+                {!isOnline && (
+                  <Alert status="warning" id="report-transition-offline-notice" role="alert">
+                    <Alert.Indicator />
+                    <Alert.Content>
+                      <Alert.Title>{t("sync.internetRequired", { ns: "common" })}</Alert.Title>
+                      <Alert.Description>{t("sync.internetRequiredDescription", { ns: "common" })}</Alert.Description>
+                    </Alert.Content>
+                  </Alert>
+                )}
+                {isSelfReviewOverride && (
+                  <div className="space-y-1.5">
+                    <HLabel htmlFor="report-override-reason" isRequired>{t("form.overrideReason")}</HLabel>
+                    <HTextArea
+                      id="report-override-reason"
+                      fullWidth
+                      dir="auto"
+                      rows={3}
+                      value={overrideReason}
+                      onChange={(e) => setOverrideReason(e.target.value)}
+                      placeholder={t("form.overridePlaceholder")}
+                    />
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <HLabel htmlFor="report-transition-comment" isRequired={transitionOpen?.action === "request_revision" || transitionOpen?.action === "reject"}>
+                    {t("detail.comment")}
+                  </HLabel>
+                  <HTextArea
+                    id="report-transition-comment"
+                    fullWidth
+                    dir="auto"
+                    rows={4}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder={transitionOpen?.action === "request_revision" || transitionOpen?.action === "reject" ? t("detail.reasonRequired") : t("detail.commentOptional")}
+                  />
+                </div>
+              </Modal.Body>
+              <Modal.Footer>
+                <HButton variant="tertiary" slot="close">{t("detail.cancel")}</HButton>
+                <HButton
+                  variant={transitionOpen?.action === "reject" ? "danger" : "primary"}
+                  onPress={onTransition}
+                  isPending={transitionMutation.isPending}
+                  isDisabled={
+                    !isOnline ||
+                    ((transitionOpen?.action === "request_revision" || transitionOpen?.action === "reject") && !comment.trim()) ||
+                    (isSelfReviewOverride && !overrideReason.trim())
+                  }
+                  aria-describedby={!isOnline ? "report-transition-offline-notice" : undefined}
+                >
+                  {t("detail.confirm")}
+                </HButton>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
       {/* ── Discard Unsaved Changes Confirmation ── */}
-      <AlertDialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved changes. Discard and close?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowDiscardConfirm(false)}>
-              Keep Editing
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setShowDiscardConfirm(false);
-                setIsFormDirty(false);
-                setCreateOpen(false);
-                resetForm();
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Discard
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={showDiscardConfirm}
+        title={t("form.discardTitle")}
+        message={t("form.discardDescription")}
+        cancelLabel={t("form.keepEditing")}
+        confirmLabel={t("form.discard")}
+        onCancel={() => setShowDiscardConfirm(false)}
+        onConfirm={() => {
+          setShowDiscardConfirm(false);
+          setIsFormDirty(false);
+          setCreateOpen(false);
+          resetForm();
+        }}
+      />
 
       {/* ── Supporting Insights Remove Confirmation ── */}
       {/* Shown when a user clicks Remove on a populated section (prevents accidental data loss). */}
-      <AlertDialog open={removeInsightConfirm !== null} onOpenChange={(o) => !o && setRemoveInsightConfirm(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this section?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The text you have entered will be discarded. This cannot be undone unless you close
-              without saving.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setRemoveInsightConfirm(null)}>{t("formExtra.keep")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (removeInsightConfirm === "successStory") {
-                  setSectionValues((cur) => ({ ...cur, successStory: "" }));
-                  setShowSuccessStory(false);
-                } else if (removeInsightConfirm === "coordinationUpdates") {
-                  setSectionValues((cur) => ({ ...cur, coordinationUpdates: "" }));
-                  setShowCoordinationUpdates(false);
-                } else if (removeInsightConfirm === "communityFeedback") {
-                  setSectionValues((cur) => ({ ...cur, communityFeedback: "" }));
-                  setShowCommunityFeedback(false);
-                }
-                setIsFormDirty(true);
-                setRemoveInsightConfirm(null);
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={removeInsightConfirm !== null}
+        title={t("form.removeSectionTitle")}
+        message={t("form.removeSectionDescription")}
+        cancelLabel={t("formExtra.keep")}
+        confirmLabel={t("form.removeSection")}
+        onCancel={() => setRemoveInsightConfirm(null)}
+        onConfirm={() => {
+          if (removeInsightConfirm === "successStory") {
+            setSectionValues((cur) => ({ ...cur, successStory: "" }));
+            setShowSuccessStory(false);
+          } else if (removeInsightConfirm === "coordinationUpdates") {
+            setSectionValues((cur) => ({ ...cur, coordinationUpdates: "" }));
+            setShowCoordinationUpdates(false);
+          } else if (removeInsightConfirm === "communityFeedback") {
+            setSectionValues((cur) => ({ ...cur, communityFeedback: "" }));
+            setShowCommunityFeedback(false);
+          }
+          setIsFormDirty(true);
+          setRemoveInsightConfirm(null);
+        }}
+      />
 
       {/* ── Delete Draft Confirmation ── */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-destructive" /> {t("detail.deleteDraft")}
-            </DialogTitle>
-            <DialogDescription>
-              This will permanently delete the draft report{" "}
-              <span className="font-medium text-foreground">"{deleteTarget?.title}"</span>.
-              This action cannot be undone and does not affect any approved records.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>{t("detail.cancel")}</Button>
-            <Button
-              variant="destructive"
-              onClick={() => deleteTarget && handleDeleteReport(deleteTarget)}
-            >
-              {t("detail.deleteDraft")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title={t("detail.deleteDraft")}
+        message={<>{t("detail.deleteDraftDescription")} <bdi dir="auto" className="font-medium text-[var(--foreground)]">«{deleteTarget?.title}»</bdi></>}
+        cancelLabel={t("detail.cancel")}
+        confirmLabel={t("detail.deleteDraft")}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => { if (deleteTarget) handleDeleteReport(deleteTarget); }}
+      />
+    </div>
+  );
+}
+
+/** Heading + content block used throughout the report viewer. */
+function ViewerSection({ title, icon: Icon, children }: { title: string; icon?: typeof FileText; children: ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <h4 className="flex items-center gap-2 text-sm font-semibold">
+        {Icon && <Icon className="size-4 text-[var(--muted)]" aria-hidden />}{title}
+      </h4>
+      {children}
+    </section>
+  );
+}
+
+/** A labelled free-text value (user-entered, so it keeps its own direction). */
+function ViewerField({ label, value, small }: { label: string; value: string; small?: boolean }) {
+  return (
+    <div>
+      <p className={cn("mb-1 font-medium text-[var(--muted)]", small ? "text-xs" : "text-xs")}>{label}</p>
+      <p dir="auto" className={cn("whitespace-pre-wrap text-page-start", small ? "text-xs" : "text-sm")}>{value}</p>
     </div>
   );
 }

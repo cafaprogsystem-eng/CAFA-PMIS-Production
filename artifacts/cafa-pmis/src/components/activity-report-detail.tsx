@@ -23,8 +23,7 @@
 
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, Chip } from "@heroui/react";
 import {
   FileText, Target, Users, AlertTriangle, Info, Paperclip,
   ChevronRight, MapPin, BookOpen, Calendar, User, Send,
@@ -399,7 +398,7 @@ export function ActivityReportDetail({
             {implStatusLabel && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1">{t("activityDetail.status")}</p>
-                <Badge variant="outline" className="text-xs">{implStatusLabel}</Badge>
+                <Chip size="sm" variant="tertiary">{implStatusLabel}</Chip>
               </div>
             )}
             {actualStartDate && (
@@ -610,16 +609,12 @@ export function ActivityReportDetail({
                   <Button
                     key={tr.action}
                     size="sm"
-                    variant={tr.variant ?? "default"}
-                    disabled={blocked}
-                    title={
-                      blocked
-                        ? t("activityDetail.unresolvedCorrections", { count: reportUnresolvedRC })
-                        : undefined
-                    }
-                    onClick={() => onTransitionOpen({ action: tr.action, label: tr.label })}
+                    variant={tr.variant === "destructive" ? "danger" : tr.variant === "outline" ? "tertiary" : "primary"}
+                    isDisabled={blocked}
+                    aria-label={blocked ? `${tr.label} — ${t("activityDetail.unresolvedCorrections", { count: reportUnresolvedRC })}` : undefined}
+                    onPress={() => onTransitionOpen({ action: tr.action, label: tr.label })}
                   >
-                <tr.icon className="h-4 w-4" aria-hidden="true" />
+                <tr.icon className="size-4" aria-hidden="true" />
                     {tr.label}
                   </Button>
                 );

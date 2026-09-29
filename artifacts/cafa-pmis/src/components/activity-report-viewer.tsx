@@ -5,10 +5,9 @@
  * RecordDetailModal owns the viewport, scroll, accessibility, and focus contract;
  * ActivityReportDetail owns only report presentation.
  */
-import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { ActivityReportDetail, ActivityReportDetailProps } from "./activity-report-detail";
-import { statusBadgeVariant } from "@/lib/format";
+import { ReportStatusChip } from "@/components/report-status-chip";
 import { RecordDetailModal } from "@/components/record-detail-modal";
 
 // Re-export ARTransitionItem so callers can import from one place
@@ -64,10 +63,7 @@ export function ActivityReportViewer({
       description={t("detail.activityReportViewerDescription")}
       restoreFocusRef={restoreFocusRef}
       headerActions={headerActions}
-      metadata={report?.status ? (() => {
-        const sb = statusBadgeVariant(report.status);
-        return <Badge variant={sb.variant} className={sb.className}>{displayStatus(report.status, t)}</Badge>;
-      })() : undefined}
+      metadata={report?.status ? <ReportStatusChip status={report.status} label={displayStatus(report.status, t)} /> : undefined}
     >
       {report && (
         <ActivityReportDetail

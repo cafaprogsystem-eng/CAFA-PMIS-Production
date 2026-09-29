@@ -589,7 +589,12 @@
     "projectTitle": "Project details",
     "planTitle": "Plan details",
     "conversationTitle": "Conversation",
-    "description": "Authorised record information and actions"
+    "description": "Authorised record information and actions",
+    "unavailable": "Record unavailable",
+    "unavailableDescription": "This record is unavailable or you no longer have access to it.",
+    "error": "Could not load record",
+    "errorDescription": "The record could not be loaded. Please try again.",
+    "retry": "Try again"
   },
   "output": "Output",
   "unit": "Unit",
