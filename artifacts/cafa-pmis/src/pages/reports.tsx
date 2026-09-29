@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import type { ReactNode } from "react";
-import { Alert, Button as HButton, Card as HCard, Chip, Dropdown, Label as HLabel, Modal, Skeleton as HSkeleton, TextArea as HTextArea } from "@heroui/react";
+import { Alert, Button as HButton, Card as HCard, Chip, Dropdown, Input as HInput, Label as HLabel, Modal, Separator, Skeleton as HSkeleton, TextArea as HTextArea } from "@heroui/react";
 import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import { FilterKpi } from "@/components/filter-kpi";
 import { SelectField } from "@/components/select-field";
+import { SearchPickerField } from "@/components/search-picker-field";
+import { CheckItem, DateInput } from "@/components/form-controls";
 import { ConfirmModal } from "@/components/confirm-modal";
 import { ReportStatusChip } from "@/components/report-status-chip";
 import { Segment } from "@heroui-pro/react/segment";
@@ -19,21 +21,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useListReports, useListReportAuthors, useListProjects, useListStates, useCreateReport, useTransitionReport, useGetMe, useGetReportAggregates, useGetReportsSummary, useGetReportsStats, type ListReportsQueryResult, type ListRisksQueryResult, type ExportReportsParams } from "@workspace/api-client-react";
 import { TransitionReportBody } from "@workspace/api-zod";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { FileText, Plus, CheckCircle2, XCircle, ArrowRight, RotateCcw, Users, DollarSign, Target, AlertTriangle, Clock, Archive, Info, Trash2, Download, Building2, MapPin, FolderKanban, Send, TrendingUp, TrendingDown, Minus, AlertCircle, Paperclip, Filter, X, MoreHorizontal, Pencil, Copy, ChevronRight, Lock, Loader2, ChevronLeft, PlusCircle } from "@/components/icons";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { FileText, Plus, CheckCircle2, XCircle, ArrowRight, RotateCcw, Users, DollarSign, Target, AlertTriangle, Clock, Archive, Info, Trash2, Download, Building2, MapPin, FolderKanban, Send, TrendingUp, TrendingDown, Minus, AlertCircle, Paperclip, Filter, X, MoreHorizontal, Pencil, Copy, ChevronRight, Lock, ChevronLeft, PlusCircle } from "@/components/icons";
 import { ErrorState } from "@/components/ui/error-state";
-import { Separator } from "@/components/ui/separator";
-import { formatDate, formatDateTime, formatCurrency, hasPerm, formatStatusLabel, severityBadgeVariant, formatLocation } from "@/lib/format";
-import { getLinkedStateLabel } from "@/components/state-label";
+import { formatDate, formatDateTime, formatCurrency, hasPerm, formatStatusLabel, formatLocation } from "@/lib/format";
+import { getLinkedStateLabel, getStateLabel } from "@/components/state-label";
 import { LocationSelector } from "@/components/location-selector";
 import { getGeographicScope, canAuthorHqSectorReport, canAuthorProgramStateReport, hasFullOperationalAccess } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -129,6 +120,18 @@ const REPORT_EXPORT_MAX_ROWS = 5_000;
 
 const ACTIVITY_STATUS = ["Planned", "In Progress", "Completed", "Delayed", "Cancelled"] as const;
 // Activity status is stored as the English option text; this maps it to a locale key.
+// Variance reasons are stored as their English text; the second value is the locale key.
+const VARIANCE_REASONS = [
+  ["Procurement Delay", "procurementDelay"], ["Activity Rescheduled", "activityRescheduled"],
+  ["Market Price Increase", "marketPriceIncrease"], ["Additional Beneficiaries Reached", "additionalBeneficiaries"],
+  ["Cost Saving", "costSaving"], ["Security Constraints", "securityConstraints"],
+  ["Access Constraints", "accessConstraints"], ["Other", "other"],
+] as const;
+// Supporting-document types, stored the same way.
+const DOC_TYPES = [
+  ["Progress Photos", "progressPhotos"], ["Field Visit Report", "fieldVisitReport"], ["Beneficiary Data", "beneficiaryData"],
+  ["Financial Record", "financialRecord"], ["Meeting Minutes", "meetingMinutes"], ["Monitoring Form", "monitoringForm"], ["Other", "other"],
+] as const;
 const ACTIVITY_STATUS_KEYS: Record<string, string> = {
   "Planned": "planned", "In Progress": "inProgress", "Completed": "completed", "Delayed": "delayed", "Cancelled": "cancelled",
 };
@@ -638,10 +641,10 @@ function BudgetStatusBadge({ planned, actual }: { planned: number | null | undef
   if (planned == null) return null; // no authoritative planned budget
   const status = calcBudgetStatus(planned, actual);
   if (status === "over_budget")
-    return <Badge variant="rejected" className="gap-1"><TrendingUp className="h-3 w-3" />{t("detail.overspend")}</Badge>;
+    return <Chip size="sm" variant="soft" color="danger"><TrendingUp className="size-3" aria-hidden="true" />{t("detail.overspend")}</Chip>;
   if (status === "under_budget")
-    return <Badge variant="returned" className="gap-1"><TrendingDown className="h-3 w-3" />{t("detail.underspend")}</Badge>;
-  return <Badge variant="approved" className="gap-1"><Minus className="h-3 w-3" />{t("detail.onBudget")}</Badge>;
+    return <Chip size="sm" variant="soft" color="warning"><TrendingDown className="size-3" aria-hidden="true" />{t("detail.underspend")}</Chip>;
+  return <Chip size="sm" variant="soft" color="success"><Minus className="size-3" aria-hidden="true" />{t("detail.onBudget")}</Chip>;
 }
 
 // ── Project activities hook ───────────────────────────────────────────────────
@@ -1521,9 +1524,12 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
   const createMutation = useCreateReport();
   const transitionMutation = useTransitionReport();
 
-  const now = new Date();
-  const form = useForm<FormShape>({
-    defaultValues: {
+  // A blank report. Loading a draft calls form.reset(draft), which react-hook-form
+  // also adopts as the new defaults, so resetting must pass these explicitly —
+  // otherwise "New Report" reopens with the last edited draft's project and title.
+  const blankFormValues = (): FormShape => {
+    const now = new Date();
+    return {
       title: "", kind: "monthly",
       reportingMonth: now.getMonth() + 1, reportingYear: now.getFullYear(),
       periodStart: "", periodEnd: "",
@@ -1532,8 +1538,9 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
       beneficiariesMale: 0, beneficiariesFemale: 0, beneficiariesBoys: 0, beneficiariesGirls: 0,
       plannedBudget: 0, actualExpenditure: 0,
       quarter: 1, onDemandReason: "", activityName: "",
-    },
-  });
+    };
+  };
+  const form = useForm<FormShape>({ defaultValues: blankFormValues() });
 
   const v = form.watch();
 
@@ -1631,9 +1638,6 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
         : [], // "none" — expose no states, do not fall back to global list
   [geographicScope, states]);
 
-  // Wizard combobox open state — project and activity selectors for activity reports
-  const [projectComboOpen, setProjectComboOpen] = useState(false);
-  const [activityComboOpen, setActivityComboOpen] = useState(false);
 
   // Optional project filter for Activity Reports (0 = "All Projects").
   // Does NOT become a required report field — project context is derived from the selected activity.
@@ -2137,8 +2141,6 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     setFieldErrors({});
     setVoiceNoteRetry(null);
     setActiveSection(isActivity ? "ar-section-basic" : "rp-section-basic");
-    setProjectComboOpen(false);
-    setActivityComboOpen(false);
     setProjectFilterId(0);
     autoTitleRef.current = "";
     // Step 5 Activity Report state
@@ -2147,9 +2149,17 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     setShowCoordinationUpdates(false);
     setShowCommunityFeedback(false);
     setRemoveInsightConfirm(null);
-    form.reset();
+    form.reset(blankFormValues());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Every way out of the report form (Escape, the close button, Cancel) goes
+  // through here so unsaved changes are confirmed before they are discarded.
+  const requestCloseForm = () => {
+    if (isFormDirty) { setShowDiscardConfirm(true); return; }
+    setCreateOpen(false);
+    resetForm();
+  };
 
   const localFormSnapshot = useMemo<LocalReportFormSnapshot>(() => ({
     values: form.getValues(),
@@ -2303,12 +2313,6 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     setIsLoadingEditForm(true);
     setTimeout(() => setIsLoadingEditForm(false), 400);
     const r = report as Report & Record<string, unknown>;
-
-    // Activity Reports: reset combobox state before form.reset so a clean slate is visible.
-    if (isActivity) {
-      setProjectComboOpen(false);
-      setActivityComboOpen(false);
-    }
 
     form.reset({
       title: report.title ?? "",
@@ -2959,10 +2963,10 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     }
     // Non-activity reports: original logic retained
     const fieldErrs: Partial<Record<string, string>> = {};
-    if (!values.title.trim()) fieldErrs["title"] = "Report Title is required";
-    if (!values.stateId && !isHqSector) fieldErrs["stateId"] = "State is required";
-    if (values.kind === "on_demand" && !values.periodStart?.trim()) fieldErrs["periodStart"] = "Period Start is required";
-    if (values.kind === "on_demand" && !onDemandReason.trim()) fieldErrs["onDemandReason"] = "On-Demand reason is required";
+    if (!values.title.trim()) fieldErrs["title"] = t("formUi.errors.titleRequired");
+    if (!values.stateId && !isHqSector) fieldErrs["stateId"] = t("formUi.errors.stateRequired");
+    if (values.kind === "on_demand" && !values.periodStart?.trim()) fieldErrs["periodStart"] = t("formUi.errors.periodStartRequired");
+    if (values.kind === "on_demand" && !onDemandReason.trim()) fieldErrs["onDemandReason"] = t("formUi.errors.onDemandReasonRequired");
     setFieldErrors(fieldErrs);
     const hasError = Object.keys(fieldErrs).length > 0;
     if (hasError) {
@@ -3070,7 +3074,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
           const el = document.querySelector<HTMLElement>('[aria-invalid="true"]');
           if (el) { el.focus(); el.scrollIntoView({ block: "center", behavior: "smooth" }); }
         }, 80);
-        const firstMsg = result.errors[0]?.message ?? "Please complete all required fields before submitting.";
+        const firstMsg = result.errors[0]?.message ?? t("formUi.errors.completeRequired");
         toast.error(firstMsg);
         return false;
       }
@@ -3093,12 +3097,12 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     const attachId: ReportSectionId   = "rp-section-attachments";
 
     // Tab 1 — Basic Information
-    if (!values.title.trim()) { addErr(basicId, "title", "Report Title is required"); msgs.push("Report Title is required"); }
-    if (isProject && !values.projectId) { addErr(basicId, "projectId", "Project is required"); msgs.push("Project is required"); }
-    if (!values.stateId && !isHqSector && !(isProject && pmrLocationType === "hq")) { addErr(basicId, "stateId", "State is required"); msgs.push("State is required"); }
-    if (isHqSector && !values.sector) { addErr(basicId, "sector", "Sector is required"); msgs.push("Sector is required"); }
-    if (values.kind === "on_demand" && !values.periodStart?.trim()) { addErr(basicId, "periodStart", "Period Start is required for On-Demand reports"); msgs.push("Period Start is required for On-Demand reports"); }
-    if (values.kind === "on_demand" && !onDemandReason.trim()) { addErr(basicId, "onDemandReason", "Reason for On-Demand is required"); msgs.push("Reason for On-Demand is required"); }
+    if (!values.title.trim()) { addErr(basicId, "title", t("formUi.errors.titleRequired")); msgs.push(t("formUi.errors.titleRequired")); }
+    if (isProject && !values.projectId) { addErr(basicId, "projectId", t("formUi.errors.projectRequired")); msgs.push(t("formUi.errors.projectRequired")); }
+    if (!values.stateId && !isHqSector && !(isProject && pmrLocationType === "hq")) { addErr(basicId, "stateId", t("formUi.errors.stateRequired")); msgs.push(t("formUi.errors.stateRequired")); }
+    if (isHqSector && !values.sector) { addErr(basicId, "sector", t("formUi.errors.sectorRequired")); msgs.push(t("formUi.errors.sectorRequired")); }
+    if (values.kind === "on_demand" && !values.periodStart?.trim()) { addErr(basicId, "periodStart", t("formUi.errors.periodStartRequired")); msgs.push(t("formUi.errors.periodStartRequired")); }
+    if (values.kind === "on_demand" && !onDemandReason.trim()) { addErr(basicId, "onDemandReason", t("formUi.errors.onDemandReasonRequired")); msgs.push(t("formUi.errors.onDemandReasonRequired")); }
 
     // Tab 1 — Project currency guard
     if (isProject && !projectCurrency) {
@@ -3107,8 +3111,8 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
         return v !== null && v > 0;
       });
       if (hasFinancials) {
-        addErr(basicId, "projectCurrency", "Project currency is not configured. Financial reporting cannot be submitted until the Project currency is set.");
-        msgs.push("Project currency is not configured. Financial reporting cannot be submitted until the Project currency is set.");
+        addErr(basicId, "projectCurrency", t("formUi.errors.currencyMissing"));
+        msgs.push(t("formUi.errors.currencyMissing"));
       }
     }
 
@@ -3124,13 +3128,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     // Tab 3 — Activities (project type)
     if (isProject) {
       const cleanActs = activities.filter((a) => a.name?.trim());
-      if (cleanActs.length === 0) { addErr("rp-section-activities", "act-0-name", "At least one Activity is required — enter an Activity Name"); msgs.push("At least one Activity is required"); }
+      if (cleanActs.length === 0) { addErr("rp-section-activities", "act-0-name", t("formUi.errors.activityRequired")); msgs.push(t("formUi.errors.activityRequiredShort")); }
       activities.forEach((a, actIdx) => {
         if (!a.name?.trim()) return;
         const actualVal = a.actualExpenditure === "" ? null : Number(a.actualExpenditure ?? null);
-        if (actualVal !== null && actualVal < 0) { addErr("rp-section-activities", `act-${actIdx}-actualExpenditure`, "Actual Expenditure cannot be negative"); msgs.push(`${a.name}: Actual Expenditure cannot be negative`); }
-        if (actualVal === null) { addErr("rp-section-activities", `act-${actIdx}-actualExpenditure`, "Actual Expenditure (This Period) is required"); msgs.push(`${a.name}: Actual Expenditure (This Period) is required`); }
-        if (!(a.achievementSummary ?? "").trim()) { addErr("rp-section-activities", `act-${actIdx}-achievementSummary`, "Achievement Summary is required"); msgs.push(`${a.name}: Achievement Summary is required`); }
+        if (actualVal !== null && actualVal < 0) { addErr("rp-section-activities", `act-${actIdx}-actualExpenditure`, t("formUi.errors.actualNegative")); msgs.push(`${a.name}: ${t("formUi.errors.actualNegative")}`); }
+        if (actualVal === null) { addErr("rp-section-activities", `act-${actIdx}-actualExpenditure`, t("formUi.errors.actualRequired")); msgs.push(`${a.name}: ${t("formUi.errors.actualRequired")}`); }
+        if (!(a.achievementSummary ?? "").trim()) { addErr("rp-section-activities", `act-${actIdx}-achievementSummary`, t("formUi.errors.achievementRequired")); msgs.push(`${a.name}: ${t("formUi.errors.achievementRequired")}`); }
         // Parse each beneficiary field: blank/null → required error; negative → invalid; 0+ → valid.
         // Only accepts number or string types — booleans/arrays/objects are rejected.
         const parseBenFe = (v: unknown): number | null | "negative" => {
@@ -3145,15 +3149,15 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
         const benFieldValues: Array<[string, unknown]> = [["men", a.beneficiariesMen], ["women", a.beneficiariesWomen], ["boys", a.beneficiariesBoys], ["girls", a.beneficiariesGirls]];
         for (const [benKey, bv] of benFieldValues) {
           const parsed = parseBenFe(bv);
-          if (parsed === null) { addErr("rp-section-activities", `act-${actIdx}-ben-${benKey}`, "Beneficiary field is required — enter 0 if no direct reach occurred this period"); msgs.push(`${a.name}: Beneficiary field is required — enter 0 if no direct reach occurred this period`); }
-          else if (parsed === "negative") { addErr("rp-section-activities", `act-${actIdx}-ben-${benKey}`, "Beneficiary values cannot be negative"); msgs.push(`${a.name}: Beneficiary values cannot be negative`); }
+          if (parsed === null) { addErr("rp-section-activities", `act-${actIdx}-ben-${benKey}`, t("formUi.errors.beneficiaryRequired")); msgs.push(`${a.name}: ${t("formUi.errors.beneficiaryRequired")}`); }
+          else if (parsed === "negative") { addErr("rp-section-activities", `act-${actIdx}-ben-${benKey}`, t("formUi.errors.beneficiaryNegative")); msgs.push(`${a.name}: ${t("formUi.errors.beneficiaryNegative")}`); }
         }
-        if (a.isUnplanned && !(a.unplannedReason ?? "").trim()) { addErr("rp-section-activities", `act-${actIdx}-unplannedReason`, "Exception/Reason is required for Unplanned Activities"); msgs.push(`${a.name}: Exception/Reason is required for Unplanned Activities`); }
+        if (a.isUnplanned && !(a.unplannedReason ?? "").trim()) { addErr("rp-section-activities", `act-${actIdx}-unplannedReason`, t("formUi.errors.unplannedReasonRequired")); msgs.push(`${a.name}: ${t("formUi.errors.unplannedReasonRequired")}`); }
         const pBudget = a.plannedBudget;
         const aBudget = actualVal ?? 0;
         if (varianceReasonRequired(pBudget, aBudget) && !(a.varianceReason ?? "").trim()) {
-          addErr("rp-section-activities", `act-${actIdx}-varianceReason`, "Reason for Variance is required");
-          msgs.push(`${a.name}: Reason for Variance is required`);
+          addErr("rp-section-activities", `act-${actIdx}-varianceReason`, t("formUi.errors.varianceReasonRequired"));
+          msgs.push(`${a.name}: ${t("formUi.errors.varianceReasonRequired")}`);
         }
       });
     }
@@ -3172,7 +3176,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
       const hasDocOrBypass = supportingDocs.length > 0 || (docsNoSupport && docsNoSupportReason.trim().length > 0);
       if (!hasDocOrBypass) {
         addErr(attachId);
-        msgs.push("Attach at least one Supporting Document, or select 'No supporting documents' and provide a reason");
+        msgs.push(t("formUi.errors.attachmentsRequired"));
       }
     }
 
@@ -3559,6 +3563,25 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     const start = cur - 2;
     return Array.from({ length: 2035 - start + 1 }, (_, i) => start + i);
   }, []);
+  // Project choices for the Activity Report pickers, limited to the selected State.
+  const projectPickerItems = useMemo(() => (projects ?? [])
+    .filter((p) => !v.stateId || (p.stateIds ?? []).includes(Number(v.stateId)))
+    .map((p) => {
+      const pR = p as unknown as Record<string, unknown>;
+      const donor = (pR["donorName"] ?? pR["donor"]) as string | undefined;
+      return {
+        id: String(p.id),
+        title: p.title,
+        textValue: `${p.code} ${p.title}`,
+        details: [p.code, donor, t(`status.${p.status}`, { ns: "projects", defaultValue: formatStatusLabel(p.status) })].filter(Boolean).join(" · "),
+      };
+    }), [projects, v.stateId, t]);
+  const activityStatusOptions = useMemo(() => ACTIVITY_STATUS.map((s) => ({ value: s, label: t(`form.activityStatusValues.${ACTIVITY_STATUS_KEYS[s]}`) })), [t]);
+  const yearSelectOptions = useMemo(() => yearOptions.map((y) => ({ value: String(y), label: String(y) })), [yearOptions]);
+  const monthOptions = useMemo(() => Array.from({ length: 12 }, (_, i) => ({
+    value: String(i + 1),
+    label: new Date(2000, i, 1).toLocaleString(i18n.language === "ar" ? "ar" : "en", { month: "long" }),
+  })), [i18n.language]);
 
   const updateActivity = (i: number, patch: Partial<ActivityRow>) => {
     setActivities((cur) => cur.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
@@ -3697,38 +3720,27 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
             <Download className="size-4" aria-hidden /> {t("exportCsv")}
           </HButton>
           {canCreate && (
-            <Dialog open={createOpen} onOpenChange={(o) => {
-                if (!o) {
-                  if (isFormDirty) { setShowDiscardConfirm(true); return; }
-                  setCreateOpen(false);
-                  resetForm();
-                } else {
-                  setCreateOpen(true);
-                }
-              }}>
-              <DialogTrigger asChild>
-                <Button><Plus className="h-4 w-4" /> {t("newReport")}</Button>
-              </DialogTrigger>
-              <DialogContent
-                className="sm:max-w-[920px] max-h-[90vh] p-0 gap-0 flex flex-col overflow-y-hidden"
-                onInteractOutside={(e) => {
-                  e.preventDefault();
-                  if (isFormDirty) setShowDiscardConfirm(true);
-                }}
-                onEscapeKeyDown={(e) => {
-                  e.preventDefault();
-                  if (isFormDirty) { setShowDiscardConfirm(true); } else { setCreateOpen(false); resetForm(); }
-                }}
+            <>
+            <HButton onPress={() => setCreateOpen(true)}><Plus className="size-4" aria-hidden="true" /> {t("newReport")}</HButton>
+            {/* Closing (Escape, the close button, Cancel) asks before discarding unsaved changes;
+                clicking outside never closes the form. */}
+            <Modal isOpen={createOpen} onOpenChange={(o) => { if (o) setCreateOpen(true); else requestCloseForm(); }}>
+              <Modal.Backdrop isDismissable={false}>
+              <Modal.Container size="lg" scroll="inside" className="max-sm:p-0">
+              <Modal.Dialog
+                className="flex max-h-[calc(100dvh-3rem)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[920px] max-sm:h-[100dvh] max-sm:max-h-none max-sm:rounded-none"
+                data-report-form
               >
                 {/* ── Sticky dialog header ── */}
-                <div className="px-6 pt-5 pb-4 border-b shrink-0">
-                  <DialogHeader>
-                    <DialogTitle>
+                <div className="shrink-0 border-b border-[var(--border)] px-6 pt-5 pb-4">
+                  <Modal.CloseTrigger aria-label={t("close", { ns: "common" })} />
+                  <div className="space-y-1.5 pe-8 text-start">
+                    <Modal.Heading className="text-lg font-semibold">
                       {editingReport
                         ? t("form.continueEditing", { reportType: isProgramState ? t("typeMeta.programStateShort") : isHqSector ? t("typeMeta.hqSectorShort") : meta.short })
                         : t("form.newReportForType", { reportType: isProgramState ? t("typeMeta.programStateShort") : isHqSector ? t("typeMeta.hqSectorShort") : meta.short })}
-                    </DialogTitle>
-                    <DialogDescription>
+                    </Modal.Heading>
+                    <p className="text-sm text-[var(--muted)]">
                       {isProgramState
                         ? t("form.dialogDescriptionState")
                         : isHqSector
@@ -3736,7 +3748,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         : isActivity
                         ? t("form.dialogDescriptionActivity")
                         : t("form.dialogDescriptionProject")}
-                    </DialogDescription>
+                    </p>
                     {!isProgramState && !isHqSector && localDraft.hasLocalDraft && (
                       <OfflineReportDraftStatus
                         status={localDraft.status}
@@ -3751,12 +3763,15 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         isStale={localDraft.isStale}
                       />
                     )}
-                  </DialogHeader>
+                  </div>
                   {!isOnline && (
-                    <div id="offline-workflow-notice" className="mt-3 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-200" role="alert">
-                      <span className="font-medium">{t("sync.internetRequired", { ns: "common" })}.</span>{" "}
-                      {t("sync.internetRequiredDescription", { ns: "common" })}
-                    </div>
+                    <Alert id="offline-workflow-notice" status="warning" role="alert" className="mt-3">
+                      <Alert.Indicator />
+                      <Alert.Content>
+                        <Alert.Title>{t("sync.internetRequired", { ns: "common" })}</Alert.Title>
+                        <Alert.Description>{t("sync.internetRequiredDescription", { ns: "common" })}</Alert.Description>
+                      </Alert.Content>
+                    </Alert>
                   )}
                   {/* ── Compact Approval Workflow strip inside the header (Activity Reports only) ── */}
                   {isActivity && (() => {
@@ -3767,20 +3782,20 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         ? DUAL_WORKFLOW.paths[1]
                         : null;
                     return (
-                      <div className="mt-2 flex flex-wrap items-start gap-x-3 gap-y-0.5 text-xs border-t border-border/40 pt-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 shrink-0 mt-0.5">
+                      <div className="mt-2 flex flex-wrap items-start gap-x-3 gap-y-0.5 border-t border-[var(--border)] pt-2 text-xs">
+                        <span className="mt-0.5 shrink-0 text-[11px] font-semibold text-[var(--muted)]">
                           {myPath ? t("approval.yourApprovalPath") : t("approval.approvalPaths")}
                         </span>
                         {myPath ? (
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-muted-foreground/60">{t(myPath.labelKey)}:</span>
+                            <span className="text-[10px] text-[var(--muted)]/60">{t(myPath.labelKey)}:</span>
                             <WorkflowChainRow abbrs={myPath.abbrs} roles={myPath.roles} />
                           </div>
                         ) : (
                           <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                             {DUAL_WORKFLOW.paths.map((path) => (
                               <div key={path.label} className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-muted-foreground/60">{t(path.labelKey)}:</span>
+                                <span className="text-[10px] text-[var(--muted)]/60">{t(path.labelKey)}:</span>
                                 <WorkflowChainRow abbrs={path.abbrs} roles={path.roles} />
                               </div>
                             ))}
@@ -3794,7 +3809,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                 {/* ── Step navigation — HeroUI Pro Stepper (horizontal, md). Every
                     step stays clickable, as the sections always were; a section
                     with validation errors says so under its title. ── */}
-                <div className="border-b shrink-0 bg-background">
+                <div className="shrink-0 border-b border-[var(--border)]">
                   <div data-stepper-scroll className="overflow-x-auto px-5 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <Stepper
                       aria-label={t("form.tabsAriaLabel")}
@@ -3824,29 +3839,29 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                 </div>
 
                 {/* ── Scrollable tab panel body ── */}
-                <div className="overflow-y-auto flex-1 min-h-0 px-5 py-4" aria-busy={isLoadingEditForm ? "true" : undefined}>
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-busy={isLoadingEditForm ? "true" : undefined} data-report-form-body>
                 {/* ── Edit loading skeleton / form switch ── */}
                 {isLoadingEditForm ? (
                   <div className="space-y-4" aria-hidden="true">
                     <span className="sr-only">{t("form.loadingReport")}</span>
                     {/* header placeholder */}
                     <div className="flex items-center gap-3 border-b pb-3">
-                      <Skeleton className="h-5 w-48" />
-                      <Skeleton className="h-4 w-24" />
+                      <HSkeleton className="h-5 w-48" />
+                      <HSkeleton className="h-4 w-24" />
                     </div>
                     {/* field row skeletons */}
                     <div className="space-y-3">
                       {[160, 220, 140, 200].map((w) => (
                         <div key={w} className="space-y-1.5">
-                          <Skeleton className="h-3.5 w-24" />
-                          <Skeleton className={`h-9 w-full max-w-[${w}px]`} />
+                          <HSkeleton className="h-3.5 w-24" />
+                          <HSkeleton className="h-9 w-full rounded-lg" style={{ maxWidth: w }} />
                         </div>
                       ))}
                     </div>
                     {/* footer placeholder */}
                     <div className="flex justify-end gap-2 pt-2 border-t">
-                      <Skeleton className="h-9 w-24" />
-                      <Skeleton className="h-9 w-28" />
+                      <HSkeleton className="h-9 w-24" />
+                      <HSkeleton className="h-9 w-28" />
                     </div>
                   </div>
                 ) : isProgramState ? (
@@ -3880,39 +3895,26 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                 <form className="space-y-6">
                   {/* ── Returned-for-revision feedback banner ── */}
                   {editingReport && editingReport.status === "draft" && lastRevisionRequest && !revisionBannerDismissed && (
-                    <div
-                      role="status"
-                      aria-label={t("form.revisionRequested")}
-                      className="rounded-md border border-amber-300/60 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden="true" />
-                          <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">{t("form.revisionRequested")}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setRevisionBannerDismissed(true)}
-                          className="text-xs text-amber-600/70 hover:text-amber-700 dark:text-amber-400/70 underline underline-offset-2"
-                          aria-label={t("form.dismissRevision")}
-                        >
-                          {t("form.dismiss")}
-                        </button>
-                      </div>
-                      <p className="text-sm text-amber-700 dark:text-amber-300 ps-6">
-                        <span className="font-medium">{lastRevisionRequest.authorName}</span>
-                        {" · "}
-                        <span className="text-xs text-amber-600/80">{formatDate(String(lastRevisionRequest.createdAt).slice(0, 10))}</span>
-                      </p>
-                      {lastRevisionRequest.body && (
-                        <p className="text-sm text-amber-700/90 dark:text-amber-300/90 ps-6 italic">
-                          &ldquo;{lastRevisionRequest.body}&rdquo;
-                        </p>
-                      )}
-                      <p className="text-xs text-amber-600/70 dark:text-amber-400/70 ps-6">
-                        {t("form.revisionHelp")}
-                      </p>
-                    </div>
+                    <Alert status="warning" role="status" aria-label={t("form.revisionRequested")}>
+                      <Alert.Indicator />
+                      <Alert.Content>
+                        <Alert.Title>{t("form.revisionRequested")}</Alert.Title>
+                        <Alert.Description className="space-y-1">
+                          <span className="block">
+                            <span className="font-medium">{lastRevisionRequest.authorName}</span>
+                            {" · "}
+                            <bdi dir="ltr" className="text-xs">{formatDate(String(lastRevisionRequest.createdAt).slice(0, 10))}</bdi>
+                          </span>
+                          {lastRevisionRequest.body && (
+                            <blockquote className="border-s-2 border-[var(--warning)] ps-2" dir="auto">{lastRevisionRequest.body}</blockquote>
+                          )}
+                          <span className="block text-xs">{t("form.revisionHelp")}</span>
+                        </Alert.Description>
+                      </Alert.Content>
+                      <HButton size="sm" variant="ghost" onPress={() => setRevisionBannerDismissed(true)} aria-label={t("form.dismissRevision")}>
+                        {t("form.dismiss")}
+                      </HButton>
+                    </Alert>
                   )}
 
                   {/* ── TAB 1 (non-activity): BASIC INFORMATION ── */}
@@ -3926,10 +3928,18 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                     <div className="grid grid-cols-2 gap-3">
                       {/* ── PROJECT — first for PMR so location can be derived from it ── */}
                       <div className="col-span-2">
-                        <Label htmlFor="pmr-project-trigger">{isProject ? <>{t("fields.project")} <span className="text-destructive">*</span></> : <>{t("form.linkedProject")} <span className="font-normal text-muted-foreground">({t("form.optional")})</span></>}</Label>
-                        <Select
+                        <SelectField
+                          id="pmr-project-trigger"
+                          label={isProject ? t("fields.project") : <>{t("form.linkedProject")} <span className="font-normal text-[var(--muted)]">({t("form.optional")})</span></>}
+                          isRequired={isProject}
+                          isInvalid={!!fieldErrors["projectId"]}
+                          aria-describedby={
+                            [isProject ? "help-pmr-project" : null, fieldErrors["projectId"] ? "err-pmr-project" : null]
+                              .filter(Boolean).join(" ") || undefined
+                          }
+                          placeholder={t("form.selectProject")}
                           value={v.projectId ? String(v.projectId) : (isProject ? "" : "__none__")}
-                          onValueChange={(val) => {
+                          onChange={(val) => {
                             const newId = val === "__none__" ? 0 : Number(val);
                             form.setValue("projectId", newId);
                             // Reset reporting location when project changes for PMR
@@ -3938,158 +3948,145 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               setPmrLocationType("state");
                             }
                           }}
-                        >
-                          <SelectTrigger
-                            id="pmr-project-trigger"
-                            aria-required={isProject ? "true" : undefined}
-                            aria-invalid={!!fieldErrors["projectId"] || undefined}
-                            aria-describedby={
-                              [isProject ? "help-pmr-project" : null, fieldErrors["projectId"] ? "err-pmr-project" : null]
-                                .filter(Boolean).join(" ") || undefined
-                            }
-                          ><SelectValue placeholder={isProject ? `${t("form.selectProject")} *` : `${t("form.selectProject")} (${t("form.optional")})`} /></SelectTrigger>
-                          <SelectContent>
-                            {!isProject && <SelectItem value="__none__">{t("form.noProjectLink")}</SelectItem>}
-                            {projects?.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.code} — {p.title}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        {!isProject && <p className="text-xs text-muted-foreground mt-1">{t("form.projectLinkHelp")}</p>}
+                          options={[
+                            ...(!isProject ? [{ value: "__none__", label: t("form.noProjectLink") }] : []),
+                            ...(projects ?? []).map((p) => ({ value: String(p.id), label: `${p.code} — ${p.title}` })),
+                          ]}
+                        />
+                        {!isProject && <p className="text-xs text-[var(--muted)] mt-1">{t("form.projectLinkHelp")}</p>}
                         {fieldErrors["projectId"] && (
-                          <p id="err-pmr-project" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["projectId"]}</p>
+                          <p id="err-pmr-project" role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["projectId"]}</p>
                         )}
                         {/* Can't Find Your Project? — always shown below the Project selector (PMR only) */}
                         {isProject && (
                           <div id="help-pmr-project" className="mt-2 rounded border border-muted bg-muted/30 p-3 text-xs">
                             <p className="font-medium text-foreground">{t("form.cantFindProject")}</p>
-                            <p className="text-muted-foreground mt-0.5">
+                            <p className="text-[var(--muted)] mt-0.5">
                               {t("form.projectRequiredHelp")}
                             </p>
                             {canCreateProject ? (
-                              <Link to="/projects/new" className="mt-1.5 inline-flex items-center gap-1 text-primary underline underline-offset-2 hover:no-underline">
+                              <Link to="/projects/new" className="mt-1.5 inline-flex items-center gap-1 text-[var(--accent)] underline underline-offset-2 hover:no-underline">
                                 {t("form.registerProject")}
                               </Link>
                             ) : (
-                              <p className="text-muted-foreground mt-1">{t("form.contactProgrammeTeam")}</p>
+                              <p className="text-[var(--muted)] mt-1">{t("form.contactProgrammeTeam")}</p>
                             )}
                           </div>
                         )}
                       </div>
                       {/* ── REPORTING LOCATION — after project for PMR; disabled until project selected ── */}
-                      <div>
-                        <Label htmlFor="pmr-location" className="flex items-center gap-1">
-                          {isHqSector ? t("form.reportingState") : t("form.reportingLocation")} <span className="text-destructive">*</span>
-                          {stateFieldLocked && pmrLocationType !== "hq" && <span className="text-xs font-normal text-muted-foreground">({t("form.fromProject")})</span>}
-                          {!stateFieldLocked && allowedStateIds.length > 1 && pmrLocationType !== "hq" && <span className="text-xs font-normal text-warning">({t("form.chooseProjectState")})</span>}
-                        </Label>
-                        {isProject && pmrLocationType === "hq" && allowedStateIds.length === 0 ? (
-                          // HQ-only project: no states linked — lock to HQ (sole valid location).
-                          <Input
-                            id="pmr-location"
-                            readOnly
-                            aria-readonly="true"
-                            value={t("form.hqHeadquarters")}
-                            className="bg-muted cursor-not-allowed"
-                          />
-                        ) : isProject && stateFieldLocked && pmrLocationType !== "hq" && !pmrHqAvailable ? (
-                          // Single-state project with no HQ option: lock to the one state.
-                          <Input
-                            id="pmr-location"
-                            readOnly
-                            aria-readonly="true"
-                            value={states?.find((s) => s.id === v.stateId)?.name ?? ""}
-                            className="bg-muted cursor-not-allowed"
-                          />
-                        ) : (
-                          <Select
-                            value={
-                              isProject
-                                ? (pmrLocationType === "hq" ? "__hq__" : (v.stateId ? String(v.stateId) : ""))
-                                : String(v.stateId || "")
-                            }
-                            disabled={isProject && !selectedProjectId}
-                            onValueChange={(val) => {
-                              if (isProject) {
-                                if (val === "__hq__") {
-                                  setPmrLocationType("hq");
-                                  form.setValue("stateId", 0);
+                      <div className="flex flex-col gap-1.5">
+                        {(() => {
+                          const locationLabel = (
+                            <>
+                              {isHqSector ? t("form.reportingState") : t("form.reportingLocation")}
+                              {stateFieldLocked && pmrLocationType !== "hq" && <span className="ms-1 text-xs font-normal text-[var(--muted)]">({t("form.fromProject")})</span>}
+                              {!stateFieldLocked && allowedStateIds.length > 1 && pmrLocationType !== "hq" && <span className="ms-1 text-xs font-normal text-[var(--warning)]">({t("form.chooseProjectState")})</span>}
+                            </>
+                          );
+                          if (isProject && pmrLocationType === "hq" && allowedStateIds.length === 0) {
+                            // HQ-only project: no states linked — lock to HQ (sole valid location).
+                            return (
+                              <>
+                                <HLabel htmlFor="pmr-location" isRequired>{locationLabel}</HLabel>
+                                <HInput fullWidth id="pmr-location" readOnly aria-readonly="true" value={t("form.hqHeadquarters")} className="cursor-not-allowed bg-[var(--default)]" />
+                              </>
+                            );
+                          }
+                          if (isProject && stateFieldLocked && pmrLocationType !== "hq" && !pmrHqAvailable) {
+                            // Single-state project with no HQ option: lock to the one state.
+                            const lockedState = states?.find((s) => s.id === v.stateId);
+                            return (
+                              <>
+                                <HLabel htmlFor="pmr-location" isRequired>{locationLabel}</HLabel>
+                                <HInput fullWidth id="pmr-location" readOnly aria-readonly="true" value={lockedState ? getStateLabel(lockedState, i18n.language) : ""} className="cursor-not-allowed bg-[var(--default)]" />
+                              </>
+                            );
+                          }
+                          return (
+                            <SelectField
+                              id="pmr-location"
+                              label={locationLabel}
+                              isRequired
+                              isInvalid={!!fieldErrors["stateId"]}
+                              aria-describedby={fieldErrors["stateId"] ? "err-pmr-location" : undefined}
+                              isDisabled={isProject && !selectedProjectId}
+                              placeholder={isProject && !selectedProjectId ? t("form.selectProjectFirst") : t("form.selectLocation")}
+                              value={
+                                isProject
+                                  ? (pmrLocationType === "hq" ? "__hq__" : (v.stateId ? String(v.stateId) : ""))
+                                  : String(v.stateId || "")
+                              }
+                              onChange={(val) => {
+                                if (isProject) {
+                                  if (val === "__hq__") {
+                                    setPmrLocationType("hq");
+                                    form.setValue("stateId", 0);
+                                  } else {
+                                    setPmrLocationType("state");
+                                    form.setValue("stateId", Number(val));
+                                  }
                                 } else {
-                                  setPmrLocationType("state");
                                   form.setValue("stateId", Number(val));
                                 }
-                              } else {
-                                form.setValue("stateId", Number(val));
-                              }
-                            }}
-                          >
-                            <SelectTrigger
-                              id="pmr-location"
-                              aria-required="true"
-                              aria-invalid={!!fieldErrors["stateId"] || undefined}
-                              aria-describedby={fieldErrors["stateId"] ? "err-pmr-location" : undefined}
-                            >
-                              <SelectValue placeholder={isProject && !selectedProjectId ? t("form.selectProjectFirst") : t("form.selectLocation")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {/* HQ option — available when project is not explicitly state_managed and user is not state-scoped */}
-                              {pmrHqAvailable && (
-                                <SelectItem value="__hq__">{t("form.hqHeadquarters")}</SelectItem>
-                              )}
-                              {(isProject && selectedProjectId
+                              }}
+                              options={[
+                                // HQ option — available when project is not explicitly state_managed and user is not state-scoped
+                                ...(pmrHqAvailable ? [{ value: "__hq__", label: t("form.hqHeadquarters") }] : []),
                                 // Project is selected: show only the project's linked states.
                                 // When allowedStateIds is empty the project has no linked states —
                                 // do NOT fall back to all states; show nothing (only HQ if valid).
-                                ? states?.filter((s) => allowedStateIds.includes(s.id))
-                                : states
-                              )?.map((s) => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        )}
+                                ...((isProject && selectedProjectId ? states?.filter((s) => allowedStateIds.includes(s.id)) : states) ?? [])
+                                  .map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name })),
+                              ]}
+                            />
+                          );
+                        })()}
                         {fieldErrors["stateId"] && !isActivity && (
-                          <p id="err-pmr-location" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["stateId"]}</p>
+                          <p id="err-pmr-location" role="alert" className="text-sm text-[var(--danger)]">{fieldErrors["stateId"]}</p>
                         )}
                       </div>
                       {/* ── SECTOR ── */}
-                      {(isProject || isHqSector) && (
-                        <div>
-                          <Label className="flex items-center gap-1">
-                            {t("fields.sector")} {isHqSector ? <span className="text-destructive">*</span> : ""}
-                            {sectorFieldLocked && <span className="text-xs font-normal text-muted-foreground">({t("form.fromProject")})</span>}
-                            {!sectorFieldLocked && allowedSectors.length > 1 && <span className="text-xs font-normal text-warning">({t("form.chooseProjectSector")})</span>}
-                          </Label>
-                          {isProject && sectorFieldLocked ? (
-                            <Input
-                              readOnly
-                              value={v.sector ?? ""}
-                              className="bg-muted cursor-not-allowed"
-                            />
-                          ) : (
-                            <Select value={v.sector || "_none"} onValueChange={(val) => form.setValue("sector", val === "_none" ? "" : val)}>
-                              <SelectTrigger><SelectValue placeholder={t("form.selectSector")} /></SelectTrigger>
-                              <SelectContent>
-                                {!isHqSector && <SelectItem value="_none">{t("form.notSet")}</SelectItem>}
-                                {(isProject && allowedSectors.length > 0
-                                  ? SECTORS.filter((s) => allowedSectors.includes(s))
-                                  : SECTORS
-                                ).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                      )}
+                      {(isProject || isHqSector) && (() => {
+                        const sectorLabel = (
+                          <>
+                            {t("fields.sector")}
+                            {sectorFieldLocked && <span className="ms-1 text-xs font-normal text-[var(--muted)]">({t("form.fromProject")})</span>}
+                            {!sectorFieldLocked && allowedSectors.length > 1 && <span className="ms-1 text-xs font-normal text-[var(--warning)]">({t("form.chooseProjectSector")})</span>}
+                          </>
+                        );
+                        return isProject && sectorFieldLocked ? (
+                          <div className="flex flex-col gap-1.5">
+                            <HLabel htmlFor="pmr-sector">{sectorLabel}</HLabel>
+                            <HInput fullWidth id="pmr-sector" readOnly value={v.sector ?? ""} className="cursor-not-allowed bg-[var(--default)]" />
+                          </div>
+                        ) : (
+                          <SelectField
+                            id="pmr-sector"
+                            label={sectorLabel}
+                            isRequired={isHqSector}
+                            placeholder={t("form.selectSector")}
+                            value={v.sector || (isHqSector ? "" : "_none")}
+                            onChange={(val) => form.setValue("sector", val === "_none" ? "" : val)}
+                            options={[
+                              ...(!isHqSector ? [{ value: "_none", label: t("form.notSet") }] : []),
+                              ...(isProject && allowedSectors.length > 0 ? SECTORS.filter((s) => allowedSectors.includes(s)) : SECTORS)
+                                .map((s) => ({ value: s, label: s })),
+                            ]}
+                          />
+                        );
+                      })()}
                       {/* Frequency + Dynamic period block */}
                       <div className="col-span-2">
-                        <Label htmlFor="pmr-frequency">{t("form.reportingFrequency")} <span className="text-destructive">*</span></Label>
-                        <div className="max-w-xs">
-                        <Select value={v.kind} onValueChange={(val) => form.setValue("kind", val)}>
-                          <SelectTrigger id="pmr-frequency" aria-required="true"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="monthly">{t("frequency.monthly")}</SelectItem>
-                            <SelectItem value="quarterly">{t("frequency.quarterly")}</SelectItem>
-                            <SelectItem value="annual">{t("frequency.annual")}</SelectItem>
-                            <SelectItem value="on_demand">{t("frequency.on_demand")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        </div>
+                        <SelectField
+                          id="pmr-frequency"
+                          label={t("form.reportingFrequency")}
+                          isRequired
+                          className="max-w-xs"
+                          value={v.kind}
+                          onChange={(val) => form.setValue("kind", val)}
+                          options={(["monthly", "quarterly", "annual", "on_demand"] as const).map((k) => ({ value: k, label: t(`frequency.${k}`) }))}
+                        />
                         {/* Soft mismatch warning (Task #325): informational only — never blocks
                             Save As Draft or Submit, and never changes the selected kind. */}
                         {(() => {
@@ -4107,7 +4104,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             <p
                               role="alert"
                               aria-live="polite"
-                              className="text-sm text-amber-700 dark:text-amber-400 mt-1"
+                              className="mt-1 text-sm text-[var(--warning)]"
                               data-testid="text-frequency-mismatch-warning"
                             >
                               {t("form.scheduledFrequencyMismatch", { scheduled: cap(projFreq), selected: cap(v.kind) })}
@@ -4118,27 +4115,33 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                       {v.kind === "monthly" && (
                         <>
                           <div>
-                            <Label htmlFor="pmr-month">{t("form.reportingMonth")} <span className="text-destructive">*</span></Label>
-                            <Select value={String(v.reportingMonth)} onValueChange={(val) => form.setValue("reportingMonth", Number(val))}>
-                              <SelectTrigger id="pmr-month" aria-required="true" aria-invalid={!!fieldErrors["reportingMonth"] || undefined} aria-describedby={fieldErrors["reportingMonth"] ? "err-pmr-month" : undefined}><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                                  <SelectItem key={m} value={String(m)}>{new Date(2000, m - 1, 1).toLocaleString(i18n.language === "ar" ? "ar" : "en", { month: "long" })}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <SelectField
+                              id="pmr-month"
+                              label={t("form.reportingMonth")}
+                              isRequired
+                              isInvalid={!!fieldErrors["reportingMonth"]}
+                              aria-describedby={fieldErrors["reportingMonth"] ? "err-pmr-month" : undefined}
+                              value={String(v.reportingMonth)}
+                              onChange={(val) => form.setValue("reportingMonth", Number(val))}
+                              options={monthOptions}
+                            />
                             {fieldErrors["reportingMonth"] && (
-                              <p id="err-pmr-month" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["reportingMonth"]}</p>
+                              <p id="err-pmr-month" role="alert" className="mt-1 text-sm text-[var(--danger)]">{fieldErrors["reportingMonth"]}</p>
                             )}
                           </div>
                           <div>
-                            <Label htmlFor="pmr-year">{t("form.reportingYear")} <span className="text-destructive">*</span></Label>
-                            <Select value={String(v.reportingYear)} onValueChange={(val) => form.setValue("reportingYear", Number(val))}>
-                              <SelectTrigger id="pmr-year" aria-required="true" aria-invalid={!!fieldErrors["reportingYear"] || undefined} aria-describedby={fieldErrors["reportingYear"] ? "err-pmr-year" : undefined}><SelectValue /></SelectTrigger>
-                              <SelectContent>{yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                            </Select>
+                            <SelectField
+                              id="pmr-year"
+                              label={t("form.reportingYear")}
+                              isRequired
+                              isInvalid={!!fieldErrors["reportingYear"]}
+                              aria-describedby={fieldErrors["reportingYear"] ? "err-pmr-year" : undefined}
+                              value={String(v.reportingYear)}
+                              onChange={(val) => form.setValue("reportingYear", Number(val))}
+                              options={yearSelectOptions}
+                            />
                             {fieldErrors["reportingYear"] && (
-                              <p id="err-pmr-year" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["reportingYear"]}</p>
+                              <p id="err-pmr-year" role="alert" className="mt-1 text-sm text-[var(--danger)]">{fieldErrors["reportingYear"]}</p>
                             )}
                           </div>
                         </>
@@ -4146,108 +4149,125 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                       {v.kind === "quarterly" && (
                         <>
                           <div>
-                            <Label htmlFor="pmr-quarter">{t("form.quarter")} <span className="text-destructive">*</span></Label>
-                            <Select value={String(quarter)} onValueChange={(val) => setQuarter(Number(val))}>
-                              <SelectTrigger id="pmr-quarter" aria-required="true" aria-invalid={!!fieldErrors["quarter"] || undefined} aria-describedby={fieldErrors["quarter"] ? "err-pmr-quarter" : undefined}><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {[1, 2, 3, 4].map((q) => <SelectItem key={q} value={String(q)}>Q{q}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
+                            <SelectField
+                              id="pmr-quarter"
+                              label={t("form.quarter")}
+                              isRequired
+                              isInvalid={!!fieldErrors["quarter"]}
+                              aria-describedby={fieldErrors["quarter"] ? "err-pmr-quarter" : undefined}
+                              value={String(quarter)}
+                              onChange={(val) => setQuarter(Number(val))}
+                              options={[1, 2, 3, 4].map((q) => ({ value: String(q), label: t("formUi.quarterN", { number: q }) }))}
+                            />
                             {fieldErrors["quarter"] && (
-                              <p id="err-pmr-quarter" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["quarter"]}</p>
+                              <p id="err-pmr-quarter" role="alert" className="mt-1 text-sm text-[var(--danger)]">{fieldErrors["quarter"]}</p>
                             )}
                           </div>
-                          <div>
-                            <Label htmlFor="pmr-year">{t("form.year")} <span className="text-destructive">*</span></Label>
-                            <Select value={String(v.reportingYear)} onValueChange={(val) => form.setValue("reportingYear", Number(val))}>
-                              <SelectTrigger id="pmr-year" aria-required="true"><SelectValue /></SelectTrigger>
-                              <SelectContent>{yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                            </Select>
-                          </div>
+                          <SelectField
+                            id="pmr-year"
+                            label={t("form.year")}
+                            isRequired
+                            value={String(v.reportingYear)}
+                            onChange={(val) => form.setValue("reportingYear", Number(val))}
+                            options={yearSelectOptions}
+                          />
                         </>
                       )}
                       {v.kind === "annual" && (
                         <div className="col-span-2">
-                          <Label htmlFor="pmr-year">{t("form.reportingYear")} <span className="text-destructive">*</span></Label>
-                          <div className="max-w-[10rem]">
-                            <Select value={String(v.reportingYear)} onValueChange={(val) => form.setValue("reportingYear", Number(val))}>
-                              <SelectTrigger id="pmr-year" aria-required="true"><SelectValue /></SelectTrigger>
-                              <SelectContent>{yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                            </Select>
-                          </div>
+                          <SelectField
+                            id="pmr-year"
+                            label={t("form.reportingYear")}
+                            isRequired
+                            className="max-w-[10rem]"
+                            value={String(v.reportingYear)}
+                            onChange={(val) => form.setValue("reportingYear", Number(val))}
+                            options={yearSelectOptions}
+                          />
                         </div>
                       )}
                       {v.kind === "on_demand" && (
                         <>
                           <div>
-                            <Label htmlFor="pmr-period-start">{t("form.periodStart")} <span className="text-destructive">*</span></Label>
-                            <Input id="pmr-period-start" type="date" aria-required="true" aria-invalid={!!fieldErrors["periodStart"] || undefined} aria-describedby={fieldErrors["periodStart"] ? "err-pmr-period-start" : undefined} {...form.register("periodStart")} />
+                            <DateInput
+                              id="pmr-period-start"
+                              label={t("form.periodStart")}
+                              isRequired
+                              isInvalid={!!fieldErrors["periodStart"]}
+                              describedBy={fieldErrors["periodStart"] ? "err-pmr-period-start" : undefined}
+                              value={v.periodStart}
+                              onChange={(d) => form.setValue("periodStart", d)}
+                            />
                             {fieldErrors["periodStart"] && (
-                              <p id="err-pmr-period-start" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["periodStart"]}</p>
+                              <p id="err-pmr-period-start" role="alert" className="mt-1 text-sm text-[var(--danger)]">{fieldErrors["periodStart"]}</p>
                             )}
                           </div>
-                          <div>
-                            <Label htmlFor="pmr-period-end">{t("form.periodEnd")}</Label>
-                            <Input id="pmr-period-end" type="date" {...form.register("periodEnd")} />
-                          </div>
+                          <DateInput
+                            id="pmr-period-end"
+                            label={t("form.periodEnd")}
+                            value={v.periodEnd}
+                            min={v.periodStart || undefined}
+                            onChange={(d) => form.setValue("periodEnd", d)}
+                          />
                           <div className="col-span-2">
-                            <Label htmlFor="pmr-ondemand-reason">{t("form.onDemandReason")} <span className="text-destructive">*</span></Label>
-                            <div className="max-w-xs">
-                              <Select value={onDemandReason} onValueChange={setOnDemandReason}>
-                                <SelectTrigger id="pmr-ondemand-reason" aria-required="true" aria-invalid={!!fieldErrors["onDemandReason"] || undefined} aria-describedby={fieldErrors["onDemandReason"] ? "err-pmr-ondemand-reason" : undefined}><SelectValue placeholder={t("form.selectReason")} /></SelectTrigger>
-                                <SelectContent>
-                                  {([
-                                    ["Donor Request", "donorRequest"],
-                                    ["Management Request", "managementRequest"],
-                                    ["Emergency Response", "emergencyResponse"],
-                                    ["Audit Requirement", "auditRequirement"],
-                                    ["Other", "other"],
-                                  ] as const).map(([value, key]) => (
-                                    <SelectItem key={value} value={value}>{t(`form.${key}`)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            <SelectField
+                              id="pmr-ondemand-reason"
+                              label={t("form.onDemandReason")}
+                              isRequired
+                              className="max-w-xs"
+                              isInvalid={!!fieldErrors["onDemandReason"]}
+                              aria-describedby={fieldErrors["onDemandReason"] ? "err-pmr-ondemand-reason" : undefined}
+                              placeholder={t("form.selectReason")}
+                              value={onDemandReason}
+                              onChange={setOnDemandReason}
+                              options={([
+                                ["Donor Request", "donorRequest"],
+                                ["Management Request", "managementRequest"],
+                                ["Emergency Response", "emergencyResponse"],
+                                ["Audit Requirement", "auditRequirement"],
+                                ["Other", "other"],
+                              ] as const).map(([value, key]) => ({ value, label: t(`form.${key}`) }))}
+                            />
                             {fieldErrors["onDemandReason"] && (
-                              <p id="err-pmr-ondemand-reason" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["onDemandReason"]}</p>
+                              <p id="err-pmr-ondemand-reason" role="alert" className="mt-1 text-sm text-[var(--danger)]">{fieldErrors["onDemandReason"]}</p>
                             )}
                           </div>
                         </>
                       )}
                       {/* Duplicate detection alert */}
                       {isProject && dupCheck?.matchType === "exact" && dupCheck.existingReport && (
-                        <div className="col-span-2 rounded border border-warning/30 bg-warning/10 p-3 flex items-start gap-2">
-                          <AlertCircle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
-                          <div className="text-xs">
-                            <p className="font-semibold text-warning">{t("form.duplicatePeriodTitle")}</p>
-                            <p className="text-warning/80 mt-0.5">
-                              <strong>{dupCheck.existingReport.title}</strong> — {t("list.status")}: {displayStatus(dupCheck.existingReport.status, t)}
-                            </p>
-                            <p className="text-warning mt-1">{t("form.duplicatePeriodHelp")}</p>
-                          </div>
-                        </div>
+                        <Alert status="warning" className="col-span-2">
+                          <Alert.Indicator />
+                          <Alert.Content>
+                            <Alert.Title>{t("form.duplicatePeriodTitle")}</Alert.Title>
+                            <Alert.Description>
+                              <strong dir="auto">{dupCheck.existingReport.title}</strong> — {t("list.status")}: {displayStatus(dupCheck.existingReport.status, t)}
+                              <span className="mt-1 block">{t("form.duplicatePeriodHelp")}</span>
+                            </Alert.Description>
+                          </Alert.Content>
+                        </Alert>
                       )}
                       <div className="col-span-2">
-                        <Label htmlFor="field-title">{t("fields.reportTitle")} <span className="text-destructive">*</span></Label>
-                        <Input
+                        <HLabel htmlFor="field-title" isRequired>{t("fields.reportTitle")}</HLabel>
+                        <HInput fullWidth
                           {...form.register("title")}
                           id="field-title"
-                          placeholder={`e.g. ${meta.short} report — ${computedPeriod}`}
+                          placeholder={t("formUi.titlePlaceholder", { type: meta.short, period: computedPeriod })}
                           onFocus={() => { autoTitleRef.current = ""; }}
                           aria-invalid={!!fieldErrors["title"] || undefined}
                           aria-describedby={fieldErrors["title"] ? "err-title" : undefined}
                         />
                         {fieldErrors["title"] && (
-                          <p id="err-title" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["title"]}</p>
+                          <p id="err-title" role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["title"]}</p>
                         )}
                         {fieldErrors["projectCurrency"] && (
-                          <p id="err-project-currency" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["projectCurrency"]}</p>
+                          <p id="err-project-currency" role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["projectCurrency"]}</p>
                         )}
                       </div>
                       {(isHqSector || isProgramState) && (
                         <div className="col-span-2">
-                          <Label>{t("form.preparedBy")}</Label>
-                          <Input value={`${me?.user?.name ?? "—"} (${me?.user?.roleLabel ?? "—"})`} readOnly className="bg-muted" />
+                          <HLabel htmlFor="rp-prepared-by">{t("form.preparedBy")}</HLabel>
+                          <HInput fullWidth id="rp-prepared-by" value={`${me?.user?.name ?? "—"} (${me?.user?.role ? t(`roles.${me.user.role}`, { ns: "users", defaultValue: me.user.roleLabel ?? me.user.role }) : "—"})`} readOnly className="bg-[var(--default)]" />
                         </div>
                       )}
                     </div>
@@ -4263,23 +4283,24 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                     >
                       {/* ─── A: Report Context ─── */}
                       <div className="space-y-3">
-                        <p className="text-[11px] font-semibold text-muted-foreground">{t("form.reportContext")}</p>
+                        <p className="text-[11px] font-semibold text-[var(--muted)]">{t("form.reportContext")}</p>
 
                         {/* State / Location — locked for single-state users (scope-based, not role-based) */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <Label>{t("form.stateLocation")} <span className="text-destructive">*</span></Label>
+                            <HLabel htmlFor="ar-state-location" isRequired>{t("form.stateLocation")}</HLabel>
                             {singleStateUser ? (
                               <div>
                                 <div className="relative">
-                                  <Lock className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none z-10" />
-                                  <Input
+                                  <Lock className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--muted)] pointer-events-none z-10" aria-hidden="true" />
+                                  <HInput fullWidth
+                                    id="ar-state-location"
                                     readOnly
-                                    value={visibleStates.find((s) => s.id === v.stateId)?.name ?? t("form.assignedState")}
-                                    className="bg-muted cursor-not-allowed ps-8"
+                                    value={(() => { const st = visibleStates.find((s) => s.id === v.stateId); return st ? getStateLabel(st, i18n.language) : t("form.assignedState"); })()}
+                                    className="cursor-not-allowed bg-[var(--default)] ps-8"
                                   />
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">{t("form.assignedStateHelp")}</p>
+                                <p className="text-xs text-[var(--muted)] mt-1">{t("form.assignedStateHelp")}</p>
                               </div>
                             ) : (
                               <LocationSelector
@@ -4295,27 +4316,28 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 aria-invalid={!!fieldErrors["stateId"] || undefined}
                               />
                             )}
-                            {fieldErrors["stateId"] && <p role="alert" className="text-sm text-destructive mt-1">{fieldErrors["stateId"]}</p>}
+                            {fieldErrors["stateId"] && <p role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["stateId"]}</p>}
                           </div>
                         </div>
 
                         {/* Report Subject / Activity Name — required; primary human-readable identity */}
                         <div>
-                          <Label>{t("form.activitySubject")} <span className="text-destructive">*</span></Label>
-                          <Input
+                          <HLabel htmlFor="ar-activity-subject" isRequired>{t("form.activitySubject")}</HLabel>
+                          <HInput fullWidth
+                            id="ar-activity-subject"
+                            dir="auto"
                             {...form.register("activityName")}
                             placeholder={t("form.activitySubjectPlaceholder")}
                             aria-invalid={!!fieldErrors["activityName"] || undefined}
-                            className={cn(fieldErrors["activityName"] && "border-destructive")}
                           />
-                          <p className="text-xs text-muted-foreground mt-1">{t("form.activitySubjectHelp")}</p>
-                          {fieldErrors["activityName"] && <p role="alert" className="text-sm text-destructive mt-1">{fieldErrors["activityName"]}</p>}
+                          <p className="text-xs text-[var(--muted)] mt-1">{t("form.activitySubjectHelp")}</p>
+                          {fieldErrors["activityName"] && <p role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["activityName"]}</p>}
                         </div>
 
                         {/* Link To Existing Record — optional 3-mode selector */}
                         <div>
-                          <p id="ar-link-mode-label" className="text-[11px] font-semibold text-muted-foreground mb-1.5">
-                            {t("form.linkExistingRecord")} <span className="font-normal normal-case tracking-normal text-muted-foreground/70">({t("form.optional")})</span>
+                          <p id="ar-link-mode-label" className="text-[11px] font-semibold text-[var(--muted)] mb-1.5">
+                            {t("form.linkExistingRecord")} <span className="font-normal normal-case tracking-normal text-[var(--muted)]/70">({t("form.optional")})</span>
                           </p>
                           {/* HeroUI Pro Segment (default variant, md) */}
                           <Segment
@@ -4330,7 +4352,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             ))}
                           </Segment>
                           {linkMode === "standalone" && (
-                            <p className="text-xs text-muted-foreground mt-1">{t("form.standaloneLinkHelp")}</p>
+                            <p className="text-xs text-[var(--muted)] mt-1">{t("form.standaloneLinkHelp")}</p>
                           )}
                         </div>
 
@@ -4340,100 +4362,53 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               {/* Activity combobox */}
                               <div className="sm:col-span-2">
-                                <Label>{t("fields.activity")}</Label>
-                                <Popover open={activityComboOpen} onOpenChange={(open) => { if (!activitiesLoading) setActivityComboOpen(open); }}>
-                                  <PopoverTrigger asChild>
-                                    <button
-                                      type="button"
-                                      role="combobox"
-                                      aria-expanded={activityComboOpen}
-                                      aria-invalid={!!fieldErrors["activityId"] || undefined}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                                        fieldErrors["activityId"] && "border-destructive",
-                                      )}
-                                    >
-                                      <span className={!activityId ? "text-muted-foreground" : "text-foreground"}>
-                                        {activitiesLoading
-                                          ? t("form.loadingActivities")
-                                          : activityId
-                                          ? activitiesData?.find((a) => a.id === activityId)?.title ?? t("form.selectedActivity")
-                                          : t("form.searchActivities")}
-                                      </span>
-                                      {activitiesLoading
-                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
-                                        : <ChevronRight className="ms-2 h-4 w-4 shrink-0 text-muted-foreground opacity-50 rtl:rotate-180" />}
-                                    </button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-[min(520px,90vw)] p-0" align="start">
-                                    <Command>
-                                      <CommandInput placeholder={t("form.searchByNameCode")} />
-                                      <CommandList>
-                                        {activitiesError ? (
-                                          <div className="px-3 py-4 text-center">
-                                            <p className="text-sm font-medium text-destructive">{t("form.activitiesLoadError")}</p>
-                                            <p className="text-xs text-muted-foreground mt-1">{t("form.activitiesLoadErrorHelp")}</p>
-                                          </div>
-                                        ) : activitiesLoading ? (
-                                          <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            <span>{t("form.loadingActivities")}</span>
-                                          </div>
-                                        ) : (
-                                          <>
-                                            {(!activitiesData || activitiesData.length === 0) ? (
-                                              <div className="px-3 py-4 text-center">
-                                                <p className="text-sm font-medium">{t("form.noActivities")}</p>
-                                                <p className="text-xs text-muted-foreground mt-1">{t("form.noActivitiesScope")}</p>
-                                              </div>
-                                            ) : (
-                                              <CommandGroup>
-                                                {activitiesData
-                                                  .filter((a) => !v.stateId || !a.stateId || Number(a.stateId) === Number(v.stateId))
-                                                  .map((a) => {
-                                                  const sa = a as ScopedActivity;
-                                                  return (
-                                                    <CommandItem
-                                                      key={a.id}
-                                                      value={`${a.code ?? ""} ${a.title}`}
-                                                      onSelect={() => {
-                                                        setActivityId(a.id);
-                                                        form.setValue("projectId", sa.projectId ?? 0);
-                                                        // Pre-populate activityName from activity title if not yet edited.
-                                                        if (!form.getValues("activityName").trim()) {
-                                                          form.setValue("activityName", a.title);
-                                                        }
-                                                        setFieldErrors((cur) => ({ ...cur, activityId: undefined, activityName: undefined }));
-                                                        setActivityComboOpen(false);
-                                                      }}
-                                                    >
-                                                      <div className="flex flex-col w-full">
-                                                        <span className="font-medium text-sm">{a.title}</span>
-                                                        <span className="text-[11px] text-muted-foreground">
-                                                          {[
-                                                            a.code,
-                                                            sa.sector,
-                                                            a.stateName,
-                                                            a.plannedStart ? String(a.plannedStart).slice(0, 10) : null,
-                                                            a.plannedEnd ? `– ${String(a.plannedEnd).slice(0, 10)}` : null,
-                                                          ].filter(Boolean).join(" · ")}
-                                                        </span>
-                                                        {sa.projectTitle && (
-                                                          <span className="text-[11px] text-muted-foreground/70 mt-0.5">{sa.projectTitle}</span>
-                                                        )}
-                                                      </div>
-                                                    </CommandItem>
-                                                  );
-                                                })}
-                                              </CommandGroup>
-                                            )}
-                                          </>
-                                        )}
-                                      </CommandList>
-                                    </Command>
-                                  </PopoverContent>
-                                </Popover>
-                                {fieldErrors["activityId"] && <p role="alert" className="text-sm text-destructive mt-1">{fieldErrors["activityId"]}</p>}
+                                <SearchPickerField
+                                  id="ar-activity"
+                                  label={t("fields.activity")}
+                                  isInvalid={!!fieldErrors["activityId"]}
+                                  isDisabled={activitiesLoading}
+                                  placeholder={activitiesLoading ? t("form.loadingActivities") : t("form.searchActivities")}
+                                  emptyState={activitiesError ? (
+                                    <>
+                                      <span className="block font-medium text-[var(--danger)]">{t("form.activitiesLoadError")}</span>
+                                      <span className="mt-1 block text-xs">{t("form.activitiesLoadErrorHelp")}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="block font-medium text-[var(--foreground)]">{t("form.noActivities")}</span>
+                                      <span className="mt-1 block text-xs">{t("form.noActivitiesScope")}</span>
+                                    </>
+                                  )}
+                                  selectedKey={activityId ? String(activityId) : null}
+                                  onSelect={(key) => {
+                                    const a = key ? activitiesData?.find((x) => String(x.id) === key) : undefined;
+                                    if (!a) return;
+                                    setActivityId(a.id);
+                                    form.setValue("projectId", a.projectId ?? 0);
+                                    // Pre-populate activityName from activity title if not yet edited.
+                                    if (!form.getValues("activityName").trim()) {
+                                      form.setValue("activityName", a.title);
+                                    }
+                                    setFieldErrors((cur) => ({ ...cur, activityId: undefined, activityName: undefined }));
+                                  }}
+                                  items={(activitiesError ? [] : activitiesData ?? [])
+                                    .filter((a) => !v.stateId || !a.stateId || Number(a.stateId) === Number(v.stateId))
+                                    .map((a) => ({
+                                      id: String(a.id),
+                                      title: a.title,
+                                      textValue: `${a.code ?? ""} ${a.title}`,
+                                      details: (
+                                        <>
+                                          <span className="block">
+                                            {[a.code, a.sector, a.stateName ? getLinkedStateLabel(a, i18n.language) : null].filter(Boolean).join(" · ")}
+                                            {a.plannedStart && <> · <bdi dir="ltr">{formatDate(String(a.plannedStart).slice(0, 10))}{a.plannedEnd ? ` – ${formatDate(String(a.plannedEnd).slice(0, 10))}` : ""}</bdi></>}
+                                          </span>
+                                          {a.projectTitle && <span className="block" dir="auto">{a.projectTitle}</span>}
+                                        </>
+                                      ),
+                                    }))}
+                                />
+                                {fieldErrors["activityId"] && <p role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["activityId"]}</p>}
 
                                 {/* Compact Activity summary strip */}
                                 {activityId && (() => {
@@ -4442,21 +4417,21 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   const sa = act as ScopedActivity;
                                   return (
                                     <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
-                                      {act.code && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("form.code")}</dt><dd className="font-medium">{act.code}</dd></div>}
-                                      {sa.sector && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("fields.sector")}</dt><dd className="font-medium">{sa.sector}</dd></div>}
-                                      {act.stateName && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("fields.state")}</dt><dd className="font-medium">{getLinkedStateLabel(act, i18n.language)}</dd></div>}
-                                      {act.localityName && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("form.location")}</dt><dd className="font-medium">{act.localityName}</dd></div>}
-                                      {act.plannedStart && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("form.plannedStart")}</dt><dd className="font-medium">{String(act.plannedStart).slice(0, 10)}</dd></div>}
-                                      {act.plannedEnd && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("form.plannedEnd")}</dt><dd className="font-medium">{String(act.plannedEnd).slice(0, 10)}</dd></div>}
-                                      {act.status && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("list.status")}</dt><dd className="font-medium capitalize">{displayStatus(String(act.status), t)}</dd></div>}
+                                      {act.code && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("form.code")}</dt><dd className="font-medium">{act.code}</dd></div>}
+                                      {sa.sector && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("fields.sector")}</dt><dd className="font-medium">{sa.sector}</dd></div>}
+                                      {act.stateName && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("fields.state")}</dt><dd className="font-medium">{getLinkedStateLabel(act, i18n.language)}</dd></div>}
+                                      {act.localityName && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("form.location")}</dt><dd className="font-medium">{act.localityName}</dd></div>}
+                                      {act.plannedStart && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("form.plannedStart")}</dt><dd className="font-medium"><bdi dir="ltr">{formatDate(String(act.plannedStart).slice(0, 10))}</bdi></dd></div>}
+                                      {act.plannedEnd && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("form.plannedEnd")}</dt><dd className="font-medium"><bdi dir="ltr">{formatDate(String(act.plannedEnd).slice(0, 10))}</bdi></dd></div>}
+                                      {act.status && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("list.status")}</dt><dd className="font-medium">{t(`activityStatus.${act.status}`, { ns: "projects", defaultValue: formatStatusLabel(String(act.status)) })}</dd></div>}
                                       {sa.projectId ? (
                                         <div className="flex items-center gap-1 w-full mt-0.5 pt-1 border-t border-border/40">
-                                          <dt className="text-muted-foreground">{t("form.linkedProjectDisplay")}</dt>
+                                          <dt className="text-[var(--muted)]">{t("form.linkedProjectDisplay")}</dt>
                                           <dd className="font-medium">{sa.projectTitle ?? t("fields.project")}{sa.projectCode ? ` · ${sa.projectCode}` : ""}</dd>
                                         </div>
                                       ) : (
                                         <div className="flex items-center gap-1 w-full mt-0.5 pt-1 border-t border-border/40">
-                                          <dd className="text-muted-foreground">{t("form.noLinkedProject")}</dd>
+                                          <dd className="text-[var(--muted)]">{t("form.noLinkedProject")}</dd>
                                         </div>
                                       )}
                                     </dl>
@@ -4466,57 +4441,15 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                               {/* Project filter — optional; narrows the activity list */}
                               <div className="sm:col-span-2">
-                                 <Label className="text-muted-foreground">{t("form.projectFilter")} <span className="font-normal text-muted-foreground/70">({t("form.optional")})</span></Label>
-                                <Popover open={projectComboOpen} onOpenChange={setProjectComboOpen}>
-                                  <PopoverTrigger asChild>
-                                    <button
-                                      type="button"
-                                      role="combobox"
-                                      aria-expanded={projectComboOpen}
-                                      className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                                    >
-                                      <span className={projectFilterId ? "text-foreground" : "text-muted-foreground"}>
-                                        {projectFilterId
-                                          ? projects?.find((p) => p.id === projectFilterId)?.title ?? t("form.selectedProject")
-                                          : t("filters.allProjects")}
-                                      </span>
-                                      <ChevronRight className="ms-2 h-4 w-4 shrink-0 text-muted-foreground opacity-50 rtl:rotate-180" />
-                                    </button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-[min(480px,90vw)] p-0" align="start">
-                                    <Command>
-                                      <CommandInput placeholder={t("form.searchByNameCode")} />
-                                      <CommandList>
-                                        <CommandEmpty>{t("form.noProjectsFound")}</CommandEmpty>
-                                        <CommandGroup>
-                                          <CommandItem value="all-projects" onSelect={() => { setProjectFilterId(0); setProjectComboOpen(false); }}>
-                                            <div className="flex flex-col w-full">
-                                              <span className="font-medium text-sm text-muted-foreground">{t("filters.allProjects")}</span>
-                                            </div>
-                                          </CommandItem>
-                                          {projects
-                                            ?.filter((p) => !v.stateId || (p.stateIds ?? []).includes(Number(v.stateId)))
-                                            .map((p) => {
-                                            const pR = p as unknown as Record<string, unknown>;
-                                            const donor = (pR["donorName"] ?? pR["donor"] ?? "—") as string;
-                                            return (
-                                              <CommandItem
-                                                key={p.id}
-                                                value={`${p.code} ${p.title}`}
-                                                onSelect={() => { setProjectFilterId(p.id); setProjectComboOpen(false); }}
-                                              >
-                                                <div className="flex flex-col w-full">
-                                                  <span className="font-medium text-sm">{p.title}</span>
-                                                  <span className="text-[11px] text-muted-foreground">{p.code} · {donor} · {formatStatusLabel(p.status)}</span>
-                                                </div>
-                                              </CommandItem>
-                                            );
-                                          })}
-                                        </CommandGroup>
-                                      </CommandList>
-                                    </Command>
-                                  </PopoverContent>
-                                </Popover>
+                                <SearchPickerField
+                                  id="ar-project-filter"
+                                  label={<>{t("form.projectFilter")} <span className="font-normal text-[var(--muted)]">({t("form.optional")})</span></>}
+                                  placeholder={t("filters.allProjects")}
+                                  emptyState={t("form.noProjectsFound")}
+                                  selectedKey={projectFilterId ? String(projectFilterId) : "all-projects"}
+                                  onSelect={(key) => setProjectFilterId(key && key !== "all-projects" ? Number(key) : 0)}
+                                  items={[{ id: "all-projects", title: t("filters.allProjects") }, ...projectPickerItems]}
+                                />
                               </div>
                             </div>
                           </div>
@@ -4526,62 +4459,22 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         {linkMode === "project" && (
                           <div className="space-y-2">
                             <div>
-                              <Label>{t("fields.project")} <span className="text-destructive">*</span></Label>
-                              <Popover open={projectComboOpen} onOpenChange={setProjectComboOpen}>
-                                <PopoverTrigger asChild>
-                                  <button
-                                    type="button"
-                                    role="combobox"
-                                    aria-expanded={projectComboOpen}
-                                    aria-invalid={!!fieldErrors["projectId"] || undefined}
-                                    aria-describedby={fieldErrors["projectId"] ? "err-ar-project" : undefined}
-                                    className={cn(
-                                      "flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                                      fieldErrors["projectId"] && "border-destructive",
-                                    )}
-                                  >
-                                    <span className={!v.projectId ? "text-muted-foreground" : "text-foreground"}>
-                                      {v.projectId
-                                        ? projects?.find((p) => p.id === Number(v.projectId))?.title ?? t("form.selectedProject")
-                                        : t("form.searchProjects")}
-                                    </span>
-                                    <ChevronRight className="ms-2 h-4 w-4 shrink-0 text-muted-foreground opacity-50 rtl:rotate-180" />
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[min(520px,90vw)] p-0" align="start">
-                                  <Command>
-                                    <CommandInput placeholder={t("form.searchByNameCode")} />
-                                    <CommandList>
-                                      <CommandEmpty>{t("form.noProjectsFound")}</CommandEmpty>
-                                      <CommandGroup>
-                                        {projects
-                                          ?.filter((p) => !v.stateId || (p.stateIds ?? []).includes(Number(v.stateId)))
-                                          .map((p) => {
-                                          const pR = p as unknown as Record<string, unknown>;
-                                          const donor = (pR["donorName"] ?? pR["donor"] ?? "—") as string;
-                                          return (
-                                            <CommandItem
-                                              key={p.id}
-                                              value={`${p.code} ${p.title}`}
-                                              onSelect={() => {
-                                                form.setValue("projectId", p.id);
-                                                setFieldErrors((cur) => ({ ...cur, projectId: undefined }));
-                                                setProjectComboOpen(false);
-                                              }}
-                                            >
-                                              <div className="flex flex-col w-full">
-                                                <span className="font-medium text-sm">{p.title}</span>
-                                                <span className="text-[11px] text-muted-foreground">{p.code} · {donor} · {formatStatusLabel(p.status)}</span>
-                                              </div>
-                                            </CommandItem>
-                                          );
-                                        })}
-                                      </CommandGroup>
-                                    </CommandList>
-                                  </Command>
-                                </PopoverContent>
-                              </Popover>
-                              {fieldErrors["projectId"] && <p id="err-ar-project" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["projectId"]}</p>}
+                              <SearchPickerField
+                                id="ar-project"
+                                label={t("fields.project")}
+                                isRequired
+                                isInvalid={!!fieldErrors["projectId"]}
+                                aria-describedby={fieldErrors["projectId"] ? "err-ar-project" : undefined}
+                                placeholder={t("form.searchProjects")}
+                                emptyState={t("form.noProjectsFound")}
+                                selectedKey={v.projectId ? String(v.projectId) : null}
+                                onSelect={(key) => {
+                                  form.setValue("projectId", key ? Number(key) : 0);
+                                  setFieldErrors((cur) => ({ ...cur, projectId: undefined }));
+                                }}
+                                items={projectPickerItems}
+                              />
+                              {fieldErrors["projectId"] && <p id="err-ar-project" role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["projectId"]}</p>}
 
                               {/* Project summary strip */}
                               {v.projectId > 0 && (() => {
@@ -4591,9 +4484,9 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 const donor = (pR["donorName"] ?? pR["donor"] ?? "—") as string;
                                 return (
                                   <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
-                                    {proj.code && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("form.code")}</dt><dd className="font-medium">{proj.code}</dd></div>}
-                                    {donor !== "—" && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("detail.donor")}</dt><dd className="font-medium">{donor}</dd></div>}
-                                    {proj.status && <div className="flex items-center gap-1"><dt className="text-muted-foreground">{t("list.status")}</dt><dd className="font-medium capitalize">{displayStatus(String(proj.status), t)}</dd></div>}
+                                    {proj.code && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("form.code")}</dt><dd className="font-medium">{proj.code}</dd></div>}
+                                    {donor !== "—" && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("detail.donor")}</dt><dd className="font-medium">{donor}</dd></div>}
+                                    {proj.status && <div className="flex items-center gap-1"><dt className="text-[var(--muted)]">{t("list.status")}</dt><dd className="font-medium">{t(`status.${proj.status}`, { ns: "projects", defaultValue: formatStatusLabel(proj.status) })}</dd></div>}
                                   </dl>
                                 );
                               })()}
@@ -4604,35 +4497,33 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                             <hr className="border-border/60" />
                       {/* ─── B: Reporting Period — Month + Year only (Activity Reports are always monthly) ─── */}
                        <div className="space-y-3">
-                         <p className="text-[11px] font-semibold text-muted-foreground">{t("fields.period")}</p>
+                         <p className="text-[11px] font-semibold text-[var(--muted)]">{t("fields.period")}</p>
                          <div className="grid grid-cols-2 gap-3">
-                           <div>
-                             <Label>{t("fields.periodMonth")} *</Label>
-                             <Select value={String(v.reportingMonth)} onValueChange={(val) => form.setValue("reportingMonth", Number(val))}>
-                               <SelectTrigger><SelectValue /></SelectTrigger>
-                               <SelectContent>
-                                 {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                                  <SelectItem key={m} value={String(m)}>{new Date(2000, m - 1, 1).toLocaleString(i18n.language === "ar" ? "ar" : "en", { month: "long" })}</SelectItem>
-                                 ))}
-                               </SelectContent>
-                             </Select>
-                           </div>
-                           <div>
-                             <Label>{t("fields.periodYear")} *</Label>
-                             <Select value={String(v.reportingYear)} onValueChange={(val) => form.setValue("reportingYear", Number(val))}>
-                               <SelectTrigger><SelectValue /></SelectTrigger>
-                               <SelectContent>{yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                             </Select>
-                           </div>
+                           <SelectField
+                             id="ar-period-month"
+                             label={t("fields.periodMonth")}
+                             isRequired
+                             value={String(v.reportingMonth)}
+                             onChange={(val) => form.setValue("reportingMonth", Number(val))}
+                             options={monthOptions}
+                           />
+                           <SelectField
+                             id="ar-period-year"
+                             label={t("fields.periodYear")}
+                             isRequired
+                             value={String(v.reportingYear)}
+                             onChange={(val) => form.setValue("reportingYear", Number(val))}
+                             options={yearSelectOptions}
+                           />
                          </div>
                        </div>
                       <hr className="border-border/60" />
                       {/* ─── C: Report Identification ─── */}
                       <div className="space-y-3">
-                        <p className="text-[11px] font-semibold text-muted-foreground">{t("formExtra.reportIdentification")}</p>
+                        <p className="text-[11px] font-semibold text-[var(--muted)]">{t("formExtra.reportIdentification")}</p>
                         <div>
-                          <Label htmlFor="ar-field-title">Report Title *</Label>
-                          <Input
+                          <HLabel htmlFor="ar-field-title" isRequired>{t("fields.reportTitle")}</HLabel>
+                          <HInput fullWidth
                             {...form.register("title")}
                             id="ar-field-title"
                             placeholder={t("formExtra.autoGeneratedTitle")}
@@ -4641,7 +4532,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             aria-describedby={fieldErrors["title"] ? "ar-err-title" : undefined}
                           />
                           {fieldErrors["title"] && (
-                            <p id="ar-err-title" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["title"]}</p>
+                            <p id="ar-err-title" role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["title"]}</p>
                           )}
                         </div>
                       </div>
@@ -4656,7 +4547,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                     className={(isActivity ? activeSection === "ar-section-progress" : activeSection === "rp-section-progress") ? "space-y-3" : "hidden"}
                   >
                     <h4 className="text-sm font-semibold border-b pb-1">
-                      {isActivity ? t("wizard.step2.sectionHeader") : isHqSector ? "Sector Progress & Achievements" : isProgramState ? "State Progress & Achievements" : "Progress & Achievements"}
+                      {isActivity ? t("wizard.step2.sectionHeader") : isHqSector ? t("formUi.progressTitleHq") : isProgramState ? t("formUi.progressTitleState") : t("formUi.progressTitleProject")}
                     </h4>
 
                     {isActivity ? (
@@ -4664,69 +4555,57 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                       <div className="space-y-5">
                         {/* Section A — Implementation Status */}
                         <div className="space-y-3">
-                          <p className="text-[11px] font-semibold text-muted-foreground">{t("wizard.step2.sectionAHeader")}</p>
+                          <p className="text-[11px] font-semibold text-[var(--muted)]">{t("wizard.step2.sectionAHeader")}</p>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             {/* Implementation Status select */}
                             <div>
-                              <Label htmlFor="field-implementationStatus">
-                                {t("wizard.step2.implementationStatus")} *
-                              </Label>
-                              <Select
+                              <SelectField
+                                id="field-implementationStatus"
+                                label={t("wizard.step2.implementationStatus")}
+                                isRequired
+                                isInvalid={!!fieldErrors["implementationStatus"]}
+                                aria-describedby={fieldErrors["implementationStatus"] ? "err-implementationStatus" : undefined}
+                                placeholder={t("wizard.step2.statusPlaceholder")}
                                 value={sectionValues["implementationStatus"] ?? ""}
-                                onValueChange={(val) => {
+                                onChange={(val) => {
                                   setSectionValues((cur) => ({ ...cur, implementationStatus: val }));
                                   setIsFormDirty(true);
                                   setFieldErrors((cur) => ({ ...cur, implementationStatus: undefined }));
                                 }}
-                              >
-                                <SelectTrigger
-                                  id="field-implementationStatus"
-                                  aria-invalid={!!fieldErrors["implementationStatus"] || undefined}
-                                  aria-describedby={fieldErrors["implementationStatus"] ? "err-implementationStatus" : undefined}
-                                >
-                                  <SelectValue placeholder={t("wizard.step2.statusPlaceholder")} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {IMPLEMENTATION_STATUS_OPTIONS.map((opt) => (
-                                    <SelectItem key={opt.value} value={opt.value}>{t(`implementationStatus.${opt.value}`)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                options={IMPLEMENTATION_STATUS_OPTIONS.map((opt) => ({ value: opt.value, label: t(`implementationStatus.${opt.value}`) }))}
+                              />
                               {fieldErrors["implementationStatus"] && (
-                                <p id="err-implementationStatus" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["implementationStatus"]}</p>
+                                <p id="err-implementationStatus" role="alert" className="mt-1 text-sm text-[var(--danger)]">{fieldErrors["implementationStatus"]}</p>
                               )}
                             </div>
                             {/* Actual Start Date */}
-                            <div>
-                              <Label htmlFor="field-actualStartDate">{t("wizard.step2.actualStartDate")}</Label>
-                              <Input
-                                id="field-actualStartDate"
-                                type="date"
-                                value={sectionValues["actualStartDate"] ?? ""}
-                                onChange={(e) => {
-                                  setSectionValues((cur) => ({ ...cur, actualStartDate: e.target.value }));
-                                  setIsFormDirty(true);
-                                  setFieldErrors((cur) => ({ ...cur, actualStartDate: undefined, actualEndDate: undefined }));
-                                }}
-                              />
-                            </div>
+                            <DateInput
+                              id="field-actualStartDate"
+                              label={t("wizard.step2.actualStartDate")}
+                              value={sectionValues["actualStartDate"] ?? ""}
+                              onChange={(d) => {
+                                setSectionValues((cur) => ({ ...cur, actualStartDate: d }));
+                                setIsFormDirty(true);
+                                setFieldErrors((cur) => ({ ...cur, actualStartDate: undefined, actualEndDate: undefined }));
+                              }}
+                            />
                             {/* Actual End Date */}
                             <div>
-                              <Label htmlFor="field-actualEndDate">{t("wizard.step2.actualEndDate")}</Label>
-                              <Input
+                              <DateInput
                                 id="field-actualEndDate"
-                                type="date"
+                                label={t("wizard.step2.actualEndDate")}
                                 value={sectionValues["actualEndDate"] ?? ""}
-                                onChange={(e) => {
-                                  setSectionValues((cur) => ({ ...cur, actualEndDate: e.target.value }));
+                                min={sectionValues["actualStartDate"] || undefined}
+                                onChange={(d) => {
+                                  setSectionValues((cur) => ({ ...cur, actualEndDate: d }));
                                   setIsFormDirty(true);
                                   setFieldErrors((cur) => ({ ...cur, actualEndDate: undefined }));
                                 }}
-                                aria-invalid={!!fieldErrors["actualEndDate"] || undefined}
-                                aria-describedby={fieldErrors["actualEndDate"] ? "err-actualEndDate" : undefined}
+                                isInvalid={!!fieldErrors["actualEndDate"]}
+                                describedBy={fieldErrors["actualEndDate"] ? "err-actualEndDate" : undefined}
                               />
                               {fieldErrors["actualEndDate"] && (
-                                <p id="err-actualEndDate" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["actualEndDate"]}</p>
+                                <p id="err-actualEndDate" role="alert" className="mt-1 text-sm text-[var(--danger)]">{fieldErrors["actualEndDate"]}</p>
                               )}
                             </div>
                           </div>
@@ -4736,14 +4615,14 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                         {/* Section B — Implementation Summary */}
                         <div className="space-y-3">
-                          <p className="text-[11px] font-semibold text-muted-foreground">{t("wizard.step2.sectionBHeader")}</p>
+                          <p className="text-[11px] font-semibold text-[var(--muted)]">{t("wizard.step2.sectionBHeader")}</p>
                           <div>
-                            <Label htmlFor="field-implementationSummary">{t("wizard.step2.implementationSummary")} *</Label>
-                            <p className="text-xs text-muted-foreground mb-1">
+                            <HLabel htmlFor="field-implementationSummary" isRequired>{t("wizard.step2.implementationSummary")}</HLabel>
+                            <p className="text-xs text-[var(--muted)] mb-1">
                               {t("wizard.step2.implementationSummaryHelper")}
                             </p>
                             <div className="max-w-2xl">
-                            <Textarea
+                            <HTextArea fullWidth
                               id="field-implementationSummary"
                               rows={4}
                               className="resize-y"
@@ -4759,7 +4638,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             />
                             </div>
                             {fieldErrors["implementationSummary"] && (
-                              <p id="err-implementationSummary" role="alert" className="text-sm text-destructive mt-1">{fieldErrors["implementationSummary"]}</p>
+                              <p id="err-implementationSummary" role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors["implementationSummary"]}</p>
                             )}
                           </div>
                         </div>
@@ -4768,14 +4647,14 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                         {/* Section C — Progress Against Plan */}
                         <div className="space-y-3">
-                          <p className="text-[11px] font-semibold text-muted-foreground">{t("wizard.step2.sectionCHeader")}</p>
+                          <p className="text-[11px] font-semibold text-[var(--muted)]">{t("wizard.step2.sectionCHeader")}</p>
                           <div>
-                            <Label htmlFor="field-progressAgainstPlan">{t("wizard.step2.progressAgainstPlan")}</Label>
-                            <p className="text-xs text-muted-foreground mb-1">
+                            <HLabel htmlFor="field-progressAgainstPlan">{t("wizard.step2.progressAgainstPlan")}</HLabel>
+                            <p className="text-xs text-[var(--muted)] mb-1">
                               {t("wizard.step2.progressAgainstPlanHelper")}
                             </p>
                             <div className="max-w-2xl">
-                            <Textarea
+                            <HTextArea fullWidth
                               id="field-progressAgainstPlan"
                               rows={3}
                               className="resize-y"
@@ -4789,12 +4668,12 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             </div>
                           </div>
                           <div>
-                            <Label htmlFor="field-keyAchievements">{t("wizard.step2.implementationHighlights")}</Label>
-                            <p className="text-xs text-muted-foreground mb-1">
+                            <HLabel htmlFor="field-keyAchievements">{t("wizard.step2.implementationHighlights")}</HLabel>
+                            <p className="text-xs text-[var(--muted)] mb-1">
                               {t("wizard.step2.implementationHighlightsHelper")}
                             </p>
                             <div className="max-w-2xl">
-                            <Textarea
+                            <HTextArea fullWidth
                               id="field-keyAchievements"
                               rows={3}
                               className="resize-y"
@@ -4813,9 +4692,9 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                       /* ── Non-activity reports: generic field list ── */
                       sectionsCfg.progress.map((f) => (
                         <div key={f.key}>
-                          <Label htmlFor={`field-${f.key}`}>{configuredFieldLabel(f)}{f.required ? " *" : ""}</Label>
+                          <HLabel htmlFor={`field-${f.key}`} isRequired={!!f.required}>{configuredFieldLabel(f)}</HLabel>
                           <div className="max-w-2xl">
-                            <Textarea
+                            <HTextArea fullWidth
                               id={`field-${f.key}`}
                               rows={f.rows ?? 3}
                               className="resize-y"
@@ -4827,7 +4706,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             />
                           </div>
                           {fieldErrors[f.key] && (
-                            <p id={`err-${f.key}`} role="alert" className="text-sm text-destructive mt-1">{fieldErrors[f.key]}</p>
+                            <p id={`err-${f.key}`} role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors[f.key]}</p>
                           )}
                         </div>
                       ))
@@ -4842,22 +4721,17 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                       aria-labelledby="tab-ar-section-results"
                       className={activeSection === "ar-section-results" ? "space-y-6" : "hidden"}
                     >
-                      <h4 className="text-sm font-semibold border-b pb-1">Results & Beneficiaries</h4>
+                      <h4 className="text-sm font-semibold border-b pb-1">{t("form.tabResultsBeneficiaries")}</h4>
 
                       {/* ── Sub-section 1: Results Achieved ── */}
-                      <div className="space-y-2">
-                        <div>
-                          <Label htmlFor="field-resultsAchieved" className="text-sm font-medium">
-                            Results Achieved <span className="text-destructive">*</span>
-                          </Label>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Describe the main results or outputs achieved through this activity during the reporting period.
-                          </p>
-                        </div>
+                      <div className="flex flex-col gap-1.5">
+                        <HLabel htmlFor="field-resultsAchieved" isRequired>{t("formUi.resultsAchieved")}</HLabel>
+                        <p id="help-resultsAchieved" className="text-xs text-[var(--muted)]">{t("formUi.resultsAchievedHelp")}</p>
                         <div className="max-w-2xl">
-                        <Textarea
+                        <HTextArea fullWidth
                           id="field-resultsAchieved"
                           rows={4}
+                          dir="auto"
                           className="resize-y"
                           value={sectionValues["resultsAchieved"] ?? ""}
                           onChange={(e) => {
@@ -4867,11 +4741,11 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                           }}
                           placeholder={t("form.writeNarrative")}
                           aria-invalid={!!fieldErrors["resultsAchieved"] || undefined}
-                          aria-describedby={fieldErrors["resultsAchieved"] ? "err-resultsAchieved" : undefined}
+                          aria-describedby={fieldErrors["resultsAchieved"] ? "help-resultsAchieved err-resultsAchieved" : "help-resultsAchieved"}
                         />
                         </div>
                         {fieldErrors["resultsAchieved"] && (
-                          <p id="err-resultsAchieved" role="alert" className="text-sm text-destructive">
+                          <p id="err-resultsAchieved" role="alert" className="text-sm text-[var(--danger)]">
                             {fieldErrors["resultsAchieved"]}
                           </p>
                         )}
@@ -4881,94 +4755,67 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                       {/* ── Sub-section 2: Beneficiary Reach toggle ── */}
                       <div className="space-y-4">
-                        <div>
-                          <Label className="text-sm font-medium">{t("formExtra.beneficiaryReach")}</Label>
-                          <p className="text-xs text-muted-foreground mt-0.5 mb-3">
-                            Does this activity have direct beneficiary / participant reach?
-                          </p>
-                          <div className="flex gap-3">
-                            {(["yes", "no"] as const).map((opt) => (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => {
-                                  setSectionValues((cur) => ({ ...cur, hasBeneficiaryReach: opt }));
-                                  if (opt === "no") {
-                                    form.setValue("beneficiariesMale", 0);
-                                    form.setValue("beneficiariesFemale", 0);
-                                    form.setValue("beneficiariesBoys", 0);
-                                    form.setValue("beneficiariesGirls", 0);
-                                  }
-                                  setIsFormDirty(true);
-                                }}
-                                className={cn(
-                                  "flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors",
-                                  hasBeneficiaryReachValue === opt
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "border-border bg-card text-foreground hover:bg-muted"
-                                )}
-                                aria-pressed={hasBeneficiaryReachValue === opt}
-                              >
-                                {opt === "yes" ? "Yes" : "No / Not Applicable"}
-                              </button>
-                            ))}
-                          </div>
+                        <div className="flex flex-col items-start gap-1.5">
+                          <p id="ar-reach-label" className="text-sm font-medium">{t("formExtra.beneficiaryReach")}</p>
+                          <p id="ar-reach-question" className="mb-1.5 text-xs text-[var(--muted)]">{t("formUi.beneficiaryReachQuestion")}</p>
+                          {/* HeroUI Pro Segment (default variant, md) */}
+                          <Segment
+                            aria-labelledby="ar-reach-label"
+                            aria-describedby="ar-reach-question"
+                            selectedKey={hasBeneficiaryReachValue || null}
+                            onSelectionChange={(key) => {
+                              const opt = key as "yes" | "no";
+                              setSectionValues((cur) => ({ ...cur, hasBeneficiaryReach: opt }));
+                              if (opt === "no") {
+                                form.setValue("beneficiariesMale", 0);
+                                form.setValue("beneficiariesFemale", 0);
+                                form.setValue("beneficiariesBoys", 0);
+                                form.setValue("beneficiariesGirls", 0);
+                              }
+                              setIsFormDirty(true);
+                            }}
+                          >
+                            <Segment.Item id="yes">{t("formUi.yes")}</Segment.Item>
+                            <Segment.Item id="no">{t("formUi.noNotApplicable")}</Segment.Item>
+                          </Segment>
                         </div>
 
                         {/* Four numeric inputs — visible only when reach = Yes */}
                         {hasBeneficiaryReachValue === "yes" && (
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div>
-                              <Label className="text-xs">{t("formExtra.men")}</Label>
-                              <Input type="number" min={0} {...form.register("beneficiariesMale", { valueAsNumber: true })} onChange={(e) => { form.setValue("beneficiariesMale", Number(e.target.value)); setIsFormDirty(true); }} />
-                            </div>
-                            <div>
-                              <Label className="text-xs">{t("formExtra.women")}</Label>
-                              <Input type="number" min={0} {...form.register("beneficiariesFemale", { valueAsNumber: true })} onChange={(e) => { form.setValue("beneficiariesFemale", Number(e.target.value)); setIsFormDirty(true); }} />
-                            </div>
-                            <div>
-                              <Label className="text-xs">{t("formExtra.boys")}</Label>
-                              <Input type="number" min={0} {...form.register("beneficiariesBoys", { valueAsNumber: true })} onChange={(e) => { form.setValue("beneficiariesBoys", Number(e.target.value)); setIsFormDirty(true); }} />
-                            </div>
-                            <div>
-                              <Label className="text-xs">{t("formExtra.girls")}</Label>
-                              <Input type="number" min={0} {...form.register("beneficiariesGirls", { valueAsNumber: true })} onChange={(e) => { form.setValue("beneficiariesGirls", Number(e.target.value)); setIsFormDirty(true); }} />
-                            </div>
+                            {([
+                              ["beneficiariesMale", "men"],
+                              ["beneficiariesFemale", "women"],
+                              ["beneficiariesBoys", "boys"],
+                              ["beneficiariesGirls", "girls"],
+                            ] as const).map(([field, key]) => (
+                              <div key={field} className="flex flex-col gap-1.5">
+                                <HLabel htmlFor={`ar-${field}`} className="text-xs">{t(`formExtra.${key}`)}</HLabel>
+                                <HInput fullWidth id={`ar-${field}`} type="number" min={0} inputMode="numeric" {...form.register(field, { valueAsNumber: true })} onChange={(e) => { form.setValue(field, Number(e.target.value)); setIsFormDirty(true); }} />
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
 
                       {/* ── Sub-section 3: Reach Summary (when Yes and totals > 0) ── */}
-                      {hasBeneficiaryReachValue === "yes" && beneficiariesTotal > 0 && (
-                        <>
-                          <Separator />
-                          <div>
-                            <Label className="text-sm font-medium">{t("formExtra.reachSummary")}</Label>
-                            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                              <span className="text-muted-foreground">
-                                Total Direct Reach:{" "}
-                                <strong className="text-foreground">{beneficiariesTotal.toLocaleString()}</strong>
-                              </span>
-                              {(Number(v.beneficiariesMale || 0) + Number(v.beneficiariesFemale || 0)) > 0 && (
-                                <span className="text-muted-foreground">
-                                  Adults:{" "}
-                                  <strong className="text-foreground">
-                                    {(Number(v.beneficiariesMale || 0) + Number(v.beneficiariesFemale || 0)).toLocaleString()}
-                                  </strong>
-                                </span>
-                              )}
-                              {(Number(v.beneficiariesBoys || 0) + Number(v.beneficiariesGirls || 0)) > 0 && (
-                                <span className="text-muted-foreground">
-                                  Children:{" "}
-                                  <strong className="text-foreground">
-                                    {(Number(v.beneficiariesBoys || 0) + Number(v.beneficiariesGirls || 0)).toLocaleString()}
-                                  </strong>
-                                </span>
-                              )}
+                      {hasBeneficiaryReachValue === "yes" && beneficiariesTotal > 0 && (() => {
+                        const adults = Number(v.beneficiariesMale || 0) + Number(v.beneficiariesFemale || 0);
+                        const children = Number(v.beneficiariesBoys || 0) + Number(v.beneficiariesGirls || 0);
+                        return (
+                          <>
+                            <Separator />
+                            <div>
+                              <p className="text-sm font-medium">{t("formExtra.reachSummary")}</p>
+                              <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                                <div className="flex gap-1.5"><dt className="text-[var(--muted)]">{t("formUi.totalDirectReach")}:</dt><dd className="font-semibold"><Num value={beneficiariesTotal} /></dd></div>
+                                {adults > 0 && <div className="flex gap-1.5"><dt className="text-[var(--muted)]">{t("formUi.adults")}:</dt><dd className="font-semibold"><Num value={adults} /></dd></div>}
+                                {children > 0 && <div className="flex gap-1.5"><dt className="text-[var(--muted)]">{t("formUi.children")}:</dt><dd className="font-semibold"><Num value={children} /></dd></div>}
+                              </dl>
                             </div>
-                          </div>
-                        </>
-                      )}
+                          </>
+                        );
+                      })()}
                     </section>
                   )}
 
@@ -4979,21 +4826,21 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                     aria-labelledby="tab-rp-section-activities"
                     className={(!isActivity && activeSection === "rp-section-activities") ? "space-y-3" : "hidden"}
                   >
-                    <div className="flex items-center justify-between border-b pb-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-1">
                       <h4 className="text-sm font-semibold">
-                        Section 3 — {isHqSector ? "Sector Activities Implemented" : isProgramState ? "Activities Implemented in the State" : "Activities Implemented"}
+                        {isHqSector ? t("formUi.activitiesTitleHq") : isProgramState ? t("formUi.activitiesTitleState") : t("formUi.activitiesTitleProject")}
                       </h4>
                       {isProject ? (
                         <div className="flex items-center gap-2">
-                          {selectedProjectId && !projectActivitiesData && <span className="text-xs text-muted-foreground">Loading project activities…</span>}
-                          <Button type="button" size="sm" variant="outline" onClick={() => { setActivities((cur) => [...cur, emptyProjectActivity()]); setIsFormDirty(true); }}>
-                            <Plus className="h-3 w-3" /> Add Unplanned Activity (Report Only)
-                          </Button>
+                          {selectedProjectId && !projectActivitiesData && <span className="text-xs text-[var(--muted)]">{t("formUi.loadingProjectActivities")}</span>}
+                          <HButton type="button" size="sm" variant="tertiary" onPress={() => { setActivities((cur) => [...cur, emptyProjectActivity()]); setIsFormDirty(true); }}>
+                            <Plus className="size-3.5" aria-hidden="true" /> {t("formUi.addUnplannedActivity")}
+                          </HButton>
                         </div>
                       ) : (
-                        <Button type="button" size="sm" variant="outline" onClick={() => setActivities((cur) => [...cur, emptyActivity()])}>
-                          <Plus className="h-3 w-3" /> Add Activity
-                        </Button>
+                        <HButton type="button" size="sm" variant="tertiary" onPress={() => setActivities((cur) => [...cur, emptyActivity()])}>
+                          <Plus className="size-3.5" aria-hidden="true" /> {t("stateForm.addActivity")}
+                        </HButton>
                       )}
                     </div>
 
@@ -5001,8 +4848,8 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                     {isProject ? (
                       <>
                         {activities.length === 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            {selectedProjectId ? "Select a project above to auto-load its activities." : "No activities yet."}
+                          <p className="text-xs text-[var(--muted)]">
+                            {selectedProjectId ? t("formUi.noActivitiesYet") : t("formUi.selectProjectToLoad")}
                           </p>
                         )}
                         {activities.map((a, i) => {
@@ -5012,57 +4859,57 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                           const variance = planned != null ? planned - actualNum : null;
                           const needsReason = varianceReasonRequired(planned, actualNum);
                           const cur = projectCurrency ?? undefined;
-                          const rowLabel = a.name || (a.isUnplanned ? `Unplanned Activity ${i + 1}` : `Activity ${i + 1}`);
+                          const numbered = a.isUnplanned ? t("formUi.unplannedActivityN", { number: i + 1 }) : t("formUi.activityN", { number: i + 1 });
+                          const rowLabel = a.name || numbered;
+                          const fid = (field: string) => `act-${i}-${field}`;
 
                           return (
-                            <div key={i} className="rounded-md border p-3 space-y-3 bg-muted/10">
+                            <div key={i} className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                               {/* Header row */}
                               <div className="flex items-start justify-between gap-2 flex-wrap">
-                                <div className="space-y-0.5">
+                                <div className="min-w-0 space-y-0.5">
                                   {a.isUnplanned && (
-                                    <Badge variant="outline" className="text-xs mb-0.5">Unplanned Activity (Report Only)</Badge>
+                                    <Chip size="sm" variant="tertiary" className="mb-0.5">{t("formUi.unplannedBadge")}</Chip>
                                   )}
-                                  <p className="text-sm font-medium">
-                                    {a.name || (a.isUnplanned ? `Unplanned Activity #${i + 1}` : `Activity #${i + 1}`)}
-                                  </p>
-                                  {a.indicator && <p className="text-xs text-muted-foreground">Indicator: {a.indicator}</p>}
+                                  <p className="text-sm font-medium" dir="auto">{rowLabel}</p>
+                                  {a.indicator && <p className="text-xs text-[var(--muted)]">{t("formUi.indicatorLabel", { value: a.indicator })}</p>}
                                   {(a.stateName || a.output) && (
-                                    <p className="text-xs text-muted-foreground">
+                                    <p className="text-xs text-[var(--muted)]">
                                       {[a.stateName ? getLinkedStateLabel(a, i18n.language) : null, a.output].filter(Boolean).join(" · ")}
                                     </p>
                                   )}
                                   {(a.target !== undefined && a.target > 0) && (
-                                    <p className="text-xs text-info flex items-center gap-1">
-                                      <Target className="h-3 w-3" /> Target: {a.target.toLocaleString()}
+                                    <p className="flex items-center gap-1 text-xs text-[var(--accent)]">
+                                      <Target className="size-3" aria-hidden="true" /> {t("formExtra.target")}: <Num value={a.target} />
                                     </p>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   {planned != null && <BudgetStatusBadge planned={planned} actual={actualNum} />}
-                                  <Button type="button" size="sm" variant="ghost" aria-label={t("formExtra.removeRowAria", { label: rowLabel })} onClick={() => { setActivities((cur) => cur.filter((_, idx) => idx !== i)); setIsFormDirty(true); }}>
-                                    <Trash2 className="h-3 w-3 text-destructive" />
-                                  </Button>
+                                  <HButton type="button" size="sm" variant="ghost" isIconOnly aria-label={t("formExtra.removeRowAria", { label: rowLabel })} onPress={() => { setActivities((cur) => cur.filter((_, idx) => idx !== i)); setIsFormDirty(true); }}>
+                                    <Trash2 className="size-3.5 text-[var(--danger)]" aria-hidden="true" />
+                                  </HButton>
                                 </div>
                               </div>
 
                               {/* Name field (unplanned / custom activities only) */}
                               {!a.activityId && (
-                                <div>
-                                  <Label className="text-xs">Activity Name *</Label>
-                                  <Input aria-label={t("formExtra.activityNameAria", { label: rowLabel })} aria-required="true" aria-invalid={!!fieldErrors[`act-${i}-name`] || undefined} aria-describedby={fieldErrors[`act-${i}-name`] ? `err-act-${i}-name` : undefined} value={a.name} onChange={(e) => { updateActivity(i, { name: e.target.value }); setIsFormDirty(true); }} />
+                                <div className="flex flex-col gap-1.5">
+                                  <HLabel htmlFor={fid("name")} isRequired>{t("formExtra.activityName")}</HLabel>
+                                  <HInput fullWidth id={fid("name")} dir="auto" aria-label={t("formExtra.activityNameAria", { label: rowLabel })} aria-required="true" aria-invalid={!!fieldErrors[`act-${i}-name`] || undefined} aria-describedby={fieldErrors[`act-${i}-name`] ? `err-act-${i}-name` : undefined} value={a.name} onChange={(e) => { updateActivity(i, { name: e.target.value }); setIsFormDirty(true); }} />
                                   {fieldErrors[`act-${i}-name`] && (
-                                    <p id={`err-act-${i}-name`} role="alert" className="text-xs text-destructive mt-1">{fieldErrors[`act-${i}-name`]}</p>
+                                    <p id={`err-act-${i}-name`} role="alert" className="text-xs text-[var(--danger)]">{fieldErrors[`act-${i}-name`]}</p>
                                   )}
                                 </div>
                               )}
 
                               {/* Exception / Reason (mandatory for Unplanned Activities) */}
                               {a.isUnplanned && (
-                                <div>
-                                  <Label className="text-xs">
-                                    Exception / Reason for Unplanned Activity <span className="text-destructive">*</span>
-                                  </Label>
-                                  <Input
+                                <div className="flex flex-col gap-1.5">
+                                  <HLabel htmlFor={fid("unplannedReason")} isRequired>{t("formUi.unplannedReason")}</HLabel>
+                                  <HInput fullWidth
+                                    id={fid("unplannedReason")}
+                                    dir="auto"
                                     aria-label={t("formExtra.exceptionReasonAria", { label: rowLabel })}
                                     aria-required="true"
                                     aria-invalid={!!fieldErrors[`act-${i}-unplannedReason`] || undefined}
@@ -5072,22 +4919,21 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                     placeholder={t("formExtra.unplannedReasonPlaceholder")}
                                   />
                                   {fieldErrors[`act-${i}-unplannedReason`] && (
-                                    <p id={`err-act-${i}-unplannedReason`} role="alert" className="text-xs text-destructive mt-1">{fieldErrors[`act-${i}-unplannedReason`]}</p>
+                                    <p id={`err-act-${i}-unplannedReason`} role="alert" className="text-xs text-[var(--danger)]">{fieldErrors[`act-${i}-unplannedReason`]}</p>
                                   )}
                                 </div>
                               )}
 
                               {/* Budget row */}
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-muted/30 rounded p-2">
+                              <div className="grid grid-cols-2 gap-3 rounded-lg bg-[var(--default)] p-3 sm:grid-cols-4">
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">{t("formExtra.plannedBudget")}</Label>
-                                  <div className="font-medium text-sm">
-                                    {planned != null ? formatCurrency(planned, cur) : "—"}
-                                  </div>
+                                  <p className="text-xs text-[var(--muted)]">{t("formExtra.plannedBudget")}</p>
+                                  <p className="mt-1 text-sm font-medium"><bdi dir="ltr">{planned != null ? formatCurrency(planned, cur) : "—"}</bdi></p>
                                 </div>
-                                <div>
-                                  <Label className="text-xs">Actual Expenditure (This Period) *</Label>
-                                  <Input
+                                <div className="flex flex-col gap-1">
+                                  <HLabel htmlFor={fid("actualExpenditure")} isRequired>{t("formUi.actualExpenditure")}</HLabel>
+                                  <HInput fullWidth
+                                    id={fid("actualExpenditure")}
                                     type="number" min={0} step="0.01" inputMode="decimal"
                                     aria-label={t("formExtra.actualExpenditureAria", { label: rowLabel })}
                                     aria-required="true"
@@ -5095,58 +4941,61 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                     aria-describedby={fieldErrors[`act-${i}-actualExpenditure`] ? `err-act-${i}-actualExpenditure` : undefined}
                                     value={a.actualExpenditure ?? ""}
                                     onChange={(e) => { updateActivity(i, { actualExpenditure: e.target.value === "" ? "" : Number(e.target.value) }); setIsFormDirty(true); }}
-                                    className="h-8"
                                   />
                                   {fieldErrors[`act-${i}-actualExpenditure`] && (
-                                    <p id={`err-act-${i}-actualExpenditure`} role="alert" className="text-xs text-destructive mt-1">{fieldErrors[`act-${i}-actualExpenditure`]}</p>
+                                    <p id={`err-act-${i}-actualExpenditure`} role="alert" className="text-xs text-[var(--danger)]">{fieldErrors[`act-${i}-actualExpenditure`]}</p>
                                   )}
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">{t("formExtra.variance")}</Label>
-                                  <div className="font-medium text-sm text-foreground">
+                                  <p className="text-xs text-[var(--muted)]">{t("formExtra.variance")}</p>
+                                  <p className="mt-1 text-sm font-medium">
                                     {variance != null
-                                      ? `${variance > 0 ? "Underspend" : variance < 0 ? "Overspend" : "On Budget"}: ${formatCurrency(Math.abs(variance), cur)}`
+                                      ? <>{variance > 0 ? t("detail.underspend") : variance < 0 ? t("detail.overspend") : t("detail.onBudget")}: <bdi dir="ltr">{formatCurrency(Math.abs(variance), cur)}</bdi></>
                                       : "—"}
-                                  </div>
+                                  </p>
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">{t("formExtra.utilisation")}</Label>
-                                  <div className="font-medium text-sm">
-                                    {planned != null && planned > 0 ? `${Math.round((actualNum / planned) * 100)}%` : "—"}
-                                  </div>
+                                  <p className="text-xs text-[var(--muted)]">{t("formExtra.utilisation")}</p>
+                                  <p className="mt-1 text-sm font-medium">
+                                    <bdi dir="ltr">{planned != null && planned > 0 ? `${Math.round((actualNum / planned) * 100)}%` : "—"}</bdi>
+                                  </p>
                                 </div>
                               </div>
 
                               {/* Variance reason (conditional — required when over budget or < 70%) */}
                               {needsReason && (
-                                <div className="bg-warning/10 border border-warning/20 rounded p-2 space-y-1">
-                                  <Label className="text-xs font-medium text-warning">
-                                    <AlertTriangle className="h-3 w-3 inline me-1" />
-                                    Reason for Variance *
-                                    {planned != null && actualNum > planned ? " (over budget)" : " (under 70% utilisation)"}
-                                  </Label>
-                                  <Select
+                                <div className="space-y-1 rounded-lg border border-[color-mix(in_oklab,var(--warning)_35%,transparent)] bg-[color-mix(in_oklab,var(--warning)_10%,transparent)] p-3">
+                                  <SelectField
+                                    id={fid("varianceReason")}
+                                    label={
+                                      <span className="inline-flex items-center gap-1">
+                                        <AlertTriangle className="size-3.5 text-[var(--warning)]" aria-hidden="true" />
+                                        {t("formUi.varianceReason")}
+                                        <span className="font-normal text-[var(--muted)]">{planned != null && actualNum > planned ? t("formUi.overBudget") : t("formUi.underUtilised")}</span>
+                                      </span>
+                                    }
+                                    aria-label={t("formExtra.varianceReasonAria", { label: rowLabel })}
+                                    isRequired
+                                    isInvalid={!!fieldErrors[`act-${i}-varianceReason`]}
+                                    aria-describedby={fieldErrors[`act-${i}-varianceReason`] ? `err-act-${i}-varianceReason` : undefined}
+                                    placeholder={t("form.selectReason")}
                                     value={a.varianceReason ?? ""}
-                                    onValueChange={(val) => { updateActivity(i, { varianceReason: val }); setIsFormDirty(true); }}
-                                  >
-                                    <SelectTrigger className="h-8" aria-label={t("formExtra.varianceReasonAria", { label: rowLabel })} aria-required="true" aria-invalid={!!fieldErrors[`act-${i}-varianceReason`] || undefined} aria-describedby={fieldErrors[`act-${i}-varianceReason`] ? `err-act-${i}-varianceReason` : undefined}><SelectValue placeholder={t("form.selectReason")} /></SelectTrigger>
-                                    <SelectContent>
-                                      {["Procurement Delay","Activity Rescheduled","Market Price Increase","Additional Beneficiaries Reached","Cost Saving","Security Constraints","Access Constraints","Other"].map((r) => (
-                                        <SelectItem key={r} value={r}>{r}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    onChange={(val) => { updateActivity(i, { varianceReason: val }); setIsFormDirty(true); }}
+                                    options={VARIANCE_REASONS.map(([value, key]) => ({ value, label: t(`formUi.varianceReasons.${key}`) }))}
+                                  />
                                   {fieldErrors[`act-${i}-varianceReason`] && (
-                                    <p id={`err-act-${i}-varianceReason`} role="alert" className="text-xs text-destructive mt-1">{fieldErrors[`act-${i}-varianceReason`]}</p>
+                                    <p id={`err-act-${i}-varianceReason`} role="alert" className="text-xs text-[var(--danger)]">{fieldErrors[`act-${i}-varianceReason`]}</p>
                                   )}
                                 </div>
                               )}
 
                               {/* Achievement summary */}
-                              <div>
-                                <Label className="text-xs">Achievement Summary *</Label>
-                                <Textarea
+                              <div className="flex flex-col gap-1.5">
+                                <HLabel htmlFor={fid("achievementSummary")} isRequired>{t("formUi.achievementSummary")}</HLabel>
+                                <HTextArea fullWidth
+                                  id={fid("achievementSummary")}
                                   rows={3}
+                                  dir="auto"
                                   className="resize-y"
                                   aria-label={t("formExtra.achievementSummaryAria", { label: rowLabel })}
                                   aria-required="true"
@@ -5157,58 +5006,69 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   placeholder={t("formExtra.achievementSummaryPlaceholder")}
                                 />
                                 {fieldErrors[`act-${i}-achievementSummary`] && (
-                                  <p id={`err-act-${i}-achievementSummary`} role="alert" className="text-xs text-destructive mt-1">{fieldErrors[`act-${i}-achievementSummary`]}</p>
+                                  <p id={`err-act-${i}-achievementSummary`} role="alert" className="text-xs text-[var(--danger)]">{fieldErrors[`act-${i}-achievementSummary`]}</p>
                                 )}
                               </div>
 
                               {/* Beneficiaries per activity */}
-                              <div>
-                                <Label className="text-xs">Beneficiary Reach This Period *</Label>
-                                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-1">
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.men")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={t("formExtra.menBeneficiariesAria", { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-men`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-men`] ? `err-act-${i}-ben-men` : undefined} value={a.beneficiariesMen ?? ""} onChange={(e) => updateActivity(i, { beneficiariesMen: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.women")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={t("formExtra.womenBeneficiariesAria", { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-women`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-women`] ? `err-act-${i}-ben-women` : undefined} value={a.beneficiariesWomen ?? ""} onChange={(e) => updateActivity(i, { beneficiariesWomen: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.boys")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={t("formExtra.boysBeneficiariesAria", { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-boys`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-boys`] ? `err-act-${i}-ben-boys` : undefined} value={a.beneficiariesBoys ?? ""} onChange={(e) => updateActivity(i, { beneficiariesBoys: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.girls")}</Label><Input type="number" min={0} inputMode="numeric" aria-label={t("formExtra.girlsBeneficiariesAria", { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-girls`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-girls`] ? `err-act-${i}-ben-girls` : undefined} value={a.beneficiariesGirls ?? ""} onChange={(e) => updateActivity(i, { beneficiariesGirls: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" /></div>
-                                  <div><Label className="text-xs text-muted-foreground">{t("formExtra.totalThisPeriod")}</Label><Input aria-label={t("formExtra.totalBeneficiariesThisPeriodAria", { label: rowLabel })} value={(Number(a.beneficiariesMen || 0) + Number(a.beneficiariesWomen || 0) + Number(a.beneficiariesBoys || 0) + Number(a.beneficiariesGirls || 0)).toLocaleString()} readOnly className="h-8 bg-muted font-medium" /></div>
+                              <fieldset>
+                                <legend className="text-sm font-medium">{t("formUi.beneficiaryReachThisPeriod")} <span className="text-[var(--danger)]" aria-hidden="true">*</span></legend>
+                                <div className="mt-1.5 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                                  {([
+                                    ["beneficiariesMen", "men", "menBeneficiariesAria"],
+                                    ["beneficiariesWomen", "women", "womenBeneficiariesAria"],
+                                    ["beneficiariesBoys", "boys", "boysBeneficiariesAria"],
+                                    ["beneficiariesGirls", "girls", "girlsBeneficiariesAria"],
+                                  ] as const).map(([field, key, aria]) => (
+                                    <div key={field} className="flex flex-col gap-1">
+                                      <HLabel htmlFor={fid(`ben-${key}`)} className="text-xs text-[var(--muted)]">{t(`formExtra.${key}`)}</HLabel>
+                                      <HInput fullWidth id={fid(`ben-${key}`)} type="number" min={0} inputMode="numeric" aria-label={t(`formExtra.${aria}`, { label: rowLabel })} aria-invalid={!!fieldErrors[`act-${i}-ben-${key}`] || undefined} aria-describedby={fieldErrors[`act-${i}-ben-${key}`] ? `err-act-${i}-ben-${key}` : undefined} value={a[field] ?? ""} onChange={(e) => updateActivity(i, { [field]: e.target.value === "" ? "" : Number(e.target.value) })} />
+                                    </div>
+                                  ))}
+                                  <div className="flex flex-col gap-1">
+                                    <HLabel htmlFor={fid("ben-total")} className="text-xs text-[var(--muted)]">{t("formExtra.totalThisPeriod")}</HLabel>
+                                    <HInput fullWidth id={fid("ben-total")} aria-label={t("formExtra.totalBeneficiariesThisPeriodAria", { label: rowLabel })} value={(Number(a.beneficiariesMen || 0) + Number(a.beneficiariesWomen || 0) + Number(a.beneficiariesBoys || 0) + Number(a.beneficiariesGirls || 0)).toLocaleString("en-GB")} readOnly className="bg-[var(--default)] font-medium" />
+                                  </div>
                                 </div>
                                 {(["men", "women", "boys", "girls"] as const).map((benKey) =>
                                   fieldErrors[`act-${i}-ben-${benKey}`] ? (
-                                    <p key={benKey} id={`err-act-${i}-ben-${benKey}`} role="alert" className="text-xs text-destructive mt-1">
-                                      {`${benKey.charAt(0).toUpperCase()}${benKey.slice(1)}: ${fieldErrors[`act-${i}-ben-${benKey}`]}`}
+                                    <p key={benKey} id={`err-act-${i}-ben-${benKey}`} role="alert" className="mt-1 text-xs text-[var(--danger)]">
+                                      {`${t(`formExtra.${benKey}`)}: ${fieldErrors[`act-${i}-ben-${benKey}`]}`}
                                     </p>
                                   ) : null,
                                 )}
-                              </div>
+                              </fieldset>
 
                               {/* Status + Progress */}
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <Label className="text-xs">{t("formExtra.activityStatus")}</Label>
-                                  <Select value={a.status} onValueChange={(val) => updateActivity(i, { status: val })}>
-                                    <SelectTrigger className="h-8" aria-label={t("formExtra.activityStatusAria", { label: rowLabel })}><SelectValue /></SelectTrigger>
-                                    <SelectContent>{ACTIVITY_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                                  </Select>
-                                </div>
-                                <div>
-                                  <Label className="text-xs">% of Implementation</Label>
-                                  <Input type="number" min={0} max={100} inputMode="numeric" aria-label={t("formExtra.implementationPercentAria", { label: rowLabel })} value={a.percent} onChange={(e) => updateActivity(i, { percent: e.target.value === "" ? "" : Number(e.target.value) })} className="h-8" />
+                              <div className="grid grid-cols-2 gap-3">
+                                <SelectField
+                                  id={fid("status")}
+                                  label={t("formExtra.activityStatus")}
+                                  aria-label={t("formExtra.activityStatusAria", { label: rowLabel })}
+                                  value={a.status}
+                                  onChange={(val) => updateActivity(i, { status: val })}
+                                  options={activityStatusOptions}
+                                />
+                                <div className="flex flex-col gap-1.5">
+                                  <HLabel htmlFor={fid("percent")}>{t("formUi.implementationPercent")}</HLabel>
+                                  <HInput fullWidth id={fid("percent")} type="number" min={0} max={100} inputMode="numeric" aria-label={t("formExtra.implementationPercentAria", { label: rowLabel })} value={a.percent} onChange={(e) => updateActivity(i, { percent: e.target.value === "" ? "" : Number(e.target.value) })} />
                                 </div>
                               </div>
 
                               {/* Optional narrative */}
-                              <div className="grid grid-cols-1 gap-2">
-                                <div>
-                                  <Label className="text-xs text-muted-foreground">{t("formExtra.challenges")} <span className="font-normal">({t("form.optional")})</span></Label>
-                                  <Textarea rows={1} aria-label={t("formExtra.challengesAria", { label: rowLabel })} value={a.challenges ?? ""} onChange={(e) => updateActivity(i, { challenges: e.target.value })} placeholder={t("formExtra.challengesPlaceholder")} />
+                              <div className="grid grid-cols-1 gap-3">
+                                <div className="flex flex-col gap-1.5">
+                                  <HLabel htmlFor={fid("challenges")} className="text-xs text-[var(--muted)]">{t("formExtra.challenges")} <span className="font-normal">({t("form.optional")})</span></HLabel>
+                                  <HTextArea fullWidth id={fid("challenges")} rows={1} dir="auto" aria-label={t("formExtra.challengesAria", { label: rowLabel })} value={a.challenges ?? ""} onChange={(e) => updateActivity(i, { challenges: e.target.value })} placeholder={t("formExtra.challengesPlaceholder")} />
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div>
-                                    <Label className="text-xs text-muted-foreground">{t("formExtra.mitigationMeasures")}</Label>
-                                    <Textarea rows={1} aria-label={t("formExtra.mitigationMeasuresAria", { label: rowLabel })} value={a.mitigationMeasures ?? ""} onChange={(e) => updateActivity(i, { mitigationMeasures: e.target.value })} placeholder={t("formExtra.mitigationPlaceholder")} />
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  <div className="flex flex-col gap-1.5">
+                                    <HLabel htmlFor={fid("mitigation")} className="text-xs text-[var(--muted)]">{t("formExtra.mitigationMeasures")}</HLabel>
+                                    <HTextArea fullWidth id={fid("mitigation")} rows={1} dir="auto" aria-label={t("formExtra.mitigationMeasuresAria", { label: rowLabel })} value={a.mitigationMeasures ?? ""} onChange={(e) => updateActivity(i, { mitigationMeasures: e.target.value })} placeholder={t("formExtra.mitigationPlaceholder")} />
                                   </div>
-                                  <div>
-                                    <Label className="text-xs text-muted-foreground">{t("formExtra.nextSteps")}</Label>
-                                    <Textarea rows={1} aria-label={t("formExtra.nextStepsAria", { label: rowLabel })} value={a.nextSteps ?? ""} onChange={(e) => updateActivity(i, { nextSteps: e.target.value })} placeholder={t("formExtra.nextStepsPlaceholder")} />
+                                  <div className="flex flex-col gap-1.5">
+                                    <HLabel htmlFor={fid("nextSteps")} className="text-xs text-[var(--muted)]">{t("formExtra.nextSteps")}</HLabel>
+                                    <HTextArea fullWidth id={fid("nextSteps")} rows={1} dir="auto" aria-label={t("formExtra.nextStepsAria", { label: rowLabel })} value={a.nextSteps ?? ""} onChange={(e) => updateActivity(i, { nextSteps: e.target.value })} placeholder={t("formExtra.nextStepsPlaceholder")} />
                                   </div>
                                 </div>
                               </div>
@@ -5219,72 +5079,79 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                     ) : (
                       /* NON-PROJECT TYPES: simple activity grid */
                       <>
-                        {activities.length === 0 && <p className="text-xs text-muted-foreground">{t("formExtra.noActivitiesHintPrefix")} <strong>{t("stateForm.addActivity")}</strong>{t("formExtra.noActivitiesHintSuffix")}</p>}
-                        {activities.map((a, i) => (
-                          <div key={i} className="rounded border p-3 space-y-2 bg-muted/20">
+                        {activities.length === 0 && <p className="text-xs text-[var(--muted)]">{t("formExtra.noActivitiesHintPrefix")} <strong>{t("stateForm.addActivity")}</strong>{t("formExtra.noActivitiesHintSuffix")}</p>}
+                        {activities.map((a, i) => {
+                          const numbered = t("stateForm.activityLabel", { number: i + 1 });
+                          const fid = (field: string) => `rp-act-${i}-${field}`;
+                          return (
+                          <div key={i} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                             <div className="flex items-center justify-between">
-                              <p className="text-xs font-medium">Activity #{i + 1}</p>
-                              <Button type="button" size="sm" variant="ghost" aria-label={a.name ? t("formExtra.removeActivityNamedAria", { name: a.name }) : t("formExtra.removeActivityNumberedAria", { number: i + 1 })} onClick={() => setActivities((cur) => cur.filter((_, idx) => idx !== i))}>
-                                <Trash2 className="h-3 w-3 text-destructive" />
-                              </Button>
+                              <p className="text-xs font-medium">{t("formUi.activityN", { number: i + 1 })}</p>
+                              <HButton type="button" size="sm" variant="ghost" isIconOnly aria-label={a.name ? t("formExtra.removeActivityNamedAria", { name: a.name }) : t("formExtra.removeActivityNumberedAria", { number: i + 1 })} onPress={() => setActivities((cur) => cur.filter((_, idx) => idx !== i))}>
+                                <Trash2 className="size-3.5 text-[var(--danger)]" aria-hidden="true" />
+                              </HButton>
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="col-span-2"><Label className="text-xs">{t("formExtra.activityName")}</Label><Input aria-label={t("formExtra.activityNameAria", { label: t("stateForm.activityLabel", { number: i + 1 }) })} value={a.name} onChange={(e) => updateActivity(i, { name: e.target.value })} /></div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="col-span-2 flex flex-col gap-1.5"><HLabel htmlFor={fid("name")} className="text-xs">{t("formExtra.activityName")}</HLabel><HInput fullWidth id={fid("name")} dir="auto" aria-label={t("formExtra.activityNameAria", { label: numbered })} value={a.name} onChange={(e) => updateActivity(i, { name: e.target.value })} /></div>
                               {activityFields.includes("relatedProjectId") && (
-                                <div>
-                                  <Label className="text-xs">{t("formExtra.relatedProject")}</Label>
-                                  <Select value={String(a.relatedProjectId || "")} onValueChange={(val) => updateActivity(i, { relatedProjectId: Number(val) })}>
-                                    <SelectTrigger><SelectValue placeholder={t("formExtra.select")} /></SelectTrigger>
-                                    <SelectContent>{projects?.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.code}</SelectItem>)}</SelectContent>
-                                  </Select>
-                                </div>
+                                <SelectField
+                                  id={fid("project")}
+                                  label={t("formExtra.relatedProject")}
+                                  placeholder={t("formExtra.select")}
+                                  value={String(a.relatedProjectId || "")}
+                                  onChange={(val) => updateActivity(i, { relatedProjectId: Number(val) })}
+                                  options={(projects ?? []).map((p) => ({ value: String(p.id), label: p.code }))}
+                                />
                               )}
                               {activityFields.includes("stateId") && (
-                                <div>
-                                  <Label className="text-xs">{t("formExtra.state")}</Label>
-                                  <Select value={String(a.stateId || "")} onValueChange={(val) => updateActivity(i, { stateId: Number(val) })}>
-                                    <SelectTrigger><SelectValue placeholder={t("formExtra.select")} /></SelectTrigger>
-                                    <SelectContent>{states?.map((s) => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}</SelectContent>
-                                  </Select>
-                                </div>
+                                <SelectField
+                                  id={fid("state")}
+                                  label={t("formExtra.state")}
+                                  placeholder={t("formExtra.select")}
+                                  value={String(a.stateId || "")}
+                                  onChange={(val) => updateActivity(i, { stateId: Number(val) })}
+                                  options={(states ?? []).map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }))}
+                                />
                               )}
                               {activityFields.includes("sector") && (
-                                <div>
-                                  <Label className="text-xs">{t("formExtra.sector")}</Label>
-                                  <Select value={a.sector || ""} onValueChange={(val) => updateActivity(i, { sector: val })}>
-                                    <SelectTrigger><SelectValue placeholder={t("formExtra.select")} /></SelectTrigger>
-                                    <SelectContent>{SECTORS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                                  </Select>
-                                </div>
+                                <SelectField
+                                  id={fid("sector")}
+                                  label={t("formExtra.sector")}
+                                  placeholder={t("formExtra.select")}
+                                  value={a.sector || ""}
+                                  onChange={(val) => updateActivity(i, { sector: val })}
+                                  options={SECTORS.map((s) => ({ value: s, label: s }))}
+                                />
                               )}
-                              <div><Label className="text-xs">{t("formExtra.output")}</Label><Input aria-label={t("formExtra.outputAria", { label: t("stateForm.activityLabel", { number: i + 1 }) })} value={a.output} onChange={(e) => updateActivity(i, { output: e.target.value })} /></div>
-                              <div><Label className="text-xs">{t("formExtra.milestone")}</Label><Input aria-label={t("formExtra.milestoneAria", { label: t("stateForm.activityLabel", { number: i + 1 }) })} value={a.milestone} onChange={(e) => updateActivity(i, { milestone: e.target.value })} /></div>
-                              <div>
-                                <Label className="text-xs">{t("formExtra.status")}</Label>
-                                <Select value={a.status} onValueChange={(val) => updateActivity(i, { status: val })}>
-                                  <SelectTrigger><SelectValue /></SelectTrigger>
-                                  <SelectContent>{ACTIVITY_STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <Label className="text-xs">% of Implementation</Label>
-                                <Input type="number" min={0} max={100} inputMode="numeric" aria-label={t("formExtra.implementationPercentAria", { label: t("stateForm.activityLabel", { number: i + 1 }) })} value={a.percent} onChange={(e) => updateActivity(i, { percent: e.target.value === "" ? "" : Number(e.target.value) })} />
+                              <div className="flex flex-col gap-1.5"><HLabel htmlFor={fid("output")} className="text-xs">{t("formExtra.output")}</HLabel><HInput fullWidth id={fid("output")} dir="auto" aria-label={t("formExtra.outputAria", { label: numbered })} value={a.output} onChange={(e) => updateActivity(i, { output: e.target.value })} /></div>
+                              <div className="flex flex-col gap-1.5"><HLabel htmlFor={fid("milestone")} className="text-xs">{t("formExtra.milestone")}</HLabel><HInput fullWidth id={fid("milestone")} dir="auto" aria-label={t("formExtra.milestoneAria", { label: numbered })} value={a.milestone} onChange={(e) => updateActivity(i, { milestone: e.target.value })} /></div>
+                              <SelectField
+                                id={fid("status")}
+                                label={t("formExtra.status")}
+                                value={a.status}
+                                onChange={(val) => updateActivity(i, { status: val })}
+                                options={activityStatusOptions}
+                              />
+                              <div className="flex flex-col gap-1.5">
+                                <HLabel htmlFor={fid("percent")} className="text-xs">{t("formUi.implementationPercent")}</HLabel>
+                                <HInput fullWidth id={fid("percent")} type="number" min={0} max={100} inputMode="numeric" aria-label={t("formExtra.implementationPercentAria", { label: numbered })} value={a.percent} onChange={(e) => updateActivity(i, { percent: e.target.value === "" ? "" : Number(e.target.value) })} />
                               </div>
                               {activityFields.includes("budget") && (
-                                <div>
-                                  <Label className="text-xs">{t("formExtra.budget")}</Label>
-                                  <Input type="number" min={0} step="0.01" value={a.budget ?? ""} onChange={(e) => updateActivity(i, { budget: e.target.value === "" ? "" : Number(e.target.value) })} />
+                                <div className="flex flex-col gap-1.5">
+                                  <HLabel htmlFor={fid("budget")} className="text-xs">{t("formExtra.budget")}</HLabel>
+                                  <HInput fullWidth id={fid("budget")} type="number" min={0} step="0.01" value={a.budget ?? ""} onChange={(e) => updateActivity(i, { budget: e.target.value === "" ? "" : Number(e.target.value) })} />
                                 </div>
                               )}
                               {activityFields.includes("beneficiaries") && (
-                                <div>
-                                  <Label className="text-xs">{t("formExtra.beneficiaries")}</Label>
-                                  <Input type="number" min={0} value={a.beneficiaries ?? ""} onChange={(e) => updateActivity(i, { beneficiaries: e.target.value === "" ? "" : Number(e.target.value) })} />
+                                <div className="flex flex-col gap-1.5">
+                                  <HLabel htmlFor={fid("beneficiaries")} className="text-xs">{t("formExtra.beneficiaries")}</HLabel>
+                                  <HInput fullWidth id={fid("beneficiaries")} type="number" min={0} value={a.beneficiaries ?? ""} onChange={(e) => updateActivity(i, { beneficiaries: e.target.value === "" ? "" : Number(e.target.value) })} />
                                 </div>
                               )}
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </>
                     )}
                   </section>
@@ -5292,9 +5159,9 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                   {/* ── Indicator Progress (Activities tab) ── */}
                   {isProject && indicatorProgressEntries.length > 0 && (
                     <section className={activeSection === "rp-section-activities" ? "space-y-3" : "hidden"}>
-                      <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
-                        <Target className="h-4 w-4" /> {t("formExtra.indicatorProgressTitle")}
-                        <span className="text-xs font-normal text-muted-foreground">{t("formExtra.indicatorProgressSubtitle")}</span>
+                      <h4 className="text-sm font-semibold border-b pb-1 flex flex-wrap items-center gap-2">
+                        <Target className="size-4" aria-hidden="true" /> {t("formExtra.indicatorProgressTitle")}
+                        <span className="text-xs font-normal text-[var(--muted)]">{t("formExtra.indicatorProgressSubtitle")}</span>
                       </h4>
                       {indicatorProgressEntries.map((entry, idx) => {
                         // Null (not 0) when there's no valid target to divide by — matches
@@ -5302,40 +5169,45 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         // else, so "no target configured" is never displayed as "0%" (which
                         // would imply severe under-performance rather than "not measurable").
                         const progressPct = entry.target > 0 ? Math.round(((entry.cumAchieved + Number(entry.currentAchievement || 0)) / entry.target) * 100) : null;
+                        const tone = progressPct == null ? "var(--muted)" : progressPct >= 100 ? "var(--success)" : progressPct >= 60 ? "var(--warning)" : "var(--danger)";
                         return (
-                          <div key={entry.indicatorId} className="rounded border p-3 space-y-2 bg-muted/10">
-                            <p className="text-sm font-medium">{entry.name}{entry.unit ? ` (${entry.unit})` : ""}</p>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-                              <div className="rounded border bg-background p-1.5">
-                                <p className="text-muted-foreground">{t("formExtra.target")}</p>
-                                <p className="font-medium">{entry.target.toLocaleString()}</p>
+                          <div key={entry.indicatorId} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                            <p className="text-sm font-medium" dir="auto">{entry.name}{entry.unit ? ` (${entry.unit})` : ""}</p>
+                            <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
+                              <div className="rounded-lg bg-[var(--default)] p-2">
+                                <p className="text-[var(--muted)]">{t("formExtra.target")}</p>
+                                <p className="mt-0.5 font-medium"><Num value={entry.target} /></p>
                               </div>
-                              <div className="rounded border bg-background p-1.5">
-                                <p className="text-muted-foreground">{t("formExtra.cumulativeToDate")}</p>
-                                <p className="font-medium">{entry.cumAchieved.toLocaleString()}</p>
+                              <div className="rounded-lg bg-[var(--default)] p-2">
+                                <p className="text-[var(--muted)]">{t("formExtra.cumulativeToDate")}</p>
+                                <p className="mt-0.5 font-medium"><Num value={entry.cumAchieved} /></p>
                               </div>
-                              <div className="rounded border bg-background p-1.5">
-                                <p className="text-muted-foreground">{t("formExtra.thisPeriod")}</p>
-                                <input
+                              <div className="flex flex-col gap-1 rounded-lg bg-[var(--default)] p-2">
+                                <HLabel htmlFor={`ind-${entry.indicatorId}-current`} className="text-xs font-normal text-[var(--muted)]">{t("formExtra.thisPeriod")}</HLabel>
+                                <HInput
+                                  fullWidth
+                                  id={`ind-${entry.indicatorId}-current`}
                                   type="number"
                                   min={0}
                                   inputMode="numeric"
                                   aria-label={t("formExtra.thisPeriodAchievementAria", { name: entry.name })}
-                                  className="w-full text-center font-medium bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-primary rounded"
+                                  className="text-center font-medium"
                                   value={entry.currentAchievement}
                                   onChange={(e) => setIndicatorProgressEntries((cur) => cur.map((x, i) => i === idx ? { ...x, currentAchievement: e.target.value === "" ? "" : Number(e.target.value) } : x))}
                                   placeholder="0"
                                 />
                               </div>
-                              <div className={`rounded border p-1.5 ${progressPct == null ? "bg-muted/30 border-muted" : progressPct >= 100 ? "bg-success/10 border-success/20" : progressPct >= 60 ? "bg-warning/10 border-warning/20" : "bg-destructive/10 border-destructive/20"}`}>
-                                <p className="text-muted-foreground">{t("formExtra.progress")}</p>
-                                <p className={`font-semibold ${progressPct == null ? "text-muted-foreground" : progressPct >= 100 ? "text-success" : progressPct >= 60 ? "text-warning" : "text-destructive"}`}>{progressPct == null ? "—" : `${progressPct}%`}</p>
+                              <div className="rounded-lg p-2" style={{ background: `color-mix(in oklab, ${tone} 12%, transparent)` }}>
+                                <p className="text-[var(--muted)]">{t("formExtra.progress")}</p>
+                                <p className="mt-0.5 font-semibold" style={{ color: tone }}><bdi dir="ltr">{progressPct == null ? "—" : `${progressPct}%`}</bdi></p>
                               </div>
                             </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">{t("formExtra.remarksOptional")}</Label>
-                              <Input
-                                className="h-8 text-xs"
+                            <div className="flex flex-col gap-1.5">
+                              <HLabel htmlFor={`ind-${entry.indicatorId}-remarks`} className="text-xs text-[var(--muted)]">{t("formExtra.remarksOptional")}</HLabel>
+                              <HInput
+                                fullWidth
+                                id={`ind-${entry.indicatorId}-remarks`}
+                                dir="auto"
                                 aria-label={t("formExtra.remarksAria", { name: entry.name })}
                                 value={entry.remarks}
                                 onChange={(e) => setIndicatorProgressEntries((cur) => cur.map((x, i) => i === idx ? { ...x, remarks: e.target.value } : x))}
@@ -5352,34 +5224,46 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                   {isProject ? (
                     /* Project type: auto-calculated from activity rows */
                     <section className={activeSection === "rp-section-activities" ? "space-y-3" : "hidden"}>
-                      <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
-                        <Users className="h-4 w-4" /> Beneficiaries Reported This Period
-                        <span className="text-xs font-normal text-muted-foreground">(calculated from activities)</span>
+                      <h4 className="text-sm font-semibold border-b pb-1 flex flex-wrap items-center gap-2">
+                        <Users className="size-4" aria-hidden="true" /> {t("formUi.beneficiariesReported")}
+                        <span className="text-xs font-normal text-[var(--muted)]">{t("formUi.calculatedFromActivities")}</span>
                       </h4>
-                      <p className="text-xs text-muted-foreground">
-                        Figures may include participants reported under more than one activity.
-                      </p>
-                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                        <div><Label htmlFor="pmr-benef-men" className="text-xs">{t("formExtra.men")}</Label><Input id="pmr-benef-men" value={activities.reduce((s, a) => s + Number(a.beneficiariesMen || 0), 0).toLocaleString()} readOnly className="bg-muted font-medium" /></div>
-                        <div><Label htmlFor="pmr-benef-women" className="text-xs">{t("formExtra.women")}</Label><Input id="pmr-benef-women" value={activities.reduce((s, a) => s + Number(a.beneficiariesWomen || 0), 0).toLocaleString()} readOnly className="bg-muted font-medium" /></div>
-                        <div><Label htmlFor="pmr-benef-boys" className="text-xs">{t("formExtra.boys")}</Label><Input id="pmr-benef-boys" value={activities.reduce((s, a) => s + Number(a.beneficiariesBoys || 0), 0).toLocaleString()} readOnly className="bg-muted font-medium" /></div>
-                        <div><Label htmlFor="pmr-benef-girls" className="text-xs">{t("formExtra.girls")}</Label><Input id="pmr-benef-girls" value={activities.reduce((s, a) => s + Number(a.beneficiariesGirls || 0), 0).toLocaleString()} readOnly className="bg-muted font-medium" /></div>
-                        <div><Label htmlFor="pmr-benef-total" className="text-xs">{t("formExtra.totalThisPeriod")}</Label><Input id="pmr-benef-total" value={projectBenTotal.toLocaleString()} readOnly className="bg-muted font-semibold text-primary" /></div>
+                      <p className="text-xs text-[var(--muted)]">{t("formUi.beneficiariesOverlapNote")}</p>
+                      <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+                        {([
+                          ["pmr-benef-men", "men", activities.reduce((s, a) => s + Number(a.beneficiariesMen || 0), 0)],
+                          ["pmr-benef-women", "women", activities.reduce((s, a) => s + Number(a.beneficiariesWomen || 0), 0)],
+                          ["pmr-benef-boys", "boys", activities.reduce((s, a) => s + Number(a.beneficiariesBoys || 0), 0)],
+                          ["pmr-benef-girls", "girls", activities.reduce((s, a) => s + Number(a.beneficiariesGirls || 0), 0)],
+                          ["pmr-benef-total", "totalThisPeriod", projectBenTotal],
+                        ] as const).map(([id, key, value]) => (
+                          <div key={id} className="flex flex-col gap-1.5">
+                            <HLabel htmlFor={id} className="text-xs">{t(`formExtra.${key}`)}</HLabel>
+                            <HInput fullWidth id={id} value={value.toLocaleString("en-GB")} readOnly className={cn("bg-[var(--default)]", key === "totalThisPeriod" ? "font-semibold text-[var(--accent)]" : "font-medium")} />
+                          </div>
+                        ))}
                       </div>
                     </section>
                   ) : (
                     /* Non-project types: manual entry */
                     <section className={activeSection === "rp-section-activities" ? "space-y-3" : "hidden"}>
-                      <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
-                        <Users className="h-4 w-4" /> Beneficiary Reach
-                        <span className="text-xs font-normal text-muted-foreground">(manual entry — auto total)</span>
+                      <h4 className="text-sm font-semibold border-b pb-1 flex flex-wrap items-center gap-2">
+                        <Users className="size-4" aria-hidden="true" /> {t("formExtra.beneficiaryReach")}
+                        <span className="text-xs font-normal text-[var(--muted)]">{t("formUi.manualEntryAutoTotal")}</span>
                       </h4>
-                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                        <div><Label htmlFor="rp-benef-male">{t("formExtra.male")}</Label><Input id="rp-benef-male" type="number" min={0} inputMode="numeric" {...form.register("beneficiariesMale", { valueAsNumber: true })} /></div>
-                        <div><Label htmlFor="rp-benef-female">{t("formExtra.female")}</Label><Input id="rp-benef-female" type="number" min={0} inputMode="numeric" {...form.register("beneficiariesFemale", { valueAsNumber: true })} /></div>
-                        <div><Label htmlFor="rp-benef-boys">{t("formExtra.boys")}</Label><Input id="rp-benef-boys" type="number" min={0} inputMode="numeric" {...form.register("beneficiariesBoys", { valueAsNumber: true })} /></div>
-                        <div><Label htmlFor="rp-benef-girls">{t("formExtra.girls")}</Label><Input id="rp-benef-girls" type="number" min={0} inputMode="numeric" {...form.register("beneficiariesGirls", { valueAsNumber: true })} /></div>
-                        <div><Label htmlFor="rp-benef-total">{t("formExtra.total")}</Label><Input id="rp-benef-total" value={beneficiariesTotal.toLocaleString()} readOnly className="bg-muted font-medium" /></div>
+                      <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+                        {([
+                          ["rp-benef-male", "male", "beneficiariesMale"],
+                          ["rp-benef-female", "female", "beneficiariesFemale"],
+                          ["rp-benef-boys", "boys", "beneficiariesBoys"],
+                          ["rp-benef-girls", "girls", "beneficiariesGirls"],
+                        ] as const).map(([id, key, field]) => (
+                          <div key={id} className="flex flex-col gap-1.5">
+                            <HLabel htmlFor={id}>{t(`formExtra.${key}`)}</HLabel>
+                            <HInput fullWidth id={id} type="number" min={0} inputMode="numeric" {...form.register(field, { valueAsNumber: true })} />
+                          </div>
+                        ))}
+                        <div className="flex flex-col gap-1.5"><HLabel htmlFor="rp-benef-total">{t("formExtra.total")}</HLabel><HInput fullWidth id="rp-benef-total" value={beneficiariesTotal.toLocaleString("en-GB")} readOnly className="bg-[var(--default)] font-medium" /></div>
                       </div>
                     </section>
                   )}
@@ -5387,42 +5271,38 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                   {/* ── Financial Summary (Activities tab) ── */}
                   {isProject && (
                     <section className={activeSection === "rp-section-activities" ? "space-y-3" : "hidden"}>
-                      <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" /> Financial Summary
-                        <span className="text-xs font-normal text-muted-foreground">(auto-calculated from activities)</span>
+                      <h4 className="text-sm font-semibold border-b pb-1 flex flex-wrap items-center gap-2">
+                        <DollarSign className="size-4" aria-hidden="true" /> {t("formUi.financialSummary")}
+                        <span className="text-xs font-normal text-[var(--muted)]">{t("formUi.autoCalculated")}</span>
                       </h4>
                       {/* Linked-activity totals */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <div>
-                          <Label className="text-xs text-muted-foreground">Total Planned (Linked)</Label>
-                          <div className="text-lg font-bold">
-                            {projectTotalPlanned != null ? formatCurrency(projectTotalPlanned, projectCurrency ?? undefined) : "—"}
-                          </div>
+                          <dt className="text-xs text-[var(--muted)]">{t("formUi.totalPlannedLinked")}</dt>
+                          <dd className="text-lg font-bold"><bdi dir="ltr">{projectTotalPlanned != null ? formatCurrency(projectTotalPlanned, projectCurrency ?? undefined) : "—"}</bdi></dd>
                         </div>
                         <div>
-                          <Label className="text-xs text-muted-foreground">Actual Expenditure (This Period)</Label>
-                          <div className="text-lg font-bold">{formatCurrency(projectTotalActual, projectCurrency ?? undefined)}</div>
+                          <dt className="text-xs text-[var(--muted)]">{t("formUi.actualExpenditure")}</dt>
+                          <dd className="text-lg font-bold"><bdi dir="ltr">{formatCurrency(projectTotalActual, projectCurrency ?? undefined)}</bdi></dd>
                         </div>
                         <div>
-                          <Label className="text-xs text-muted-foreground">{t("formExtra.variance")}</Label>
-                          <div className="text-lg font-bold text-foreground">
+                          <dt className="text-xs text-[var(--muted)]">{t("formExtra.variance")}</dt>
+                          <dd className="text-lg font-bold">
                             {projectVariance != null
-                              ? `${projectVariance > 0 ? "Underspend" : projectVariance < 0 ? "Overspend" : "On Budget"}: ${formatCurrency(Math.abs(projectVariance), projectCurrency ?? undefined)}`
+                              ? <>{projectVariance > 0 ? t("detail.underspend") : projectVariance < 0 ? t("detail.overspend") : t("detail.onBudget")}: <bdi dir="ltr">{formatCurrency(Math.abs(projectVariance), projectCurrency ?? undefined)}</bdi></>
                               : "—"}
-                          </div>
+                          </dd>
                         </div>
                         <div>
-                          <Label className="text-xs text-muted-foreground">{t("formExtra.budgetUtilisation")}</Label>
-                          <div className="text-lg font-bold text-foreground">
-                            {projectUtilizationPct != null ? `${projectUtilizationPct}%` : "—"}
-                          </div>
+                          <dt className="text-xs text-[var(--muted)]">{t("formExtra.budgetUtilisation")}</dt>
+                          <dd className="text-lg font-bold"><bdi dir="ltr">{projectUtilizationPct != null ? `${projectUtilizationPct}%` : "—"}</bdi></dd>
                         </div>
-                      </div>
+                      </dl>
                       {/* Unplanned expenditure (if any) */}
                       {unplannedTotalActual > 0 && (
-                        <div className="mt-1 p-3 bg-muted/40 rounded-md">
-                          <Label className="text-xs text-muted-foreground">Unplanned Activity Expenditure (This Period)</Label>
-                          <div className="text-base font-bold">{formatCurrency(unplannedTotalActual, projectCurrency ?? undefined)}</div>
+                        <div className="mt-1 rounded-lg bg-[var(--default)] p-3">
+                          <p className="text-xs text-[var(--muted)]">{t("formUi.unplannedExpenditure")}</p>
+                          <p className="text-base font-bold"><bdi dir="ltr">{formatCurrency(unplannedTotalActual, projectCurrency ?? undefined)}</bdi></p>
                         </div>
                       )}
                     </section>
@@ -5441,37 +5321,28 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         {/* Section A — Challenges Encountered (with applicability toggle) */}
                         <div className="space-y-3">
                           <h4 className="text-sm font-semibold border-b pb-1">{t("activityForm.step4.sectionChallengesEncountered")}</h4>
-                          <div>
-                            <Label className="text-sm font-medium">{t("activityForm.step4.hasChallengesLabel")}</Label>
-                            <div className="flex gap-3 mt-2">
-                              {(["yes", "no"] as const).map((opt) => (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  onClick={() => {
-                                    setSectionValues((cur) => ({ ...cur, hasChallenges: opt }));
-                                    setIsFormDirty(true);
-                                  }}
-                                  className={cn(
-                                    "flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors",
-                                    hasChallengesValue === opt
-                                      ? "border-primary bg-primary/10 text-primary"
-                                      : "border-border bg-card text-foreground hover:bg-muted",
-                                  )}
-                                  aria-pressed={hasChallengesValue === opt}
-                                >
-                                  {opt === "yes" ? t("activityForm.step4.hasChallengesYes") : t("activityForm.step4.hasChallengesNo")}
-                                </button>
-                              ))}
-                            </div>
+                          <div className="flex flex-col items-start gap-2">
+                            <p id="ar-has-challenges-label" className="text-sm font-medium">{t("activityForm.step4.hasChallengesLabel")}</p>
+                            {/* HeroUI Pro Segment (default variant, md) */}
+                            <Segment
+                              aria-labelledby="ar-has-challenges-label"
+                              selectedKey={hasChallengesValue || null}
+                              onSelectionChange={(key) => {
+                                setSectionValues((cur) => ({ ...cur, hasChallenges: key as "yes" | "no" }));
+                                setIsFormDirty(true);
+                              }}
+                            >
+                              <Segment.Item id="yes">{t("activityForm.step4.hasChallengesYes")}</Segment.Item>
+                              <Segment.Item id="no">{t("activityForm.step4.hasChallengesNo")}</Segment.Item>
+                            </Segment>
                           </div>
 
                           {/* Challenges textarea — visible when Yes */}
                           {hasChallengesValue === "yes" && (
                             <div>
-                              <Label htmlFor="ar-challenges-text">{t("activityForm.step4.challengesTextLabel")}</Label>
+                              <HLabel htmlFor="ar-challenges-text">{t("activityForm.step4.challengesTextLabel")}</HLabel>
                               <div className="max-w-2xl">
-                                <Textarea
+                                <HTextArea fullWidth
                                   id="ar-challenges-text"
                                   rows={4}
                                   className="resize-y"
@@ -5484,7 +5355,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 />
                               </div>
                               {fieldErrors["challenges"] && (
-                                <p id="err-pmr-challenges" className="text-xs text-destructive mt-1" role="alert">{fieldErrors["challenges"]}</p>
+                                <p id="err-pmr-challenges" className="text-xs text-[var(--danger)] mt-1" role="alert">{fieldErrors["challenges"]}</p>
                               )}
                             </div>
                           )}
@@ -5496,13 +5367,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             <Separator />
                             <div className="space-y-2">
                               <h4 className="text-sm font-semibold border-b pb-1">{t("activityForm.step4.sectionActionsTaken")}</h4>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-[var(--muted)]">
                                 {t("activityForm.step4.actionsTakenHelper")}
                               </p>
                               <div>
-                                <Label htmlFor="ar-mitigation-text">{t("activityForm.step4.actionsTakenLabel")}</Label>
+                                <HLabel htmlFor="ar-mitigation-text">{t("activityForm.step4.actionsTakenLabel")}</HLabel>
                                 <div className="max-w-2xl">
-                                  <Textarea
+                                  <HTextArea fullWidth
                                     id="ar-mitigation-text"
                                     rows={4}
                                     className="resize-y"
@@ -5520,13 +5391,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         <Separator />
                         <div className="space-y-2">
                           <h4 className="text-sm font-semibold border-b pb-1">{t("activityForm.step4.sectionFollowUp")}</h4>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-[var(--muted)]">
                             {t("activityForm.step4.followUpHelper")}
                           </p>
                           <div>
-                            <Label htmlFor="ar-nextsteps-text">{t("activityForm.step4.followUpLabel")}</Label>
+                            <HLabel htmlFor="ar-nextsteps-text">{t("activityForm.step4.followUpLabel")}</HLabel>
                             <div className="max-w-2xl">
-                              <Textarea
+                              <HTextArea fullWidth
                                 id="ar-nextsteps-text"
                                 rows={4}
                                 className="resize-y"
@@ -5542,13 +5413,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                       /* ── Non-activity report: original simple textarea loop ── */
                       <>
                         <h4 className="text-sm font-semibold border-b pb-1">
-                          {isHqSector ? "Challenges & Recommendations" : "Challenges & Next Steps"}
+                          {isHqSector ? t("formUi.challengesTitleHq") : t("formUi.challengesTitle")}
                         </h4>
                         {sectionsCfg.challenges.map((f) => (
                           <div key={f.key}>
-                            <Label htmlFor={`field-${f.key}`}>{configuredFieldLabel(f)}</Label>
+                            <HLabel htmlFor={`field-${f.key}`}>{configuredFieldLabel(f)}</HLabel>
                             <div className="max-w-2xl">
-                              <Textarea
+                              <HTextArea fullWidth
                                 id={`field-${f.key}`}
                                 rows={f.rows ?? 3}
                                 className="resize-y"
@@ -5560,7 +5431,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               />
                             </div>
                             {fieldErrors[f.key] && (
-                              <p id={`err-${f.key}`} role="alert" className="text-sm text-destructive mt-1">{fieldErrors[f.key]}</p>
+                              <p id={`err-${f.key}`} role="alert" className="text-sm text-[var(--danger)] mt-1">{fieldErrors[f.key]}</p>
                             )}
                           </div>
                         ))}
@@ -5574,53 +5445,53 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                       <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-warning" />
                         {t("formExtra.projectRisksTitle")}
-                        <span className="text-xs font-normal text-muted-foreground">{t("formExtra.projectRisksSubtitle")}</span>
+                        <span className="text-xs font-normal text-[var(--muted)]">{t("formExtra.projectRisksSubtitle")}</span>
                       </h4>
                       {!projectLinkedRisksRaw ? (
-                        <p className="text-xs text-muted-foreground">{t("formExtra.loadingRisks")}</p>
+                        <p className="text-xs text-[var(--muted)]">{t("formExtra.loadingRisks")}</p>
                       ) : projectLinkedRisksRaw.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-2">{t("formExtra.noLinkedRisks")}</p>
+                        <p className="text-sm text-[var(--muted)] py-2">{t("formExtra.noLinkedRisks")}</p>
                       ) : (
                         <div className="space-y-2">
                           {(projectLinkedRisksRaw as ProjectRisk[]).map((risk) => {
                             const rl = risk.riskLevel ?? "";
                             const currentStatus = riskStatusEdits[risk.id] ?? risk.status ?? "open";
-                            const riskStatusVariant =
-                              currentStatus === "closed" ? "closed" as const :
-                              currentStatus === "under_mitigation" ? "submitted" as const :
-                              "returned" as const;
+                            const riskStatusColor =
+                              currentStatus === "closed" ? "success" as const :
+                              currentStatus === "under_mitigation" ? "accent" as const :
+                              "warning" as const;
+                            const levelColor = rl === "critical" || rl === "high" ? "danger" as const : rl === "medium" ? "warning" as const : "default" as const;
                             return (
-                              <div key={risk.id} className="flex items-start gap-3 rounded border bg-muted/20 px-3 py-2 text-sm">
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium truncate">{risk.title}</p>
-                                  <div className="flex gap-1.5 mt-1 flex-wrap">
-                                    <Badge variant="outline" className="text-xs capitalize">{risk.category}</Badge>
-                                    {rl && <Badge variant={severityBadgeVariant(rl)} className="text-xs">{rl}</Badge>}
-                                    <Badge variant={riskStatusVariant} className="text-xs">
+                              <div key={risk.id} className="flex flex-wrap items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
+                                <div className="min-w-0 flex-1">
+                                  <p className="line-clamp-2 font-medium" dir="auto" title={risk.title}>{risk.title}</p>
+                                  <div className="mt-1 flex flex-wrap gap-1.5">
+                                    {risk.category && <Chip size="sm" variant="tertiary">{t(`presentation.categories.${risk.category}`, { ns: "risks", defaultValue: risk.category })}</Chip>}
+                                    {rl && <Chip size="sm" variant="soft" color={levelColor}>{t(`levels.${rl}`, { ns: "risks", defaultValue: rl })}</Chip>}
+                                    <Chip size="sm" variant="soft" color={riskStatusColor}>
                                       {currentStatus === "under_mitigation" ? t("formExtra.riskStatusUnderMitigation") : currentStatus === "closed" ? t("formExtra.riskStatusClosed") : t("formExtra.riskStatusOpen")}
-                                    </Badge>
+                                    </Chip>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0">
-                                  <Select
+                                  <SelectField
+                                    aria-label={t("formUi.riskStatusAria", { title: risk.title })}
+                                    triggerClassName="w-40"
                                     value={currentStatus}
-                                    onValueChange={(val) => setRiskStatusEdits((prev) => ({ ...prev, [risk.id]: val }))}
-                                  >
-                                    <SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="open">{t("formExtra.riskStatusOpen")}</SelectItem>
-                                      <SelectItem value="under_mitigation">{t("formExtra.riskStatusUnderMitigation")}</SelectItem>
-                                      <SelectItem value="closed">{t("formExtra.riskStatusClosed")}</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                    onChange={(val) => setRiskStatusEdits((prev) => ({ ...prev, [risk.id]: val }))}
+                                    options={[
+                                      { value: "open", label: t("formExtra.riskStatusOpen") },
+                                      { value: "under_mitigation", label: t("formExtra.riskStatusUnderMitigation") },
+                                      { value: "closed", label: t("formExtra.riskStatusClosed") },
+                                    ]}
+                                  />
                                   {riskStatusEdits[risk.id] && riskStatusEdits[risk.id] !== (risk.status ?? "open") && (
-                                    <Button
+                                    <HButton
                                       type="button"
                                       size="sm"
-                                      variant="outline"
-                                      className="h-7 text-xs px-2"
-                                      disabled={savingRiskId === risk.id}
-                                      onClick={async () => {
+                                      variant="tertiary"
+                                      isPending={savingRiskId === risk.id}
+                                      onPress={async () => {
                                         setSavingRiskId(risk.id);
                                         try {
                                           const res = await fetch(`/api/risks/${risk.id}`, {
@@ -5641,7 +5512,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                       }}
                                     >
                                       {savingRiskId === risk.id ? t("savingData", { ns: "common" }) : t("save", { ns: "common" })}
-                                    </Button>
+                                    </HButton>
                                   )}
                                 </div>
                               </div>
@@ -5669,13 +5540,10 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                             {/* Lessons Learned (required) */}
                             <div className="space-y-1">
-                              <Label htmlFor="ar-lessonsLearned">{t("formExtra.lessonsLearned")} <span className="text-destructive">*</span></Label>
-                              <p className="text-xs text-muted-foreground">
-                                Summarise the key lessons from implementing this activity, including what
-                                worked well and what could be improved.
-                              </p>
+                              <HLabel htmlFor="ar-lessonsLearned" isRequired>{t("formExtra.lessonsLearned")}</HLabel>
+                              <p className="text-xs text-[var(--muted)]">{t("formUi.lessonsHelp")}</p>
                               <div className="max-w-2xl">
-                              <Textarea
+                              <HTextArea fullWidth
                                 id="ar-lessonsLearned"
                                 rows={4}
                                 className="resize-y"
@@ -5691,19 +5559,16 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               />
                               </div>
                               {fieldErrors["lessonsLearned"] && (
-                                <p id="err-pmr-lessons" className="text-xs text-destructive" role="alert">{fieldErrors["lessonsLearned"]}</p>
+                                <p id="err-pmr-lessons" className="text-xs text-[var(--danger)]" role="alert">{fieldErrors["lessonsLearned"]}</p>
                               )}
                             </div>
 
                             {/* Recommendations (optional, top-level DB column) */}
                             <div className="space-y-1">
-                              <Label htmlFor="ar-recommendations">{t("formExtra.recommendations")}</Label>
-                              <p className="text-xs text-muted-foreground">
-                                Provide practical recommendations for improving future activities,
-                                implementation approaches or programme decisions.
-                              </p>
+                              <HLabel htmlFor="ar-recommendations">{t("formExtra.recommendations")}</HLabel>
+                              <p className="text-xs text-[var(--muted)]">{t("formUi.recommendationsHelp")}</p>
                               <div className="max-w-2xl">
-                              <Textarea
+                              <HTextArea fullWidth
                                 id="ar-recommendations"
                                 rows={4}
                                 className="resize-y"
@@ -5723,13 +5588,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             {showSuccessStory ? (
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <Label htmlFor="ar-successStory">Success Story / Case Example</Label>
-                                  <Button
+                                  <HLabel htmlFor="ar-successStory">{t("formUi.successStory")}</HLabel>
+                                  <HButton
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    className="text-xs text-muted-foreground h-auto py-0"
-                                    onClick={() => {
+                                    className="text-xs text-[var(--muted)] h-auto py-0"
+                                    onPress={() => {
                                       if ((sectionValues["successStory"] ?? "").trim()) {
                                         // Content exists — ask for confirmation before discarding
                                         setRemoveInsightConfirm("successStory");
@@ -5739,15 +5604,12 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                       }
                                     }}
                                   >
-                                    Remove
-                                  </Button>
+                                    {t("formUi.remove")}
+                                  </HButton>
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                  Describe a concise example that demonstrates a meaningful positive result
-                                  or change linked to this activity.
-                                </p>
+                                <p className="text-xs text-[var(--muted)]">{t("formUi.successStoryHelp")}</p>
                                 <div className="max-w-2xl">
-                                <Textarea
+                                <HTextArea fullWidth
                                   id="ar-successStory"
                                   rows={4}
                                   className="resize-y"
@@ -5761,26 +5623,26 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 </div>
                               </div>
                             ) : (
-                              <Button
+                              <HButton
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="text-muted-foreground text-sm h-auto py-1"
-                                onClick={() => setShowSuccessStory(true)}
+                                className="text-[var(--muted)] text-sm h-auto py-1"
+                                onPress={() => setShowSuccessStory(true)}
                               >
-                                <PlusCircle className="h-3.5 w-3.5" /> Add Success Story / Case Example
-                              </Button>
+                                <PlusCircle className="size-3.5" aria-hidden="true" /> {t("formUi.addSuccessStory")}
+                              </HButton>
                             )}
 
                             {/* Coordination Updates */}
                             {showCoordinationUpdates ? (
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <Label htmlFor="ar-coordinationUpdates">{t("formExtra.coordinationUpdates")}</Label>
-                                  <Button
+                                  <HLabel htmlFor="ar-coordinationUpdates">{t("formExtra.coordinationUpdates")}</HLabel>
+                                  <HButton
                                     type="button" variant="ghost" size="sm"
-                                    className="text-xs text-muted-foreground h-auto py-0"
-                                    onClick={() => {
+                                    className="text-xs text-[var(--muted)] h-auto py-0"
+                                    onPress={() => {
                                       if ((sectionValues["coordinationUpdates"] ?? "").trim()) {
                                         setRemoveInsightConfirm("coordinationUpdates");
                                       } else {
@@ -5788,14 +5650,12 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                       }
                                     }}
                                   >
-                                    Remove
-                                  </Button>
+                                    {t("formUi.remove")}
+                                  </HButton>
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                  Record any significant coordination developments relevant to this activity.
-                                </p>
+                                <p className="text-xs text-[var(--muted)]">{t("formUi.coordinationHelp")}</p>
                                 <div className="max-w-2xl">
-                                <Textarea
+                                <HTextArea fullWidth
                                   id="ar-coordinationUpdates"
                                   rows={4}
                                   className="resize-y"
@@ -5809,24 +5669,24 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 </div>
                               </div>
                             ) : (
-                              <Button
+                              <HButton
                                 type="button" variant="ghost" size="sm"
-                                className="text-muted-foreground text-sm h-auto py-1"
-                                onClick={() => setShowCoordinationUpdates(true)}
+                                className="text-[var(--muted)] text-sm h-auto py-1"
+                                onPress={() => setShowCoordinationUpdates(true)}
                               >
-                                <PlusCircle className="h-3.5 w-3.5" /> Add Coordination Update
-                              </Button>
+                                <PlusCircle className="size-3.5" aria-hidden="true" /> {t("formUi.addCoordinationUpdate")}
+                              </HButton>
                             )}
 
                             {/* Community Feedback */}
                             {showCommunityFeedback ? (
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <Label htmlFor="ar-communityFeedback">{t("formExtra.communityFeedback")}</Label>
-                                  <Button
+                                  <HLabel htmlFor="ar-communityFeedback">{t("formExtra.communityFeedback")}</HLabel>
+                                  <HButton
                                     type="button" variant="ghost" size="sm"
-                                    className="text-xs text-muted-foreground h-auto py-0"
-                                    onClick={() => {
+                                    className="text-xs text-[var(--muted)] h-auto py-0"
+                                    onPress={() => {
                                       if ((sectionValues["communityFeedback"] ?? "").trim()) {
                                         setRemoveInsightConfirm("communityFeedback");
                                       } else {
@@ -5834,15 +5694,12 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                       }
                                     }}
                                   >
-                                    Remove
-                                  </Button>
+                                    {t("formUi.remove")}
+                                  </HButton>
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                  Summarise relevant feedback received from participants, communities or
-                                  other affected people.
-                                </p>
+                                <p className="text-xs text-[var(--muted)]">{t("formUi.communityHelp")}</p>
                                 <div className="max-w-2xl">
-                                <Textarea
+                                <HTextArea fullWidth
                                   id="ar-communityFeedback"
                                   rows={4}
                                   className="resize-y"
@@ -5856,25 +5713,25 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 </div>
                               </div>
                             ) : (
-                              <Button
+                              <HButton
                                 type="button" variant="ghost" size="sm"
-                                className="text-muted-foreground text-sm h-auto py-1"
-                                onClick={() => setShowCommunityFeedback(true)}
+                                className="text-[var(--muted)] text-sm h-auto py-1"
+                                onPress={() => setShowCommunityFeedback(true)}
                               >
-                                <PlusCircle className="h-3.5 w-3.5" /> Add Community Feedback
-                              </Button>
+                                <PlusCircle className="size-3.5" aria-hidden="true" /> {t("formUi.addCommunityFeedback")}
+                              </HButton>
                             )}
                           </div>
                         </>
                       ) : (
                         /* ── PROJECT / STATE / HQ REPORT: existing generic loop (unchanged) ── */
                         <>
-                          <h4 className="text-sm font-semibold border-b pb-1">Lessons Learned & Narrative</h4>
+                          <h4 className="text-sm font-semibold border-b pb-1">{t("formUi.lessonsTitle")}</h4>
                           {sectionsCfg.narrative.map((f) => (
                             <div key={f.key}>
-                              <Label htmlFor={`field-${f.key}`}>{configuredFieldLabel(f)}</Label>
+                              <HLabel htmlFor={`field-${f.key}`}>{configuredFieldLabel(f)}</HLabel>
                               <div className="max-w-2xl">
-                                <Textarea
+                                <HTextArea fullWidth
                                   id={`field-${f.key}`}
                                   rows={f.rows ?? 3}
                                   className="resize-y"
@@ -5886,7 +5743,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 />
                               </div>
                               {fieldErrors[f.key] && (
-                                <p id={`err-${f.key}`} className="text-xs text-destructive" role="alert">{fieldErrors[f.key]}</p>
+                                <p id={`err-${f.key}`} className="text-xs text-[var(--danger)]" role="alert">{fieldErrors[f.key]}</p>
                               )}
                             </div>
                           ))}
@@ -5908,13 +5765,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         {/* ── Section 1: Supporting Attachments ── */}
                         <div className="space-y-3">
                           <h4 className="text-sm font-semibold border-b pb-1">{t("formExtra.supportingAttachments")}</h4>
-                          <p className="text-sm text-muted-foreground">Upload relevant documents, photos or other supporting evidence.</p>
-                          {docsError && <p className="text-xs text-destructive">{docsError}</p>}
+                          <p className="text-sm text-[var(--muted)]">{t("formUi.attachmentsHelp")}</p>
+                          {docsError && <p className="text-xs text-[var(--danger)]">{docsError}</p>}
 
                           {/* Already-uploaded attachments (restored from saved draft) */}
                           {savedAttachments.length > 0 && (
                             <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground">{t("formExtra.saved")}</p>
+                              <p className="text-xs font-medium text-[var(--muted)]">{t("formExtra.saved")}</p>
                               {savedAttachments.map((att) => {
                                 const sizeMb = att.size != null && att.size >= 1024 * 1024;
                                 const sizeStr = att.size != null
@@ -5925,37 +5782,36 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   <div key={att.id} className="flex items-center gap-2 rounded border p-2 bg-muted/10">
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-medium truncate" title={att.fileName}>{att.fileName}</p>
-                                      <p className="text-xs text-muted-foreground">{[ext, sizeStr].filter(Boolean).join(" · ")}</p>
+                                      <p className="text-xs text-[var(--muted)]">{[ext, sizeStr].filter(Boolean).join(" · ")}</p>
                                     </div>
                                     <a
                                       href={attachmentDownloadUrl(att.reportId, att.id)}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      title={`Download ${att.fileName}`}
+                                      title={t("formExtra.downloadFileAria", { fileName: att.fileName })}
                                       aria-label={t("formExtra.downloadFileAria", { fileName: att.fileName })}
                                       className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent shrink-0"
                                     >
-                                      <Download className="h-3 w-3 text-muted-foreground" />
+                                      <Download className="h-3 w-3 text-[var(--muted)]" />
                                     </a>
-                                  <Button
-                                      type="button" size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0"
-                                      title={`Remove ${att.fileName}`}
+                                  <HButton
+                                      type="button" size="sm" isIconOnly variant="ghost" className="h-7 w-7 flex-shrink-0"
                                       aria-label={t("formExtra.removeFileAria", { fileName: att.fileName })}
-                                      onClick={async () => {
+                                      onPress={async () => {
                                         if (!editingReport) return;
                                         try {
                                           const delRes = await fetch(`/api/reports/${editingReport.id}/attachments/${att.id}`, { method: "DELETE", credentials: "include" });
                                           if (!delRes.ok) {
                                             const e = await delRes.json().catch(() => ({})) as { message?: string };
-                                            toast.error(e.message ?? "Failed to remove attachment.");
+                                            toast.error(e.message ?? t("form.attachmentRemoveFailed"));
                                             return;
                                           }
                                           setSavedAttachments((cur) => cur.filter((a) => a.id !== att.id));
                                         } catch { toast.error(t("form.attachmentRemoveFailed")); }
                                       }}
                                     >
-                                      <Trash2 className="h-3 w-3 text-destructive" />
-                                    </Button>
+                                      <Trash2 className="h-3 w-3 text-[var(--danger)]" />
+                                    </HButton>
                                   </div>
                                 );
                               })}
@@ -5971,23 +5827,22 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               <div key={idx} className="flex items-center gap-2 rounded border p-2 bg-muted/10">
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-medium truncate" title={doc.file.name}>{doc.file.name}</p>
-                                  <p className="text-xs text-muted-foreground">{ext} · {sizeStr}</p>
+                                  <p className="text-xs text-[var(--muted)]">{ext} · {sizeStr}</p>
                                 </div>
-                                <Button
-                                  type="button" size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0"
-                                  onClick={() => setSupportingDocs((cur) => cur.filter((_, i) => i !== idx))}
+                                <HButton
+                                  type="button" size="sm" isIconOnly variant="ghost" className="h-7 w-7 flex-shrink-0"
+                                  onPress={() => setSupportingDocs((cur) => cur.filter((_, i) => i !== idx))}
                                   aria-label={t("formExtra.removeFileAria", { fileName: doc.file.name })}
-                                  title={`Remove ${doc.file.name}`}
                                 >
-                                  <Trash2 className="h-3 w-3 text-destructive" />
-                                </Button>
+                                  <Trash2 className="h-3 w-3 text-[var(--danger)]" />
+                                </HButton>
                               </div>
                             );
                           })}
 
-                          <label className="flex items-center gap-2 cursor-pointer text-sm text-primary hover:underline w-fit">
-                            <Plus className="h-4 w-4" />
-                            + Add Files
+                          <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--accent)] hover:underline w-fit">
+                            <Plus className="size-4" aria-hidden="true" />
+                            {t("formUi.addFiles")}
                             <input
                               id="pmr-file-input"
                               type="file"
@@ -6003,12 +5858,12 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                               }}
                             />
                           </label>
-                          <p id="pmr-file-formats" className="text-xs text-muted-foreground">{t("formExtra.acceptedFormatsWithSize")}</p>
+                          <p id="pmr-file-formats" className="text-xs text-[var(--muted)]">{t("formExtra.acceptedFormatsWithSize")}</p>
                           {supportingDocs.length > 0 ? (
-                            <p className="text-xs text-muted-foreground">Files will be uploaded when you save or submit the report. Max 20 MB per file.</p>
+                            <p className="text-xs text-[var(--muted)]">{t("formUi.filesUploadOnSave")}</p>
                           ) : (
                             savedAttachments.length === 0 && (
-                              <p className="text-xs text-muted-foreground">Max 20 MB per file. Attachments are optional.</p>
+                              <p className="text-xs text-[var(--muted)]">{t("formUi.maxSizeOptional")}</p>
                             )
                           )}
                         </div>
@@ -6016,16 +5871,16 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                         {/* ── Section 2: Voice Notes ── */}
                         <div className="space-y-3">
                           <h4 className="text-sm font-semibold border-b pb-1">{t("formExtra.voiceNotes")}</h4>
-                          <p className="text-sm text-muted-foreground">Add an optional voice note to provide additional context.</p>
+                          <p className="text-sm text-[var(--muted)]">{t("formUi.voiceNoteHelp")}</p>
 
                           {voiceNoteRetry && (
-                            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 space-y-2">
-                              <p className="text-sm font-medium text-destructive">{t("formExtra.voiceNoteUploadFailed")}</p>
-                              <p className="text-xs text-muted-foreground">Your report has been saved. The recording is preserved — click Retry Upload to re-send it.</p>
-                              <Button
+                            <div className="rounded-md border border-[var(--danger)]/40 bg-destructive/10 p-3 space-y-2">
+                              <p className="text-sm font-medium text-[var(--danger)]">{t("formExtra.voiceNoteUploadFailed")}</p>
+                              <p className="text-xs text-[var(--muted)]">{t("formUi.voiceRetryHelp")}</p>
+                              <HButton
                                 type="button"
                                 size="sm"
-                                onClick={async () => {
+                                onPress={async () => {
                                   try {
                                     await uploadVoiceNote(voiceNoteRetry.note, voiceNoteRetry.reportId);
                                     setVoiceNoteRetry(null);
@@ -6036,14 +5891,14 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   }
                                 }}
                               >
-                                Retry Upload
-                              </Button>
+                                {t("formUi.retryUpload")}
+                              </HButton>
                             </div>
                           )}
 
                           {editingReport && (
                             <div>
-                              <p className="text-xs text-muted-foreground mb-2">Previously saved recording:</p>
+                              <p className="mb-2 text-xs text-[var(--muted)]">{t("formUi.previousRecording")}</p>
                               <VoiceNotePanel entityType="report" entityId={editingReport.id} />
                             </div>
                           )}
@@ -6083,21 +5938,21 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                 {steps.map((step) => (
                                   <div key={step.sectionId} className="flex items-center gap-2 text-sm">
                                     {step.issues.length === 0
-                                      ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                                      : <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
-                                    <span className={step.issues.length === 0 ? "text-muted-foreground" : "text-foreground"}>
+                                      ? <CheckCircle2 className="size-3.5 shrink-0 text-[var(--success)]" aria-hidden="true" />
+                                      : <AlertCircle className="size-3.5 shrink-0 text-[var(--danger)]" aria-hidden="true" />}
+                                    <span className={step.issues.length === 0 ? "text-[var(--muted)]" : "text-foreground"}>
                                       {step.label}
                                     </span>
                                   </div>
                                 ))}
                               </div>
                               {allValid ? (
-                                <p className="text-sm font-medium text-green-600 dark:text-green-400">{t("formExtra.readyToSubmit")}</p>
+                                <p className="text-sm font-medium text-[var(--success)]">{t("formExtra.readyToSubmit")}</p>
                               ) : (
                                 <div className="space-y-1">
-                                  <p className="text-sm font-medium text-destructive">{t("formExtra.actionRequired")}</p>
+                                  <p className="text-sm font-medium text-[var(--danger)]">{t("formExtra.actionRequired")}</p>
                                   {(firstWithIssues?.issues ?? []).map((msg) => (
-                                    <p key={msg} className="text-xs text-muted-foreground">• {msg}</p>
+                                    <p key={msg} className="text-xs text-[var(--muted)]">• {msg}</p>
                                   ))}
                                 </div>
                               )}
@@ -6109,36 +5964,35 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                       /* ── Project / State / HQ reports: existing layout unchanged ── */
                       <>
                         <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
-                          <Paperclip className="h-4 w-4" aria-hidden="true" /> Evidence &amp; Supporting Documents
+                          <Paperclip className="size-4" aria-hidden="true" /> {t("formUi.evidenceTitle")}
                         </h4>
 
                         {/* File attachment sub-section */}
                         <section aria-labelledby="rp-docs-heading" className="space-y-2">
-                          <p id="rp-docs-heading" className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                            Attachments {isProject && !docsNoSupport && <span className="text-destructive">*</span>}
+                          <p id="rp-docs-heading" className="text-xs font-medium text-[var(--muted)] flex items-center gap-1">
+                            {t("formUi.attachments")} {isProject && !docsNoSupport && <span className="text-[var(--danger)]" aria-hidden="true">*</span>}
                           </p>
-                          {docsError && <p className="text-xs text-destructive">{docsError}</p>}
+                          {docsError && <p className="text-xs text-[var(--danger)]">{docsError}</p>}
                           {supportingDocs.map((doc, idx) => (
                             <div key={idx} className="flex items-center gap-2 rounded border p-2 bg-muted/10">
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium truncate" title={doc.file.name}>{doc.file.name}</p>
-                                <p className="text-xs text-muted-foreground">{(doc.file.size / 1024).toFixed(1)} KB</p>
+                                <p className="text-xs text-[var(--muted)]">{(doc.file.size / 1024).toFixed(1)} KB</p>
                               </div>
-                              <Select value={doc.docType} onValueChange={(val) => setSupportingDocs((cur) => cur.map((d, i) => i === idx ? { ...d, docType: val } : d))}>
-                                <SelectTrigger className="w-44 h-7 text-xs" aria-label={t("formExtra.documentTypeForAria", { fileName: doc.file.name })}><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {["Progress Photos", "Field Visit Report", "Beneficiary Data", "Financial Record", "Meeting Minutes", "Monitoring Form", "Other"].map((t) => (
-                                    <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Button type="button" size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0" aria-label={t("formExtra.removeFileAria", { fileName: doc.file.name })} title={t("formExtra.removeFileAria", { fileName: doc.file.name })} onClick={() => setSupportingDocs((cur) => cur.filter((_, i) => i !== idx))}>
-                                <Trash2 className="h-3 w-3 text-destructive" />
-                              </Button>
+                              <SelectField
+                                aria-label={t("formExtra.documentTypeForAria", { fileName: doc.file.name })}
+                                triggerClassName="w-44"
+                                value={doc.docType}
+                                onChange={(val) => setSupportingDocs((cur) => cur.map((d, i) => i === idx ? { ...d, docType: val } : d))}
+                                options={DOC_TYPES.map(([value, key]) => ({ value, label: t(`formUi.docTypes.${key}`) }))}
+                              />
+                              <HButton type="button" size="sm" isIconOnly variant="ghost" className="h-7 w-7 flex-shrink-0" aria-label={t("formExtra.removeFileAria", { fileName: doc.file.name })} onPress={() => setSupportingDocs((cur) => cur.filter((_, i) => i !== idx))}>
+                                <Trash2 className="h-3 w-3 text-[var(--danger)]" />
+                              </HButton>
                             </div>
                           ))}
                           <div className={cn(docsNoSupport ? "opacity-50 pointer-events-none" : "")}>
-                            <label className="flex items-center gap-2 cursor-pointer text-sm text-primary hover:underline w-fit">
+                            <label className="flex items-center gap-2 cursor-pointer text-sm text-[var(--accent)] hover:underline w-fit">
                               <Paperclip className="h-4 w-4" aria-hidden="true" />
                               {t("formExtra.attachDocument")}
                               <span id="rp-file-formats" className="sr-only">{t("formExtra.acceptedFormatsCsv")}</span>
@@ -6160,24 +6014,21 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                             </label>
                           </div>
                           {supportingDocs.length > 0 && (
-                            <p className="text-xs text-muted-foreground">Documents will be uploaded when you save or submit the report.</p>
+                            <p className="text-xs text-[var(--muted)]">{t("formUi.docsUploadOnSave")}</p>
                           )}
                           {/* No-documents bypass — must provide a documented reason */}
                           {isProject && supportingDocs.length === 0 && (
                             <div className="mt-2 space-y-2 rounded-md border border-dashed p-3">
-                              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={docsNoSupport}
-                                  onChange={(e) => { setDocsNoSupport(e.target.checked); if (!e.target.checked) setDocsNoSupportReason(""); setIsFormDirty(true); }}
-                                  className="h-4 w-4 rounded border-border"
-                                />
-                                <span>{t("formExtra.noSupportingDocuments")}</span>
-                              </label>
+                              <CheckItem
+                                isSelected={docsNoSupport}
+                                onChange={(checked) => { setDocsNoSupport(checked); if (!checked) setDocsNoSupportReason(""); setIsFormDirty(true); }}
+                              >
+                                {t("formExtra.noSupportingDocuments")}
+                              </CheckItem>
                               {docsNoSupport && (
                                 <div className="mt-2 ms-6">
-                                  <Label htmlFor="rp-docs-no-support-reason" className="text-xs">{t("formExtra.reason")} <span className="text-destructive">*</span></Label>
-                                  <Textarea
+                                  <HLabel htmlFor="rp-docs-no-support-reason" className="text-xs" isRequired>{t("formExtra.reason")}</HLabel>
+                                  <HTextArea fullWidth
                                     id="rp-docs-no-support-reason"
                                     rows={2}
                                     aria-required="true"
@@ -6193,15 +6044,15 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
 
                         {/* Voice Note (inside Attachments & Voice tab) */}
                         <div className="pt-2 space-y-2">
-                          <h5 className="text-sm font-medium border-b pb-1 text-muted-foreground">Voice Note (Optional)</h5>
+                          <h5 className="text-sm font-medium border-b pb-1 text-[var(--muted)]">{t("formUi.voiceNoteOptional")}</h5>
                           {voiceNoteRetry && (
-                            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 space-y-2">
-                              <p className="text-sm font-medium text-destructive">{t("formExtra.voiceNoteUploadFailed")}</p>
-                              <p className="text-xs text-muted-foreground">Your report has been saved. The recording is preserved — click Retry Upload to re-send it.</p>
-                              <Button
+                            <div className="rounded-md border border-[var(--danger)]/40 bg-destructive/10 p-3 space-y-2">
+                              <p className="text-sm font-medium text-[var(--danger)]">{t("formExtra.voiceNoteUploadFailed")}</p>
+                              <p className="text-xs text-[var(--muted)]">{t("formUi.voiceRetryHelp")}</p>
+                              <HButton
                                 type="button"
                                 size="sm"
-                                onClick={async () => {
+                                onPress={async () => {
                                   try {
                                     await uploadVoiceNote(voiceNoteRetry.note, voiceNoteRetry.reportId);
                                     setVoiceNoteRetry(null);
@@ -6212,13 +6063,13 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                                   }
                                 }}
                               >
-                                Retry Upload
-                              </Button>
+                                {t("formUi.retryUpload")}
+                              </HButton>
                             </div>
                           )}
                           {editingReport && (
                             <div>
-                              <p className="text-xs text-muted-foreground mb-2">Previously saved recording:</p>
+                              <p className="mb-2 text-xs text-[var(--muted)]">{t("formUi.previousRecording")}</p>
                               <VoiceNotePanel entityType="report" entityId={editingReport.id} />
                             </div>
                           )}
@@ -6285,78 +6136,71 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
                     if (stepIndex < activeNavItems.length - 1) setActiveSection(activeNavItems[stepIndex + 1].id);
                   };
                   return (
-                    <div className="border-t shrink-0 px-6 py-4 flex items-center justify-between gap-2 bg-background">
+                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] px-6 py-4" data-report-form-footer aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}>
                       {/* Left side: Cancel (step 1) or Back (other steps) */}
                       {/* Sticky footer — only for PMR/Activity; SPR and HQSR own their footer */}
                       <div>
                         {isFirstStep ? (
-                          <Button
+                          <HButton
                             type="button"
-                            variant="outline"
-                            disabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}
-                            aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}
-                            onClick={() => {
-                              if (isFormDirty) { setShowDiscardConfirm(true); return; }
-                              setCreateOpen(false);
-                              resetForm();
-                            }}
+                            variant="tertiary"
+                            isDisabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}
+                            onPress={requestCloseForm}
                           >
                             {t("stateForm.cancel")}
-                          </Button>
+                          </HButton>
                         ) : (
-                          <Button
+                          <HButton
                             type="button"
-                            variant="outline"
-                            disabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}
-                            aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}
-                            onClick={prevStep}
+                            variant="tertiary"
+                            isDisabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}
+                            onPress={prevStep}
                           >
                     <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> {t("stateForm.back")}
-                          </Button>
+                          </HButton>
                         )}
                       </div>
                       {/* Right side: Save as Draft + Next / Submit */}
                       <div className="flex gap-2">
-                        <Button type="button" variant="secondary" onClick={onSaveDraft} disabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap">
+                        <HButton type="button" variant="secondary" onPress={() => { void onSaveDraft(); }} isDisabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap">
                           {t("stateForm.saveDraft")}
-                        </Button>
+                        </HButton>
                         {isLastStep ? (
-                          <Button type="button" onClick={onSubmitReport} disabled={!isOnline || isSubmittingReport || createMutation.isPending || transitionMutation.isPending} aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap" aria-describedby={!isOnline ? "offline-workflow-notice" : undefined}>
+                          <HButton type="button" onPress={() => { void onSubmitReport(); }} isDisabled={!isOnline || isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap" aria-describedby={!isOnline ? "offline-workflow-notice" : undefined}>
                     <Send className="h-4 w-4" aria-hidden="true" /> {t("stateForm.submitReport")}
-                          </Button>
+                          </HButton>
                         ) : (
-                          <Button type="button" onClick={nextStep} disabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap">
+                          <HButton type="button" onPress={nextStep} isDisabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap">
                             {t("stateForm.next")}
                             <ChevronRight className="ms-1 h-4 w-4 rtl:rotate-180" aria-hidden="true" />
-                          </Button>
+                          </HButton>
                         )}
                       </div>
                     </div>
                   );
                 })() : (
-                  <div className="border-t shrink-0 px-6 py-4 flex justify-end gap-2 bg-background">
-                    <Button
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--border)] px-6 py-4" data-report-form-footer aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}>
+                    <HButton
                       type="button"
-                      variant="outline"
-                      disabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}
-                      onClick={() => {
-                        if (isFormDirty) { setShowDiscardConfirm(true); return; }
-                        setCreateOpen(false);
-                        resetForm();
-                      }}
+                      variant="tertiary"
+                      isDisabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}
+                      onPress={requestCloseForm}
                     >
                       {t("stateForm.cancel")}
-                    </Button>
-                    <Button type="button" variant="secondary" onClick={onSaveDraft} disabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap">
+                    </HButton>
+                    <HButton type="button" variant="secondary" onPress={() => { void onSaveDraft(); }} isDisabled={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap">
                       {t("stateForm.saveDraft")}
-                    </Button>
-                    <Button type="button" onClick={onSubmitReport} disabled={!isOnline || isSubmittingReport || createMutation.isPending || transitionMutation.isPending} aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap" aria-describedby={!isOnline ? "offline-workflow-notice" : undefined}>
+                    </HButton>
+                    <HButton type="button" onPress={() => { void onSubmitReport(); }} isDisabled={!isOnline || isSubmittingReport || createMutation.isPending || transitionMutation.isPending} className="whitespace-nowrap" aria-describedby={!isOnline ? "offline-workflow-notice" : undefined}>
                     <Send className="h-4 w-4" aria-hidden="true" /> {t("stateForm.submitReport")}
-                    </Button>
+                    </HButton>
                   </div>
                 ))}
-              </DialogContent>
-            </Dialog>
+              </Modal.Dialog>
+              </Modal.Container>
+              </Modal.Backdrop>
+            </Modal>
+            </>
           )}
         </div>
       </div>

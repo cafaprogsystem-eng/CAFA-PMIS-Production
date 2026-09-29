@@ -109,7 +109,9 @@ describe("PMR form rendered accessibility (real component)", () => {
     const dialog = screen.getByRole("dialog");
     const trigger = dialog.querySelector("#pmr-project-trigger");
     expect(trigger).not.toBeNull();
-    expect(trigger).toHaveAttribute("aria-required", "true");
+    // HeroUI (React Aria) Select: the trigger is a button, which cannot carry
+    // aria-required; the field root carries the required state instead.
+    expect(trigger!.closest("[data-slot='select']")).toHaveAttribute("data-required", "true");
     const describedBy = trigger!.getAttribute("aria-describedby") ?? "";
     expect(describedBy).toContain("help-pmr-project");
     for (const id of describedBy.split(/\s+/).filter(Boolean)) {
@@ -122,7 +124,7 @@ describe("PMR form rendered accessibility (real component)", () => {
     for (const id of ["pmr-frequency", "pmr-month", "pmr-year"]) {
       const el = document.getElementById(id);
       expect(el, id).not.toBeNull();
-      expect(el).toHaveAttribute("aria-required", "true");
+      expect(el!.closest("[data-slot='select']"), id).toHaveAttribute("data-required", "true");
     }
   });
 
@@ -138,7 +140,7 @@ describe("PMR form rendered accessibility (real component)", () => {
     const errProject = document.getElementById("err-pmr-project")!;
     expect(errProject).toHaveAttribute("role", "alert");
     const trigger = document.getElementById("pmr-project-trigger")!;
-    expect(trigger).toHaveAttribute("aria-invalid", "true");
+    expect(trigger.closest("[data-slot='select']")).toHaveAttribute("data-invalid", "true");
     expect(trigger.getAttribute("aria-describedby")).toContain("err-pmr-project");
 
     // Every aria-describedby on an invalid control resolves to real elements

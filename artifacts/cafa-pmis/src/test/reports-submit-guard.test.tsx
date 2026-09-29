@@ -222,7 +222,7 @@ describe("REP-UX-03: Full submit busy state — all footer buttons respond corre
     const { join } = require("node:path");
     const src = readFileSync(join(__dirname, "../pages/reports.tsx"), "utf8");
     // Cancel in PMR footer must be disabled during submission
-    expect(src).toMatch(/disabled=\{isSubmittingReport.*createMutation\.isPending.*transitionMutation\.isPending\}/);
+    expect(src).toMatch(/isDisabled=\{isSubmittingReport \|\| createMutation\.isPending \|\| transitionMutation\.isPending\}\s+onPress=\{requestCloseForm\}/);
   });
 
   it("PMR Save Draft button uses the full shared busy predicate (not just createMutation.isPending)", () => {
@@ -230,7 +230,7 @@ describe("REP-UX-03: Full submit busy state — all footer buttons respond corre
     const { join } = require("node:path");
     const src = readFileSync(join(__dirname, "../pages/reports.tsx"), "utf8");
     // Save Draft buttons must share the full predicate - count occurrences
-    const matches = src.match(/onClick=\{onSaveDraft\}[^>]*disabled=\{[^}]*isSubmittingReport \|\| createMutation\.isPending \|\| transitionMutation\.isPending\}/g) ?? [];
+    const matches = src.match(/onPress=\{\(\) => \{ void onSaveDraft\(\); \}\} isDisabled=\{isSubmittingReport \|\| createMutation\.isPending \|\| transitionMutation\.isPending\}/g) ?? [];
     // Expect at least 2 occurrences: one for wizard, one for non-wizard PMR footer
     expect(matches.length).toBeGreaterThanOrEqual(2);
   });
@@ -248,6 +248,6 @@ describe("REP-UX-03: Full submit busy state — all footer buttons respond corre
     const { join } = require("node:path");
     const src = readFileSync(join(__dirname, "../pages/reports.tsx"), "utf8");
     // Next button must be disabled during submission
-    expect(src).toMatch(/onClick=\{nextStep\}[^>]*disabled=\{isSubmittingReport \|\| createMutation\.isPending \|\| transitionMutation\.isPending\}/);
+    expect(src).toMatch(/onPress=\{nextStep\} isDisabled=\{isSubmittingReport \|\| createMutation\.isPending \|\| transitionMutation\.isPending\}/);
   });
 });

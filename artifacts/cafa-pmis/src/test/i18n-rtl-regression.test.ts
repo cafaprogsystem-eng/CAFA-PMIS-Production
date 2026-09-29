@@ -603,7 +603,7 @@ describe("Business-module RTL production guardrails", () => {
     expect(dashboard).toContain('pinned: "start"');
     // DataGrid columns align with logical start/end values.
     expect(dashboard).toContain('align: "end"');
-    expect(reports).toContain("ps-6");
+    expect(reports).toContain("ps-8");
     expect(reports).toContain("text-start");
     expect(manual).toContain("absolute start-3");
     expect(manual).toContain("ps-9 pe-9 h-10");

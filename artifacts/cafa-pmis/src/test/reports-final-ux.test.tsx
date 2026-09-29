@@ -188,7 +188,8 @@ describe("REP-UX-09: Long project name/narrative/filename does not cause layout 
 
 describe("REP-UX-10: Responsive form footer visible, no horizontal overflow", () => {
   it("PMR/Activity sticky footer has border-t shrink-0 so it stays visible", () => {
-    expect(reportsSrc).toContain("border-t shrink-0 px-6 py-4");
+    expect(reportsSrc).toContain("flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] px-6 py-4\" data-report-form-footer");
+    expect(reportsSrc).toContain("flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--border)] px-6 py-4\" data-report-form-footer");
   });
 
   it("SPR footer uses DialogFooter flex-wrap for narrow viewports", () => {
@@ -200,7 +201,7 @@ describe("REP-UX-10: Responsive form footer visible, no horizontal overflow", ()
   });
 
   it("dialog form has a scrollable body with overflow-y-auto", () => {
-    expect(reportsSrc).toContain("overflow-y-auto flex-1 min-h-0");
+    expect(reportsSrc).toContain("min-h-0 flex-1 overflow-y-auto px-5 py-4");
   });
 });
 
@@ -307,9 +308,11 @@ describe("REP-A11Y-04: aria-busy and role=alert announce submission/error states
   });
 
   it("Activity wizard Save As Draft button uses the full shared busy predicate", () => {
-    // After fix: Save Draft disabled by same condition as Submit (not just createMutation.isPending)
-    const saveDraftCount = (reportsSrc.match(/onClick=\{onSaveDraft\}.*?aria-busy=\{isSubmittingReport \|\| createMutation\.isPending \|\| transitionMutation\.isPending\}/gs) ?? []).length;
+    // Save Draft is disabled by the same condition as Submit (not just createMutation.isPending);
+    // the busy state is announced on the footer region (HeroUI buttons drop aria-busy).
+    const saveDraftCount = (reportsSrc.match(/onPress=\{\(\) => \{ void onSaveDraft\(\); \}\} isDisabled=\{isSubmittingReport \|\| createMutation\.isPending \|\| transitionMutation\.isPending\}/g) ?? []).length;
     expect(saveDraftCount).toBeGreaterThanOrEqual(1);
+    expect(reportsSrc).toContain("data-report-form-footer aria-busy={isSubmittingReport || createMutation.isPending || transitionMutation.isPending}");
   });
 
   it("SPR Submit button has aria-busy binding tied to isSaving", () => {

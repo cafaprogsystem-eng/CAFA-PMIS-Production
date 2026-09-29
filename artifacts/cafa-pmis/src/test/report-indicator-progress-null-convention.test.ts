@@ -20,8 +20,9 @@ describe("REPORT-INDICATOR-PROGRESS-NULL-CONVENTION: progressPct is null, not 0,
   });
 
   it("the display renders '—' with a neutral style instead of a destructive-red '0%'", () => {
-    expect(src).toContain('progressPct == null ? "bg-muted/30 border-muted"');
-    expect(src).toContain('progressPct == null ? "text-muted-foreground"');
+    // neutral muted tone (not danger) for the tile background and the value
+    expect(src).toContain('const tone = progressPct == null ? "var(--muted)"');
+    expect(src).toContain("style={{ color: tone }}");
     expect(src).toContain('progressPct == null ? "—" : `${progressPct}%`');
   });
 });

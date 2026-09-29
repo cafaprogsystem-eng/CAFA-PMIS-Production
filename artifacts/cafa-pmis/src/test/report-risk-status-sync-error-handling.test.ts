@@ -18,7 +18,7 @@ describe("REPORT-RISK-STATUS-SYNC: the risk-status Save button checks res.ok bef
     const btnStart = src.indexOf('t("formExtra.riskStatusUpdateFailed")');
     expect(btnStart).toBeGreaterThan(-1);
     const block = src.slice(
-      src.lastIndexOf("onClick={async () => {", btnStart),
+      src.lastIndexOf("onPress={async () => {", btnStart),
       src.indexOf("}}", btnStart) + 2,
     );
     expect(block).toContain("if (!res.ok)");
@@ -32,7 +32,7 @@ describe("REPORT-RISK-STATUS-SYNC: the risk-status Save button checks res.ok bef
   it("shows an error toast on failure instead of silently swallowing it", () => {
     const btnStart = src.indexOf('t("formExtra.riskStatusUpdateFailed")');
     const block = src.slice(
-      src.lastIndexOf("onClick={async () => {", btnStart),
+      src.lastIndexOf("onPress={async () => {", btnStart),
       src.indexOf("}}", btnStart) + 2,
     );
     expect(block).toContain("} catch (e: unknown) {");

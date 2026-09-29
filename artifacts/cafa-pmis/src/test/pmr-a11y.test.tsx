@@ -40,48 +40,45 @@ describe("PMR-A11Y source wiring (reports.tsx)", () => {
     expect(src).toMatch(/id="err-pmr-project" role="alert"/);
     // help container carries the id
     expect(src).toMatch(/id="help-pmr-project"/);
-    // trigger is required and invalid-aware
-    expect(src).toMatch(/id="pmr-project-trigger"[\s\S]{0,200}aria-invalid=\{!!fieldErrors\["projectId"\]/);
+    // HeroUI Select: required and invalid-aware (React Aria sets aria-required / aria-invalid)
+    expect(src).toMatch(/id="pmr-project-trigger"[\s\S]{0,300}isRequired=\{isProject\}[\s\S]{0,80}isInvalid=\{!!fieldErrors\["projectId"\]\}/);
   });
 
   it("PMR-A11Y-02: Reporting Location — id, aria-describedby, aria-invalid, aria-required; locked inputs aria-readonly", () => {
-    expect(src).toMatch(/<Label htmlFor="pmr-location"/);
-    expect(src).toMatch(/id="pmr-location"\s+aria-required="true"\s+aria-invalid=\{!!fieldErrors\["stateId"\]/);
+    // locked variants: a real <label htmlFor> on the read-only input
+    expect((src.match(/<HLabel htmlFor="pmr-location" isRequired>/g) ?? []).length).toBe(2);
+    expect(src).toMatch(/id="pmr-location"\s+label=\{locationLabel\}\s+isRequired\s+isInvalid=\{!!fieldErrors\["stateId"\]\}/);
     expect(src).toContain('aria-describedby={fieldErrors["stateId"] ? "err-pmr-location" : undefined}');
     expect(src).toMatch(/id="err-pmr-location" role="alert"/);
     // both locked/read-only variants announce read-only state
-    const lockedCount = (src.match(/id="pmr-location"\s+readOnly\s+aria-readonly="true"/g) ?? []).length;
+    const lockedCount = (src.match(/id="pmr-location" readOnly aria-readonly="true"/g) ?? []).length;
     expect(lockedCount).toBe(2);
   });
 
   it("PMR-A11Y-03: Reporting Month / Year — ids, aria-required, aria-invalid, aria-describedby", () => {
-    expect(src).toMatch(/<Label htmlFor="pmr-month">[\s\S]{0,150}t\("form\.reportingMonth"\)/);
-    expect(src).toMatch(/id="pmr-month" aria-required="true" aria-invalid=\{!!fieldErrors\["reportingMonth"\][\s\S]{0,120}err-pmr-month/);
-    expect(src).toMatch(/<Label htmlFor="pmr-year">[\s\S]{0,150}t\("form\.reportingYear"\)/);
-    expect(src).toMatch(/id="pmr-year" aria-required="true" aria-invalid=\{!!fieldErrors\["reportingYear"\][\s\S]{0,120}err-pmr-year/);
-    // frequency trigger too
-    expect(src).toMatch(/id="pmr-frequency" aria-required="true"/);
+    expect(src).toMatch(/id="pmr-month"\s+label=\{t\("form\.reportingMonth"\)\}\s+isRequired\s+isInvalid=\{!!fieldErrors\["reportingMonth"\]\}[\s\S]{0,120}err-pmr-month/);
+    expect(src).toMatch(/id="pmr-year"\s+label=\{t\("form\.reportingYear"\)\}\s+isRequired\s+isInvalid=\{!!fieldErrors\["reportingYear"\]\}[\s\S]{0,120}err-pmr-year/);
+    // frequency select too
+    expect(src).toMatch(/id="pmr-frequency"\s+label=\{t\("form\.reportingFrequency"\)\}\s+isRequired/);
   });
 
   it("PMR-A11Y-04: Quarter — id, aria-required, aria-invalid, aria-describedby", () => {
-    expect(src).toMatch(/<Label htmlFor="pmr-quarter">[\s\S]{0,150}t\("form\.quarter"\)/);
-    expect(src).toMatch(/id="pmr-quarter" aria-required="true" aria-invalid=\{!!fieldErrors\["quarter"\][\s\S]{0,120}err-pmr-quarter/);
+    expect(src).toMatch(/id="pmr-quarter"\s+label=\{t\("form\.quarter"\)\}\s+isRequired\s+isInvalid=\{!!fieldErrors\["quarter"\]\}[\s\S]{0,120}err-pmr-quarter/);
   });
 
   it("PMR-A11Y-05: On-demand period start / end / reason — ids, association, aria-required", () => {
-    expect(src).toMatch(/<Label htmlFor="pmr-period-start">[\s\S]{0,150}t\("form\.periodStart"\)/);
-    expect(src).toMatch(/id="pmr-period-start" type="date" aria-required="true" aria-invalid=\{!!fieldErrors\["periodStart"\]/);
+    // HeroUI DatePickers with their own labels
+    expect(src).toMatch(/id="pmr-period-start"\s+label=\{t\("form\.periodStart"\)\}\s+isRequired\s+isInvalid=\{!!fieldErrors\["periodStart"\]\}\s+describedBy=\{fieldErrors\["periodStart"\] \? "err-pmr-period-start"/);
     expect(src).toMatch(/id="err-pmr-period-start" role="alert"/);
-    expect(src).toMatch(/<Label htmlFor="pmr-period-end">[\s\S]{0,150}t\("form\.periodEnd"\)/);
-    expect(src).toMatch(/id="pmr-period-end" type="date"/);
-    expect(src).toMatch(/<Label htmlFor="pmr-ondemand-reason">[\s\S]{0,150}t\("form\.onDemandReason"\)/);
-    expect(src).toMatch(/id="pmr-ondemand-reason" aria-required="true"/);
+    expect(src).toMatch(/id="pmr-period-end"\s+label=\{t\("form\.periodEnd"\)\}/);
+    expect(src).toMatch(/id="pmr-ondemand-reason"\s+label=\{t\("form\.onDemandReason"\)\}\s+isRequired/);
   });
 
   it("PMR-A11Y-06: Repeated activity fields carry row context via rowLabel, remove buttons named", () => {
     // rowLabel itself is still a plain positional fallback (not user-facing chrome
     // text); the wrapper phrases around it were moved to i18n (formExtra.*Aria).
-    expect(src).toContain("const rowLabel = a.name || (a.isUnplanned ? `Unplanned Activity ${i + 1}` : `Activity ${i + 1}`);");
+    expect(src).toContain('const numbered = a.isUnplanned ? t("formUi.unplannedActivityN", { number: i + 1 }) : t("formUi.activityN", { number: i + 1 });');
+    expect(src).toContain("const rowLabel = a.name || numbered;");
     expect(src).toContain('aria-label={t("formExtra.removeRowAria", { label: rowLabel })}');
     expect(src).toContain('aria-label={t("formExtra.activityNameAria", { label: rowLabel })}');
     expect(src).toContain('aria-label={t("formExtra.achievementSummaryAria", { label: rowLabel })}');
@@ -99,29 +96,27 @@ describe("PMR-A11Y source wiring (reports.tsx)", () => {
   it("PMR-A11Y-07: Activity numeric inputs use inputMode numeric/decimal", () => {
     expect(src).toMatch(/inputMode="decimal"\s*\n\s*aria-label=\{t\("formExtra\.actualExpenditureAria"/);
     expect(src).toContain('inputMode="numeric" aria-label={t("formExtra.implementationPercentAria", { label: rowLabel })}');
-    expect(src).toContain('inputMode="numeric" aria-label={t("formExtra.menBeneficiariesAria", { label: rowLabel })}');
+    expect(src).toContain('["beneficiariesMen", "men", "menBeneficiariesAria"]');
+    expect(src).toContain('inputMode="numeric" aria-label={t(`formExtra.${aria}`, { label: rowLabel })}');
   });
 
   it("PMR-A11Y-08: Beneficiary inputs — htmlFor/id association and row-context aria-labels", () => {
-    // PMR calculated summary
-    for (const k of ["men", "women", "boys", "girls", "total"]) {
-      expect(src).toContain(`htmlFor="pmr-benef-${k}"`);
-      expect(src).toContain(`id="pmr-benef-${k}"`);
-    }
-    // non-project manual entry
-    for (const k of ["male", "female", "boys", "girls", "total"]) {
-      expect(src).toContain(`htmlFor="rp-benef-${k}"`);
-      expect(src).toContain(`id="rp-benef-${k}"`);
-    }
+    // PMR calculated summary and non-project manual entry: one label/input pair per id
+    for (const k of ["men", "women", "boys", "girls", "total"]) expect(src).toContain(`"pmr-benef-${k}"`);
+    for (const k of ["male", "female", "boys", "girls"]) expect(src).toContain(`"rp-benef-${k}"`);
+    expect((src.match(/<HLabel htmlFor=\{id\}/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(src).toContain('htmlFor="rp-benef-total"');
+    expect(src).toContain('id="rp-benef-total"');
     // per-activity row beneficiaries
     for (const key of ["men", "women", "boys", "girls"]) {
-      expect(src).toContain(`aria-label={t("formExtra.${key}BeneficiariesAria", { label: rowLabel })}`);
+      expect(src).toContain(`"${key}BeneficiariesAria"]`);
     }
+    expect(src).toContain("aria-label={t(`formExtra.${aria}`, { label: rowLabel })}");
     expect(src).toContain('aria-label={t("formExtra.totalBeneficiariesThisPeriodAria", { label: rowLabel })}');
   });
 
   it("PMR-A11Y-09: Variance reason — row-contextual aria-label and aria-required when required", () => {
-    expect(src).toContain('aria-label={t("formExtra.varianceReasonAria", { label: rowLabel })} aria-required="true"');
+    expect(src).toMatch(/aria-label=\{t\("formExtra\.varianceReasonAria", \{ label: rowLabel \}\)\}\s+isRequired/);
   });
 
   it("PMR-A11Y-10: Progress narrative loop — error association (id + aria-describedby)", () => {
@@ -167,20 +162,21 @@ describe("PMR-A11Y source wiring (reports.tsx)", () => {
 
   it("PMR-A11Y-21: No validation rule changes — required-field logic untouched", () => {
     // Same submit-validation anchors as before this task:
-    expect(src).toContain('msgs.push("At least one Activity is required")');
-    expect(src).toContain("Actual Expenditure (This Period) is required");
-    expect(src).toContain("Achievement Summary is required");
-    expect(src).toContain("Exception/Reason is required for Unplanned Activities");
+    // (messages are now translated; the English text lives in locales/en/reports.json)
+    expect(src).toContain('msgs.push(t("formUi.errors.activityRequiredShort"))');
+    expect(src).toContain('t("formUi.errors.actualRequired")');
+    expect(src).toContain('t("formUi.errors.achievementRequired")');
+    expect(src).toContain('t("formUi.errors.unplannedReasonRequired")');
     // No native `required` attribute snuck onto PMR controls (aria-required only)
-    expect(src).not.toMatch(/<Input[^>]*\srequired[\s/>]/);
+    expect(src).not.toMatch(/<HInput[^>]*\srequired[\s/>]/);
   });
 
   it("PMR-A11Y-22: Activity Report wiring not regressed by these changes", () => {
     // Pre-existing AR associations preserved
     expect(src).toContain('id="err-implementationStatus"');
     expect(src).toContain('id="err-implementationSummary"');
-    expect(src).toContain('aria-describedby={fieldErrors["resultsAchieved"] ? "err-resultsAchieved" : undefined}');
-    // AR project combobox error now referenced from its trigger
+    expect(src).toContain('aria-describedby={fieldErrors["resultsAchieved"] ? "help-resultsAchieved err-resultsAchieved" : "help-resultsAchieved"}');
+    // AR project picker error referenced from the field
     expect(src).toContain('aria-describedby={fieldErrors["projectId"] ? "err-ar-project" : undefined}');
     expect(src).toMatch(/id="err-ar-project" role="alert"/);
   });

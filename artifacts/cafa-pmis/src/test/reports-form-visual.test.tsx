@@ -413,14 +413,12 @@ describe("REP-FORM-VIS — Reports Form Visual Contracts", () => {
     );
     expect(actionBtns.length).toBeGreaterThanOrEqual(2);
 
-    const busyWired = actionBtns.filter((b) => b.hasAttribute("aria-busy"));
-    // At minimum the Save Draft and Next/Submit buttons must have aria-busy
-    expect(busyWired.length).toBeGreaterThanOrEqual(2);
+    // HeroUI (React Aria) buttons don't take aria-busy; the footer region that
+    // holds them carries it, and every action button sits inside that region.
+    const footer = document.querySelector("[data-report-form-footer]");
+    expect(footer).toHaveAttribute("aria-busy", "false");
+    expect(actionBtns.filter((b) => footer!.contains(b)).length).toBeGreaterThanOrEqual(2);
 
-    // When idle, aria-busy must be "false" (not "true")
-    for (const btn of busyWired) {
-      expect(btn.getAttribute("aria-busy")).toBe("false");
-    }
   });
 
   /**
