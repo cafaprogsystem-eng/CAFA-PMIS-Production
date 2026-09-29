@@ -132,13 +132,14 @@ const EXCLUDED_FILE_PATTERNS: ReadonlyArray<string> = [
 // Archive review, item 18. Refreshed again when the project-detail Documents
 // tab moved to HeroUI and its strings to projects:detail.docs.* — the 2
 // remaining hits (activity-report-detail.tsx, voice-note-panel.tsx) are
-// outside that change's scope.
-const BASELINE_FINGERPRINT_COUNT = 2;
-const BASELINE_FINGERPRINT_SHA256 = "53b48c9a5a73f648afcac91211168545585080eae74817895fa38935b3cce66f";
+// outside that change's scope. Refreshed to zero when both moved to
+// common:voiceNote.fileUnavailable in the final HeroUI migration batch.
+const BASELINE_FINGERPRINT_COUNT = 0;
+const BASELINE_FINGERPRINT_SHA256 = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
 const BASELINE_CATEGORY_COUNTS: Readonly<Record<string, number>> = {
   "aria-label": 0,
   "column-header": 0,
-  "jsx-text": 2,
+  "jsx-text": 0,
   "placeholder": 0,
   "title-attr": 0,
   "toast-call": 0,

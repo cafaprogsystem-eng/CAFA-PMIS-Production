@@ -2,16 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useGetPmrReportingCompleteness } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
+import { Button, Card, Chip, Skeleton } from "@heroui/react";
+import { SelectField } from "@/components/select-field";
 import { formatDateTime } from "@/lib/format";
 import { locationStatusBadge } from "@/lib/pmr-status";
 import { ConsolidatedReportView } from "@/components/consolidated-report-view";
@@ -59,93 +51,80 @@ export function PmrCompletenessPanel({ projectId, projectReportingFrequency }: P
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <Card.Header>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base font-medium">{t("completeness.title")}</CardTitle>
-            <CardDescription>
-              {t("completeness.description")}
-            </CardDescription>
+            <Card.Title className="text-base font-medium">{t("completeness.title")}</Card.Title>
+            <Card.Description>{t("completeness.description")}</Card.Description>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
-              <SelectTrigger className="h-8 w-[120px]" aria-label={t("completeness.reportFrequency")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">{t("completeness.monthly")}</SelectItem>
-                <SelectItem value="quarterly">{t("completeness.quarterly")}</SelectItem>
-                <SelectItem value="annual">{t("completeness.annual")}</SelectItem>
-                <SelectItem value="on_demand">{t("completeness.onDemand")}</SelectItem>
-              </SelectContent>
-            </Select>
+            <SelectField
+              aria-label={t("completeness.reportFrequency")}
+              triggerClassName="w-32"
+              value={kind}
+              onChange={(v) => setKind(v as typeof kind)}
+              options={[
+                { value: "monthly", label: t("completeness.monthly") },
+                { value: "quarterly", label: t("completeness.quarterly") },
+                { value: "annual", label: t("completeness.annual") },
+                { value: "on_demand", label: t("completeness.onDemand") },
+              ]}
+            />
             {kind === "monthly" && (
-              <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-                <SelectTrigger className="h-8 w-[130px]" aria-label={t("completeness.reportingMonth")}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 12 }, (_, i) => i).map((i) => (
-                    <SelectItem key={i} value={String(i + 1)}>{t(`common:calendarWidget.months.${i}`)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectField
+                aria-label={t("completeness.reportingMonth")}
+                triggerClassName="w-36"
+                value={String(month)}
+                onChange={(v) => setMonth(Number(v))}
+                options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: t(`common:calendarWidget.months.${i}`) }))}
+              />
             )}
             {kind === "quarterly" && (
-              <Select value={String(quarter)} onValueChange={(v) => setQuarter(Number(v))}>
-                <SelectTrigger className="h-8 w-[90px]" aria-label={t("completeness.quarter")}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4].map((qn) => (
-                    <SelectItem key={qn} value={String(qn)}>Q{qn}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectField
+                aria-label={t("completeness.quarter")}
+                triggerClassName="w-28"
+                value={String(quarter)}
+                onChange={(v) => setQuarter(Number(v))}
+                options={[1, 2, 3, 4].map((qn) => ({ value: String(qn), label: t("formUi.quarterN", { number: qn }) }))}
+              />
             )}
-            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-              <SelectTrigger className="h-8 w-[90px]" aria-label={t("completeness.reportingYear")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectField
+              aria-label={t("completeness.reportingYear")}
+              triggerClassName="w-28"
+              value={String(year)}
+              onChange={(v) => setYear(Number(v))}
+              options={years.map((y) => ({ value: String(y), label: String(y) }))}
+            />
             <Button
-              variant="outline"
+              variant="tertiary"
               size="sm"
-              className="h-8"
-              disabled={!isOnDemand && (!project || project.expectedLocations === 0)}
+              isDisabled={!isOnDemand && (!project || project.expectedLocations === 0)}
               aria-expanded={showConsolidated}
-              onClick={() => setShowConsolidated((s) => !s)}
+              onPress={() => setShowConsolidated((s) => !s)}
               data-testid="pmr-comp-view-consolidated"
             >
               {showConsolidated ? t("completeness.hideConsolidated") : t("completeness.viewConsolidated")}
             </Button>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="p-0">
+      </Card.Header>
+      <Card.Content className="p-0">
         {isOnDemand && (
-          <p className="p-4 text-sm text-muted-foreground" data-testid="pmr-comp-ondemand-note">
+          <p className="p-4 text-sm text-[var(--muted)]" data-testid="pmr-comp-ondemand-note">
             {t("completeness.onDemandNote")}
           </p>
         )}
         {!isOnDemand && isLoading && (
-          <div className="p-4 space-y-2">
-            <Skeleton className="h-5 w-64" />
-            <Skeleton className="h-24 w-full" />
+          <div className="space-y-2 p-4">
+            <Skeleton className="h-5 w-64 rounded" />
+            <Skeleton className="h-24 w-full rounded-lg" />
           </div>
         )}
         {isError && (
-          <p className="p-4 text-sm text-muted-foreground">
-            {t("completeness.loadError")}
-          </p>
+          <p className="p-4 text-sm text-[var(--muted)]">{t("completeness.loadError")}</p>
         )}
         {!isOnDemand && !isLoading && !isError && (!project || project.expectedLocations === 0) && (
-          <p className="p-4 text-sm text-muted-foreground" data-testid="pmr-comp-empty">
+          <p className="p-4 text-sm text-[var(--muted)]" data-testid="pmr-comp-empty">
             {t("completeness.noExpectedLocations")}
           </p>
         )}
@@ -155,55 +134,56 @@ export function PmrCompletenessPanel({ projectId, projectReportingFrequency }: P
               <span className="font-medium">
                 {t("completeness.summary", { submitted: project.reportsSubmitted, expected: project.expectedLocations })}
               </span>
-              <span className="text-muted-foreground">
+              <span className="text-[var(--muted)]">
                 {t("completeness.summaryDetail", { approved: project.reportsApproved, missing: project.missingLocations })}
                 {project.completenessPercent !== null && (
                   <>{t("completeness.summaryPercent", { percent: project.completenessPercent })}</>
                 )}
               </span>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("completeness.reportingLocation")}</TableHead>
-                  <TableHead>{t("completeness.status")}</TableHead>
-                  <TableHead>{t("completeness.submittedCol")}</TableHead>
-                  <TableHead>{t("completeness.viewCol")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {project.locations.map((loc) => {
-                  const badge = locationStatusBadge(loc.reportStatus ?? null);
-                  return (
-                    <TableRow key={`${loc.locationType}-${loc.stateId ?? "hq"}`}>
-                      <TableCell className="font-medium">{loc.locationName}</TableCell>
-                      <TableCell>
-                        <Badge variant={badge.variant}>{badge.label}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {loc.submittedAt ? formatDateTime(loc.submittedAt) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {loc.reportId !== null ? (
-                          <Link
-                            href={`/reports/project?open=${loc.reportId}`}
-                            className="text-sm text-primary underline underline-offset-2"
-                          >
-                            {t("completeness.viewReport")}
-                          </Link>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--default)]">
+                  <tr>
+                    {[t("completeness.reportingLocation"), t("completeness.status"), t("completeness.submittedCol"), t("completeness.viewCol")].map((h) => (
+                      <th key={h} scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {project.locations.map((loc) => {
+                    const badge = locationStatusBadge(loc.reportStatus ?? null);
+                    return (
+                      <tr key={`${loc.locationType}-${loc.stateId ?? "hq"}`}>
+                        <td className="px-4 py-2.5 font-medium">{loc.locationName}</td>
+                        <td className="px-4 py-2.5">
+                          <Chip size="sm" variant="soft" color={badge.color}>{t(badge.key, { defaultValue: badge.fallback })}</Chip>
+                        </td>
+                        <td className="px-4 py-2.5 text-sm">
+                          {loc.submittedAt ? <bdi dir="ltr">{formatDateTime(loc.submittedAt)}</bdi> : "—"}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {loc.reportId !== null ? (
+                            <Link
+                              href={`/reports/project?open=${loc.reportId}`}
+                              className="text-sm text-[var(--accent)] underline underline-offset-2"
+                            >
+                              {t("completeness.viewReport")}
+                            </Link>
+                          ) : (
+                            <span className="text-sm text-[var(--muted)]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
         {showConsolidated && (isOnDemand || (project && project.expectedLocations > 0)) && (
-          <div className="border-t p-4">
+          <div className="border-t border-[var(--border)] p-4">
             <ConsolidatedReportView
               projectId={projectId}
               kind={kind}
@@ -214,7 +194,7 @@ export function PmrCompletenessPanel({ projectId, projectReportingFrequency }: P
             />
           </div>
         )}
-      </CardContent>
+      </Card.Content>
     </Card>
   );
 }

@@ -465,6 +465,15 @@
     "itemsQueuedForRetry_other": "تمت جدولة {{count}} عناصر لإعادة المحاولة"
   },
   "voiceNote": {
+    "fileUnavailable": "الملف غير متاح",
+    "deleteConfirmTitle": "حذف هذه الملاحظة الصوتية؟",
+    "deleteConfirmMessage": "سيُحذف التسجيل نهائيًا.",
+    "announceStarted": "بدأ التسجيل.",
+    "announceStopped": "توقف التسجيل.",
+    "play": "تشغيل الملاحظة الصوتية",
+    "pause": "إيقاف الملاحظة الصوتية مؤقتًا",
+    "recordingProgress": "مدة التسجيل",
+    "playbackProgress": "موضع التشغيل",
     "addVoiceNote": "إضافة ملاحظة صوتية",
     "recorder": "مسجّل الملاحظات الصوتية",
     "maxDuration": "5 دقائق كحد أقصى",
@@ -535,6 +544,11 @@
     "changeLocation": "تغيير الموقع",
     "activeLocation": "الموقع النشط",
     "mobileHeading": "نطاق الموقع"
+  },
+  "pwaUpdate": {
+    "available": "يتوفر إصدار جديد من النظام.",
+    "updateNow": "حدّث الآن",
+    "dismiss": "إخفاء تنبيه التحديث"
   },
   "recordLock": {
     "isEditing": "يعمل حالياً على تحرير هذا السجل. قد تُؤدي عملية الحفظ إلى الكتابة فوق تغييراته.",
@@ -613,5 +627,27 @@
   "fileName": "اسم الملف",
   "uploadedBy": "رفعه",
   "submittedBy": "قدّمه",
-  "period": "الفترة"
+  "period": "الفترة",
+  "deleteProject": {
+    "title": "حذف المشروع",
+    "loading": "جارٍ تحميل معلومات الحذف…",
+    "infoFailed": "تعذّر تحميل معلومات الحذف.",
+    "noPermission": "ليست لديك صلاحية حذف هذا المشروع.",
+    "deletionType": "نوع الحذف",
+    "permanent": "حذف نهائي",
+    "soft": "حذف مع الاحتفاظ",
+    "permanentExplanation": "لم يصل هذا المشروع إلى الاعتماد النهائي. حذفه يزيل المشروع ومسوداته غير المحمية من النظام نهائيًا.",
+    "softExplanation": "وصل هذا المشروع إلى الاعتماد النهائي. سيُزال من السجلات النشطة، مع الاحتفاظ به لأغراض المراجعة والسجل التاريخي.",
+    "reason": "سبب الحذف",
+    "reasonHint": "خمسة أحرف على الأقل. يُحفظ السبب في سجل المراجعة.",
+    "typeToConfirm": "للتأكيد، اكتب",
+    "codeMismatch": "رمز المشروع غير مطابق.",
+    "permanentButton": "حذف المشروع نهائيًا",
+    "softButton": "حذف المشروع",
+    "permanentAria": "حذف المشروع {{code}} نهائيًا",
+    "softAria": "حذف المشروع {{code}}",
+    "deletedPermanently": "تم حذف المشروع {{code}} نهائيًا.",
+    "archived": "تمت أرشفة المشروع {{code}}.",
+    "failed": "تعذّر حذف المشروع."
+  }
 }

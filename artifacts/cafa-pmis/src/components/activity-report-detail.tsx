@@ -553,7 +553,7 @@ export function ActivityReportDetail({
                   )}
                 </div>
                 {att.availabilityStatus === "unavailable" ? (
-                  <span role="status" className="text-xs text-muted-foreground shrink-0">File Unavailable</span>
+                  <span role="status" className="text-xs text-muted-foreground shrink-0">{t("common:voiceNote.fileUnavailable")}</span>
                 ) : (
                   /* Secured endpoint — objectPath is never exposed */
                   <a

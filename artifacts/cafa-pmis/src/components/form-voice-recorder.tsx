@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Alert, Button, Chip, ProgressBar } from "@heroui/react";
 import { Mic, Square, Play, Pause, RotateCcw, Volume2, Loader2, X } from "@/components/icons";
 
 const MAX_RECORD_SECONDS = 300;
@@ -34,6 +33,9 @@ export function FormVoiceRecorder({ value, onChange }: FormVoiceRecorderProps) {
   type RecState = "idle" | "requesting" | "recording" | "recorded";
   const [state, setState] = useState<RecState>("idle");
   const [elapsed, setElapsed] = useState(0);
+  // The recorder's onstop handler is created when recording starts; reading
+  // the elapsed state there would always see 0, so the seconds live in a ref.
+  const elapsedRef = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [micDenied, setMicDenied] = useState(false);
@@ -64,18 +66,18 @@ export function FormVoiceRecorder({ value, onChange }: FormVoiceRecorderProps) {
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
         const blobUrl = URL.createObjectURL(blob);
-        onChange({ blob, mimeType, durationSeconds: elapsed, blobUrl });
+        onChange({ blob, mimeType, durationSeconds: elapsedRef.current, blobUrl });
         setState("recorded");
         streamRef.current?.getTracks().forEach(t => t.stop());
       };
       recorder.start(250);
       setState("recording");
       setElapsed(0);
+      elapsedRef.current = 0;
       timerRef.current = setInterval(() => {
-        setElapsed(prev => {
-          if (prev + 1 >= MAX_RECORD_SECONDS) { stopRecording(); return prev + 1; }
-          return prev + 1;
-        });
+        elapsedRef.current += 1;
+        setElapsed(elapsedRef.current);
+        if (elapsedRef.current >= MAX_RECORD_SECONDS) stopRecording();
       }, 1000);
     } catch {
       setState("idle");
@@ -124,59 +126,61 @@ export function FormVoiceRecorder({ value, onChange }: FormVoiceRecorderProps) {
   const pct = dur > 0 ? Math.min((currentTime / dur) * 100, 100) : 0;
 
   return (
-    <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
+    <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
       {/* Screen reader announcements for recording state transitions only.
           Elapsed time is intentionally excluded to avoid per-second speech
           interruptions during a recording that can last up to 5 minutes. */}
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         {state === "recording"
-          ? "Recording started."
+          ? t("voiceNote.announceStarted")
           : state === "recorded"
-          ? "Recording stopped."
+          ? t("voiceNote.announceStopped")
           : state === "requesting"
-          ? "Requesting microphone access."
+          ? t("voiceNote.requestingMic")
           : ""}
       </span>
-      <div className="flex items-center gap-2">
-        <Volume2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+      <div className="flex flex-wrap items-center gap-2">
+        <Volume2 className="size-4 text-[var(--muted)]" aria-hidden="true" />
         <span className="text-sm font-medium">{t("voiceNote.recorder")}</span>
-        <span className="text-xs text-muted-foreground ms-auto">{t("voiceNote.maxDurationOptional")}</span>
+        <span className="ms-auto text-xs text-[var(--muted)]">{t("voiceNote.maxDurationOptional")}</span>
       </div>
 
       {state === "idle" && (
         <div className="space-y-2">
           <div className="flex justify-center py-2">
-            <Button type="button" onClick={startRecording} className="gap-2">
-              <Mic className="h-4 w-4" /> {t("voiceNote.startRecording")}
+            <Button type="button" onPress={() => { void startRecording(); }}>
+              <Mic className="size-4" aria-hidden="true" /> {t("voiceNote.startRecording")}
             </Button>
           </div>
           {micDenied && (
-            <p className="text-xs text-muted-foreground text-center">
-              Microphone access is required to record a voice note.
-            </p>
+            <Alert status="warning">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>{t("voiceNote.micDeniedTitle")}</Alert.Title>
+                <Alert.Description>{t("voiceNote.micDeniedDesc")}</Alert.Description>
+              </Alert.Content>
+            </Alert>
           )}
         </div>
       )}
 
       {state === "requesting" && (
-        <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> {t("voiceNote.requestingMic")}
+        <div className="flex items-center justify-center gap-2 py-2 text-sm text-[var(--muted)]">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" /> {t("voiceNote.requestingMic")}
         </div>
       )}
 
       {state === "recording" && (
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-            <span className="text-sm font-medium tabular-nums">{fmtDur(elapsed)}</span>
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-destructive rounded-full transition-all" style={{ width: `${(elapsed / MAX_RECORD_SECONDS) * 100}%` }} />
-            </div>
-            <span className="text-xs text-muted-foreground">{fmtDur(MAX_RECORD_SECONDS)}</span>
+            <span className="size-2 shrink-0 animate-pulse rounded-full bg-[var(--danger)]" aria-hidden="true" />
+            <bdi dir="ltr" className="text-sm font-medium tabular-nums">{fmtDur(elapsed)}</bdi>
+            <ProgressBar aria-label={t("voiceNote.recordingProgress")} value={(elapsed / MAX_RECORD_SECONDS) * 100} color="danger" size="sm" className="flex-1" />
+            <bdi dir="ltr" className="text-xs text-[var(--muted)]">{fmtDur(MAX_RECORD_SECONDS)}</bdi>
           </div>
           <div className="flex justify-center">
-            <Button type="button" variant="destructive" onClick={stopRecording} className="gap-2">
-              <Square className="h-4 w-4" /> {t("voiceNote.stopRecording")}
+            <Button type="button" variant="danger" onPress={stopRecording}>
+              <Square className="size-4" aria-hidden="true" /> {t("voiceNote.stopRecording")}
             </Button>
           </div>
         </div>
@@ -185,24 +189,22 @@ export function FormVoiceRecorder({ value, onChange }: FormVoiceRecorderProps) {
       {state === "recorded" && value && (
         <div className="space-y-3">
           {value.blobUrl && <audio ref={bindAudio} src={value.blobUrl} preload="metadata" />}
-          <div className="flex items-center gap-2 p-2 bg-background rounded border">
-            <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={togglePlay} aria-label={playing ? "Pause voice note" : "Play voice note"}>
-              {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2">
+            <Button type="button" variant="ghost" size="sm" isIconOnly onPress={togglePlay} aria-label={playing ? t("voiceNote.pause") : t("voiceNote.play")}>
+              {playing ? <Pause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5 rtl:-scale-x-100" aria-hidden="true" />}
             </Button>
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
-            </div>
-            <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+            <ProgressBar aria-label={t("voiceNote.playbackProgress")} value={pct} size="sm" className="flex-1" />
+            <bdi dir="ltr" className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
               {fmtDur(playing ? currentTime : value.durationSeconds)}
-            </span>
-            <Badge variant="secondary" className="text-xs shrink-0">{t("voiceNote.recorded")}</Badge>
+            </bdi>
+            <Chip size="sm" variant="soft" className="shrink-0">{t("voiceNote.recorded")}</Chip>
           </div>
-          <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" size="sm" onClick={reRecord} className="gap-1">
-              <RotateCcw className="h-3.5 w-3.5" /> {t("voiceNote.reRecord")}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="tertiary" size="sm" onPress={reRecord}>
+              <RotateCcw className="size-3.5" aria-hidden="true" /> {t("voiceNote.reRecord")}
             </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={discard} className="gap-1 text-muted-foreground">
-              <X className="h-3.5 w-3.5" /> {t("voiceNote.discard")}
+            <Button type="button" variant="ghost" size="sm" onPress={discard}>
+              <X className="size-3.5" aria-hidden="true" /> {t("voiceNote.discard")}
             </Button>
           </div>
         </div>

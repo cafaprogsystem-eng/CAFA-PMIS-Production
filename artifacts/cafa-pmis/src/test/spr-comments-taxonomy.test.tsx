@@ -78,11 +78,11 @@ function renderPanel(extra: Partial<React.ComponentProps<typeof CommentsPanel>> 
 describe("CommentsPanel — SPR section taxonomy", () => {
   it("FE-01/02: composer section selector renders with General / Report-Level option", async () => {
     renderPanel();
-    const trigger = await screen.findByRole("combobox", { name: "comments.tagSection" });
+    const trigger = await screen.findByRole("button", { name: /comments\.tagSection/ });
     expect(trigger).toBeInTheDocument();
     await userEvent.click(trigger);
-    expect(await screen.findByText("General / Report-Level")).toBeInTheDocument();
-    expect(screen.getByText("Activities")).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "General / Report-Level" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Activities" })).toBeInTheDocument();
   });
 
   it("FE-03: comment tagged 'activities' displays the human label", async () => {
@@ -94,7 +94,7 @@ describe("CommentsPanel — SPR section taxonomy", () => {
 
   it("FE-04: presetSection pre-fills the composer section", async () => {
     renderPanel({ presetSection: { section: "activities", nonce: 1 } });
-    const trigger = await screen.findByRole("combobox", { name: "comments.tagSection" });
+    const trigger = await screen.findByRole("button", { name: /comments\.tagSection/ });
     await waitFor(() => expect(trigger).toHaveTextContent("Activities"));
   });
 
@@ -108,7 +108,7 @@ describe("CommentsPanel — SPR section taxonomy", () => {
     commentsResponse = [baseComment];
     renderPanel();
     await screen.findByText("§ Activities");
-    const filter = screen.getByRole("combobox", { name: "comments.allSections" });
+    const filter = screen.getByRole("button", { name: /comments\.sectionPlaceholder/ });
     await userEvent.click(filter);
     const options = await screen.findAllByRole("option");
     const labels = options.map((o) => o.textContent);
@@ -120,7 +120,7 @@ describe("CommentsPanel — SPR section taxonomy", () => {
     commentsResponse = [{ ...baseComment, section: null }, { ...baseComment, id: 2, section: "risks" }];
     renderPanel();
     await screen.findByText("§ General / Report-Level");
-    const filter = screen.getByRole("combobox", { name: "comments.allSections" });
+    const filter = screen.getByRole("button", { name: /comments\.sectionPlaceholder/ });
     await userEvent.click(filter);
     // "general" is offered because a null-section comment is present
     await userEvent.click(await screen.findByRole("option", { name: "General / Report-Level" }));
@@ -132,7 +132,7 @@ describe("CommentsPanel — SPR section taxonomy", () => {
     commentsResponse = [baseComment];
     renderPanel({ readOnly: true });
     await screen.findByText("§ Activities");
-    expect(screen.queryByRole("combobox", { name: "comments.tagSection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /comments\.tagSection/ })).not.toBeInTheDocument();
     expect(screen.queryByText("comments.postComment")).not.toBeInTheDocument();
     expect(screen.queryByText("comments.reply")).not.toBeInTheDocument();
   });

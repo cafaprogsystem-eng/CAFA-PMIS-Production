@@ -38,7 +38,6 @@ vi.mock("@/components/route-error-boundary", () => ({
 }));
 vi.mock("@/components/offline-indicator", () => ({ OfflineIndicator: () => null }));
 vi.mock("@/components/pwa-update-prompt", () => ({ PwaUpdatePrompt: () => null }));
-vi.mock("@/components/ui/toaster", () => ({ Toaster: () => null }));
 vi.mock("@/components/ui/sonner", () => ({ Toaster: () => null }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/pages/login", () => ({ default: () => <div>Public sign-in shell</div> }));

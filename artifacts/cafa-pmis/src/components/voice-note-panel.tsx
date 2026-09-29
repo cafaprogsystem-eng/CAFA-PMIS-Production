@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button, Chip, ProgressBar, Skeleton } from "@heroui/react";
+import { toast } from "sonner";
 import {
   Mic, Square, Play, Pause, Trash2, RotateCcw, Loader2, Volume2,
 } from "@/components/icons";
-import { requestUploadUrl, useListVoiceNotes } from "@workspace/api-client-react";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { requestUploadUrl, useListVoiceNotes, getListVoiceNotesQueryKey } from "@workspace/api-client-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -83,23 +83,21 @@ function AudioPlayer({ src, duration }: { src: string; duration: number }) {
     const audio = audioRef.current;
     if (!audio) return;
     if (playing) { audio.pause(); setPlaying(false); }
-    else { audio.play(); setPlaying(true); }
+    else { void audio.play(); setPlaying(true); }
   };
 
   const pct = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
 
   return (
-    <div className="flex items-center gap-2 flex-1 min-w-0">
+    <div className="flex min-w-0 flex-1 items-center gap-2">
       <audio ref={audioRef} src={src} preload="metadata" />
-      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={toggle} aria-label={playing ? t("voiceNotePlayback.pause") : t("voiceNotePlayback.play")}>
-        {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+      <Button type="button" variant="ghost" size="sm" isIconOnly onPress={toggle} aria-label={playing ? t("voiceNotePlayback.pause") : t("voiceNotePlayback.play")}>
+        {playing ? <Pause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5 rtl:-scale-x-100" aria-hidden="true" />}
       </Button>
-      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+      <ProgressBar aria-label={t("voiceNote.playbackProgress")} value={pct} size="sm" className="flex-1" />
+      <bdi dir="ltr" className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
         {formatDuration(playing ? currentTime : duration)}
-      </span>
+      </bdi>
     </div>
   );
 }
@@ -115,7 +113,6 @@ interface RecorderProps {
 
 function Recorder({ entityType, entityId, onSaved, onCancel }: RecorderProps) {
   const { t } = useTranslation("common");
-  const { toast } = useToast();
   const [state, setState] = useState<"idle" | "requesting" | "recording" | "recorded" | "uploading">("idle");
   const [elapsed, setElapsed] = useState(0);
   const [blob, setBlob] = useState<Blob | null>(null);
@@ -130,7 +127,7 @@ function Recorder({ entityType, entityId, onSaved, onCancel }: RecorderProps) {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      if (streamRef.current) streamRef.current.getTracks().forEach(tr => tr.stop());
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [blobUrl]);
@@ -153,7 +150,7 @@ function Recorder({ entityType, entityId, onSaved, onCancel }: RecorderProps) {
         const recorded = new Blob(chunksRef.current, { type: mime });
         setBlob(recorded);
         setBlobUrl(URL.createObjectURL(recorded));
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(tr => tr.stop());
         setState("recorded");
         if (timerRef.current) clearInterval(timerRef.current);
       };
@@ -172,11 +169,7 @@ function Recorder({ entityType, entityId, onSaved, onCancel }: RecorderProps) {
       }, 1000);
     } catch {
       setState("idle");
-      toast({
-        title: t("voiceNote.micDeniedTitle"),
-        description: t("voiceNote.micDeniedDesc"),
-        variant: "destructive",
-      });
+      toast.error(t("voiceNote.micDeniedTitle"), { description: t("voiceNote.micDeniedDesc") });
     }
   };
 
@@ -208,11 +201,13 @@ function Recorder({ entityType, entityId, onSaved, onCancel }: RecorderProps) {
         contentType: mimeType,
       });
 
-      await fetch(uploadURL, {
+      // A failed upload must not be registered as a playable note.
+      const put = await fetch(uploadURL, {
         method: "PUT",
         body: blob,
         headers: { "Content-Type": mimeType },
       });
+      if (!put.ok) throw new Error("upload failed");
 
       const res = await fetch("/api/voice-notes", {
         method: "POST",
@@ -230,51 +225,46 @@ function Recorder({ entityType, entityId, onSaved, onCancel }: RecorderProps) {
       if (!res.ok) throw new Error("Failed to save voice note");
       const saved: VoiceNote = await res.json();
       onSaved(saved);
-      toast({ title: t("voiceNote.saved") });
+      toast.success(t("voiceNote.saved"));
     } catch {
-      toast({ title: t("voiceNote.uploadFailed"), description: t("voiceNote.uploadFailedDesc"), variant: "destructive" });
+      toast.error(t("voiceNote.uploadFailed"), { description: t("voiceNote.uploadFailedDesc") });
       setState("recorded");
     }
   };
 
   return (
-    <div className="border rounded-lg p-3 bg-muted/30 space-y-3">
-      <div className="flex items-center gap-2">
-        <Volume2 className="h-4 w-4 text-muted-foreground" />
+    <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Volume2 className="size-4 text-[var(--muted)]" aria-hidden="true" />
         <span className="text-sm font-medium">{t("voiceNote.recorder")}</span>
-        <span className="text-xs text-muted-foreground ms-auto">{t("voiceNote.maxDuration")}</span>
+        <span className="ms-auto text-xs text-[var(--muted)]">{t("voiceNote.maxDuration")}</span>
       </div>
 
       {state === "idle" && (
         <div className="flex justify-center py-2">
-          <Button type="button" onClick={startRecording} className="gap-2">
-            <Mic className="h-4 w-4" /> {t("voiceNote.startRecording")}
+          <Button type="button" onPress={() => { void startRecording(); }}>
+            <Mic className="size-4" aria-hidden="true" /> {t("voiceNote.startRecording")}
           </Button>
         </div>
       )}
 
       {state === "requesting" && (
-        <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> {t("voiceNote.requestingMic")}
+        <div className="flex items-center justify-center gap-2 py-2 text-sm text-[var(--muted)]">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" /> {t("voiceNote.requestingMic")}
         </div>
       )}
 
       {state === "recording" && (
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-            <span className="text-sm font-medium tabular-nums">{formatDuration(elapsed)}</span>
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-destructive rounded-full transition-all"
-                style={{ width: `${(elapsed / MAX_SECONDS) * 100}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground">{formatDuration(MAX_SECONDS)}</span>
+            <span className="size-2 shrink-0 animate-pulse rounded-full bg-[var(--danger)]" aria-hidden="true" />
+            <bdi dir="ltr" className="text-sm font-medium tabular-nums">{formatDuration(elapsed)}</bdi>
+            <ProgressBar aria-label={t("voiceNote.recordingProgress")} value={(elapsed / MAX_SECONDS) * 100} color="danger" size="sm" className="flex-1" />
+            <bdi dir="ltr" className="text-xs text-[var(--muted)]">{formatDuration(MAX_SECONDS)}</bdi>
           </div>
           <div className="flex justify-center">
-            <Button type="button" variant="destructive" onClick={stopRecording} className="gap-2">
-              <Square className="h-4 w-4" /> {t("voiceNote.stopRecording")}
+            <Button type="button" variant="danger" onPress={stopRecording}>
+              <Square className="size-4" aria-hidden="true" /> {t("voiceNote.stopRecording")}
             </Button>
           </div>
         </div>
@@ -282,16 +272,15 @@ function Recorder({ entityType, entityId, onSaved, onCancel }: RecorderProps) {
 
       {state === "recorded" && blobUrl && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 p-2 bg-background rounded border">
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] p-2">
             <AudioPlayer src={blobUrl} duration={elapsed} />
-            <Badge variant="secondary" className="text-xs shrink-0">{formatDuration(elapsed)}</Badge>
           </div>
-          <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" size="sm" onClick={reRecord} className="gap-1">
-              <RotateCcw className="h-3.5 w-3.5" /> {t("voiceNote.reRecord")}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="tertiary" size="sm" onPress={reRecord}>
+              <RotateCcw className="size-3.5" aria-hidden="true" /> {t("voiceNote.reRecord")}
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={onCancel}>{t("cancel")}</Button>
-            <Button type="button" size="sm" onClick={saveRecording} className="gap-1">
+            <Button type="button" variant="ghost" size="sm" onPress={onCancel}>{t("cancel")}</Button>
+            <Button type="button" size="sm" onPress={() => { void saveRecording(); }}>
               {t("voiceNote.saveRecording")}
             </Button>
           </div>
@@ -299,8 +288,8 @@ function Recorder({ entityType, entityId, onSaved, onCancel }: RecorderProps) {
       )}
 
       {state === "uploading" && (
-        <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> {t("uploadingFile")}
+        <div className="flex items-center justify-center gap-2 py-2 text-sm text-[var(--muted)]">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" /> {t("uploadingFile")}
         </div>
       )}
     </div>
@@ -317,10 +306,10 @@ interface VoiceNoteItemProps {
 
 function VoiceNoteItem({ note, onDelete, readOnly = false }: VoiceNoteItemProps) {
   const { t } = useTranslation("common");
-  const { toast } = useToast();
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(note.playbackUrl ?? null);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadUrl = async () => {
     if (note.availabilityStatus === "unavailable") return;
@@ -332,23 +321,25 @@ function VoiceNoteItem({ note, onDelete, readOnly = false }: VoiceNoteItemProps)
       const { url } = await res.json();
       setPlaybackUrl(url);
     } catch {
-      toast({ title: t("voiceNote.couldNotLoad"), variant: "destructive" });
+      toast.error(t("voiceNote.couldNotLoad"));
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!confirming) { setConfirming(true); return; }
+    setDeleting(true);
     try {
       const res = await fetch(`/api/voice-notes/${note.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed");
       onDelete(note.id);
-      toast({ title: t("voiceNote.deleted") });
+      toast.success(t("voiceNote.deleted"));
+      setConfirming(false);
     } catch {
-      toast({ title: t("voiceNote.couldNotDelete"), variant: "destructive" });
+      toast.error(t("voiceNote.couldNotDelete"));
+    } finally {
+      setDeleting(false);
     }
-    setConfirming(false);
   };
 
   const recordedAt = new Date(note.createdAt).toLocaleDateString("en-GB", {
@@ -356,41 +347,51 @@ function VoiceNoteItem({ note, onDelete, readOnly = false }: VoiceNoteItemProps)
   });
 
   return (
-    <div className="flex items-center gap-2 p-2 bg-muted/30 rounded border">
+    <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2">
       {note.availabilityStatus === "unavailable" ? (
-        <span role="status" className="text-xs text-muted-foreground">File Unavailable</span>
+        <span role="status" className="text-xs text-[var(--muted)]">{t("voiceNote.fileUnavailable")}</span>
       ) : loading ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        <Loader2 className="size-3.5 animate-spin text-[var(--muted)]" aria-hidden="true" />
       ) : playbackUrl ? (
         <AudioPlayer src={playbackUrl} duration={note.durationSeconds} />
       ) : (
-        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={loadUrl} aria-label={t("voiceNotePlayback.play")}>
-          <Play className="h-3.5 w-3.5" />
+        <Button type="button" variant="ghost" size="sm" isIconOnly onPress={() => { void loadUrl(); }} aria-label={t("voiceNotePlayback.play")}>
+          <Play className="size-3.5 rtl:-scale-x-100" aria-hidden="true" />
         </Button>
       )}
 
-      <div className="flex flex-col min-w-0 shrink-0">
-        <span className="text-xs text-muted-foreground">{recordedAt}</span>
+      <div className="flex min-w-0 shrink-0 flex-col">
+        <bdi dir="ltr" className="text-xs text-[var(--muted)]">{recordedAt}</bdi>
         {note.recordedByName && (
-          <span className="text-xs text-muted-foreground truncate">{note.recordedByName}</span>
+          <span className="truncate text-xs text-[var(--muted)]">{note.recordedByName}</span>
         )}
       </div>
 
-      <Badge variant="outline" className="text-xs shrink-0">{formatDuration(note.durationSeconds)}</Badge>
+      <Chip size="sm" variant="tertiary" className="shrink-0"><bdi dir="ltr">{formatDuration(note.durationSeconds)}</bdi></Chip>
 
       {!readOnly && (
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className={`h-6 w-6 p-0 shrink-0 ${confirming ? "text-destructive" : ""}`}
-          onClick={handleDelete}
-          title={confirming ? t("voiceNote.confirmDelete") : t("voiceNote.deleteNote")}
-          aria-label={confirming ? t("voiceNote.confirmDelete") : t("voiceNote.deleteNote")}
+          isIconOnly
+          className="shrink-0 text-[var(--danger)]"
+          onPress={() => setConfirming(true)}
+          aria-label={t("voiceNote.deleteNote")}
         >
-          <Trash2 className="h-3 w-3" />
+          <Trash2 className="size-3.5" aria-hidden="true" />
         </Button>
       )}
+      <ConfirmModal
+        isOpen={confirming}
+        title={t("voiceNote.deleteConfirmTitle")}
+        message={t("voiceNote.deleteConfirmMessage")}
+        confirmLabel={t("voiceNote.deleteNote")}
+        cancelLabel={t("cancel")}
+        isPending={deleting}
+        onConfirm={() => { void handleDelete(); }}
+        onCancel={() => setConfirming(false)}
+      />
     </div>
   );
 }
@@ -403,10 +404,14 @@ export function VoiceNotePanel({
   readOnly = false,
 }: VoiceNotePanelProps) {
   const { t } = useTranslation("common");
+  const qc = useQueryClient();
   const [showRecorder, setShowRecorder] = useState(false);
   const [localNotes, setLocalNotes] = useState<VoiceNote[]>([]);
+  // Notes deleted in this session disappear at once, before the refetch lands.
+  const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
 
-  const { data: fetchedNotes, isLoading } = useListVoiceNotes({ entityType, entityId });
+  const params = { entityType, entityId };
+  const { data: fetchedNotes, isLoading } = useListVoiceNotes(params);
 
   // Merge server notes with any locally-added notes (avoid duplicates)
   const serverNotes: VoiceNote[] = (fetchedNotes ?? []) as VoiceNote[];
@@ -414,7 +419,7 @@ export function VoiceNotePanel({
   const merged = [
     ...serverNotes,
     ...localNotes.filter(n => !allNoteIds.has(n.id)),
-  ];
+  ].filter((n) => !deletedIds.has(n.id));
 
   const handleAdded = (note: VoiceNote) => {
     setLocalNotes(prev => [note, ...prev]);
@@ -423,14 +428,15 @@ export function VoiceNotePanel({
 
   const handleDeleted = (id: number) => {
     setLocalNotes(prev => prev.filter(n => n.id !== id));
-    // Also remove from server notes via refetch — optimistic removal only for local list
+    setDeletedIds(prev => new Set(prev).add(id));
+    void qc.invalidateQueries({ queryKey: getListVoiceNotesQueryKey(params) });
   };
 
   if (isLoading) {
     return (
       <div className="space-y-2">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full rounded-lg" />
+        <Skeleton className="h-10 w-full rounded-lg" />
       </div>
     );
   }
@@ -438,7 +444,7 @@ export function VoiceNotePanel({
   return (
     <div className="space-y-2">
       {merged.length === 0 && !showRecorder && (
-        <p className="text-xs text-muted-foreground italic">{t("voiceNote.noNotes")}</p>
+        <p className="text-xs italic text-[var(--muted)]">{t("voiceNote.noNotes")}</p>
       )}
       {merged.map(note => (
         <VoiceNoteItem key={note.id} note={note} onDelete={handleDeleted} readOnly={readOnly} />
@@ -452,14 +458,8 @@ export function VoiceNotePanel({
             onCancel={() => setShowRecorder(false)}
           />
         ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setShowRecorder(true)}
-          >
-            <Mic className="h-3.5 w-3.5" /> {t("voiceNote.addVoiceNote")}
+          <Button type="button" variant="tertiary" size="sm" onPress={() => setShowRecorder(true)}>
+            <Mic className="size-3.5" aria-hidden="true" /> {t("voiceNote.addVoiceNote")}
           </Button>
         )
       )}

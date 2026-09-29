@@ -157,7 +157,7 @@ describe("PMR-A11Y source wiring (reports.tsx)", () => {
   });
 
   it("PMR-A11Y-15: Voice note Play/Pause has aria-label (form-voice-recorder.tsx)", () => {
-    expect(voiceSrc).toContain('aria-label={playing ? "Pause voice note" : "Play voice note"}');
+    expect(voiceSrc).toContain('aria-label={playing ? t("voiceNote.pause") : t("voiceNote.play")}');
   });
 
   it("PMR-A11Y-21: No validation rule changes — required-field logic untouched", () => {

@@ -457,6 +457,15 @@
     "itemsQueuedForRetry_other": "{{count}} items queued for retry"
   },
   "voiceNote": {
+    "fileUnavailable": "File unavailable",
+    "deleteConfirmTitle": "Delete this voice note?",
+    "deleteConfirmMessage": "The recording will be removed permanently.",
+    "announceStarted": "Recording started.",
+    "announceStopped": "Recording stopped.",
+    "play": "Play voice note",
+    "pause": "Pause voice note",
+    "recordingProgress": "Recording time",
+    "playbackProgress": "Playback position",
     "addVoiceNote": "Add Voice Note",
     "recorder": "Voice Note Recorder",
     "maxDuration": "Max 5 min",
@@ -512,6 +521,11 @@
     "prepareFailed": "Could not prepare the upload.",
     "transferFailed": "The file could not be uploaded.",
     "finalizeFailed": "The upload could not be finalised."
+  },
+  "pwaUpdate": {
+    "available": "A new version is available.",
+    "updateNow": "Update now",
+    "dismiss": "Dismiss update notice"
   },
   "recordLock": {
     "isEditing": "is currently editing this record. Saving may overwrite their changes.",
@@ -601,5 +615,27 @@
   "fileName": "File Name",
   "uploadedBy": "Uploaded By",
   "submittedBy": "Submitted By",
-  "period": "Period"
+  "period": "Period",
+  "deleteProject": {
+    "title": "Delete Project",
+    "loading": "Loading deletion information…",
+    "infoFailed": "The deletion information could not be loaded.",
+    "noPermission": "You do not have permission to delete this project.",
+    "deletionType": "Deletion type",
+    "permanent": "Permanent deletion",
+    "soft": "Soft delete",
+    "permanentExplanation": "This project has not reached final approval. Deleting it permanently removes the project and its non-protected draft records from CAFA PMIS.",
+    "softExplanation": "This project has reached final approval. It will be removed from active CAFA PMIS records but kept for audit and history.",
+    "reason": "Reason for deletion",
+    "reasonHint": "At least 5 characters. The reason is kept in the audit log.",
+    "typeToConfirm": "To confirm, type",
+    "codeMismatch": "The project code does not match.",
+    "permanentButton": "Permanently delete project",
+    "softButton": "Delete project",
+    "permanentAria": "Permanently delete project {{code}}",
+    "softAria": "Delete project {{code}}",
+    "deletedPermanently": "Project {{code}} has been permanently deleted.",
+    "archived": "Project {{code}} has been archived.",
+    "failed": "The project could not be deleted."
+  }
 }

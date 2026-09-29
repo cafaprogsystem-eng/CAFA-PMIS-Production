@@ -1096,6 +1096,10 @@
     "programmeManagerApproval": "Programme Manager Approval"
   },
   "comments": {
+    "replyingToName": "Replying to {{name}}",
+    "deleteConfirmTitle": "Delete this comment?",
+    "deleteConfirmMessage": "The comment will be removed for everyone, and its replies will no longer be shown.",
+    "deleteFailed": "The comment could not be deleted.",
     "title": "Comments & Revisions",
     "unresolvedCorrections_one": "{{count}} unresolved correction",
     "unresolvedCorrections_other": "{{count}} unresolved corrections",
@@ -1191,6 +1195,12 @@
     }
   },
   "completeness": {
+    "notSubmitted": "Not Submitted",
+    "draft": "Draft",
+    "returned": "Returned – Revision Required",
+    "approved": "Approved",
+    "submittedStatus": "Submitted",
+    "inReview": "In Review",
     "title": "Reporting Completeness",
     "description": "Expected operational locations and their PMR submission status for the selected period",
     "reportFrequency": "Report frequency",

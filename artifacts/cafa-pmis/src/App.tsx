@@ -5,7 +5,6 @@ import { ApiError } from "@workspace/api-client-react";
 import { Loader2 } from "@/components/icons";
 import { DirectionProvider } from "@radix-ui/react-direction";
 import { I18nProvider } from "@heroui/react";
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -345,7 +344,6 @@ function App() {
               </Suspense>
             </WouterRouter>
             <PwaUpdatePrompt />
-            <Toaster />
             <SonnerToaster />
           </TooltipProvider>
         </DirectionBridge>

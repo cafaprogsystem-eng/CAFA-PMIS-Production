@@ -7,9 +7,8 @@ import type {
   ConsolidatedReportLocation,
 } from "@workspace/api-client-react";
 import { ChevronRight, ArrowLeft } from "@/components/icons";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button, Chip, Skeleton } from "@heroui/react";
+import { projectActivityStatusText } from "@/lib/report-form-options";
 import { formatDateTime } from "@/lib/format";
 import { locationStatusBadge } from "@/lib/pmr-status";
 
@@ -26,7 +25,7 @@ type LocationEntry = ConsolidatedReportLocation;
 
 function formatMoney(value: number | null, currency: string | null): string {
   if (value === null) return "—";
-  return `${value.toLocaleString()}${currency ? ` ${currency}` : ""}`;
+  return `${value.toLocaleString("en-GB")}${currency ? ` ${currency}` : ""}`;
 }
 
 /** Minimal per-location activities rendering (JSONB passthrough). */
@@ -38,20 +37,20 @@ function ActivityList({ activities }: { activities: unknown }) {
       <h4 className="text-sm font-medium mb-2">{t("consolidated.activitiesImplemented")}</h4>
       <div className="space-y-2">
         {(activities as Array<Record<string, unknown>>).map((a, i) => (
-          <details key={i} className="rounded border text-xs group">
-            <summary className="flex items-center justify-between p-2 cursor-pointer list-none select-none">
-              <div className="flex items-center gap-2 min-w-0">
-                <ChevronRight className="h-3 w-3 flex-shrink-0 transition-transform group-open:rotate-90" aria-hidden />
-                <p className="font-medium truncate">{String(a.name ?? "—")}</p>
+          <details key={i} className="group rounded-lg border border-[var(--border)] text-xs">
+            <summary className="flex cursor-pointer list-none select-none items-center justify-between p-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <ChevronRight className="size-3 flex-shrink-0 transition-transform group-open:rotate-90 rtl:-scale-x-100 rtl:group-open:rotate-90" aria-hidden />
+                <p className="line-clamp-2 font-medium" dir="auto">{String(a.name ?? "—")}</p>
                 {!!a.isUnplanned && (
-                  <Badge variant="secondary" className="text-xs flex-shrink-0">{t("consolidated.unplanned")}</Badge>
+                  <Chip size="sm" variant="soft" className="flex-shrink-0">{t("consolidated.unplanned")}</Chip>
                 )}
               </div>
-              <Badge variant="outline" className="text-xs flex-shrink-0 ms-2">
-                {String(a.status ?? "—")} · <bdi dir="ltr">{String(a.percent ?? 0)}%</bdi>
-              </Badge>
+              <Chip size="sm" variant="tertiary" className="ms-2 flex-shrink-0">
+                {a.status ? projectActivityStatusText(t, String(a.status)) : "—"} · <bdi dir="ltr">{String(a.percent ?? 0)}%</bdi>
+              </Chip>
             </summary>
-            <div className="px-3 pb-3 pt-1 space-y-1 border-t bg-muted/10 text-muted-foreground">
+            <div className="space-y-1 border-t border-[var(--border)] px-3 pb-3 pt-1 text-[var(--muted)]">
               <p>
                 {t("consolidated.output", { output: String(a.output ?? "—"), milestone: String(a.milestone ?? "—") })}
               </p>
@@ -59,10 +58,10 @@ function ActivityList({ activities }: { activities: unknown }) {
                 a.beneficiariesBoys != null || a.beneficiariesGirls != null) && (
                 <p>
                   {t("consolidated.beneficiariesLine", {
-                    men: Number(a.beneficiariesMen ?? 0).toLocaleString(),
-                    women: Number(a.beneficiariesWomen ?? 0).toLocaleString(),
-                    boys: Number(a.beneficiariesBoys ?? 0).toLocaleString(),
-                    girls: Number(a.beneficiariesGirls ?? 0).toLocaleString(),
+                    men: Number(a.beneficiariesMen ?? 0).toLocaleString("en-GB"),
+                    women: Number(a.beneficiariesWomen ?? 0).toLocaleString("en-GB"),
+                    boys: Number(a.beneficiariesBoys ?? 0).toLocaleString("en-GB"),
+                    girls: Number(a.beneficiariesGirls ?? 0).toLocaleString("en-GB"),
                   })}
                 </p>
               )}
@@ -82,9 +81,9 @@ function IndicatorList({ indicatorProgress }: { indicatorProgress: unknown }) {
     <div>
       <h4 className="text-sm font-medium mb-2">{t("consolidated.indicatorProgress")}</h4>
       <div className="overflow-x-auto">
-        <table className="w-full text-xs border rounded">
+        <table className="w-full rounded-lg border border-[var(--border)] text-xs">
           <thead>
-            <tr className="border-b bg-muted/30 text-start">
+            <tr className="border-b border-[var(--border)] bg-[var(--default)] text-start">
               <th scope="col" className="p-2 font-medium">{t("consolidated.indicator")}</th>
               <th scope="col" className="p-2 font-medium">{t("consolidated.targetReference")}</th>
               <th scope="col" className="p-2 font-medium">{t("consolidated.achievedLocation")}</th>
@@ -92,10 +91,10 @@ function IndicatorList({ indicatorProgress }: { indicatorProgress: unknown }) {
           </thead>
           <tbody>
             {(indicatorProgress as Array<Record<string, unknown>>).map((ind, i) => (
-              <tr key={i} className="border-b last:border-0">
-                <td className="p-2">{String(ind.name ?? ind.indicator ?? "—")}</td>
-                <td className="p-2">{ind.target != null ? String(ind.target) : "—"}</td>
-                <td className="p-2">{ind.achieved != null ? String(ind.achieved) : ind.value != null ? String(ind.value) : "—"}</td>
+              <tr key={i} className="border-b border-[var(--border)] last:border-0">
+                <td className="p-2" dir="auto">{String(ind.name ?? ind.indicator ?? "—")}</td>
+                <td className="p-2"><bdi dir="ltr">{ind.target != null ? Number(ind.target).toLocaleString("en-GB") : "—"}</bdi></td>
+                <td className="p-2"><bdi dir="ltr">{ind.achieved != null ? Number(ind.achieved).toLocaleString("en-GB") : ind.value != null ? Number(ind.value).toLocaleString("en-GB") : "—"}</bdi></td>
               </tr>
             ))}
           </tbody>
@@ -112,11 +111,11 @@ function LocationSection({ loc }: { loc: LocationEntry }) {
   const badge = locationStatusBadge(loc.report?.status ?? null);
   if (!loc.report) {
     return (
-      <div className="rounded-md border p-3 flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
         <h3 className="text-sm font-medium">{loc.locationName}</h3>
         <div className="flex items-center gap-3">
-          <Badge variant={badge.variant}>{badge.label}</Badge>
-          <span className="text-xs text-muted-foreground">
+          <Chip size="sm" variant="soft" color={badge.color}>{t(badge.key, { defaultValue: badge.fallback })}</Chip>
+          <span className="text-xs text-[var(--muted)]">
             {t("consolidated.noPmrSubmitted")}
           </span>
         </div>
@@ -125,7 +124,7 @@ function LocationSection({ loc }: { loc: LocationEntry }) {
   }
   const r = loc.report;
   return (
-    <div className="rounded-md border" data-testid={`cons-loc-${loc.locationType}-${loc.stateId ?? "hq"}`}>
+    <div className="rounded-xl border border-[var(--border)]" data-testid={`cons-loc-${loc.locationType}-${loc.stateId ?? "hq"}`}>
       <div className="flex flex-wrap items-center justify-between gap-3 p-3">
         <button
           type="button"
@@ -135,50 +134,50 @@ function LocationSection({ loc }: { loc: LocationEntry }) {
           onClick={() => setOpen((o) => !o)}
         >
           <ChevronRight
-            className={`h-4 w-4 flex-shrink-0 transition-transform ${open ? "rotate-90 rtl:rotate-90" : "rtl:scale-x-[-1]"}`}
+            className={`size-4 flex-shrink-0 transition-transform ${open ? "rotate-90 rtl:rotate-90" : "rtl:scale-x-[-1]"}`}
             aria-hidden
           />
           <h3 className="text-sm font-medium truncate">{loc.locationName}</h3>
         </button>
         <span className="flex items-center gap-3">
-          <Badge variant={badge.variant}>{badge.label}</Badge>
+          <Chip size="sm" variant="soft" color={badge.color}>{t(badge.key, { defaultValue: badge.fallback })}</Chip>
           {r.submittedAt && (
-            <span className="text-xs text-muted-foreground"><bdi dir="ltr">{formatDateTime(r.submittedAt)}</bdi></span>
+            <span className="text-xs text-[var(--muted)]"><bdi dir="ltr">{formatDateTime(r.submittedAt)}</bdi></span>
           )}
           <Link
             href={`/reports/project?open=${r.reportId}`}
-            className="text-sm text-primary underline underline-offset-2"
+            className="text-sm text-[var(--accent)] underline underline-offset-2"
           >
             {t("consolidated.viewArrow")}
           </Link>
         </span>
       </div>
       {open && (
-      <div className="border-t p-3 space-y-4" id={contentId}>
+      <div className="space-y-4 border-t border-[var(--border)] p-3" id={contentId}>
         {(r.executiveSummary || r.narrative || r.challenges || r.recommendations) && (
           <div className="space-y-3 text-sm">
             {r.executiveSummary && (
               <div>
                 <h4 className="font-medium">{t("consolidated.executiveSummary")}</h4>
-                <p className="text-muted-foreground whitespace-pre-wrap">{r.executiveSummary}</p>
+                <p className="text-[var(--muted)] whitespace-pre-wrap">{r.executiveSummary}</p>
               </div>
             )}
             {r.narrative && (
               <div>
                 <h4 className="font-medium">{t("consolidated.keyAchievements")}</h4>
-                <p className="text-muted-foreground whitespace-pre-wrap">{r.narrative}</p>
+                <p className="text-[var(--muted)] whitespace-pre-wrap">{r.narrative}</p>
               </div>
             )}
             {r.challenges && (
               <div>
                 <h4 className="font-medium">{t("consolidated.challenges")}</h4>
-                <p className="text-muted-foreground whitespace-pre-wrap">{r.challenges}</p>
+                <p className="text-[var(--muted)] whitespace-pre-wrap">{r.challenges}</p>
               </div>
             )}
             {r.recommendations && (
               <div>
                 <h4 className="font-medium">{t("consolidated.recommendations")}</h4>
-                <p className="text-muted-foreground whitespace-pre-wrap">{r.recommendations}</p>
+                <p className="text-[var(--muted)] whitespace-pre-wrap">{r.recommendations}</p>
               </div>
             )}
           </div>
@@ -188,9 +187,9 @@ function LocationSection({ loc }: { loc: LocationEntry }) {
         <div>
           <h4 className="text-sm font-medium mb-2">{t("consolidated.periodReach", { location: loc.locationName })}</h4>
           <div className="overflow-x-auto">
-            <table className="text-xs border rounded w-full max-w-md">
+            <table className="text-xs w-full max-w-md rounded-lg border border-[var(--border)]">
               <thead>
-                <tr className="border-b bg-muted/30 text-start">
+                <tr className="border-b border-[var(--border)] bg-[var(--default)] text-start">
                   <th scope="col" className="p-2 font-medium">{t("consolidated.men")}</th>
                   <th scope="col" className="p-2 font-medium">{t("consolidated.women")}</th>
                   <th scope="col" className="p-2 font-medium">{t("consolidated.boys")}</th>
@@ -199,10 +198,10 @@ function LocationSection({ loc }: { loc: LocationEntry }) {
               </thead>
               <tbody>
                 <tr>
-                  <td className="p-2"><bdi dir="ltr">{r.beneficiariesMale != null ? r.beneficiariesMale.toLocaleString() : "—"}</bdi></td>
-                  <td className="p-2"><bdi dir="ltr">{r.beneficiariesFemale != null ? r.beneficiariesFemale.toLocaleString() : "—"}</bdi></td>
-                  <td className="p-2"><bdi dir="ltr">{r.beneficiariesBoys != null ? r.beneficiariesBoys.toLocaleString() : "—"}</bdi></td>
-                  <td className="p-2"><bdi dir="ltr">{r.beneficiariesGirls != null ? r.beneficiariesGirls.toLocaleString() : "—"}</bdi></td>
+                  <td className="p-2"><bdi dir="ltr">{r.beneficiariesMale != null ? r.beneficiariesMale.toLocaleString("en-GB") : "—"}</bdi></td>
+                  <td className="p-2"><bdi dir="ltr">{r.beneficiariesFemale != null ? r.beneficiariesFemale.toLocaleString("en-GB") : "—"}</bdi></td>
+                  <td className="p-2"><bdi dir="ltr">{r.beneficiariesBoys != null ? r.beneficiariesBoys.toLocaleString("en-GB") : "—"}</bdi></td>
+                  <td className="p-2"><bdi dir="ltr">{r.beneficiariesGirls != null ? r.beneficiariesGirls.toLocaleString("en-GB") : "—"}</bdi></td>
                 </tr>
               </tbody>
             </table>
@@ -216,11 +215,11 @@ function LocationSection({ loc }: { loc: LocationEntry }) {
           <div>
             <h4 className="text-sm font-medium mb-1">
               {t("consolidated.reportedExpenditure")}{" "}
-              <span className="font-normal text-muted-foreground">
+              <span className="font-normal text-[var(--muted)]">
                 {t("consolidated.selfReportedNote")}
               </span>
             </h4>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-[var(--muted)]">
               {t("consolidated.plannedActual", {
                 planned: formatMoney(r.plannedBudget ?? null, r.currency ?? null),
                 actual: formatMoney(r.actualExpenditure ?? null, r.currency ?? null),
@@ -257,16 +256,16 @@ export function ConsolidatedReportView({
   if (isLoading) {
     return (
       <div className="space-y-2 p-4" data-testid="cons-view-loading">
-        <Skeleton className="h-6 w-72" />
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-6 w-72 rounded" />
+        <Skeleton className="h-12 w-full rounded-lg" />
+        <Skeleton className="h-12 w-full rounded-lg" />
+        <Skeleton className="h-12 w-full rounded-lg" />
       </div>
     );
   }
   if (isError || !data) {
     return (
-      <p className="p-4 text-sm text-destructive" data-testid="cons-view-error">
+      <p className="p-4 text-sm text-[var(--danger)]" data-testid="cons-view-error">
         {t("consolidated.loadError")}
       </p>
     );
@@ -281,9 +280,10 @@ export function ConsolidatedReportView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           {onClose && (
-            <Button variant="ghost" size="sm" onClick={onClose} aria-label={t("consolidated.backToOverview")}>
-              <ArrowLeft className="h-4 w-4" aria-hidden />
-              <span className="ms-1">{t("consolidated.back")}</span>
+            <Button variant="ghost" size="sm" onPress={onClose} aria-label={t("consolidated.backToOverview")}>
+              {/* "Back" points to the reading start: left in English, right in Arabic */}
+              <ArrowLeft className="size-4 rtl:-scale-x-100" aria-hidden />
+              {t("consolidated.back")}
             </Button>
           )}
           <h2 className="text-base font-medium truncate">
@@ -298,16 +298,16 @@ export function ConsolidatedReportView({
         <span>{t("consolidated.approved")}: <span className="font-medium">{c.reportsApproved}</span></span>
         <span>{t("consolidated.missing")}: <span className="font-medium">{c.missingLocations}</span></span>
         {c.completenessPercent !== null && (
-          <span className="text-muted-foreground">{t("consolidated.percentComplete", { percent: c.completenessPercent })}</span>
+          <span className="text-[var(--muted)]">{t("consolidated.percentComplete", { percent: c.completenessPercent })}</span>
         )}
       </div>
 
       {c.expectedLocations === 0 ? (
-        <p className="text-sm text-muted-foreground" data-testid="cons-view-empty">
+        <p className="text-sm text-[var(--muted)]" data-testid="cons-view-empty">
           {t("consolidated.noExpectedLocations")}
         </p>
       ) : data.locations.length === 0 ? (
-        <p className="text-sm text-destructive">
+        <p className="text-sm text-[var(--danger)]">
           {t("consolidated.locationsUnresolved")}
         </p>
       ) : (

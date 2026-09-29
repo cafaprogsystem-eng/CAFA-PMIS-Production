@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle2, Clock, GitMerge, Loader2 } from "@/components/icons";
-import { Badge } from "@/components/ui/badge";
+import { Chip } from "@heroui/react";
 import type { DraftStatus } from "@/lib/offline/draft-store";
 
 const icons = {
@@ -17,11 +17,11 @@ export function OfflineDraftNotice({ status, error }: { status: DraftStatus | nu
   const Icon = icons[status] ?? Loader2;
   const attention = status === "failed" || status === "conflict";
   return (
-    <div className={`mb-4 flex items-start gap-2 rounded-md border p-2 text-xs ${attention ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-border bg-muted/30 text-muted-foreground"}`} role={attention ? "alert" : "status"}>
-      <Badge variant="outline" className="shrink-0 gap-1">
-        <Icon className="h-3 w-3" />
+    <div className={`mb-4 flex items-start gap-2 rounded-xl border p-2 text-xs ${attention ? "border-[var(--danger)]/30 bg-[var(--danger)]/5 text-[var(--danger)]" : "border-[var(--border)] bg-[var(--default)] text-[var(--muted)]"}`} role={attention ? "alert" : "status"}>
+      <Chip size="sm" variant="soft" color={attention ? "danger" : status === "synced" ? "success" : "default"} className="shrink-0 gap-1">
+        <Icon className="size-3" aria-hidden="true" />
         {t(`sync.status.${status}`)}
-      </Badge>
+      </Chip>
       <span>{error || t(`sync.draftState.${status}`)}</span>
     </div>
   );

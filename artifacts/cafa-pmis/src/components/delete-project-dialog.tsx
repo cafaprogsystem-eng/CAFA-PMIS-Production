@@ -15,19 +15,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { Alert, Button, Chip, Input, Label, Modal, TextArea } from "@heroui/react";
 import { AlertTriangle, Archive, Loader2, Trash2 } from "@/components/icons";
 import { toast } from "sonner";
 
@@ -54,7 +42,7 @@ async function fetchDeletionInfo(projectId: number): Promise<DeletionInfo> {
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err.error ?? "Failed to load deletion information");
+    throw new Error(err.error ?? "deletion_info_failed");
   }
   return res.json() as Promise<DeletionInfo>;
 }
@@ -109,13 +97,14 @@ export function DeleteProjectDialog({
           error?: string;
           message?: string;
         };
-        throw new Error(err.message ?? err.error ?? "Deletion failed");
+        throw new Error(err.message ?? err.error ?? "deletion_failed");
       }
       return res.json() as Promise<{ deletionMode: string }>;
     },
     onSuccess: (data) => {
-      const archived = data.deletionMode === "permanent" ? "permanently deleted" : "archived";
-      toast.success(`Project ${projectCode} has been ${archived}.`);
+      toast.success(data.deletionMode === "permanent"
+        ? t("deleteProject.deletedPermanently", { code: projectCode })
+        : t("deleteProject.archived", { code: projectCode }));
       // ["projects"]/["dashboard"] never matched the generated hooks' real
       // keys (["/api/projects", ...], ["/api/dashboard/...", ...]), so the
       // list/dashboard silently kept showing the deleted project until a
@@ -128,7 +117,7 @@ export function DeleteProjectDialog({
       setLocation("/projects");
     },
     onError: (err: Error) => {
-      toast.error(err.message);
+      toast.error(err.message === "deletion_failed" ? t("deleteProject.failed") : err.message);
     },
   });
 
@@ -151,161 +140,149 @@ export function DeleteProjectDialog({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  const codeMismatch = codeConfirm.length > 0 && !codeMatches;
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {isPermanent ? (
-              <AlertTriangle className="h-5 w-5 text-destructive shrink-0" aria-hidden="true" />
-            ) : (
-              <Archive className="h-5 w-5 text-amber-500 shrink-0" aria-hidden="true" />
-            )}
-            Delete Project
-          </DialogTitle>
-          <DialogDescription asChild>
-            <div className="space-y-0.5 text-start">
-              <span className="block font-medium text-foreground leading-snug">
-                {projectTitle}
-              </span>
-              <code className="text-xs font-mono text-muted-foreground">{projectCode}</code>
-            </div>
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* ── Loading ── */}
-        {infoLoading && (
-          <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Loading deletion information…</span>
-          </div>
-        )}
-
-        {/* ── Error ── */}
-        {!infoLoading && infoError && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {(infoError as Error).message}
-          </div>
-        )}
-
-        {/* ── Not authorised ── */}
-        {!infoLoading && !infoError && info && !info.canDelete && (
-          <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-            You do not have permission to delete this project.
-          </div>
-        )}
-
-        {/* ── Main form ── */}
-        {!infoLoading && !infoError && info?.canDelete && mode && (
-          <div className="space-y-4">
-            {/* Deletion type banner */}
-            <div
-              className={`rounded-lg border px-4 py-3 space-y-1.5 ${
-                isPermanent
-                  ? "bg-destructive/5 border-destructive/30"
-                  : "bg-amber-50 border-amber-200"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Deletion Type
-                </span>
-                <Badge
-                  variant={isPermanent ? "destructive" : "outline"}
-                  className={
-                    isPermanent
-                      ? ""
-                      : "border-amber-400 text-amber-700 bg-amber-50 font-semibold"
-                  }
-                >
-                  {isPermanent ? "Permanent Deletion" : "Soft Delete"}
-                </Badge>
+    <Modal isOpen={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <Modal.Backdrop isDismissable={!deleteMutation.isPending}>
+        <Modal.Container size="md" scroll="inside">
+          <Modal.Dialog className="max-h-[calc(100dvh-2rem)] sm:max-w-lg">
+            <Modal.CloseTrigger aria-label={t("close")} />
+            <Modal.Header>
+              <Modal.Heading className="flex items-center gap-2">
+                {isPermanent ? (
+                  <AlertTriangle className="size-5 shrink-0 text-[var(--danger)]" aria-hidden="true" />
+                ) : (
+                  <Archive className="size-5 shrink-0 text-[var(--warning)]" aria-hidden="true" />
+                )}
+                {t("deleteProject.title")}
+              </Modal.Heading>
+              <div className="space-y-0.5 text-start">
+                <span className="block font-medium leading-snug" dir="auto">{projectTitle}</span>
+                <bdi dir="ltr" className="font-mono text-xs text-[var(--muted)]">{projectCode}</bdi>
               </div>
-              <p className="text-sm text-muted-foreground leading-snug">
-                {isPermanent
-                  ? "This Project has not reached Final Approval. Deleting it will permanently remove the Project and its non-protected draft records from CAFA PMIS."
-                  : "This Project has reached Final Approval. It will be removed from active CAFA PMIS records but retained for audit and historical purposes."}
-              </p>
-            </div>
+            </Modal.Header>
 
-            {/* Reason */}
-            <div className="space-y-1.5">
-              <Label htmlFor="deletion-reason" className="text-sm font-medium">
-                Reason for Deletion{" "}
-                <span className="text-destructive" aria-hidden="true">*</span>
-              </Label>
-              <Textarea
-                id="deletion-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder={t("deleteProjectReasonPlaceholder")}
-                className="resize-none"
-                rows={3}
-                aria-required="true"
-              />
-            </div>
-
-            {/* Project code confirmation */}
-            <div className="space-y-1.5">
-              <Label htmlFor="deletion-code-confirm" className="text-sm font-medium">
-                To confirm, type{" "}
-                <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
-                  {projectCode}
-                </code>
-              </Label>
-              <Input
-                id="deletion-code-confirm"
-                value={codeConfirm}
-                onChange={(e) => setCodeConfirm(e.target.value)}
-                placeholder={projectCode}
-                autoComplete="off"
-                spellCheck={false}
-                aria-required="true"
-                aria-invalid={codeConfirm.length > 0 && !codeMatches}
-                className={
-                  codeConfirm.length > 0 && !codeMatches ? "border-destructive" : ""
-                }
-              />
-              {codeConfirm.length > 0 && !codeMatches && (
-                <p className="text-xs text-destructive" role="alert">
-                  Project code does not match.
-                </p>
+            <Modal.Body className="space-y-4">
+              {/* ── Loading ── */}
+              {infoLoading && (
+                <div className="flex items-center justify-center gap-2 py-10 text-[var(--muted)]">
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  <span className="text-sm">{t("deleteProject.loading")}</span>
+                </div>
               )}
-            </div>
-          </div>
-        )}
 
-        <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={deleteMutation.isPending}
-          >
-            Cancel
-          </Button>
-
-          {info?.canDelete && mode && (
-            <Button
-              variant="destructive"
-              onClick={() => deleteMutation.mutate()}
-              disabled={!canSubmit}
-              className="gap-1.5"
-              aria-label={
-                isPermanent
-                  ? `Permanently delete project ${projectCode}`
-                  : `Delete project ${projectCode}`
-              }
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              {/* ── Error ── */}
+              {!infoLoading && infoError && (
+                <Alert status="danger">
+                  <Alert.Indicator />
+                  <Alert.Content>
+                    <Alert.Description>
+                      {(infoError as Error).message === "deletion_info_failed" ? t("deleteProject.infoFailed") : (infoError as Error).message}
+                    </Alert.Description>
+                  </Alert.Content>
+                </Alert>
               )}
-              {isPermanent ? "Permanently Delete Project" : "Delete Project"}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+              {/* ── Not authorised ── */}
+              {!infoLoading && !infoError && info && !info.canDelete && (
+                <Alert status="default">
+                  <Alert.Indicator />
+                  <Alert.Content>
+                    <Alert.Description>{t("deleteProject.noPermission")}</Alert.Description>
+                  </Alert.Content>
+                </Alert>
+              )}
+
+              {/* ── Main form ── */}
+              {!infoLoading && !infoError && info?.canDelete && mode && (
+                <>
+                  {/* Deletion type banner */}
+                  <Alert status={isPermanent ? "danger" : "warning"}>
+                    <Alert.Indicator />
+                    <Alert.Content>
+                      <Alert.Title className="flex flex-wrap items-center gap-2">
+                        {t("deleteProject.deletionType")}
+                        <Chip size="sm" variant="soft" color={isPermanent ? "danger" : "warning"}>
+                          {isPermanent ? t("deleteProject.permanent") : t("deleteProject.soft")}
+                        </Chip>
+                      </Alert.Title>
+                      <Alert.Description>
+                        {isPermanent ? t("deleteProject.permanentExplanation") : t("deleteProject.softExplanation")}
+                      </Alert.Description>
+                    </Alert.Content>
+                  </Alert>
+
+                  {/* Reason */}
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="deletion-reason" isRequired>{t("deleteProject.reason")}</Label>
+                    <TextArea
+                      id="deletion-reason"
+                      fullWidth
+                      dir="auto"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder={t("deleteProjectReasonPlaceholder")}
+                      className="resize-none text-page-start"
+                      rows={3}
+                      aria-required="true"
+                      aria-describedby="deletion-reason-hint"
+                    />
+                    <p id="deletion-reason-hint" className="text-xs text-[var(--muted)]">{t("deleteProject.reasonHint")}</p>
+                  </div>
+
+                  {/* Project code confirmation */}
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="deletion-code-confirm">
+                      {t("deleteProject.typeToConfirm")}{" "}
+                      <bdi dir="ltr" className="rounded bg-[var(--default)] px-1.5 py-0.5 font-mono text-xs">{projectCode}</bdi>
+                    </Label>
+                    <Input
+                      id="deletion-code-confirm"
+                      fullWidth
+                      dir="ltr"
+                      value={codeConfirm}
+                      onChange={(e) => setCodeConfirm(e.target.value)}
+                      placeholder={projectCode}
+                      autoComplete="off"
+                      spellCheck={false}
+                      aria-required="true"
+                      aria-invalid={codeMismatch || undefined}
+                      aria-describedby={codeMismatch ? "deletion-code-error" : undefined}
+                      className="rtl:text-end"
+                    />
+                    {codeMismatch && (
+                      <p id="deletion-code-error" className="text-xs text-[var(--danger)]" role="alert">
+                        {t("deleteProject.codeMismatch")}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </Modal.Body>
+
+            <Modal.Footer>
+              <Button variant="tertiary" onPress={handleClose} isDisabled={deleteMutation.isPending}>
+                {t("cancel")}
+              </Button>
+              {info?.canDelete && mode && (
+                <Button
+                  variant="danger"
+                  onPress={() => deleteMutation.mutate()}
+                  isDisabled={!canSubmit && !deleteMutation.isPending}
+                  isPending={deleteMutation.isPending}
+                  aria-label={isPermanent
+                    ? t("deleteProject.permanentAria", { code: projectCode })
+                    : t("deleteProject.softAria", { code: projectCode })}
+                >
+                  {!deleteMutation.isPending && <Trash2 className="size-4" aria-hidden="true" />}
+                  {isPermanent ? t("deleteProject.permanentButton") : t("deleteProject.softButton")}
+                </Button>
+              )}
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }

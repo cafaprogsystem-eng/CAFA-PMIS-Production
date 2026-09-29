@@ -1,5 +1,5 @@
-import { AlertCircle, Loader2, RefreshCw } from "@/components/icons";
-import { Button } from "@/components/ui/button";
+import { RefreshCw } from "@/components/icons";
+import { Alert, Button, Spinner } from "@heroui/react";
 import type { StateReferenceStatus as Status } from "@/lib/state-reference-data";
 
 type Props = {
@@ -21,23 +21,23 @@ export function StateReferenceStatus({
 }: Props) {
   if (status === "loading") {
     return (
-      <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground" role="status">
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--default)] px-3 py-2 text-sm text-[var(--muted)]" role="status">
+        <Spinner size="sm" aria-hidden="true" />
         {loadingText}
       </div>
     );
   }
 
   return (
-    <div className="flex items-start justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm" role="alert">
-      <span className="flex items-start gap-2 text-destructive">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-        {status === "error" ? errorText : emptyText}
-      </span>
-      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+    <Alert status="danger" role="alert">
+      <Alert.Indicator />
+      <Alert.Content>
+        <Alert.Description>{status === "error" ? errorText : emptyText}</Alert.Description>
+      </Alert.Content>
+      <Button variant="secondary" size="sm" onPress={onRetry}>
+        <RefreshCw className="size-3.5" aria-hidden="true" />
         {retryText}
       </Button>
-    </div>
+    </Alert>
   );
 }

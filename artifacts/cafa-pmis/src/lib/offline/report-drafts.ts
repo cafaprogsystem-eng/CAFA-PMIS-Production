@@ -2,7 +2,7 @@ import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getOfflineUser, type ReportDraftSnapshot, type ReportDraftStatus, type SyncFailureCode } from "./db";
 import { useTranslation } from "react-i18next";
-import { Badge } from "@/components/ui/badge";
+import { Chip } from "@heroui/react";
 import { cn } from "@/lib/utils";
 
 export type ReportDraftType = ReportDraftSnapshot["reportType"];
@@ -282,7 +282,7 @@ export function OfflineReportDraftStatus({
    *  see useOfflineReportDraft's isStale. */
   isStale?: boolean;
 }) {
-  const { t, i18n } = useTranslation("common");
+  const { t } = useTranslation("common");
   const label = t(`sync.status.${status}`, { defaultValue: status });
   const needsRecovery = status === "failed" || status === "conflict";
   return createElement(
@@ -292,12 +292,12 @@ export function OfflineReportDraftStatus({
       "div",
       { className: "flex items-center gap-2" },
     createElement(
-      Badge,
-      { variant: status === "conflict" || status === "failed" ? "destructive" : "secondary", className: "text-[10px]" },
-      label,
+      Chip,
+      { size: "sm", variant: "soft", color: needsRecovery ? "danger" : "default", children: label },
     ),
     savedAt
-      ? createElement("span", null, t("sync.savedOnDeviceAt", { date: new Date(savedAt).toLocaleString(i18n.language) }))
+      // U+2066/U+2069 isolate the Western-digit date inside Arabic text.
+      ? createElement("span", null, t("sync.savedOnDeviceAt", { date: `\u2066${new Date(savedAt).toLocaleString("en-GB")}\u2069` }))
       : null,
     ),
     needsRecovery

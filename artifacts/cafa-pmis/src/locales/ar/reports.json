@@ -1111,6 +1111,10 @@
     "programmeManagerApproval": "اعتماد مدير البرنامج"
   },
   "comments": {
+    "replyingToName": "الرد على {{name}}",
+    "deleteConfirmTitle": "حذف هذا التعليق؟",
+    "deleteConfirmMessage": "سيُحذف التعليق لدى الجميع، ولن تظهر الردود عليه بعد ذلك.",
+    "deleteFailed": "تعذّر حذف التعليق.",
     "title": "التعليقات والمراجعات",
     "unresolvedCorrections_one": "{{count}} تصحيح غير محلول",
     "unresolvedCorrections_other": "{{count}} تصحيحات غير محلولة",
@@ -1199,6 +1203,12 @@
     }
   },
   "completeness": {
+    "notSubmitted": "لم يُقدَّم",
+    "draft": "مسودة",
+    "returned": "أُعيد — مطلوب تعديل",
+    "approved": "معتمد",
+    "submittedStatus": "مُقدَّم",
+    "inReview": "قيد المراجعة",
     "title": "اكتمال الإبلاغ",
     "description": "مواقع التشغيل المتوقعة وحالة تقديم تقارير المتابعة الخاصة بها للفترة المحددة",
     "reportFrequency": "تواتر التقرير",

@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@heroui/react";
 import { RefreshCw, X } from "@/components/icons";
-import { Button } from "@/components/ui/button";
 
 export function PwaUpdatePrompt() {
+  const { t } = useTranslation("common");
   const [needRefresh, setNeedRefresh] = useState(false);
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
   const [dismissed, setDismissed] = useState(false);
@@ -43,18 +45,22 @@ export function PwaUpdatePrompt() {
   if (!needRefresh || dismissed) return null;
 
   return (
-    <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[99] flex items-center gap-3 rounded-xl bg-[#1a2744] px-4 py-3 text-white shadow-2xl max-w-sm w-[calc(100vw-2rem)]">
-      <RefreshCw className="h-4 w-4 shrink-0 text-blue-300" />
-      <p className="text-sm flex-1">A new version is available.</p>
-      <Button size="sm" variant="secondary"
-        className="h-7 text-xs px-3 bg-white text-[#1a2744] hover:bg-white/90"
-        onClick={handleUpdate}>
-        Update now
+    <div role="status" className="fixed bottom-16 start-1/2 z-[99] flex w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-2xl bg-[#1a2744] px-4 py-3 text-white shadow-2xl rtl:translate-x-1/2">
+      <RefreshCw className="size-4 shrink-0 text-blue-300" aria-hidden="true" />
+      <p className="flex-1 text-sm">{t("pwaUpdate.available")}</p>
+      <Button size="sm" variant="secondary" className="bg-white text-[#1a2744]" onPress={handleUpdate}>
+        {t("pwaUpdate.updateNow")}
       </Button>
-      <button onClick={() => setDismissed(true)}
-        className="shrink-0 opacity-60 hover:opacity-100 transition-opacity">
-        <X className="h-4 w-4" />
-      </button>
+      <Button
+        isIconOnly
+        size="sm"
+        variant="ghost"
+        className="text-white/70 hover:text-white"
+        aria-label={t("pwaUpdate.dismiss")}
+        onPress={() => setDismissed(true)}
+      >
+        <X className="size-4" aria-hidden="true" />
+      </Button>
     </div>
   );
 }

@@ -3,11 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Reply, CheckCircle2, RotateCcw, Trash2, Loader2 } from "@/components/icons";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, Button, Card, Chip, TextArea } from "@heroui/react";
+import { SelectField } from "@/components/select-field";
+import { ConfirmModal } from "@/components/confirm-modal";
 
 export type CommentEntityType = "project" | "report" | "plan" | "risk";
 
@@ -29,15 +27,16 @@ export type Comment = {
   updatedAt: string;
 };
 
-const TYPE_META: Record<string, { color: string }> = {
-  general: { color: "bg-slate-100 text-slate-700 border-slate-200" },
-  technical: { color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-  required_correction: { color: "bg-red-100 text-red-700 border-red-200" },
-  approval_note: { color: "bg-green-100 text-green-700 border-green-200" },
-  rejection_reason: { color: "bg-rose-100 text-rose-700 border-rose-200" },
-  revision_request: { color: "bg-amber-100 text-amber-700 border-amber-200" },
-  coordination: { color: "bg-blue-100 text-blue-700 border-blue-200" },
-  observation: { color: "bg-violet-100 text-violet-700 border-violet-200" },
+type ChipColor = "default" | "accent" | "success" | "warning" | "danger";
+const TYPE_META: Record<string, { color: ChipColor }> = {
+  general: { color: "default" },
+  technical: { color: "accent" },
+  required_correction: { color: "danger" },
+  approval_note: { color: "success" },
+  rejection_reason: { color: "danger" },
+  revision_request: { color: "warning" },
+  coordination: { color: "accent" },
+  observation: { color: "default" },
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -111,6 +110,7 @@ export function CommentsPanel({
   const [commentType, setCommentType] = useState<string>("general");
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [postingSection, setPostingSection] = useState<string>("");
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
 
   const allowedTypes: string[] = (currentUserRole ? ROLE_TYPE_ALLOW[currentUserRole] : null) ?? ["general"];
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -177,7 +177,8 @@ export function CommentsPanel({
       const res = await fetch(`/api/comments/${id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok && res.status !== 204) throw new Error("failed");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["comments", entityType, entityId] }),
+    onSuccess: () => { setPendingDelete(null); qc.invalidateQueries({ queryKey: ["comments", entityType, entityId] }); },
+    onError: () => toast.error(t("comments.deleteFailed")),
   });
 
   // Filtered + threaded view
@@ -209,47 +210,47 @@ export function CommentsPanel({
   const roots = visible.filter((c) => c.parentId == null);
   const unresolvedRC = comments.filter((c) => c.commentType === "required_correction" && c.status === "open").length;
 
+  const replyingToName = replyTo != null ? comments.find((c) => c.id === replyTo)?.authorName : undefined;
+
   function renderComment(c: Comment, depth: number) {
     const meta = TYPE_META[c.commentType] ?? TYPE_META.general;
     const kids = childrenOf.get(c.id) ?? [];
     const canDelete = currentUserId != null && (c.authorId === currentUserId || currentUserRole === "super_admin");
     const typeLabel = t(TYPE_LABELS[c.commentType] ?? "comments.typeGeneral");
+    const sectionLabel = c.section ? labelFor(c.section) : sectionLabels?.general;
     return (
-        <div key={c.id} className="space-y-2" style={{ marginLeft: depth * 20 }}>
-        <div className={`rounded-md border p-3 ${c.status === "resolved" ? "bg-muted/30 opacity-70" : "bg-card"}`}>
-          <div className="flex items-start justify-between gap-2 mb-1">
+      // Replies indent from the reading-start edge in both directions.
+      <div key={c.id} className="space-y-2" style={{ marginInlineStart: depth * 20 }}>
+        <div className={`rounded-xl border border-[var(--border)] p-3 ${c.status === "resolved" ? "bg-[var(--default)] opacity-75" : "bg-[var(--surface)]"}`}>
+          <div className="mb-1 flex items-start justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="font-medium">{c.authorName}</span>
-              <span className="text-xs text-muted-foreground">{c.authorRoleLabel}</span>
-              <Badge variant="outline" className={`text-xs ${meta.color}`}>{typeLabel}</Badge>
-              {c.section ? (
-                <Badge variant="secondary" className="text-xs">§ {labelFor(c.section)}</Badge>
-              ) : sectionLabels?.general ? (
-                <Badge variant="secondary" className="text-xs">§ {sectionLabels.general}</Badge>
-              ) : null}
-              {c.status === "resolved" && <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">{t("comments.statusResolved")}</Badge>}
+              <span className="text-xs text-[var(--muted)]">{c.authorRoleLabel}</span>
+              <Chip size="sm" variant="soft" color={meta.color}>{typeLabel}</Chip>
+              {sectionLabel && <Chip size="sm" variant="tertiary">§ {sectionLabel}</Chip>}
+              {c.status === "resolved" && <Chip size="sm" variant="soft" color="success">{t("comments.statusResolved")}</Chip>}
             </div>
-              <span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">{new Date(c.createdAt).toLocaleString("en-GB")}</span>
+            <bdi dir="ltr" className="shrink-0 whitespace-nowrap text-xs text-[var(--muted)]">{new Date(c.createdAt).toLocaleString("en-GB")}</bdi>
           </div>
-          <p className="text-sm whitespace-pre-wrap break-words">{c.body}</p>
-          {!readOnly && <div className="flex items-center gap-2 mt-2">
-            <Button size="sm" variant="ghost" onClick={() => { setReplyTo(c.id); setCommentType("general"); }}>
-              <Reply className="h-3 w-3" /> {t("comments.reply")}
+          <p className="whitespace-pre-wrap break-words text-page-start text-sm" dir="auto">{c.body}</p>
+          {!readOnly && <div className="mt-2 flex items-center gap-1">
+            <Button size="sm" variant="ghost" onPress={() => { setReplyTo(c.id); setCommentType("general"); composerRef.current?.focus(); }}>
+              <Reply className="size-3.5" aria-hidden="true" /> {t("comments.reply")}
             </Button>
             {c.commentType === "required_correction" && (
               c.status === "open" ? (
-                <Button size="sm" variant="ghost" onClick={() => resolveMut.mutate({ id: c.id, action: "resolve" })}>
-              <CheckCircle2 className="h-3 w-3" /> {t("comments.resolve")}
+                <Button size="sm" variant="ghost" onPress={() => resolveMut.mutate({ id: c.id, action: "resolve" })}>
+                  <CheckCircle2 className="size-3.5" aria-hidden="true" /> {t("comments.resolve")}
                 </Button>
               ) : (
-                <Button size="sm" variant="ghost" onClick={() => resolveMut.mutate({ id: c.id, action: "reopen" })}>
-              <RotateCcw className="h-3 w-3" /> {t("comments.reopen")}
+                <Button size="sm" variant="ghost" onPress={() => resolveMut.mutate({ id: c.id, action: "reopen" })}>
+                  <RotateCcw className="size-3.5" aria-hidden="true" /> {t("comments.reopen")}
                 </Button>
               )
             )}
             {canDelete && (
-                <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" aria-label={t("comments.delete")} onClick={() => deleteMut.mutate(c.id)}>
-                <Trash2 className="h-3 w-3" />
+              <Button size="sm" variant="ghost" isIconOnly className="text-[var(--danger)]" aria-label={t("comments.delete")} onPress={() => setPendingDelete(c.id)}>
+                <Trash2 className="size-3.5" aria-hidden="true" />
               </Button>
             )}
           </div>}
@@ -259,117 +260,126 @@ export function CommentsPanel({
     );
   }
 
+  const filterSections = sections.filter((s) => comments.some((c) =>
+    c.section === s || (c.section == null && s === "general" && !!sectionLabels?.general)));
+
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <MessageSquare className="h-4 w-4" />
-          {t("comments.title")}
-          {unresolvedRC > 0 && (
-            <Badge variant="outline" className="ms-auto bg-red-50 text-red-700 border-red-200">
-              {t("comments.unresolvedCorrections", { count: unresolvedRC })}
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <Card.Header className="flex-row flex-wrap items-center gap-2">
+        <MessageSquare className="size-4" aria-hidden="true" />
+        <Card.Title className="text-base">{t("comments.title")}</Card.Title>
+        {unresolvedRC > 0 && (
+          <Chip size="sm" variant="soft" color="danger" className="ms-auto">
+            {t("comments.unresolvedCorrections", { count: unresolvedRC })}
+          </Chip>
+        )}
+      </Card.Header>
+      <Card.Content className="space-y-4">
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2">
           {sections.length > 0 && (
-            <Select value={section} onValueChange={setSection}>
-              <SelectTrigger aria-label={t("comments.allSections")} className="h-8 min-w-36 w-auto max-w-full text-xs"><SelectValue placeholder={t("comments.sectionPlaceholder")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("comments.allSections")}</SelectItem>
-                {sections
-                  .filter((s) => comments.some((c) =>
-                    c.section === s || (c.section == null && s === "general" && !!sectionLabels?.general)))
-                  .map((s) => <SelectItem key={s} value={s}>{labelFor(s)}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SelectField
+              aria-label={t("comments.sectionPlaceholder")}
+              triggerClassName="min-w-40"
+              value={section}
+              onChange={setSection}
+              options={[{ value: "all", label: t("comments.allSections") }, ...filterSections.map((s) => ({ value: s, label: labelFor(s) }))]}
+            />
           )}
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger aria-label={t("comments.allTypes")} className="h-8 min-w-36 w-auto max-w-full text-xs"><SelectValue placeholder={t("comments.typePlaceholder")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("comments.allTypes")}</SelectItem>
-              {Object.keys(TYPE_META).map((k) => (
-                <SelectItem key={k} value={k}>{t(TYPE_LABELS[k] ?? "comments.typeGeneral")}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectField
+            aria-label={t("comments.typePlaceholder")}
+            triggerClassName="min-w-40"
+            value={filterType}
+            onChange={setFilterType}
+            options={[{ value: "all", label: t("comments.allTypes") }, ...Object.keys(TYPE_META).map((k) => ({ value: k, label: t(TYPE_LABELS[k] ?? "comments.typeGeneral") }))]}
+          />
         </div>
 
         {/* Thread */}
         <div className="space-y-3">
           {isLoading ? (
-            <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("comments.loading")}</div>
+            <div className="flex items-center gap-2 text-sm text-[var(--muted)]"><Loader2 className="size-4 animate-spin" aria-hidden="true" /> {t("comments.loading")}</div>
           ) : isError ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-              <p>{t("comments.loadFailed")}</p>
-              <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => refetch()}>
-                {t("comments.retry")}
-              </Button>
-            </div>
+            <Alert status="danger">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>{t("comments.loadFailed")}</Alert.Description>
+              </Alert.Content>
+              <Button size="sm" variant="tertiary" onPress={() => { void refetch(); }}>{t("comments.retry")}</Button>
+            </Alert>
           ) : roots.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center py-6 border-2 border-dashed rounded-md">{t("comments.empty")}</div>
+            <div className="rounded-xl border-2 border-dashed border-[var(--border)] py-6 text-center text-sm text-[var(--muted)]">{t("comments.empty")}</div>
           ) : (
             roots.map((c) => renderComment(c, 0))
           )}
         </div>
 
         {/* Composer (hidden in read-only mode) */}
-        {!readOnly && <div className="border-t pt-4 space-y-2">
+        {!readOnly && <div className="space-y-2 border-t border-[var(--border)] pt-4">
           {replyTo != null && (
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              {t("comments.replyingTo", { id: replyTo })}
-              <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => setReplyTo(null)}>{t("comments.cancel")}</Button>
+            <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+              {replyingToName ? t("comments.replyingToName", { name: replyingToName }) : t("comments.replyingTo", { id: replyTo })}
+              <Button size="sm" variant="ghost" onPress={() => setReplyTo(null)}>{t("comments.cancel")}</Button>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={commentType} onValueChange={setCommentType} disabled={replyTo != null}>
-              <SelectTrigger aria-label={t("comments.typePlaceholder")} className="h-8 min-w-40 w-auto max-w-full text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {allowedTypes.map((k: string) => (
-                  <SelectItem key={k} value={k}>{t(TYPE_LABELS[k] ?? "comments.typeGeneral")}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectField
+              aria-label={t("comments.typePlaceholder")}
+              triggerClassName="min-w-40"
+              isDisabled={replyTo != null}
+              value={commentType}
+              onChange={setCommentType}
+              options={allowedTypes.map((k) => ({ value: k, label: t(TYPE_LABELS[k] ?? "comments.typeGeneral") }))}
+            />
             {sections.length > 0 && replyTo == null && (
-              <Select value={postingSection || "_none"} onValueChange={(v) => setPostingSection(v === "_none" ? "" : v)}>
-                <SelectTrigger aria-label={t("comments.tagSection")} className="h-8 min-w-36 w-auto max-w-full text-xs"><SelectValue placeholder={t("comments.tagSection")} /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">{t("comments.noSection")}</SelectItem>
-                  {sections.map((s) => <SelectItem key={s} value={s}>{labelFor(s)}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SelectField
+                aria-label={t("comments.tagSection")}
+                triggerClassName="min-w-40"
+                placeholder={t("comments.tagSection")}
+                value={postingSection || "_none"}
+                onChange={(v) => setPostingSection(v === "_none" ? "" : v)}
+                options={[{ value: "_none", label: t("comments.noSection") }, ...sections.map((s) => ({ value: s, label: labelFor(s) }))]}
+              />
             )}
           </div>
-          <Textarea
+          <TextArea
             ref={composerRef}
+            fullWidth
+            dir="auto"
+            className="resize-y text-page-start"
+            aria-label={replyTo != null ? t("comments.placeholderReply") : t("comments.placeholderNew")}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder={replyTo != null ? t("comments.placeholderReply") : t("comments.placeholderNew")}
             rows={3}
-            className="resize-y"
           />
           <div className="flex justify-end">
             <Button
               size="sm"
-              disabled={!body.trim() || createMut.isPending}
-              onClick={() => createMut.mutate({
+              isDisabled={!body.trim()}
+              isPending={createMut.isPending}
+              onPress={() => createMut.mutate({
                 body: body.trim(),
                 commentType: replyTo != null ? "general" : commentType,
                 parentId: replyTo,
                 section: replyTo != null ? null : (postingSection || null),
               })}
             >
-              {createMut.isPending
-                ? <><Loader2 className="h-3 w-3 animate-spin" /> {t("comments.posting")}</>
-                : (replyTo != null ? t("comments.postReply") : t("comments.postComment"))
-              }
+              {createMut.isPending ? t("comments.posting") : (replyTo != null ? t("comments.postReply") : t("comments.postComment"))}
             </Button>
           </div>
         </div>}
-      </CardContent>
+      </Card.Content>
+      <ConfirmModal
+        isOpen={pendingDelete != null}
+        title={t("comments.deleteConfirmTitle")}
+        message={t("comments.deleteConfirmMessage")}
+        confirmLabel={t("comments.delete")}
+        cancelLabel={t("comments.cancel")}
+        isPending={deleteMut.isPending}
+        onConfirm={() => { if (pendingDelete != null) deleteMut.mutate(pendingDelete); }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </Card>
   );
 }

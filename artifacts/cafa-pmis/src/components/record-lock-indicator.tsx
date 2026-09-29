@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Lock } from "@/components/icons";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, Button } from "@heroui/react";
 import { useSocket, useWatchRecord } from "@/lib/socket";
 
 interface LockState {
@@ -77,20 +76,19 @@ export function RecordLockIndicator({
   }
 
   return (
-    <Alert className="border-amber-200 bg-amber-50 mb-3">
-      <Lock className="h-4 w-4 text-amber-600 shrink-0" />
-      <AlertDescription className="text-amber-800 text-sm">
-        <span className="font-semibold">{lockState.lockedBy?.name}</span>{" "}
-        {t("recordLock.isEditing")}
-        {onAcquireLock && (
-          <button
-            onClick={onAcquireLock}
-            className="ms-2 underline text-amber-900 hover:text-amber-700 text-xs"
-          >
-            {t("recordLock.takeOver")}
-          </button>
-        )}
-      </AlertDescription>
+    <Alert status="warning" className="mb-3">
+      <Alert.Indicator />
+      <Alert.Content>
+        <Alert.Description>
+          <span className="font-semibold" dir="auto">{lockState.lockedBy?.name}</span>{" "}
+          {t("recordLock.isEditing")}
+        </Alert.Description>
+      </Alert.Content>
+      {onAcquireLock && (
+        <Button size="sm" variant="secondary" onPress={onAcquireLock}>
+          {t("recordLock.takeOver")}
+        </Button>
+      )}
     </Alert>
   );
 }
