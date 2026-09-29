@@ -78,8 +78,6 @@ DOCUMENT UPLOAD: Use "Upload" button on project detail page under Documents tab.
 EXPORT: Reports page has "Export CSV" button. Project detail has "Export PDF" (print dialog). Manual chapters have Print + Word export buttons.
 
 BENEFICIARY TRACKING: Registered per project in the project form. Categories: IDP, Returnee, Host Community, Refugee. Breakdown: Male, Female, Boys, Girls. Dashboard shows aggregated totals with modal breakdown.
-
-DEMO CREDENTIALS: password cafa2026 for all users. Username is email local-part (e.g. amira for super_admin).
 `;
 
 function buildRoleContext(user: {
