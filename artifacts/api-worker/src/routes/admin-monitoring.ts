@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Bindings } from "../lib/db";
 import { openDb } from "../lib/db";
 import { attachCurrentUser, requireAuth, requirePerm, type Variables } from "../lib/rbac";
-import { checkFromDomainVerification } from "../lib/mailer";
 
 /**
  * New admin module (not a port — this system-activity module doesn't exist
@@ -17,12 +16,6 @@ import { checkFromDomainVerification } from "../lib/mailer";
 export const adminMonitoringRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 adminMonitoringRoutes.use("/admin/email-logs", attachCurrentUser, requireAuth, requirePerm("system.monitoring.view"));
-adminMonitoringRoutes.use("/admin/email-domain-status", attachCurrentUser, requireAuth, requirePerm("system.monitoring.view"));
-
-adminMonitoringRoutes.get("/admin/email-domain-status", async (c) => {
-  const result = await checkFromDomainVerification(c.env);
-  return c.json(result);
-});
 
 adminMonitoringRoutes.get("/admin/email-logs", async (c) => {
   const search = c.req.query("search");
