@@ -123,7 +123,9 @@ describe("Secure My Profile UI", () => {
     expect(await screen.findByText("المنظمة والوصول")).toBeInTheDocument();
     expect(screen.getByText("اسم المستخدم")).toBeInTheDocument();
     expect(screen.getByText("تاريخ الانضمام")).toBeInTheDocument();
-    expect(screen.getByText(/يناير/)).toBeInTheDocument();
+    // Dates are en-GB in both languages (PROFILE-DATE-FORMAT-UNIFIED), not Arabic month names.
+    expect(screen.getByText("02 Jan 2026")).toBeInTheDocument();
+    expect(screen.queryByText(/يناير/)).not.toBeInTheDocument();
     expect(document.documentElement.dir).toBe("rtl");
   });
 });

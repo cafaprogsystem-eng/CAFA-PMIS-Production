@@ -34,10 +34,25 @@ beforeAll(() => {
   }
 });
 
-// ── i18n mock — return the key (or defaultValue) so buttons are queryable ───
+// ── i18n mock — the real English strings (so labels read as users see them),
+// falling back to the key, which keeps buttons like "submitReport" queryable.
+const EN = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const load = (ns: string) => JSON.parse(readFileSync(`src/locales/en/${ns}.json`, "utf8")) as Record<string, unknown>;
+  return { reports: load("reports"), common: load("common") };
+});
+function translate(key: string, opts?: unknown): string {
+  const o = (opts && typeof opts === "object" ? opts : {}) as Record<string, unknown>;
+  const [ns, path] = key.includes(":") ? key.split(":") : [typeof o.ns === "string" ? o.ns : "reports", key];
+  let v: unknown = (EN as Record<string, Record<string, unknown>>)[ns] ?? EN.reports;
+  for (const part of path.split(".")) v = v && typeof v === "object" ? (v as Record<string, unknown>)[part] : undefined;
+  if (typeof v !== "string") return typeof opts === "string" ? opts : typeof o.defaultValue === "string" ? o.defaultValue : key;
+  return v.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, name: string) => String(o[name] ?? ""));
+}
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, def?: unknown) => (typeof def === "string" ? def : key),
+    t: translate,
     i18n: { language: "en", dir: () => "ltr", changeLanguage: vi.fn() },
   }),
   initReactI18next: { type: "3rdParty", init: vi.fn() },
@@ -97,7 +112,7 @@ function renderPmrPage() {
 
 async function openCreateDialog() {
   const utils = renderPmrPage();
-  const newBtn = (await screen.findAllByRole("button", { name: /newReport/i }))[0];
+  const newBtn = (await screen.findAllByRole("button", { name: /New Report/i }))[0];
   fireEvent.click(newBtn);
   await screen.findByRole("dialog");
   return utils;
@@ -131,7 +146,7 @@ describe("PMR form rendered accessibility (real component)", () => {
   it("failed submit renders role=alert errors whose ids are referenced by the invalid controls", async () => {
     await openCreateDialog();
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /submitReport/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Submit Report/i }));
 
     // Project error: element exists and is referenced from the trigger
     await waitFor(() => {
@@ -165,7 +180,7 @@ describe("PMR form rendered accessibility (real component)", () => {
     const exp = within(dialog).getByLabelText(/Actual Expenditure \(This Period\) — Borehole drilling/);
     fireEvent.change(exp, { target: { value: "-5" } });
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /submitReport/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Submit Report/i }));
 
     // Actual Expenditure: invalid + describedby resolving to a rendered alert
     await waitFor(() => {
@@ -204,7 +219,7 @@ describe("PMR form rendered accessibility (real component)", () => {
     fireEvent.change(within(dialog).getByLabelText("Boys beneficiaries — Borehole drilling"), { target: { value: "4" } });
     fireEvent.change(within(dialog).getByLabelText("Girls beneficiaries — Borehole drilling"), { target: { value: "5" } });
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /submitReport/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Submit Report/i }));
 
     await waitFor(() => {
       expect(document.getElementById("err-act-0-ben-men")).not.toBeNull();
@@ -235,7 +250,7 @@ describe("PMR form rendered accessibility (real component)", () => {
     await openCreateDialog();
     const dialog = screen.getByRole("dialog");
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /submitReport/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Submit Report/i }));
 
     await waitFor(() => {
       expect(document.getElementById("err-act-0-name")).not.toBeNull();
@@ -257,7 +272,7 @@ describe("PMR form rendered accessibility (real component)", () => {
   it("validation rules unchanged: submit with empty form does not call create mutation", async () => {
     await openCreateDialog();
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /submitReport/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Submit Report/i }));
     // Dialog stays open (validation blocked submission)
     await waitFor(() => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();

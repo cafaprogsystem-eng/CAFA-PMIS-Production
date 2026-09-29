@@ -91,6 +91,9 @@ const fetchCalls: FetchCall[] = [];
 let patchOk = true;
 let commentsStatus = 200;
 beforeEach(() => {
+  // The fixture has no attachments, so submit first asks "submit without
+  // documents?" through window.confirm (as in spr-draft-edit); accept it.
+  vi.spyOn(window, "confirm").mockReturnValue(true);
   fetchCalls.length = 0;
   patchOk = true;
   commentsStatus = 200;
