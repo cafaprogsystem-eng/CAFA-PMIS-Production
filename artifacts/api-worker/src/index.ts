@@ -15,7 +15,7 @@ import {
 import { isAccountLocked, recordFailedLogin, clearAccountFailures } from "./lib/rate-limit-store";
 import { disconnectSession } from "./lib/realtime";
 import { getOpenAIClient, buildSystemPrompt } from "./lib/ai";
-import { attachCurrentUser, requireAuth, isDemoRoleHarnessEnabled, type Variables } from "./lib/rbac";
+import { attachCurrentUser, requireAuth, isDemoRoleHarnessEnabled, permissionsFor, type CurrentUser, type Variables } from "./lib/rbac";
 import { notificationsRoutes } from "./routes/notifications";
 import { meRoutes } from "./routes/me";
 import { beneficiariesRoutes } from "./routes/beneficiaries";
@@ -41,6 +41,7 @@ import { healthRoutes } from "./routes/health";
 import { profileRoutes } from "./routes/profile";
 import { passwordResetAdminRoutes } from "./routes/password-reset-admin";
 import { aiRoutes } from "./routes/ai";
+import { authRoutes } from "./routes/auth";
 import { realtimeLocksRoutes } from "./routes/realtime-locks";
 
 /**
@@ -137,6 +138,27 @@ app.post("/auth/login", async (c) => {
     const { token } = await createSession(db, row.id, remember);
     setSessionCookie(c, token, remember);
 
+    // Bug fix (found live during pre-launch certification): this response
+    // was missing `permissions`, unlike /auth/me and /me which both include
+    // it — any caller trusting the login response as an immediate identity
+    // payload (matching the /me contract shape) saw empty permissions until
+    // a separate /me fetch happened.
+    const currentUser: CurrentUser = {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      roleLabel: row.role_label,
+      scope: row.scope,
+      stateId: row.state_id,
+      stateName: null,
+      sector: row.sector,
+      sectors: row.role === "technical_coordinator" && row.sector
+        ? String(row.sector).split(",").map((s) => s.trim()).filter(Boolean)
+        : null,
+      avatarUrl: null,
+    };
+
     return c.json({
       user: {
         id: row.id,
@@ -150,6 +172,7 @@ app.post("/auth/login", async (c) => {
         sector: row.sector,
         status: row.status,
       },
+      permissions: permissionsFor(currentUser),
     });
   } finally {
     close();
@@ -426,6 +449,7 @@ app.route("/", healthRoutes);
 app.route("/", profileRoutes);
 app.route("/", passwordResetAdminRoutes);
 app.route("/", aiRoutes);
+app.route("/", authRoutes);
 app.route("/", realtimeLocksRoutes);
 
 /**

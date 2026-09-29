@@ -70,3 +70,24 @@ export async function isPasswordChangeRateLimited(db: QueryExecutor, userId: num
 export async function recordPasswordChangeAttempt(db: QueryExecutor, userId: number): Promise<void> {
   await recordEvent(db, PASSWORD_CHANGE_BUCKET, String(userId));
 }
+
+/**
+ * Ported from artifacts/api-server/src/lib/rate-limit-store.ts's generic
+ * `isRateLimited` — a manual sliding-window limiter used by auth.ts for
+ * forgot-password (3/15min per IP) and send-verification-email (5/hour per
+ * IP). Matches the original semantics exactly: a request that would exceed
+ * `max` in the trailing `windowMs` is rejected WITHOUT being recorded (so a
+ * blocked caller never extends their own lockout by retrying).
+ */
+export async function isRateLimited(
+  db: QueryExecutor, bucket: string, key: string, max: number, windowMs: number,
+): Promise<boolean> {
+  const { rows } = await db.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM rate_limit_events
+      WHERE bucket = $1 AND key = $2 AND occurred_at > NOW() - ($3 || ' milliseconds')::interval`,
+    [bucket, key, windowMs],
+  );
+  if (Number(rows[0]?.count ?? 0) >= max) return true;
+  await recordEvent(db, bucket, key);
+  return false;
+}

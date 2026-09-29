@@ -123,6 +123,13 @@ custom_domain = true
 # which warns if this is missing) — every var, including this placeholder,
 # must be repeated here even though it's identical to the top-level one.
 SESSION_SECRET = "dev-only-insecure-secret-change-me"
+# Left unset everywhere else (this repo's only other environment is the
+# ongoing test/dev one) — gates isDemoRoleHarnessEnabled (lib/rbac.ts) and
+# whether auth.ts's forgot-password/send-verification-email responses may
+# ever expose a real token for non-production testing convenience. Setting
+# this is a real security boundary, not a label — it must never be set
+# anywhere real staff can actually reach.
+NODE_ENV = "production"
 R2_BUCKET = "cafa-pmis-production-storage"
 PUBLIC_APP_URL = "https://cafa-pmis.org"
 EMAIL_ENABLED = "false"

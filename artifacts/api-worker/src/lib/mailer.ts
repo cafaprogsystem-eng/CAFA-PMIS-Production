@@ -237,6 +237,19 @@ export function renderPasswordResetEmail(env: Bindings, opts: {
   return { subject, html, text };
 }
 
+export function renderPasswordResetConfirmEmail(_env: Bindings, opts: { name: string; email: string }): { subject: string; html: string; text: string } {
+  const subject = "Your CAFA system password has been changed";
+  const html = HEADER() + `
+    <h2 style="margin:0 0 16px;font-size:20px">Password changed</h2>
+    <p>Hello <strong>${opts.name}</strong>,</p>
+    <p>Your CAFA Program Management System password was successfully changed.</p>
+    <p style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:12px 16px;font-size:14px;color:#166534">✓ Your account is secure. You can now sign in with your new password.</p>
+    <p style="font-size:13px;color:#6b7280;margin-top:16px">If you did not make this change, contact your administrator immediately.</p>
+  ` + FOOTER;
+  const text = `Hello ${opts.name},\n\nYour CAFA PMIS password was successfully changed.\n\nIf you did not make this change, contact your administrator immediately.`;
+  return { subject, html, text };
+}
+
 export function renderInviteEmail(env: Bindings, opts: {
   name: string; email: string; roleLabel: string;
   stateName: string | null; sector: string | null;
