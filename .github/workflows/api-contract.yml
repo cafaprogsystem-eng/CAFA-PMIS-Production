@@ -51,6 +51,11 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        env:
+          # @heroui-pro/react downloads its component and style files during
+          # install; without the token the PWA tests and build cannot run
+          # (same secret as the production deploy workflow).
+          HEROUI_AUTH_TOKEN: ${{ secrets.HEROUI_AUTH_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       # Keep this before the broader typecheck so stale contracts fail fast.

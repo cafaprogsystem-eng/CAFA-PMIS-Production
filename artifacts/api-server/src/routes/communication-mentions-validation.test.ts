@@ -519,14 +519,16 @@ describe("COMM-VALIDATION-14 — Body over 10 000 characters rejected with 400",
 });
 
 describe("COMM-VALIDATION-15 — Reaction toggle is idempotent under concurrent duplicate requests", () => {
-  it("uses DELETE RETURNING then conditional INSERT so concurrent toggling does not produce a raw constraint error", async () => {
-    // Simulate a concurrent scenario: DELETE finds nothing (already deleted by concurrent request),
-    // INSERT uses ON CONFLICT DO NOTHING — result is always 200, never 500
+  it("toggles with DELETE RETURNING, then a plain INSERT only when nothing was deleted", async () => {
+    // DELETE finds nothing (e.g. already removed by a concurrent request), so the
+    // route INSERTs. The INSERT has no ON CONFLICT: message_reactions has no unique
+    // index on (message_id, user_id, emoji), and ON CONFLICT against a missing
+    // constraint made every reaction 500 in production (fixed in 89da6a0).
     mockPoolQuery.mockImplementation((sql: string) => {
       if (sql.includes("SELECT conversation_id FROM messages")) return { rows: [{ conversation_id: 101 }], rowCount: 1 };
       if (sql.includes("conversation_members")) return memberResult(true);
       if (sql.includes("DELETE FROM message_reactions")) return { rows: [], rowCount: 0 }; // nothing deleted
-      if (sql.includes("INSERT INTO message_reactions") && sql.includes("ON CONFLICT")) return { rows: [], rowCount: 1 };
+      if (sql.includes("INSERT INTO message_reactions")) return { rows: [], rowCount: 1 };
       if (sql.includes("SELECT r.emoji")) return { rows: [{ emoji: "👍", userId: 1, userName: "Alice Sender" }], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     });
@@ -540,7 +542,8 @@ describe("COMM-VALIDATION-15 — Reaction toggle is idempotent under concurrent 
     // Confirm the route used DELETE RETURNING before INSERT, not check-then-insert
     const deleteCalls = mockPoolQuery.mock.calls.filter(([sql]) => String(sql).includes("DELETE FROM message_reactions"));
     expect(deleteCalls.length).toBeGreaterThanOrEqual(1);
-    const insertCalls = mockPoolQuery.mock.calls.filter(([sql]) => String(sql).includes("ON CONFLICT (message_id, user_id, emoji) DO NOTHING"));
-    expect(insertCalls.length).toBeGreaterThanOrEqual(1);
+    const insertCalls = mockPoolQuery.mock.calls.filter(([sql]) => String(sql).includes("INSERT INTO message_reactions"));
+    expect(insertCalls.length).toBe(1);
+    expect(String(insertCalls[0][0])).not.toContain("ON CONFLICT");
   });
 });

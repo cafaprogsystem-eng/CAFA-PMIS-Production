@@ -176,7 +176,7 @@ async function buildApp(user: Record<string, unknown>) {
  * 14. DELETE project_documents
  * 15. INSERT output → RETURNING id
  * 16. INSERT indicator → RETURNING id
- * 17. UPDATE or INSERT activity
+ * 17. UPDATE or INSERT activity (INSERT … RETURNING id)
  * 18. DELETE removed activities  (or DELETE all when matchedIds empty)
  * 19. COMMIT
  */
@@ -203,7 +203,10 @@ function makeClientResponses(
     { rows: [] },                                          // 14. DELETE project_documents
     { rows: [{ id: 999 }] },                              // 15. INSERT output
     { rows: [{ id: 888 }] },                              // 16. INSERT indicator
-    { rows: [] },                                          // 17. UPDATE/INSERT activity
+    // 17. UPDATE/INSERT activity. The INSERT uses RETURNING id so the new row
+    // joins matchedActivityIds and survives step 18 (fix 6d19bf1); the UPDATE
+    // path ignores the rows.
+    { rows: [{ id: 777 }] },
     { rows: [] },                                          // 18. DELETE removed activities
     { rows: [] },                                          // 19. COMMIT
   ];
@@ -552,8 +555,10 @@ describe("PRJ-BD-03 — Activity Spend Preservation", () => {
   });
 
   it("PRJ-SPEND-11: Removed activity with budget_spent > 0 is deleted by the DELETE clause", async () => {
-    // Activity id=50 exists in DB with spend but is NOT in incoming payload
-    // → it must appear in the DELETE query (matchedIds is empty → DELETE all)
+    // Activity id=50 exists in DB with spend but is NOT in incoming payload,
+    // so the cleanup DELETE must remove it — while keeping the activity that
+    // was just INSERTed (id 777 from RETURNING). Before fix 6d19bf1 the new
+    // row was not in matchedIds and "DELETE all" removed it again.
     setupClientResponses(makeClientResponses([{ id: 50, budget_spent: "9999.00", progress_pct: 100 }]));
     setupPoolEnrich();
 
@@ -567,12 +572,14 @@ describe("PRJ-BD-03 — Activity Spend Preservation", () => {
 
     const allCalls = mockClientQuery.mock.calls.map((c: unknown[]) => (c[0] as string).trim());
 
-    // Since no activities matched (new one has no id), the fallback DELETE all runs
-    const deleteAll = allCalls.find(
-      (q: string) => q.startsWith("DELETE FROM activities WHERE project_id=$1") &&
-        !q.includes("AND id"),
-    );
-    expect(deleteAll).toBeDefined();
+    // The cleanup keeps only the rows written in this request: 50 goes, 777 stays.
+    const deleteIndex = allCalls.findIndex((q: string) =>
+      q.startsWith("DELETE FROM activities WHERE project_id=$1 AND id != ALL($2::int[])"));
+    expect(deleteIndex).toBeGreaterThanOrEqual(0);
+    const [, keptIds] = mockClientQuery.mock.calls[deleteIndex][1] as [number, number[]];
+    expect(keptIds).toEqual([777]);
+    expect(keptIds).not.toContain(50);
+    expect(allCalls.some((q: string) => q === "DELETE FROM activities WHERE project_id=$1")).toBe(false);
 
     // The new activity was INSERTed with 0 spend
     const insertCall = allCalls.find((q: string) => q.startsWith("INSERT INTO activities"));

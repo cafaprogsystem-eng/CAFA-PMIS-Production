@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
@@ -33,14 +33,19 @@ export default defineConfig({
     mockupPreviewPlugin(),
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
+    // When the lockfile holds two resolutions of Vite (with and without the
+    // optional tsx peer), the Replit plugins get their types from the other
+    // one and TypeScript sees two unrelated Plugin types. It is the same Vite
+    // at runtime; typing them against this config's Vite keeps the workspace
+    // typecheck stable either way.
+    runtimeErrorOverlay() as PluginOption,
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
           await import("@replit/vite-plugin-cartographer").then((m) =>
             m.cartographer({
               root: path.resolve(import.meta.dirname, ".."),
-            }),
+            }) as PluginOption,
           ),
         ]
       : []),

@@ -18,12 +18,10 @@
   },
   "private": true,
   "devDependencies": {
+    "@playwright/test": "1.57.0",
     "prettier": "^3.8.3",
+    "sharp": "^0.34.5",
     "tsx": "catalog:",
     "typescript": "~5.9.3"
-  },
-  "dependencies": {
-    "@playwright/test": "1.57.0",
-    "sharp": "^0.34.5"
   }
 }

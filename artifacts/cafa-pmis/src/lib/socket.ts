@@ -190,12 +190,16 @@ class RealtimeSocket {
         if (typeof cid === "string" && this.pendingAcks.has(cid)) {
           const resolve = this.pendingAcks.get(cid)!;
           this.pendingAcks.delete(cid);
-          const { type: _t, cid: _c, ...result } = msg;
+          // The ack payload is the message without its envelope fields.
+          const result = { ...msg };
+          delete result.type;
+          delete result.cid;
           resolve(result);
         }
         return;
       }
-      const { type: _t2, ...payload } = msg;
+      const payload = { ...msg };
+      delete payload.type;
       this.emitLocal(type, payload);
     };
 

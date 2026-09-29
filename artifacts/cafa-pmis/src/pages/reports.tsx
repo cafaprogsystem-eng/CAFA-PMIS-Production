@@ -3475,6 +3475,10 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
   // the table and every other view mode so they stay in step.
   // `inMenu` (the table) folds Continue editing into the menu so the actions
   // column stays narrow; the card/list views keep it as a visible button.
+  // The handlers are plain functions recreated on each render; reading them
+  // through a ref keeps renderRowActions memoised while always calling the latest.
+  const rowHandlers = useRef({ handleDirectSubmit, handleDuplicateReport });
+  rowHandlers.current = { handleDirectSubmit, handleDuplicateReport };
   const renderRowActions = useCallback((r: Report, inMenu = false) => {
     const canResume = canResumeReportDraft(r, perms, me?.user);
     const canDelete = canDeleteReportDraft(r, perms, me?.user);
@@ -3482,8 +3486,8 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
     const menu = [
       ...(canResume && inMenu ? [{ id: "continue", label: t("continueEditing", { ns: "common" }), icon: Pencil, run: () => startDraftEditing(r) }] : []),
       ...(canResume ? [
-        { id: "submit", label: t("list.submit"), icon: Send, run: () => handleDirectSubmit(r) },
-        { id: "duplicate", label: t("list.duplicate"), icon: Copy, run: () => handleDuplicateReport(r) },
+        { id: "submit", label: t("list.submit"), icon: Send, run: () => rowHandlers.current.handleDirectSubmit(r) },
+        { id: "duplicate", label: t("list.duplicate"), icon: Copy, run: () => rowHandlers.current.handleDuplicateReport(r) },
       ] : []),
       // reports.delete is a dedicated permission — never inferred from reports.update.
       ...(canDelete ? [{ id: "delete", label: t("list.deleteDraft"), icon: Trash2, danger: true, run: () => setDeleteTarget(r) }] : []),
@@ -3513,7 +3517,7 @@ export default function ReportsPage({ lockedType }: { lockedType: string }) {
         </Dropdown>
       </div>
     );
-  }, [perms, me?.user, t, handleDirectSubmit, handleDuplicateReport, startDraftEditing]);
+  }, [perms, me?.user, t, startDraftEditing]);
 
   const viewRecords: ViewRecord[] = useMemo(
     () =>
