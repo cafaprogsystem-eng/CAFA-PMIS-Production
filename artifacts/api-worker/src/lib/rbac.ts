@@ -409,6 +409,17 @@ export function permissionsFor(user: CurrentUser): string[] {
     perms.push("ai.logs.view");
   }
 
+  // System monitoring (email delivery log + live presence admin module):
+  // SA (via *), plus explicit grants for ED, PM, and senior_program_coordinator
+  // oversight roles. The user's request said "senior_program_officer" — no such
+  // role exists (VALID_ROLES has senior_program_coordinator, an HQ-level
+  // coordination role, and state_program_officer, a state-level creator role);
+  // senior_program_coordinator is used here as the closest match — flagged for
+  // confirmation, one-line change if a different role was actually meant.
+  if (["executive_director", "program_manager", "senior_program_coordinator"].includes(role)) {
+    perms.push("system.monitoring.view");
+  }
+
   // Document Repository admin access: super_admin gets it via "*"; explicit grant for ED + PM.
   if (["executive_director", "program_manager"].includes(role)) {
     perms.push("storage.admin");

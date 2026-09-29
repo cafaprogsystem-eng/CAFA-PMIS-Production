@@ -43,6 +43,7 @@ import { passwordResetAdminRoutes } from "./routes/password-reset-admin";
 import { aiRoutes } from "./routes/ai";
 import { authRoutes } from "./routes/auth";
 import { realtimeLocksRoutes } from "./routes/realtime-locks";
+import { adminMonitoringRoutes } from "./routes/admin-monitoring";
 import { scheduled } from "./scheduled";
 
 /**
@@ -452,6 +453,7 @@ app.route("/", passwordResetAdminRoutes);
 app.route("/", aiRoutes);
 app.route("/", authRoutes);
 app.route("/", realtimeLocksRoutes);
+app.route("/", adminMonitoringRoutes);
 
 /**
  * Ported from artifacts/api-server/src/lib/error-handler.ts's
