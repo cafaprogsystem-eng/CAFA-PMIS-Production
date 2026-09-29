@@ -44,7 +44,7 @@ interface SwitcherRow extends Record<string, unknown> {
 // role harness is enabled (never in production regardless of env flags —
 // see isDemoRoleHarnessEnabled). Exposes all active user IDs + roles and
 // enables identity impersonation in dev.
-meRoutes.get("/users/switcher", attachCurrentUser, async (c) => {
+meRoutes.get("/users/switcher", attachCurrentUser, requireAuth, async (c) => {
   // A disabled harness intentionally looks absent so production does not
   // expose a discoverable impersonation endpoint or fixture identity list.
   if (!isDemoRoleHarnessEnabled(c.env)) {
