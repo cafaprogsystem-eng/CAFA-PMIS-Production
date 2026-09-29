@@ -26,6 +26,7 @@ import {
 } from "@/components/icons";
 import { CommentsPanel } from "@/components/comments-panel";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/use-confirm";
 import { SECTORS } from "@/lib/sectors";
 import { hasPerm } from "@/lib/format";
 import { FormVoiceRecorder, type PendingNote } from "@/components/form-voice-recorder";
@@ -1199,6 +1200,7 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
     finally { setIsSaving(false); }
   });
 
+  const [confirm, confirmDialog] = useConfirm();
   const onSubmitReport = form.handleSubmit(async (values) => {
     if (!isOnline) {
       toast.error(t("sync.internetRequired", { ns: "common" }));
@@ -1207,7 +1209,13 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
     // Unified with program-state-report-form.tsx: warn (not block) before
     // submitting with zero supporting documents.
     if (hasNoAttachments) {
-      if (!window.confirm(t("hqForm.noAttachmentsConfirm"))) return;
+      const proceed = await confirm({
+        title: t("formUi.noAttachmentsTitle"),
+        message: t("formUi.noAttachmentsMessage"),
+        confirmLabel: t("formUi.submitAnyway"),
+        cancelLabel: t("formUi.addDocumentsFirst"),
+      });
+      if (!proceed) return;
     }
     setIsSaving(true);
     try {
@@ -1918,6 +1926,7 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         </Modal.Container>
         </Modal.Backdrop>
       </Modal>
+      {confirmDialog}
     </>
   );
 }

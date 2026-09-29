@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
+import { useConfirm } from "@/components/use-confirm";
 import {
   Search, FolderKanban, ChartNoAxesColumn, User, Loader2, X, Clock,
   AlertTriangle, CalendarClock, Paperclip, LayoutDashboard,
@@ -317,12 +318,21 @@ export function CommandPalette() {
     if (restoreFocus) setTimeout(() => prevFocusRef.current?.focus(), 10);
   }, []);
 
-  const handleClearRecent = useCallback(() => {
-    if (!window.confirm(tNav("commandPalette.clearHistoryConfirm"))) return;
+  const [confirm, confirmDialog] = useConfirm();
+  const handleClearRecent = useCallback(async () => {
+    if (!(await confirm({
+      title: tNav("commandPalette.clearHistoryTitle"),
+      message: tNav("commandPalette.clearHistoryConfirm"),
+      confirmLabel: tNav("commandPalette.clearRecent"),
+      cancelLabel: tNav("commandPalette.cancel"),
+      tone: "danger",
+      // The palette is its own overlay at z-200.
+      backdropClassName: "z-[210]",
+    }))) return;
     clearRecent();
     setRecentSearches([]);
     try { localStorage.removeItem(HISTORY_KEY); } catch { /* noop */ }
-  }, [clearRecent, tNav]);
+  }, [clearRecent, confirm, tNav]);
 
   /* ── Load recent search history ─────────────────────────────────────── */
   const loadRecent = useCallback(() => {
@@ -786,6 +796,7 @@ export function CommandPalette() {
           </div>
         </div>
       </div>
+      {confirmDialog}
     </div>,
     document.body
   );

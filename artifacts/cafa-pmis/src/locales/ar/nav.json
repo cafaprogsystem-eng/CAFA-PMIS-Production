@@ -75,6 +75,8 @@
     "viewAll": "عرض كل الإشعارات"
   },
   "commandPalette": {
+    "clearHistoryTitle": "مسح السجل الأخير؟",
+    "cancel": "إلغاء",
     "label": "لوحة الأوامر",
     "searchPlaceholder": "ابحث في المشاريع والتقارير والمستخدمين أو انتقل إلى…",
     "searchAriaLabel": "بحث في لوحة الأوامر",

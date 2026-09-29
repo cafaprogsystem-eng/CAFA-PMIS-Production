@@ -615,6 +615,8 @@
     "localityHqOptional": "Optional for HQ plans. To pick a locality, add it under Geographical Coverage first."
   },
   "statesPage": {
+    "confirmTitle": "Confirm State change",
+    "confirmAction": "Confirm",
     "heading": "States",
     "description": "Canonical State registry for names, codes and office reference details.",
     "add": "Add State",

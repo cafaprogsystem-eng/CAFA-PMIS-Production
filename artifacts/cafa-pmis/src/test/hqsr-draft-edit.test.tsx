@@ -91,9 +91,6 @@ const fetchCalls: FetchCall[] = [];
 let patchOk = true;
 let commentsStatus = 200;
 beforeEach(() => {
-  // The fixture has no attachments, so submit first asks "submit without
-  // documents?" through window.confirm (as in spr-draft-edit); accept it.
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   fetchCalls.length = 0;
   patchOk = true;
   commentsStatus = 200;
@@ -371,6 +368,13 @@ describe("HQSR-005 — save behaviour (HQSR-EDIT-SAVE-01…04, ID-04…07)", () 
 });
 
 describe("HQSR-005 — submit behaviour (HQSR-EDIT-SUB-01…03, REV-06, FB tests)", () => {
+  // The fixture has no attachments, so submit first asks "submit without
+  // supporting documents?" in a HeroUI confirmation; accept it.
+  const submitAndConfirm = async () => {
+    fireEvent.click(screen.getByText("hqForm.submitReport"));
+    fireEvent.click(await screen.findByRole("button", { name: "formUi.submitAnyway" }));
+  };
+
   it("HQSR-EDIT-SUB-00: incomplete new reports never create or submit a metadata-only record", async () => {
     renderForm(undefined);
     fireEvent.click(screen.getByText("hqForm.submitReport"));
@@ -382,7 +386,7 @@ describe("HQSR-005 — submit behaviour (HQSR-EDIT-SUB-01…03, REV-06, FB tests
   it("HQSR-EDIT-SUB-01/02 / REV-06: Resubmit = PATCH then transition on the same id", async () => {
     renderForm(existingReport);
     await waitForHydration();
-    fireEvent.click(screen.getByText("hqForm.submitReport"));
+    await submitAndConfirm();
     await waitFor(() => expect(transitionMutateAsync).toHaveBeenCalledTimes(1));
     expect(patchCallsTo(88).length).toBe(1);
     expect(createMutateAsync).not.toHaveBeenCalled();
@@ -397,7 +401,7 @@ describe("HQSR-005 — submit behaviour (HQSR-EDIT-SUB-01…03, REV-06, FB tests
     patchOk = false;
     renderForm(existingReport);
     await waitForHydration();
-    fireEvent.click(screen.getByText("hqForm.submitReport"));
+    await submitAndConfirm();
     await waitFor(() => expect(patchCallsTo(88).length).toBe(1));
     await new Promise((r) => setTimeout(r, 80));
     expect(transitionMutateAsync).not.toHaveBeenCalled();
@@ -408,7 +412,7 @@ describe("HQSR-005 — submit behaviour (HQSR-EDIT-SUB-01…03, REV-06, FB tests
     transitionMutateAsync.mockRejectedValueOnce(new Error("report_content_incomplete"));
     renderForm(existingReport);
     await waitForHydration();
-    fireEvent.click(screen.getByText("hqForm.submitReport"));
+    await submitAndConfirm();
     await waitFor(() => expect(transitionMutateAsync).toHaveBeenCalledTimes(1));
     expect(patchCallsTo(88).length).toBe(1); // content was saved first
     expect(createMutateAsync).not.toHaveBeenCalled(); // never falls back to POST

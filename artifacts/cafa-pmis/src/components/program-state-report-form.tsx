@@ -27,6 +27,7 @@ import {
   CheckCircle2, AlertCircle, Lock,
 } from "@/components/icons";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/use-confirm";
 import { SECTORS } from "@/lib/sectors";
 import { hasPerm } from "@/lib/format";
 import { FormVoiceRecorder, type PendingNote } from "@/components/form-voice-recorder";
@@ -1202,13 +1203,20 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
     }
   });
 
+  const [confirm, confirmDialog] = useConfirm();
   const onSubmitReport = form.handleSubmit(async (values) => {
     if (!isOnline) {
       toast.error(t("sync.internetRequired", { ns: "common" }));
       return;
     }
     if (hasNoAttachments) {
-      if (!window.confirm(t("stateForm.noAttachmentsConfirm"))) return;
+      const proceed = await confirm({
+        title: t("formUi.noAttachmentsTitle"),
+        message: t("formUi.noAttachmentsMessage"),
+        confirmLabel: t("formUi.submitAnyway"),
+        cancelLabel: t("formUi.addDocumentsFirst"),
+      });
+      if (!proceed) return;
     }
     try {
       let reportId: number;
@@ -1261,6 +1269,7 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
     (existingReport.approvalHistory ?? []).some((h) => String(h.action ?? "").includes("revision"));
 
   return (
+    <>
     <form className="space-y-6">
       <div className="border-b pb-3">
         <h3 className="text-lg font-semibold" id="spr-form-heading">
@@ -1944,6 +1953,8 @@ export function ProgramStateReportForm({ onClose, existingReport, onOpenExisting
         </HButton>
       </div>
     </form>
+    {confirmDialog}
+    </>
   );
 }
 

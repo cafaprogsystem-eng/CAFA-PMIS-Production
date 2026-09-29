@@ -1226,6 +1226,10 @@
     "viewReport": "View report"
   },
   "formUi": {
+    "noAttachmentsTitle": "Submit without supporting documents?",
+    "noAttachmentsMessage": "No supporting documents are attached. Evidence such as photos, attendance sheets and field notes is strongly recommended.",
+    "submitAnyway": "Submit anyway",
+    "addDocumentsFirst": "Add documents first",
     "errors": {
       "titleRequired": "Report Title is required",
       "projectRequired": "Project is required",

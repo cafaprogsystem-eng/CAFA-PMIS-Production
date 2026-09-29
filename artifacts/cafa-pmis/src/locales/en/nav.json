@@ -75,6 +75,8 @@
     "viewAll": "View All Notifications"
   },
   "commandPalette": {
+    "clearHistoryTitle": "Clear recent history?",
+    "cancel": "Cancel",
     "label": "Command palette",
     "searchPlaceholder": "Search projects, reports, users, or navigate…",
     "searchAriaLabel": "Command palette search",

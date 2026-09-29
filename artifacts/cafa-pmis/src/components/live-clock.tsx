@@ -6,7 +6,6 @@
  * browser-timezone fallback. Never makes server requests for the time.
  */
 import { useState, useEffect, useRef } from "react";
-import { useTranslation } from "react-i18next";
 import { HintTooltip } from "@/components/hint-tooltip";
 
 interface LiveClockProps {
@@ -14,11 +13,10 @@ interface LiveClockProps {
   timezone?: string | null;
 }
 
-function formatParts(date: Date, tz: string, language = "en") {
+function formatParts(date: Date, tz: string) {
   const opts = { timeZone: tz } as const;
-  // Arabic month names and ص/م in Arabic, always with Western digits.
-  const ar = language === "ar";
-  const dateLocale = ar ? "ar-u-nu-latn" : "en-GB";
+  // en-GB in both languages, like every date in the app.
+  const dateLocale = "en-GB";
 
   // British English date — "5 August 2026"
   const dateFull = new Intl.DateTimeFormat(dateLocale, {
@@ -37,13 +35,13 @@ function formatParts(date: Date, tz: string, language = "en") {
   }).format(date);
 
   // "03:24 AM" — 12-hour with leading zero and uppercase meridiem
-  const rawTime = new Intl.DateTimeFormat(ar ? "ar-u-nu-latn" : "en-US", {
+  const rawTime = new Intl.DateTimeFormat("en-US", {
     ...opts,
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
   }).format(date);
-  const time = ar ? rawTime : rawTime.replace(/\s?(am|pm)$/i, m => " " + m.trim().toUpperCase());
+  const time = rawTime.replace(/\s?(am|pm)$/i, m => " " + m.trim().toUpperCase());
 
   // Machine-readable value for <time datetime="…">
   const iso = date.toISOString();
@@ -78,8 +76,7 @@ export function LiveClock({ timezone }: LiveClockProps) {
     };
   }, []); // tz is used only in render; no need to restart the timer on tz change
 
-  const { i18n } = useTranslation();
-  const { dateFull, dateShort, time, iso } = formatParts(now, tz, i18n.language);
+  const { dateFull, dateShort, time, iso } = formatParts(now, tz);
 
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const tooltipLines = [
@@ -92,25 +89,27 @@ export function LiveClock({ timezone }: LiveClockProps) {
       placement="bottom"
       className="space-y-0.5"
       content={<>
-        <p className="font-medium">{dateFull} · {time}</p>
+        <p className="font-medium"><bdi dir="ltr">{dateFull} · {time}</bdi></p>
         <p className="opacity-70">{tz}</p>
       </>}
     >
         {/*
           aria-label gives screen readers the full date + time + timezone.
           aria-live is intentionally omitted — minute updates should not be
-          announced as live regions.
+          announced as live regions. dir="ltr" keeps the en-GB date in order
+          inside the Arabic header (it read "SEPTEMBER 2026 29" otherwise).
         */}
         <time
           role="img"
+          dir="ltr"
           dateTime={iso}
           aria-label={tooltipLines.join(" — ")}
           // Label + value pair from the HeroUI Pro navbar "Dashboard" example.
           className="flex items-center gap-1.5 select-none cursor-default whitespace-nowrap tabular-nums"
         >
           {/* Full month name — large desktop only; abbreviated on md–lg */}
-          <span className="hidden lg:inline text-[var(--muted)] text-[11px] font-medium uppercase tracking-wider rtl:tracking-normal">{dateFull}</span>
-          <span className="hidden md:inline lg:hidden text-[var(--muted)] text-[11px] font-medium uppercase tracking-wider rtl:tracking-normal">{dateShort}</span>
+          <span className="hidden lg:inline text-[var(--muted)] text-[11px] font-medium uppercase tracking-wider">{dateFull}</span>
+          <span className="hidden md:inline lg:hidden text-[var(--muted)] text-[11px] font-medium uppercase tracking-wider">{dateShort}</span>
           {/* Time is always shown when the component is visible */}
           <span className="text-foreground text-sm font-semibold">{time}</span>
         </time>

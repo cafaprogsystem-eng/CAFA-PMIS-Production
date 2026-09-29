@@ -10,7 +10,7 @@ import { AlertTriangle } from "@/components/icons";
  * ignored, so an in-flight action can't be abandoned half way.
  */
 export function ConfirmModal({
-  isOpen, title, message, confirmLabel, cancelLabel, onConfirm, onCancel, isPending, tone = "danger", children,
+  isOpen, title, message, confirmLabel, cancelLabel, onConfirm, onCancel, isPending, tone = "danger", children, backdropClassName,
 }: {
   isOpen: boolean;
   title: string;
@@ -23,11 +23,13 @@ export function ConfirmModal({
   tone?: "danger" | "primary";
   /** Extra content under the message, e.g. an error alert. */
   children?: ReactNode;
+  /** Raises the dialog above a custom overlay (e.g. the command palette at z-200). */
+  backdropClassName?: string;
 }) {
   const danger = tone === "danger";
   return (
     <Modal isOpen={isOpen} onOpenChange={(open) => { if (!open && !isPending) onCancel(); }}>
-      <Modal.Backdrop isDismissable={!isPending}>
+      <Modal.Backdrop isDismissable={!isPending} className={backdropClassName}>
         <Modal.Container size="sm">
           <Modal.Dialog role="alertdialog">
             <Modal.Header>

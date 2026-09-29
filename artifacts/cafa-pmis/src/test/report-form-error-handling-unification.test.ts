@@ -40,7 +40,9 @@ describe("REPORT-FORM-ERROR-HANDLING-UNIFICATION: HQSR now matches SPR's error-r
 
   it("HQSR now has the same no-attachments submit warning as SPR", () => {
     expect(hqsrSrc).toContain("hasNoAttachments");
-    expect(hqsrSrc).toContain('if (!window.confirm(t("hqForm.noAttachmentsConfirm"))) return;');
+    // The native window.confirm became the shared HeroUI confirmation.
+    expect(hqsrSrc).toContain('title: t("formUi.noAttachmentsTitle")');
+    expect(hqsrSrc).not.toContain("window.confirm(");
     expect(enReports.hqForm.noAttachmentsConfirm).toBeTruthy();
     expect(arReports.hqForm.noAttachmentsConfirm).toBeTruthy();
   });

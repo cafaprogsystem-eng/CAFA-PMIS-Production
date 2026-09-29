@@ -1234,6 +1234,10 @@
     "viewReport": "عرض التقرير"
   },
   "formUi": {
+    "noAttachmentsTitle": "التقديم بدون مستندات داعمة؟",
+    "noAttachmentsMessage": "لا توجد مستندات داعمة مرفقة. يُوصى بشدة بإرفاق أدلة مثل الصور وسجلات الحضور والملاحظات الميدانية.",
+    "submitAnyway": "التقديم على أي حال",
+    "addDocumentsFirst": "إضافة مستندات أولاً",
     "errors": {
       "titleRequired": "عنوان التقرير مطلوب",
       "projectRequired": "المشروع مطلوب",

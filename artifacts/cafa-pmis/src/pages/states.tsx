@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useConfirm } from "@/components/use-confirm";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -283,11 +284,19 @@ export default function StatesPage() {
         .some((value) => value!.toLocaleLowerCase().includes(query)),
     );
   }, [search, states]);
+  const [confirm, confirmDialog] = useConfirm();
   const updateStateLifecycle = async (state: StateRecord, changes: { operationalStatus?: "active" | "inactive"; officeStatus?: "present" | "absent" | "unknown" }) => {
     const description = changes.operationalStatus
       ? t("statesPage.confirmOperational", { action: t(changes.operationalStatus === "active" ? "statesPage.activate" : "statesPage.deactivate"), name: state.name })
       : t("statesPage.confirmOffice", { action: t(changes.officeStatus === "present" ? "statesPage.markOfficePresent" : "statesPage.markNoOffice"), name: state.name });
-    if (!window.confirm(description)) return;
+    const deactivating = changes.operationalStatus === "inactive" || changes.officeStatus === "absent";
+    if (!(await confirm({
+      title: t("statesPage.confirmTitle"),
+      message: description,
+      confirmLabel: t("statesPage.confirmAction"),
+      cancelLabel: t("statesPage.cancel"),
+      tone: deactivating ? "danger" : "primary",
+    }))) return;
     try {
       await updateLifecycle.mutateAsync({ stateId: state.id, data: { confirmed: true, ...changes } });
       toast.success(t("statesPage.lifecycleSaved"));
@@ -352,6 +361,7 @@ export default function StatesPage() {
       )}
 
       {editing !== null && <StateDialog record={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
+      {confirmDialog}
     </div>
   );
 }
