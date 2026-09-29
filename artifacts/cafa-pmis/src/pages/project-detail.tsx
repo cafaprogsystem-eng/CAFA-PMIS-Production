@@ -16,14 +16,6 @@ import {
   scanProjectDonorIntegrity,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@heroui/react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatDateTime, formatPercent, formatStatusLabel, hasPerm } from "@/lib/format";
 import { ProjectStatusBadge, ProgressBar } from "./projects";
@@ -1869,38 +1861,38 @@ export default function ProjectDetailPage({
                           </HCard.Header>
                           <HCard.Content className="p-0">
                             <div className="overflow-x-auto">
-                            <Table aria-label={t("detail.allocationTableAria")}>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="min-w-[220px]">{tCommon("state")}</TableHead>
-                                  <TableHead className="min-w-[160px] text-end">{t("detail.budgetAllocation")}{projectCurrency ? ` (${projectCurrency})` : ""}</TableHead>
-                                  <TableHead className="min-w-[130px] text-end">{t("detail.beneficiaryTarget")}</TableHead>
-                                  <TableHead className="min-w-[105px] text-end">{t("detail.adultMen")}</TableHead>
-                                  <TableHead className="min-w-[115px] text-end">{t("detail.adultWomen")}</TableHead>
-                                  <TableHead className="min-w-[80px] text-end">{t("detail.boys")}</TableHead>
-                                  <TableHead className="min-w-[80px] text-end">{t("detail.girls")}</TableHead>
-                                  <TableHead className="min-w-[115px] text-end">{t("detail.activityTarget")}</TableHead>
-                                  <TableHead className="min-w-[115px] text-end">{t("detail.indicatorTarget")}</TableHead>
-                                  <TableHead className="min-w-[160px]">{t("detail.stateLead")}</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
+                            <table className="w-full text-sm" aria-label={t("detail.allocationTableAria")}>
+                              <thead className="bg-[var(--default)]">
+                                <tr>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[220px]">{tCommon("state")}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[160px] text-end">{t("detail.budgetAllocation")}{projectCurrency ? ` (${projectCurrency})` : ""}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[130px] text-end">{t("detail.beneficiaryTarget")}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[105px] text-end">{t("detail.adultMen")}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[115px] text-end">{t("detail.adultWomen")}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[80px] text-end">{t("detail.boys")}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[80px] text-end">{t("detail.girls")}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[115px] text-end">{t("detail.activityTarget")}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[115px] text-end">{t("detail.indicatorTarget")}</th>
+                                  <th scope="col" className="px-4 py-2 text-start text-xs font-medium text-[var(--muted)] min-w-[160px]">{t("detail.stateLead")}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[var(--border)]">
                                 {stateAllocations.map(alloc => (
-                                  <TableRow key={alloc.id}>
-                                    <TableCell className="font-medium"><span className="block max-w-[280px] break-words" title={getLinkedStateLabel(alloc, i18n?.language)}>{getLinkedStateLabel(alloc, i18n?.language)}</span></TableCell>
-                                    <TableCell className="whitespace-nowrap text-end font-medium tabular-nums">{alloc.budgetAllocation != null ? formatCurrency(alloc.budgetAllocation, projectCurrency) : "—"}</TableCell>
-                                    <TableCell className="whitespace-nowrap text-end tabular-nums">{alloc.beneficiaryTarget != null ? alloc.beneficiaryTarget.toLocaleString() : "—"}</TableCell>
-                                    <TableCell className="whitespace-nowrap text-end text-xs tabular-nums">{alloc.beneficiaryMale != null ? alloc.beneficiaryMale.toLocaleString() : "—"}</TableCell>
-                                    <TableCell className="whitespace-nowrap text-end text-xs tabular-nums">{alloc.beneficiaryFemale != null ? alloc.beneficiaryFemale.toLocaleString() : "—"}</TableCell>
-                                    <TableCell className="whitespace-nowrap text-end text-xs tabular-nums">{alloc.beneficiaryBoys != null ? alloc.beneficiaryBoys.toLocaleString() : "—"}</TableCell>
-                                    <TableCell className="whitespace-nowrap text-end text-xs tabular-nums">{alloc.beneficiaryGirls != null ? alloc.beneficiaryGirls.toLocaleString() : "—"}</TableCell>
-                                    <TableCell className="whitespace-nowrap text-end tabular-nums">{alloc.activityTarget != null ? alloc.activityTarget.toLocaleString() : "—"}</TableCell>
-                                    <TableCell className="whitespace-nowrap text-end tabular-nums">{alloc.indicatorTarget != null ? alloc.indicatorTarget.toLocaleString() : "—"}</TableCell>
-                                    <TableCell className="text-sm"><span className="block max-w-[200px] break-words" title={alloc.stateLead || undefined}>{alloc.stateLead || "—"}</span></TableCell>
-                                  </TableRow>
+                                  <tr key={alloc.id}>
+                                    <td className="px-4 py-2.5 align-top font-medium"><span className="block max-w-[280px] break-words" title={getLinkedStateLabel(alloc, i18n?.language)}>{getLinkedStateLabel(alloc, i18n?.language)}</span></td>
+                                    <td className="px-4 py-2.5 align-top whitespace-nowrap text-end font-medium tabular-nums">{alloc.budgetAllocation != null ? formatCurrency(alloc.budgetAllocation, projectCurrency) : "—"}</td>
+                                    <td className="px-4 py-2.5 align-top whitespace-nowrap text-end tabular-nums">{alloc.beneficiaryTarget != null ? alloc.beneficiaryTarget.toLocaleString("en-GB") : "—"}</td>
+                                    <td className="px-4 py-2.5 align-top whitespace-nowrap text-end text-xs tabular-nums">{alloc.beneficiaryMale != null ? alloc.beneficiaryMale.toLocaleString("en-GB") : "—"}</td>
+                                    <td className="px-4 py-2.5 align-top whitespace-nowrap text-end text-xs tabular-nums">{alloc.beneficiaryFemale != null ? alloc.beneficiaryFemale.toLocaleString("en-GB") : "—"}</td>
+                                    <td className="px-4 py-2.5 align-top whitespace-nowrap text-end text-xs tabular-nums">{alloc.beneficiaryBoys != null ? alloc.beneficiaryBoys.toLocaleString("en-GB") : "—"}</td>
+                                    <td className="px-4 py-2.5 align-top whitespace-nowrap text-end text-xs tabular-nums">{alloc.beneficiaryGirls != null ? alloc.beneficiaryGirls.toLocaleString("en-GB") : "—"}</td>
+                                    <td className="px-4 py-2.5 align-top whitespace-nowrap text-end tabular-nums">{alloc.activityTarget != null ? alloc.activityTarget.toLocaleString("en-GB") : "—"}</td>
+                                    <td className="px-4 py-2.5 align-top whitespace-nowrap text-end tabular-nums">{alloc.indicatorTarget != null ? alloc.indicatorTarget.toLocaleString("en-GB") : "—"}</td>
+                                    <td className="px-4 py-2.5 align-top text-sm"><span className="block max-w-[200px] break-words" title={alloc.stateLead || undefined}>{alloc.stateLead || "—"}</span></td>
+                                  </tr>
                                 ))}
-                              </TableBody>
-                            </Table>
+                              </tbody>
+                            </table>
                             </div>
                           </HCard.Content>
                         </HCard>
@@ -1911,10 +1903,10 @@ export default function ProjectDetailPage({
                           const totalInd = stateAllocations.reduce((s, a) => s + (a.indicatorTarget ?? 0), 0);
                           return (
                             <div className="grid grid-cols-2 gap-4 rounded-xl bg-[var(--default)] p-3 text-sm md:grid-cols-4">
-                              <div><div className="text-xs text-muted-foreground">{t("detail.totalAllocatedBudget")}{projectCurrency ? ` (${projectCurrency})` : ""}</div><div className="font-medium tabular-nums">{formatCurrency(totalBudget, projectCurrency)}</div></div>
-                              <div><div className="text-xs text-muted-foreground">{t("detail.totalBeneficiaryTargets")}</div><div className="font-medium tabular-nums">{totalBenef.toLocaleString()}</div></div>
-                              <div><div className="text-xs text-muted-foreground">{t("detail.totalActivityTargets")}</div><div className="font-medium tabular-nums">{totalAct.toLocaleString()}</div></div>
-                              <div><div className="text-xs text-muted-foreground">{t("detail.totalIndicatorTargets")}</div><div className="font-medium tabular-nums">{totalInd.toLocaleString()}</div></div>
+                              <div><div className="text-xs text-[var(--muted)]">{t("detail.totalAllocatedBudget")}{projectCurrency ? ` (${projectCurrency})` : ""}</div><div className="font-medium tabular-nums">{formatCurrency(totalBudget, projectCurrency)}</div></div>
+                              <div><div className="text-xs text-[var(--muted)]">{t("detail.totalBeneficiaryTargets")}</div><div className="font-medium tabular-nums">{totalBenef.toLocaleString("en-GB")}</div></div>
+                              <div><div className="text-xs text-[var(--muted)]">{t("detail.totalActivityTargets")}</div><div className="font-medium tabular-nums">{totalAct.toLocaleString("en-GB")}</div></div>
+                              <div><div className="text-xs text-[var(--muted)]">{t("detail.totalIndicatorTargets")}</div><div className="font-medium tabular-nums">{totalInd.toLocaleString("en-GB")}</div></div>
                             </div>
                           );
                         })()}

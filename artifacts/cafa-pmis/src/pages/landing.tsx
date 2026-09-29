@@ -9,6 +9,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
+import { Button } from "@heroui/react";
 import {
   Menu, X, ArrowRight,
   FolderKanban, CalendarCheck, BarChart3,
@@ -130,7 +131,7 @@ function smoothScroll(anchor: string) {
 
 function Eyebrow({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <p className={`text-xs font-semibold uppercase tracking-wider text-primary mb-2 ${className ?? ""}`}>
+    <p className={`text-xs font-semibold uppercase tracking-wider text-primary mb-2 ${className ?? ""} rtl:tracking-normal`}>
       {children}
     </p>
   );
@@ -160,7 +161,7 @@ function ProductFrame({
       {highlights.map(h => (
         <div
           key={h.label}
-          className="absolute z-10 px-3 py-[6px] rounded-full text-[11px] font-semibold tracking-[0.01em] bg-white/97 border border-slate-200/80 shadow-[0_2px_8px_rgb(0_0_0/0.10),0_1px_2px_rgb(0_0_0/0.06)] text-slate-600 whitespace-nowrap pointer-events-none"
+          className="absolute z-10 px-3 py-[6px] rounded-full text-[11px] font-semibold tracking-[0.01em] bg-white/97 border border-slate-200/80 shadow-[0_2px_8px_rgb(0_0_0/0.10),0_1px_2px_rgb(0_0_0/0.06)] text-slate-600 whitespace-nowrap pointer-events-none rtl:tracking-normal"
           style={h.style}
           aria-hidden="true"
         >
@@ -227,7 +228,7 @@ function ModuleCard({ mod, delay = 0 }: { mod: ModuleItem; delay?: number }) {
     >
       {/* Badge — absolute top-right pill */}
       {mod.badge && (
-        <span className={`absolute top-3.5 end-3.5 px-2 py-[3px] text-[10px] font-medium tracking-widest uppercase rounded-full ${BADGE_STYLES[mod.badge]}`}>
+        <span className={`absolute top-3.5 end-3.5 px-2 py-[3px] text-[10px] font-medium tracking-widest uppercase rounded-full ${BADGE_STYLES[mod.badge]} rtl:tracking-normal`}>
           {mod.badge}
         </span>
       )}
@@ -238,7 +239,7 @@ function ModuleCard({ mod, delay = 0 }: { mod: ModuleItem; delay?: number }) {
       </div>
 
       {/* Category label — 11px uppercase above title */}
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-1">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-1 rtl:tracking-normal">
         {t(`content.modules.${mod.id}.category`)}
       </p>
 
@@ -344,11 +345,11 @@ function FeatureShowcase() {
         const textPanel = (
           <div className="flex flex-col justify-center">
             {/* Sequential number — slightly larger, reduced opacity for elegant design element */}
-            <p className="text-[16px] font-mono font-medium tracking-[0.12em] text-slate-300/70 mb-1 select-none">
+            <p className="text-[16px] font-mono font-medium tracking-[0.12em] text-slate-300/70 mb-1 select-none rtl:tracking-normal">
               {row.num}
             </p>
             {/* Category label — standardised: 12px semibold uppercase 0.09em spacing */}
-            <p className="text-[12px] font-semibold uppercase tracking-[0.09em] text-[#6b7fa3] mb-2.5">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.09em] text-[#6b7fa3] mb-2.5 rtl:tracking-normal">
               {t(`content.featuresContent.${row.id}.category`)}
             </p>
             {/* Title — extrabold for premium weight */}
@@ -503,7 +504,7 @@ export default function LandingPage() {
                 <div className="leading-none">
                   <span className="text-base font-semibold text-foreground block tracking-tight">CAFA PMIS</span>
                   <span className="text-[10px] text-muted-foreground hidden sm:block leading-none mt-0.5">
-                    Programme Management Information System
+                    {t("footer.system")}
                   </span>
                 </div>
               </a>
@@ -512,14 +513,15 @@ export default function LandingPage() {
                 {NAV_ANCHORS.map(n => {
                   const isActive = activeSection === n.anchor.slice(1);
                   return (
-                    <button
+                    <Button
+                      variant="ghost"
                       key={n.key}
-                      onClick={() => handleAnchor(n.anchor)}
-                         className={`relative px-[18px] py-2 text-[13px] font-medium tracking-[0.02em] rounded transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      onPress={() => handleAnchor(n.anchor)}
+                         className={`relative h-auto rounded px-[18px] py-2 text-[13px] hover:bg-transparent font-medium tracking-[0.02em] rounded transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                         isActive
                           ? "text-primary"
                           : "text-muted-foreground hover:text-primary"
-                      }`}
+                      } rtl:tracking-normal`}
                     >
                       {t(`nav.${n.key}`, n.key)}
                       <span
@@ -528,41 +530,38 @@ export default function LandingPage() {
                         }`}
                         aria-hidden="true"
                       />
-                    </button>
+                    </Button>
                   );
                 })}
               </nav>
 
               <div className="hidden lg:flex">
-                <button
-                  type="button"
-                  onClick={handlePrimary}
-                  className="group inline-flex items-center justify-center gap-2 h-11 px-6 text-[15px] font-semibold rounded-xl bg-primary text-primary-foreground shadow-[0_1px_3px_rgb(0_0_0/0.14),0_1px_2px_rgb(0_0_0/0.06)] hover:bg-primary/90 hover:-translate-y-px hover:shadow-[0_4px_14px_rgb(0_0_0/0.18)] active:translate-y-px transition-all duration-[220ms] ease-out whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onPress={handlePrimary}
+                  className="group h-11 rounded-xl px-6 text-[15px] font-semibold shadow-[0_1px_3px_rgb(0_0_0/0.14),0_1px_2px_rgb(0_0_0/0.06)] hover:-translate-y-px hover:shadow-[0_4px_14px_rgb(0_0_0/0.18)] whitespace-nowrap"
                 >
                   {ctaLabel}
-                  <ArrowRight className="h-4 w-4 transition-transform duration-[220ms] ease-out group-hover:translate-x-[3px] rtl:group-hover:-translate-x-[3px] rtl:rotate-180" aria-hidden="true" />
-                </button>
+                  <ArrowRight className="size-4 transition-transform duration-[220ms] ease-out group-hover:translate-x-[3px] rtl:group-hover:-translate-x-[3px] rtl:rotate-180" aria-hidden="true" />
+                </Button>
               </div>
 
               <div className="flex lg:hidden items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handlePrimary}
-                  className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-muted transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
+                <Button variant="secondary" size="sm" onPress={handlePrimary} className="whitespace-nowrap font-semibold">
                   {ctaLabel}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMobileOpen(v => !v)}
+                </Button>
+                <Button
+                  isIconOnly
+                  variant="ghost"
+                  onPress={() => setMobileOpen(v => !v)}
                   aria-expanded={mobileOpen}
                   aria-label={mobileOpen ? t("content.closeNavigation") : t("content.openNavigation")}
-                  className="p-2 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {mobileOpen
-                    ? <X className="h-5 w-5" aria-hidden="true" />
-                    : <Menu className="h-5 w-5" aria-hidden="true" />}
-                </button>
+                    ? <X className="size-5" aria-hidden="true" />
+                    : <Menu className="size-5" aria-hidden="true" />}
+                </Button>
               </div>
             </div>
           </div>
@@ -570,17 +569,18 @@ export default function LandingPage() {
           {mobileOpen && (
             <div className="lg:hidden border-t border-border bg-white px-4 py-3 space-y-0.5">
               {NAV_ANCHORS.map(n => (
-                <button
+                <Button
+                  variant="ghost"
                   key={n.key}
-                  onClick={() => handleAnchor(n.anchor)}
-                   className={`w-full text-start px-3 py-2.5 text-[13px] font-medium tracking-[0.02em] hover:bg-muted rounded transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  onPress={() => handleAnchor(n.anchor)}
+                   className={`h-auto w-full justify-start text-start px-3 py-2.5 text-[13px] font-medium tracking-[0.02em] hover:bg-muted rounded transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     activeSection === n.anchor.slice(1)
                       ? "text-primary"
                       : "text-muted-foreground hover:text-primary"
-                  }`}
+                  } rtl:tracking-normal`}
                 >
                   {t(`nav.${n.key}`, n.key)}
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -593,7 +593,7 @@ export default function LandingPage() {
           ══════════════════════════════════════════════════════════════ */}
           <section aria-labelledby="hero-heading" className="relative overflow-hidden" style={{ minHeight: "540px" }}>
 
-            {/* Background image + lighter left-to-right gradient */}
+            {/* Background image + gradient from the reading-start edge */}
             <div className="absolute inset-0 z-0" aria-hidden="true">
               <img
                 src={cafaField}
@@ -603,10 +603,11 @@ export default function LandingPage() {
                 width={1920}
                 height={540}
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-[#0d1b3a]/82 via-[#0d1b3a]/38 to-transparent" />
+              {/* Darkest behind the text: from the start edge (left in English, right in Arabic) */}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#0d1b3a]/82 via-[#0d1b3a]/38 to-transparent rtl:bg-gradient-to-l" />
             </div>
 
-            {/* Content — vertically centred, left-aligned */}
+            {/* Content — vertically centred, start-aligned */}
             <div
               className="relative z-10 max-w-[1360px] mx-auto px-6 sm:px-8 lg:px-16 flex items-center"
               style={{ minHeight: "540px" }}
@@ -615,8 +616,7 @@ export default function LandingPage() {
 
                 {/* Small label */}
                 <p
-                  className="landing-fade-in text-[11px] font-semibold uppercase text-white/55 mb-6"
-                  style={{ letterSpacing: "0.18em" }}
+                  className="landing-fade-in text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55 mb-6 rtl:tracking-normal"
                 >
                   {t("hero.eyebrow")}
                 </p>
@@ -682,7 +682,7 @@ export default function LandingPage() {
 
             {/* Soft gradient fade — eases the Modules → Features boundary */}
             <div
-              className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none"
+              className="absolute bottom-0 inset-x-0 h-10 pointer-events-none"
               style={{ background: "linear-gradient(to bottom, transparent, rgba(255,255,255,0.55))" }}
               aria-hidden="true"
             />
@@ -831,7 +831,7 @@ export default function LandingPage() {
 
                     {/* Category grid */}
                     <div className="px-4 pt-4 pb-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.09em] text-slate-400 mb-2.5">{t("content.helpMockup.browse")}</p>
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.09em] text-slate-400 mb-2.5 rtl:tracking-normal">{t("content.helpMockup.browse")}</p>
                       <div className="grid grid-cols-3 gap-2 mb-2.5">
                         {[
                           BookOpen, BookMarked, Files, HelpCircle, Shield, Sparkles,
@@ -896,7 +896,7 @@ export default function LandingPage() {
               </div>
 
               <nav aria-label={t("common:landingFooter.platformNav")}>
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-3">{t("footer.platformNav")}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-3 rtl:tracking-normal">{t("footer.platformNav")}</p>
                 <ul className="space-y-2">
                   {[
                     { key: "modules",  anchor: "#modules"  },
@@ -905,20 +905,20 @@ export default function LandingPage() {
                     { key: "support",  anchor: "#support"  },
                   ].map(l => (
                     <li key={l.key}>
-                      <button
-                        type="button"
-                        onClick={() => smoothScroll(l.anchor)}
-                        className="text-sm text-white/75 hover:text-white hover:translate-x-0.5 transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 rounded"
+                      <Button
+                        variant="ghost"
+                        onPress={() => smoothScroll(l.anchor)}
+                        className="h-auto min-w-0 p-0 text-sm text-white/75 hover:bg-transparent hover:text-white hover:translate-x-0.5 rtl:hover:-translate-x-0.5 transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 rounded"
                       >
                         {t(`nav.${l.key}`, l.key)}
-                      </button>
+                      </Button>
                     </li>
                   ))}
                 </ul>
               </nav>
 
               <nav aria-label={t("common:landingFooter.legalNav")}>
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-3">{t("footer.legalNav")}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-3 rtl:tracking-normal">{t("footer.legalNav")}</p>
                 <ul className="space-y-2">
                   {[
                     { key: "systemManual", href: "/manual", ext: false },
@@ -927,7 +927,7 @@ export default function LandingPage() {
                       <a
                         href={l.href}
                         {...(l.ext ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                        className="text-sm text-white/75 hover:text-white hover:translate-x-0.5 transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 rounded"
+                        className="text-sm text-white/75 hover:text-white hover:translate-x-0.5 rtl:hover:-translate-x-0.5 transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40 rounded"
                       >
                         {t(`footer.links.${l.key}`, l.key)}
                       </a>

@@ -11,7 +11,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button as HButton, Card, Chip, Dropdown, Label, ProgressBar as HProgressBar, Separator, Skeleton } from "@heroui/react";
 import { DataGrid, type DataGridColumn } from "@heroui-pro/react/data-grid";
 import { SelectField } from "@/components/select-field";
-import { Empty, EmptyTitle, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ErrorState } from "@/components/ui/error-state";
 import { Plus, FolderKanban, Filter, X, MoreHorizontal, Trash2, Send, Copy } from "@/components/icons";
 import { toast } from "sonner";
@@ -364,14 +363,12 @@ export default function ProjectsPage() {
   const hasFilters = !!(statusFilter || sectorFilter || stateFilter);
 
   const emptyNode = (
-    <Empty>
-      <EmptyHeader>
-        <FolderKanban className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
-        <EmptyTitle>{t("noProjects")}</EmptyTitle>
-        <EmptyDescription>
-          {hasFilters ? t("noProjectsFiltered") : t("noProjectsAdjust")}
-        </EmptyDescription>
-      </EmptyHeader>
+    <div className="flex flex-col items-center gap-2 px-6 py-12 text-center" role="status">
+      <FolderKanban className="size-10 text-[var(--muted)]" aria-hidden="true" />
+      <p className="text-base font-medium">{t("noProjects")}</p>
+      <p className="max-w-sm text-sm text-[var(--muted)]">
+        {hasFilters ? t("noProjectsFiltered") : t("noProjectsAdjust")}
+      </p>
       {hasFilters && (
         <HButton
           variant="secondary"
@@ -383,7 +380,7 @@ export default function ProjectsPage() {
           {t("clearFilters")}
         </HButton>
       )}
-    </Empty>
+    </div>
   );
 
   return (
