@@ -3,11 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
-  HelpCircle, Search, BookOpen, ChevronRight, ChevronDown,
+  HelpCircle, BookOpen, ChevronRight,
   FolderKanban, FileText, AlertTriangle, CalendarClock,
-  Bell, Users, Settings, Loader2, X, Archive, Bot,
+  Bell, Users, Settings, Archive, Bot,
 } from "@/components/icons";
-import { Badge } from "@/components/ui/badge";
+import { Accordion, Card, Chip, Label, SearchField, Spinner, Tag, TagGroup, type Selection } from "@heroui/react";
 import { useLanguage } from "@/contexts/language-context";
 
 async function apiFetch(path: string) {
@@ -36,22 +36,25 @@ const CAT_ICONS: Record<string, React.ElementType> = {
   "Offline Mode": Settings,
 };
 
-const CAT_COLORS: Record<string, string> = {
-  Projects:         "bg-blue-50 text-blue-700 border-blue-200",
-  Planning:         "bg-pink-50 text-pink-700 border-pink-200",
-  Reports:          "bg-green-50 text-green-700 border-green-200",
-  Budgets:          "bg-amber-50 text-amber-700 border-amber-200",
-  "Risk Register":  "bg-orange-50 text-orange-700 border-orange-200",
-  "File & Archive": "bg-teal-50 text-teal-700 border-teal-200",
-  "Account & Access":"bg-indigo-50 text-indigo-700 border-indigo-200",
-  Notifications:    "bg-violet-50 text-violet-700 border-violet-200",
-  AI:               "bg-slate-50 text-slate-700 border-slate-200",
+/** Soft chip colour per category (text + icon carry the meaning, colour only groups). */
+const CAT_COLORS: Record<string, "default" | "accent" | "success" | "warning" | "danger"> = {
+  Projects: "accent",
+  Planning: "accent",
+  Reports: "success",
+  Budgets: "warning",
+  "Risk Register": "danger",
+  "File & Archive": "default",
+  "Account & Access": "accent",
+  Notifications: "default",
+  AI: "default",
   // Legacy
-  Risks:            "bg-orange-50 text-orange-700 border-orange-200",
-  "User Accounts":  "bg-indigo-50 text-indigo-700 border-indigo-200",
-  "Password Reset": "bg-teal-50 text-teal-700 border-teal-200",
-  "Offline Mode":   "bg-slate-50 text-slate-700 border-slate-200",
+  Risks: "danger",
+  "User Accounts": "accent",
+  "Password Reset": "default",
+  "Offline Mode": "default",
 };
+
+const ALL = "__all";
 
 const CATEGORY_LABEL_KEYS: Record<string, string> = {
   Projects: "faq.categories.projects",
@@ -74,7 +77,6 @@ export default function ManualFaqPage() {
   const { lang } = useLanguage();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<number | null>(null);
 
   const { data: groups = {}, isLoading } = useQuery<FaqGroups>({
     queryKey: ["manual", "faqs", lang],
@@ -98,181 +100,126 @@ export default function ManualFaqPage() {
 
   const totalResults = Object.values(filteredGroups).reduce((s, a) => s + a.length, 0);
 
-  return (
-    <div className="min-h-screen bg-[#f5f6fa]">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-[#1a2744] to-[#2d6a9f] text-white px-6 py-10">
-        <div className="max-w-4xl mx-auto">
-          <nav className="flex items-center gap-1.5 text-white/60 text-xs mb-4" aria-label={t("faq.breadcrumbLabel")}>
-            <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
-            <Link href="/manual">
-              <span className="hover:text-white cursor-pointer transition-colors">{t("manual.title")}</span>
-            </Link>
-            <ChevronRight className="h-3 w-3 rtl:rotate-180" aria-hidden="true" />
-            <span className="text-white/90">{t("faq.title")}</span>
-          </nav>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-amber-400/20" aria-hidden="true">
-              <HelpCircle className="h-6 w-6 text-amber-300" />
-            </div>
-            <h1 className="text-foreground text-xl font-semibold">{t("faq.title")}</h1>
-          </div>
-          <p className="text-white/70 text-sm max-w-xl mb-7">
-            {t("faq.subtitle")}
-          </p>
-          {/* Search */}
-          <div className="relative max-w-xl">
-            <label htmlFor="faq-search" className="sr-only">{t("faq.searchPlaceholder")}</label>
-            <Search className="absolute start-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50 pointer-events-none" aria-hidden="true" />
-            <input
-              id="faq-search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("faq.searchPlaceholder")}
-              aria-label={t("faq.searchPlaceholder")}
-              className="w-full ps-11 pe-10 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 text-sm focus:outline-none focus:ring-2 focus:ring-white/30 focus:bg-white/15 transition-all"
-            />
-            {search && (
-              <button
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white"
-                onClick={() => setSearch("")}
-                aria-label={t("faq.clearSearch")}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+  const allCount = Object.values(groups).reduce((sum, items) => sum + items.length, 0);
+  const onCategory = (keys: Selection) => {
+    const [key] = keys === "all" ? [] : [...keys];
+    setActiveCategory(key === undefined || key === ALL ? null : String(key));
+  };
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        {/* Category filter pills */}
-        <div className="flex flex-wrap gap-2 mb-7" role="group" aria-label={t("faq.filterByCategory")}>
-          <button
-            onClick={() => setActiveCategory(null)}
-            aria-pressed={!activeCategory}
-            className={`text-xs px-3.5 py-1.5 rounded-full border transition-all font-medium ${
-              !activeCategory
-                ? "bg-[#1a3c5e] text-white border-[#1a3c5e]"
-                : "bg-white text-slate-600 border-slate-200 hover:border-[#2d6a9f] hover:text-[#1a3c5e]"
-            }`}
-          >
-            {t("faq.allCategories")}
-            <span className="ms-1.5 opacity-60">
-              {Object.values(groups).reduce((s, a) => s + a.length, 0)}
-            </span>
-          </button>
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      {/* Header */}
+      <Card className="p-5 sm:p-6">
+        <nav className="mb-3 flex items-center gap-1.5 text-xs text-[var(--muted)]" aria-label={t("faq.breadcrumbLabel")}>
+          <BookOpen className="size-3.5" aria-hidden="true" />
+          <Link href="/manual" className="hover:text-[var(--accent)]">{t("manual.title")}</Link>
+          <ChevronRight className="size-3 rtl:rotate-180" aria-hidden="true" />
+          <span className="text-[var(--foreground)]">{t("faq.title")}</span>
+        </nav>
+        <h1 className="flex items-center gap-2 text-xl font-semibold">
+          <HelpCircle className="size-5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+          {t("faq.title")}
+        </h1>
+        <p className="mb-5 mt-1 max-w-xl text-sm text-[var(--muted)]">{t("faq.subtitle")}</p>
+        <SearchField value={search} onChange={setSearch} aria-label={t("faq.searchPlaceholder")} className="max-w-xl">
+          <SearchField.Group>
+            <SearchField.SearchIcon />
+            <SearchField.Input id="faq-search" placeholder={t("faq.searchPlaceholder")} />
+            <SearchField.ClearButton aria-label={t("faq.clearSearch")} />
+          </SearchField.Group>
+        </SearchField>
+      </Card>
+
+      {/* Category filter */}
+      <TagGroup
+        selectionMode="single"
+        disallowEmptySelection
+        selectedKeys={[activeCategory ?? ALL]}
+        onSelectionChange={onCategory}
+      >
+        <Label className="sr-only">{t("faq.filterByCategory")}</Label>
+        <TagGroup.List className="flex-wrap">
+          <Tag id={ALL} textValue={t("faq.allCategories")}>
+            {t("faq.allCategories")} <bdi dir="ltr" className="opacity-60">{allCount}</bdi>
+          </Tag>
           {categories.map((cat) => {
             const Icon = CAT_ICONS[cat] ?? HelpCircle;
-            const isActive = activeCategory === cat;
             return (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(isActive ? null : cat)}
-                aria-pressed={isActive}
-                className={`flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-full border transition-all font-medium ${
-                  isActive
-                    ? "bg-[#1a3c5e] text-white border-[#1a3c5e]"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-[#2d6a9f] hover:text-[#1a3c5e]"
-                }`}
-              >
-                <Icon className="h-3 w-3" aria-hidden="true" />
-                {categoryLabel(cat, t)}
-                <span className="opacity-60">{groups[cat]?.length ?? 0}</span>
-              </button>
+              <Tag key={cat} id={cat} textValue={categoryLabel(cat, t)}>
+                <Icon className="size-3" aria-hidden="true" />
+                {categoryLabel(cat, t)} <bdi dir="ltr" className="opacity-60">{groups[cat]?.length ?? 0}</bdi>
+              </Tag>
             );
           })}
+        </TagGroup.List>
+      </TagGroup>
+
+      {/* Results count when searching */}
+      {(search || activeCategory) && (
+        <p className="text-xs text-[var(--muted)]" aria-live="polite">
+          {t("faq.resultCount", { count: totalResults })}{search ? ` ${t("faq.matchingSearch", { query: search })}` : ""}{activeCategory ? ` ${t("faq.inCategory", { category: categoryLabel(activeCategory, t) })}` : ""}
+        </p>
+      )}
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="flex items-center justify-center gap-2 py-12 text-[var(--muted)]" role="status">
+          <Spinner size="sm" /> {t("faq.loading")}
         </div>
+      )}
 
-        {/* Results count when searching */}
-        {(search || activeCategory) && (
-          <p className="text-xs text-muted-foreground mb-4" aria-live="polite">
-            {t("faq.resultCount", { count: totalResults })}{search ? ` ${t("faq.matchingSearch", { query: search })}` : ""}{activeCategory ? ` ${t("faq.inCategory", { category: categoryLabel(activeCategory, t) })}` : ""}
-          </p>
-        )}
+      {/* Empty */}
+      {!isLoading && totalResults === 0 && (
+        <Card className="items-center py-16 text-center text-[var(--muted)]" role="status">
+          <HelpCircle className="size-10 opacity-20" aria-hidden="true" />
+          <p className="font-medium">{t("faq.noQuestions")}</p>
+          <p className="text-xs">{t("faq.noQuestionsHint")}</p>
+        </Card>
+      )}
 
-        {/* Loading */}
-        {isLoading && (
-          <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center" aria-live="polite">
-            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> {t("faq.loading")}
-          </div>
-        )}
+      {/* FAQ groups */}
+      {Object.entries(filteredGroups).map(([cat, items]) => {
+        const Icon = CAT_ICONS[cat] ?? HelpCircle;
+        const headingId = `cat-${cat.replace(/\s+/g, "-").toLowerCase()}`;
+        return (
+          <section key={cat} aria-labelledby={headingId}>
+            {/* Category header */}
+            <div className="mb-3 flex items-center gap-2.5">
+              <Chip variant="soft" color={CAT_COLORS[cat] ?? "default"} className="gap-1.5 font-semibold">
+                <Icon className="size-3.5" aria-hidden="true" />
+                <span id={headingId} role="heading" aria-level={2}>{categoryLabel(cat, t)}</span>
+              </Chip>
+              <span className="text-xs text-[var(--muted)]">{t("faq.resultCount", { count: items.length })}</span>
+            </div>
 
-        {/* Empty */}
-        {!isLoading && totalResults === 0 && (
-          <div className="text-center py-16 text-muted-foreground" role="status">
-            <HelpCircle className="h-10 w-10 mx-auto mb-3 opacity-20" aria-hidden="true" />
-            <p className="font-medium">{t("faq.noQuestions")}</p>
-            <p className="text-xs mt-1">{t("faq.noQuestionsHint")}</p>
-          </div>
-        )}
+            {/* FAQ items */}
+            <Accordion variant="surface" className="rounded-2xl border border-[var(--border)]">
+              {items.map((faq) => (
+                <Accordion.Item key={faq.id} id={String(faq.id)}>
+                  <Accordion.Heading>
+                    <Accordion.Trigger className="text-start text-sm font-medium leading-relaxed" dir="auto">
+                      {highlightMatch(faq.question, search)}
+                      <Accordion.Indicator />
+                    </Accordion.Trigger>
+                  </Accordion.Heading>
+                  <Accordion.Panel>
+                    <Accordion.Body className="text-sm leading-relaxed text-[var(--muted)]" dir="auto">
+                      {highlightMatch(faq.answer, search)}
+                    </Accordion.Body>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              ))}
+            </Accordion>
+          </section>
+        );
+      })}
 
-        {/* FAQ groups */}
-        <div className="space-y-6">
-          {Object.entries(filteredGroups).map(([cat, items]) => {
-            const Icon = CAT_ICONS[cat] ?? HelpCircle;
-            const colorClass = CAT_COLORS[cat] ?? "bg-slate-50 text-slate-700 border-slate-200";
-            return (
-              <section key={cat} aria-labelledby={`cat-${cat.replace(/\s+/g, "-").toLowerCase()}`}>
-                {/* Category header */}
-                <div className="flex items-center gap-2.5 mb-3">
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${colorClass}`}>
-                    <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span id={`cat-${cat.replace(/\s+/g, "-").toLowerCase()}`}>{categoryLabel(cat, t)}</span>
-                  </div>
-                  <Badge variant="outline" className="text-xs">{t("faq.resultCount", { count: items.length })}</Badge>
-                </div>
-
-                {/* FAQ items */}
-                <div className="bg-white border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-50">
-                  {items.map((faq) => {
-                    const isOpen = openId === faq.id;
-                    return (
-                      <div key={faq.id}>
-                        <button
-                          className="w-full flex items-start justify-between px-5 py-4 text-start hover:bg-slate-50/80 transition-colors group gap-4"
-                          onClick={() => setOpenId(isOpen ? null : faq.id)}
-                          aria-expanded={isOpen}
-                          aria-controls={`faq-answer-${faq.id}`}
-                          id={`faq-question-${faq.id}`}
-                        >
-                          <span className="text-sm font-medium text-slate-800 group-hover:text-[#1a3c5e] leading-relaxed">
-                            {highlightMatch(faq.question, search)}
-                          </span>
-                          <ChevronDown
-                            className={`h-4 w-4 text-slate-400 shrink-0 mt-0.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                            aria-hidden="true"
-                          />
-                        </button>
-                        <div
-                          id={`faq-answer-${faq.id}`}
-                          role="region"
-                          aria-labelledby={`faq-question-${faq.id}`}
-                          hidden={!isOpen}
-                          className="px-5 pb-5 pt-1 bg-slate-50/40"
-                        >
-                          <p className="text-sm text-slate-600 leading-relaxed">
-                            {highlightMatch(faq.answer, search)}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-
-        {/* Footer link */}
-        <div className="mt-10 text-center">
-          <p className="text-xs text-muted-foreground mb-3">{t("faq.cantFind")}</p>
-          <Link href="/manual">
-            <span className="text-sm text-[#2d6a9f] hover:text-[#1a3c5e] hover:underline cursor-pointer transition-colors">
-              ← {t("faq.backToManual")}
-            </span>
-          </Link>
-        </div>
+      {/* Footer link */}
+      <div className="pb-4 text-center">
+        <p className="mb-3 text-xs text-[var(--muted)]">{t("faq.cantFind")}</p>
+        <Link href="/manual" className="text-sm text-[var(--accent)] hover:underline">
+          <span aria-hidden="true" className="inline-block rtl:-scale-x-100">←</span> {t("faq.backToManual")}
+        </Link>
       </div>
     </div>
   );
@@ -290,7 +237,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-yellow-100 text-yellow-900 rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      <mark className="rounded bg-[var(--warning)]/20 px-0.5 text-inherit">{text.slice(idx, idx + query.length)}</mark>
       {text.slice(idx + query.length)}
     </>
   );

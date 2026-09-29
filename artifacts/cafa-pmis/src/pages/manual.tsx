@@ -6,19 +6,13 @@ import {
   BookOpen, Search, FileText, Plus, Users, LayoutDashboard,
   FolderKanban, CalendarClock, PieChart, AlertTriangle, MessageSquare,
   Bell, Settings, ShieldCheck, ClipboardList, Wrench,
-  BookMarked, Paperclip, Loader2, X,
+  BookMarked, Paperclip, X,
   Clock, ChevronRight, HelpCircle, ChevronDown,
   ArrowRight, Bot, Archive, UserCheck,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button, Card, Chip, Input, Modal, Spinner, TextArea } from "@heroui/react";
+import { Field } from "@/components/form-controls";
+import { SelectField } from "@/components/select-field";
 import { toast } from "sonner";
 import { useGetMe } from "@workspace/api-client-react";
 import { useLanguage } from "@/contexts/language-context";
@@ -50,7 +44,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
 
 function ChapterIcon({ name, className }: { name: string; className?: string }) {
   const Icon = ICON_MAP[name] ?? FileText;
-  return <Icon className={className} />;
+  return <Icon className={className} aria-hidden="true" />;
 }
 
 async function apiFetch(path: string, options?: RequestInit) {
@@ -63,7 +57,8 @@ async function apiFetch(path: string, options?: RequestInit) {
 }
 
 function fmtDate(iso: string, lang: "en" | "ar") {
-  return new Date(iso).toLocaleDateString(lang === "ar" ? "ar-SD" : "en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  // Arabic month names with Western digits (the app-wide numbers rule).
+  return new Date(iso).toLocaleDateString(lang === "ar" ? "ar-u-nu-latn" : "en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function fmtRelative(iso: string, lang: "en" | "ar", t: (key: string, values?: Record<string, unknown>) => string) {
@@ -142,54 +137,57 @@ function AddChapterModal({ open, onClose }: { open: boolean; onClose: () => void
       onClose();
       reset();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to create chapter");
+      toast.error(e instanceof Error && !/^[a-z_]+$/.test(e.message) ? e.message : t("manual.createChapterFailed"));
     } finally {
       setCreating(false);
     }
   };
 
+  const close = () => { reset(); onClose(); };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-[#1a3c5e]" />
-            {t("manual.addChapterTitle")}
-          </DialogTitle>
-          <DialogDescription>{t("manual.statusDraft")}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 py-1">
-          <div>
-            <Label className="text-xs font-medium">{t("manual.chapterTitleLabel")}</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("manual.chapterTitlePlaceholder")} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium">{t("manual.slugLabel")}</Label>
-            <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder={t("manual.slugPlaceholder")} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium">{t("manual.descriptionLabel")}</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="mt-1 text-xs resize-none" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium">{t("manual.statusLabel")}</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">{t("manual.statusDraft")}</SelectItem>
-                <SelectItem value="published">{t("manual.statusPublished")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => { reset(); onClose(); }}>{t("manual.cancel")}</Button>
-          <Button size="sm" onClick={handleCreate} disabled={!title.trim() || creating} className="gap-1.5">
-            {creating ? <><Loader2 className="h-4 w-4 animate-spin" />{t("manual.creating")}</> : t("manual.createChapter")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal isOpen={open} onOpenChange={(o) => { if (!o) close(); }}>
+      <Modal.Backdrop isDismissable={!creating}>
+        <Modal.Container size="md" scroll="inside">
+          <Modal.Dialog className="sm:max-w-md">
+            <Modal.CloseTrigger aria-label={t("manual.cancel")} />
+            <Modal.Header>
+              <Modal.Heading className="flex items-center gap-2">
+                <BookOpen className="size-5 text-[var(--accent)]" aria-hidden="true" />
+                {t("manual.addChapterTitle")}
+              </Modal.Heading>
+              <p className="text-sm text-[var(--muted)]">{t("manual.statusDraft")}</p>
+            </Modal.Header>
+            <Modal.Body className="space-y-3">
+              <Field label={t("manual.chapterTitleLabel")} isRequired>
+                {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("manual.chapterTitlePlaceholder")} className="w-full" dir="auto" />}
+              </Field>
+              <Field label={t("manual.slugLabel")}>
+                {(id) => <Input id={id} value={slug} onChange={(e) => setSlug(e.target.value)} placeholder={t("manual.slugPlaceholder")} className="w-full" dir="ltr" />}
+              </Field>
+              <Field label={t("manual.descriptionLabel")}>
+                {(id) => <TextArea id={id} value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="w-full resize-none" dir="auto" />}
+              </Field>
+              <SelectField
+                label={t("manual.statusLabel")}
+                value={status}
+                onChange={setStatus}
+                options={[
+                  { value: "draft", label: t("manual.statusDraft") },
+                  { value: "published", label: t("manual.statusPublished") },
+                ]}
+              />
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onPress={close}>{t("manual.cancel")}</Button>
+              <Button variant="primary" onPress={handleCreate} isDisabled={!title.trim()} isPending={creating}>
+                {creating ? <><Spinner size="sm" color="current" />{t("manual.creating")}</> : t("manual.createChapter")}
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
 
@@ -210,54 +208,55 @@ function SearchDropdown({
   if (!query.trim() || query.length < 2) return null;
 
   return (
-    <div className="absolute top-full inset-x-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-80 overflow-y-auto">
+    <div className="absolute inset-x-0 top-full z-50 mt-1 max-h-80 overflow-hidden overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--overlay)] shadow-lg">
       {loading && (
-        <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
+        <div className="flex items-center gap-2 px-4 py-3 text-sm text-[var(--muted)]" role="status">
+          <Spinner size="sm" />
           {t("manual.searchingLabel")}
         </div>
       )}
       {!loading && results.length === 0 && query.length >= 2 && (
-        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-          <Search className="h-8 w-8 mx-auto mb-2 opacity-20" />
+        <div className="px-4 py-6 text-center text-sm text-[var(--muted)]" role="status">
+          <Search className="mx-auto mb-2 size-8 opacity-20" aria-hidden="true" />
           <p>{t("manual.noSearchResults")}</p>
-          <p className="text-xs mt-0.5">{t("manual.noSearchResultsHint")}</p>
+          <p className="mt-0.5 text-xs">{t("manual.noSearchResultsHint")}</p>
         </div>
       )}
       {!loading && results.length > 0 && (
         <>
-          <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground font-medium">
+          <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
+            <span className="text-xs font-medium text-[var(--muted)]">
               {t("manual.searchResultsCount", { count: results.length, query })}
             </span>
-            <button onClick={onClear} className="text-xs text-muted-foreground hover:text-slate-800">
-              <X className="h-3 w-3" />
-            </button>
+            <Button isIconOnly size="sm" variant="ghost" onPress={onClear} aria-label={t("manual.clearSearch")}>
+              <X className="size-3.5" aria-hidden="true" />
+            </Button>
           </div>
           <ul id="manual-search-results" role="listbox" aria-label={t("manual.searchResultsLabel")}>
             {results.map((r, i) => (
               <li key={i}>
                 <button
+                  type="button"
                   id={`manual-search-option-${i}`}
                   role="option"
                   aria-selected={i === activeIndex}
-                  className={`w-full text-start px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 ${i === activeIndex ? "bg-slate-50" : ""}`}
+                  className={`w-full border-b border-[var(--border)] px-4 py-3 text-start transition-colors last:border-0 hover:bg-[var(--default)] ${i === activeIndex ? "bg-[var(--default)]" : ""}`}
                   onClick={() => onSelect(r.slug)}
                 >
                   <div className="flex items-start gap-2.5">
-                    <FileText className="h-3.5 w-3.5 text-[#2d6a9f] shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-slate-800 truncate">{r.chapterTitle}</p>
+                    <FileText className="mt-0.5 size-3.5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium">{r.chapterTitle}</p>
                       {r.sectionTitle && r.sectionTitle !== r.chapterTitle && (
-                        <p className="text-xs text-[#2d6a9f] truncate">{r.sectionTitle}</p>
+                        <p className="truncate text-xs text-[var(--accent)]">{r.sectionTitle}</p>
                       )}
                       {r.excerpt && (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-[var(--muted)]">
                           {r.excerpt.trim()}
                         </p>
                       )}
                     </div>
-                    <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0 mt-0.5 rtl:rotate-180" />
+                    <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-[var(--muted)] rtl:rotate-180" aria-hidden="true" />
                   </div>
                 </button>
               </li>
@@ -368,253 +367,221 @@ export default function ManualHome() {
 
   const showSearch = searchFocused && searchQuery.length >= 2;
 
+  // Shared look for the link cards (quick starts, modules, recent chapters).
+  const linkCard = "group flex rounded-2xl border border-[var(--border)] bg-[var(--surface)] transition-colors hover:border-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]";
+  const iconTile = "shrink-0 rounded-lg bg-[var(--default)] p-1.5 text-[var(--muted)] transition-colors group-hover:bg-[var(--accent)]/10 group-hover:text-[var(--accent)]";
+
   return (
-    <div className="min-h-screen bg-[#f5f6fa]">
-      {/* ── Compact Header ──────────────────────────────────────────── */}
-      <div className="bg-white border-b border-slate-100">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div>
-              <h1 className="text-foreground text-xl font-semibold">{t("manual.title")}</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                {t("manual.description")}
-              </p>
-            </div>
-            {canEdit && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setAddChapterOpen(true)}
-                className="gap-1.5 shrink-0"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {t("manual.addChapter")}
-              </Button>
-            )}
+    <div className="mx-auto max-w-5xl space-y-8">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <Card className="p-5 sm:p-6">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="flex items-center gap-2 text-xl font-semibold">
+              <BookOpen className="size-5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+              {t("manual.title")}
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted)]">{t("manual.description")}</p>
           </div>
-
-          {/* Search */}
-          <div ref={searchRef} className="relative max-w-2xl">
-            <label htmlFor="manual-search" className="sr-only">{t("manual.searchAriaLabel")}</label>
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              id="manual-search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder={t("manual.searchPlaceholder")}
-              className="ps-9 pe-9 h-10"
-              autoComplete="off"
-              aria-label={t("manual.searchAriaLabel")}
-              aria-expanded={showSearch}
-              aria-haspopup="listbox"
-              aria-controls="manual-search-results"
-              aria-activedescendant={activeSearchIndex >= 0 ? `manual-search-option-${activeSearchIndex}` : undefined}
-            />
-            {searchQuery && (
-              <button
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-800"
-                onClick={() => { setSearchQuery(""); setDebouncedQuery(""); }}
-                aria-label={t("manual.clearSearch")}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {showSearch && (
-              <div role="region" aria-label={t("manual.searchResultsLabel")}>
-                <SearchDropdown
-                  results={searchResults}
-                  query={debouncedQuery}
-                  loading={searchLoading}
-                  activeIndex={activeSearchIndex}
-                  onSelect={handleSelectSearchResult}
-                  onClear={() => { setSearchQuery(""); setDebouncedQuery(""); setSearchFocused(false); }}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Compact metadata */}
-          <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-            <span>{t("manual.chapterCount", { count: chapters.filter(c => c.status === "published").length })}</span>
-            <span>·</span>
-            <span>{t("manual.sectionCountMeta", { count: totalSections })}</span>
-            {totalSops > 0 && <><span>·</span><span>{t("manual.sopsCountMeta", { count: totalSops })}</span></>}
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
-
-        {/* ── Quick Start Guides ────────────────────────────────────── */}
-        <section aria-labelledby="quick-start-heading">
-          <div className="flex items-center justify-between mb-4">
-            <h2 id="quick-start-heading" className="text-base font-bold text-slate-900">
-              {t("manual.quickStartGuides")}
-            </h2>
-            <span className="text-xs text-muted-foreground">{t("manual.quickStartSubtitle")}</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {QUICK_STARTS.map((qs) => {
-              const Icon = ICON_MAP[qs.icon] ?? FileText;
-              return (
-                <Link key={qs.labelKey} href={qs.href}>
-                  <div className="flex items-center gap-3 bg-white border border-slate-100 rounded-lg px-4 py-3 hover:border-[#2d6a9f] hover:shadow-sm cursor-pointer transition-all group">
-                    <div className="p-1.5 rounded-md bg-[#eef4fb] text-[#2d6a9f] shrink-0 group-hover:bg-[#2d6a9f] group-hover:text-white transition-colors">
-                      <Icon className="h-3.5 w-3.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 group-hover:text-[#1a3c5e] truncate">{t(qs.labelKey)}</p>
-                      <p className="text-xs text-muted-foreground">{t("manual.stepCount", { count: qs.steps })}</p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-[#2d6a9f] shrink-0 rtl:rotate-180" />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ── Browse By Module ─────────────────────────────────────── */}
-        <section aria-labelledby="browse-modules-heading">
-          <div className="flex items-center justify-between mb-4">
-            <h2 id="browse-modules-heading" className="text-base font-bold text-slate-900">{t("manual.browseByModule")}</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {PMIS_MODULES.map((mod) => {
-              const Icon = ICON_MAP[mod.icon] ?? FileText;
-              return (
-                <Link key={mod.slug} href={mod.href}>
-                  <div className="flex items-start gap-3 bg-white border border-slate-100 rounded-xl px-4 py-3.5 hover:border-[#2d6a9f] hover:shadow-sm cursor-pointer transition-all group h-full">
-                    <div className="p-1.5 rounded-md bg-slate-50 text-slate-500 group-hover:bg-[#eef4fb] group-hover:text-[#2d6a9f] transition-colors shrink-0 mt-0.5">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 group-hover:text-[#1a3c5e]">{t(mod.labelKey)}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{t(mod.descKey)}</p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* ── Frequently Asked Questions ─────────────────────────── */}
-          <section aria-labelledby="faq-heading">
-            <div className="flex items-center justify-between mb-4">
-              <h2 id="faq-heading" className="text-base font-bold text-slate-900">
-                {t("manual.frequentlyAskedQuestions")}
-              </h2>
-            </div>
-            {landingFaqs.length > 0 ? (
-              <div className="bg-white border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-50">
-                {landingFaqs.map((faq) => {
-                  const isOpen = openFaqId === faq.id;
-                  return (
-                    <div key={faq.id}>
-                      <button
-                        className="w-full flex items-start justify-between px-4 py-3.5 text-start hover:bg-slate-50/80 transition-colors group gap-3"
-                        onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
-                        aria-expanded={isOpen}
-                        aria-controls={`faq-answer-${faq.id}`}
-                      >
-                        <span className="text-sm font-medium text-slate-800 group-hover:text-[#1a3c5e] leading-snug">
-                          {faq.question}
-                        </span>
-                        <ChevronDown
-                          className={`h-4 w-4 text-slate-400 shrink-0 mt-0.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                          aria-hidden="true"
-                        />
-                      </button>
-                      <div
-                        id={`faq-answer-${faq.id}`}
-                        role="region"
-                        hidden={!isOpen}
-                        className="px-4 pb-4 pt-1 bg-slate-50/40"
-                      >
-                        <p className="text-sm text-slate-600 leading-relaxed">{faq.answer}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="bg-white border border-slate-100 rounded-xl px-4 py-8 text-center text-muted-foreground text-sm">
-                <HelpCircle className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                {t("manual.noFaqsYet")}
-              </div>
-            )}
-            <div className="mt-3 text-center">
-              <Link href="/manual/faq">
-                <button className="text-sm text-[#2d6a9f] hover:text-[#1a3c5e] hover:underline transition-colors">
-                  {t("manual.viewAllFaqs")} →
-                </button>
-              </Link>
-            </div>
-          </section>
-
-          {/* ── Recently Updated ──────────────────────────────────── */}
-          <section aria-labelledby="recent-heading">
-            <div className="flex items-center justify-between mb-4">
-              <h2 id="recent-heading" className="text-base font-bold text-slate-900">
-                {t("manual.recentlyUpdated")}
-              </h2>
-            </div>
-            {recentChapters.length > 0 ? (
-              <div className="bg-white border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-50">
-                {recentChapters.map((ch) => (
-                  <Link key={ch.id} href={`/manual/${ch.slug}`}>
-                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors group">
-                      <div className="p-1.5 rounded-md bg-slate-50 text-slate-400 group-hover:bg-[#eef4fb] group-hover:text-[#2d6a9f] transition-colors shrink-0">
-                        <ChapterIcon name={ch.icon} className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 group-hover:text-[#1a3c5e] truncate">{ch.title}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <Clock className="h-2.5 w-2.5 text-slate-400" />
-                          <span className="text-xs text-muted-foreground">{fmtRelative(ch.updatedAt, lang, t)}</span>
-                          {ch.status === "draft" && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-200 text-amber-600 bg-amber-50">{t("manual.draft")}</Badge>
-                          )}
-                        </div>
-                      </div>
-                      <ChevronRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#2d6a9f] shrink-0 rtl:rotate-180" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white border border-slate-100 rounded-xl px-4 py-8 text-center text-muted-foreground text-sm">
-                <Clock className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                {t("manual.noChaptersYet")}
-              </div>
-            )}
-          </section>
-        </div>
-
-        {/* ── Role Guides link ─────────────────────────────────────── */}
-        <section className="bg-white border border-slate-100 rounded-xl px-5 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-[#eef4fb] text-[#2d6a9f]">
-              <Users className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-800">{t("roleGuide.title")}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{t("roleGuide.subtitle")}</p>
-            </div>
-          </div>
-          <Link href={`/manual/guides/${me?.user.role ?? "viewer"}`}>
-            <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
-              {t("manual.roleGuides")}
-              <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" />
+          {canEdit && (
+            <Button size="sm" variant="secondary" onPress={() => setAddChapterOpen(true)} className="shrink-0">
+              <Plus className="size-3.5" aria-hidden="true" />
+              {t("manual.addChapter")}
             </Button>
-          </Link>
+          )}
+        </div>
+
+        {/* Search */}
+        <div ref={searchRef} className="relative max-w-2xl">
+          <label htmlFor="manual-search" className="sr-only">{t("manual.searchAriaLabel")}</label>
+          <Search className="pointer-events-none absolute start-3 top-1/2 z-10 size-4 -translate-y-1/2 text-[var(--muted)]" aria-hidden="true" />
+          <Input
+            id="manual-search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder={t("manual.searchPlaceholder")}
+            className="ps-9 pe-9 h-10 w-full"
+            autoComplete="off"
+            aria-label={t("manual.searchAriaLabel")}
+            aria-expanded={showSearch}
+            aria-haspopup="listbox"
+            aria-controls="manual-search-results"
+            aria-activedescendant={activeSearchIndex >= 0 ? `manual-search-option-${activeSearchIndex}` : undefined}
+          />
+          {searchQuery && (
+            <Button
+              isIconOnly
+              size="sm"
+              variant="ghost"
+              className="absolute end-1.5 top-1/2 -translate-y-1/2"
+              onPress={() => { setSearchQuery(""); setDebouncedQuery(""); }}
+              aria-label={t("manual.clearSearch")}
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </Button>
+          )}
+          {showSearch && (
+            <div role="region" aria-label={t("manual.searchResultsLabel")}>
+              <SearchDropdown
+                results={searchResults}
+                query={debouncedQuery}
+                loading={searchLoading}
+                activeIndex={activeSearchIndex}
+                onSelect={handleSelectSearchResult}
+                onClear={() => { setSearchQuery(""); setDebouncedQuery(""); setSearchFocused(false); }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Compact metadata */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+          <span>{t("manual.chapterCount", { count: chapters.filter(c => c.status === "published").length })}</span>
+          <span aria-hidden="true">·</span>
+          <span>{t("manual.sectionCountMeta", { count: totalSections })}</span>
+          {totalSops > 0 && <><span aria-hidden="true">·</span><span>{t("manual.sopsCountMeta", { count: totalSops })}</span></>}
+        </div>
+      </Card>
+
+      {/* ── Quick Start Guides ────────────────────────────────────── */}
+      <section aria-labelledby="quick-start-heading">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="quick-start-heading" className="text-base font-semibold">{t("manual.quickStartGuides")}</h2>
+          <span className="text-xs text-[var(--muted)]">{t("manual.quickStartSubtitle")}</span>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {QUICK_STARTS.map((qs) => {
+            const Icon = ICON_MAP[qs.icon] ?? FileText;
+            return (
+              <Link key={qs.labelKey} href={qs.href} className={`${linkCard} items-center gap-3 px-4 py-3`}>
+                <span className={iconTile}><Icon className="size-3.5" aria-hidden="true" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium group-hover:text-[var(--accent)]">{t(qs.labelKey)}</span>
+                  <span className="block text-xs text-[var(--muted)]">{t("manual.stepCount", { count: qs.steps })}</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-[var(--muted)] group-hover:text-[var(--accent)] rtl:rotate-180" aria-hidden="true" />
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Browse By Module ─────────────────────────────────────── */}
+      <section aria-labelledby="browse-modules-heading">
+        <h2 id="browse-modules-heading" className="mb-3 text-base font-semibold">{t("manual.browseByModule")}</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {PMIS_MODULES.map((mod) => {
+            const Icon = ICON_MAP[mod.icon] ?? FileText;
+            return (
+              <Link key={mod.slug} href={mod.href} className={`${linkCard} h-full items-start gap-3 px-4 py-3.5`}>
+                <span className={`${iconTile} mt-0.5`}><Icon className="size-4" aria-hidden="true" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium group-hover:text-[var(--accent)]">{t(mod.labelKey)}</span>
+                  <span className="mt-0.5 block text-xs leading-snug text-[var(--muted)]">{t(mod.descKey)}</span>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        {/* ── Frequently Asked Questions ─────────────────────────── */}
+        <section aria-labelledby="faq-heading">
+          <h2 id="faq-heading" className="mb-3 text-base font-semibold">{t("manual.frequentlyAskedQuestions")}</h2>
+          {landingFaqs.length > 0 ? (
+            <Card className="gap-0 divide-y divide-[var(--border)] overflow-hidden p-0">
+              {landingFaqs.map((faq) => {
+                const isOpen = openFaqId === faq.id;
+                return (
+                  <div key={faq.id}>
+                    <button
+                      type="button"
+                      className="group flex w-full items-start justify-between gap-3 px-4 py-3.5 text-start transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]"
+                      onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
+                      aria-expanded={isOpen}
+                      aria-controls={`faq-answer-${faq.id}`}
+                    >
+                      <span className="text-sm font-medium leading-snug group-hover:text-[var(--accent)]" dir="auto">{faq.question}</span>
+                      <ChevronDown
+                        className={`mt-0.5 size-4 shrink-0 text-[var(--muted)] transition-transform ${isOpen ? "rotate-180" : ""}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    <div id={`faq-answer-${faq.id}`} role="region" hidden={!isOpen} className="bg-[var(--default)]/40 px-4 pb-4 pt-1">
+                      <p className="text-sm leading-relaxed text-[var(--muted)]" dir="auto">{faq.answer}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </Card>
+          ) : (
+            <Card className="items-center px-4 py-8 text-center text-sm text-[var(--muted)]">
+              <HelpCircle className="size-8 opacity-20" aria-hidden="true" />
+              {t("manual.noFaqsYet")}
+            </Card>
+          )}
+          <div className="mt-3 text-center">
+            <Link href="/manual/faq" className="text-sm text-[var(--accent)] hover:underline">
+              {t("manual.viewAllFaqs")} <span aria-hidden="true" className="inline-block rtl:-scale-x-100">→</span>
+            </Link>
+          </div>
         </section>
 
+        {/* ── Recently Updated ──────────────────────────────────── */}
+        <section aria-labelledby="recent-heading">
+          <h2 id="recent-heading" className="mb-3 text-base font-semibold">{t("manual.recentlyUpdated")}</h2>
+          {recentChapters.length > 0 ? (
+            <Card className="gap-0 divide-y divide-[var(--border)] overflow-hidden p-0">
+              {recentChapters.map((ch) => (
+                <Link
+                  key={ch.id}
+                  href={`/manual/${ch.slug}`}
+                  className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]"
+                >
+                  <span className={iconTile}><ChapterIcon name={ch.icon} className="size-3.5" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium group-hover:text-[var(--accent)]">{ch.title}</span>
+                    <span className="mt-0.5 flex items-center gap-2">
+                      <Clock className="size-2.5 text-[var(--muted)]" aria-hidden="true" />
+                      <span className="text-xs text-[var(--muted)]">{fmtRelative(ch.updatedAt, lang, t)}</span>
+                      {ch.status === "draft" && <Chip size="sm" variant="soft" color="warning">{t("manual.draft")}</Chip>}
+                    </span>
+                  </span>
+                  <ChevronRight className="size-3.5 shrink-0 text-[var(--muted)] group-hover:text-[var(--accent)] rtl:rotate-180" aria-hidden="true" />
+                </Link>
+              ))}
+            </Card>
+          ) : (
+            <Card className="items-center px-4 py-8 text-center text-sm text-[var(--muted)]">
+              <Clock className="size-8 opacity-20" aria-hidden="true" />
+              {t("manual.noChaptersYet")}
+            </Card>
+          )}
+        </section>
       </div>
+
+      {/* ── Role Guides link ─────────────────────────────────────── */}
+      <Card className="flex-row flex-wrap items-center justify-between gap-4 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <span className="rounded-lg bg-[var(--accent)]/10 p-2 text-[var(--accent)]">
+            <Users className="size-5" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-sm font-medium">{t("roleGuide.title")}</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{t("roleGuide.subtitle")}</p>
+          </div>
+        </div>
+        <Link
+          href={`/manual/guides/${me?.user.role ?? "viewer"}`}
+          className="button button--secondary button--sm shrink-0 gap-1.5"
+        >
+          {t("manual.roleGuides")}
+          <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden="true" />
+        </Link>
+      </Card>
 
       <AddChapterModal open={addChapterOpen} onClose={() => setAddChapterOpen(false)} />
     </div>

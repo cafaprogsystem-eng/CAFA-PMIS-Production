@@ -40,6 +40,7 @@
     "share": "Share"
   },
   "manual": {
+    "createChapterFailed": "The chapter could not be created. Please try again.",
     "title": "System Manual",
     "subtitle": "Complete guide to using the programme management platform",
     "tableOfContents": "Table of Contents",
@@ -658,6 +659,10 @@
     "pdfZoomIn": "Zoom in (+25%)"
   },
   "chapter": {
+    "actionFailed": "That change could not be saved. Please try again.",
+    "loading": "Loading chapter…",
+    "editSection": "Edit section: {{title}}",
+    "deleteSectionAria": "Delete section: {{title}}",
     "systemManualLink": "System Manual",
     "manual": "Manual",
     "topicNavLabel": "Manual chapters",

@@ -330,6 +330,7 @@
     "fileRepositoryRegion": "مستودع الملفات"
   },
   "manual": {
+    "createChapterFailed": "تعذّر إنشاء الفصل. حاول مرة أخرى.",
     "title": "دليل نظام CAFA PMIS",
     "subtitle": "الدليل الشامل لاستخدام منصة إدارة البرنامج",
     "tableOfContents": "جدول المحتويات",
@@ -658,6 +659,10 @@
     "pdfZoomIn": "تكبير (+25%)"
   },
   "chapter": {
+    "actionFailed": "تعذّر حفظ هذا التغيير. حاول مرة أخرى.",
+    "loading": "جارٍ تحميل الفصل…",
+    "editSection": "تعديل القسم: {{title}}",
+    "deleteSectionAria": "حذف القسم: {{title}}",
     "systemManualLink": "دليل النظام",
     "manual": "الدليل",
     "topicNavLabel": "فصول الدليل",

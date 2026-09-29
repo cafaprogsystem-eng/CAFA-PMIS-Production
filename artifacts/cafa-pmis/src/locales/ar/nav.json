@@ -132,5 +132,9 @@
   "viewMode": {
     "switchToMobile": "التبديل إلى عرض الجوال",
     "switchToDesktop": "التبديل إلى عرض سطح المكتب"
+  },
+  "manualSections": {
+    "roleGuides": "أدلة الأدوار",
+    "faq": "الأسئلة الشائعة"
   }
 }

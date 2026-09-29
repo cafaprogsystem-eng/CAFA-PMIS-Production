@@ -6,7 +6,7 @@ import {
   Bell, ShieldCheck, Eye, Pencil,
   ArrowRight,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
+import { Card, Chip } from "@heroui/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { useLanguage } from "@/contexts/language-context";
 import { ROLE_GUIDE_ARABIC_DRAFT } from "@/lib/role-guide-arabic-draft";
@@ -245,99 +245,88 @@ export default function ManualRoleGuide({ role }: { role: string }) {
 
   if (!guide) {
     return (
-      <div className="min-h-screen bg-[#f5f6fa] flex items-center justify-center">
-        <div className="text-center">
-          <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-30" />
-          <p className="text-muted-foreground font-medium">{t("roleGuide.notFound")}</p>
-          <Link href="/manual">
-            <Button variant="link" size="sm" className="mt-2">← {t("manual.title")}</Button>
-          </Link>
-        </div>
-      </div>
+      <Card className="mx-auto max-w-md items-center py-16 text-center">
+        <Users className="size-12 text-[var(--muted)] opacity-30" aria-hidden="true" />
+        <p className="font-medium text-[var(--muted)]">{t("roleGuide.notFound")}</p>
+        <Link href="/manual" className="text-sm text-[var(--accent)] hover:underline">
+          <span aria-hidden="true" className="inline-block rtl:-scale-x-100">←</span> {t("manual.title")}
+        </Link>
+      </Card>
     );
   }
 
+  const index = ALL_ROLES.indexOf(role);
+  const navLink = "flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]";
+
   return (
-    <div className="min-h-screen bg-[#f5f6fa]">
+    <div className="mx-auto max-w-5xl space-y-6">
       {/* Header */}
-      <div className={`bg-gradient-to-br ${guide.color} text-white px-6 py-8`}>
-        <div className="max-w-4xl mx-auto">
-          <nav className="flex items-center gap-1.5 text-white/60 text-xs mb-5" aria-label={t("common:manualNav.breadcrumb")}>
-            <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
-            <Link href="/manual"><span className="hover:text-white cursor-pointer">{t("manual.title")}</span></Link>
-            <ChevronRight className="h-3 w-3 rtl:rotate-180" aria-hidden="true" />
-            <span className="text-white/90">{t("roleGuide.title")}</span>
-            <ChevronRight className="h-3 w-3 rtl:rotate-180" aria-hidden="true" />
-            <span className="text-white/90">{guide.label}</span>
-          </nav>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 rounded-xl bg-white/15" aria-hidden="true">
-              <Users className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-foreground text-xl font-semibold">{guide.label}</h1>
-              <p className="text-white/70 text-sm mt-0.5">{guide.subtitle}</p>
-            </div>
+      <Card className="p-5 sm:p-6">
+        <nav className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-[var(--muted)]" aria-label={t("common:manualNav.breadcrumb")}>
+          <BookOpen className="size-3.5" aria-hidden="true" />
+          <Link href="/manual" className="hover:text-[var(--accent)]">{t("manual.title")}</Link>
+          <ChevronRight className="size-3 rtl:rotate-180" aria-hidden="true" />
+          <span>{t("roleGuide.title")}</span>
+          <ChevronRight className="size-3 rtl:rotate-180" aria-hidden="true" />
+          <span className="text-[var(--foreground)]">{guide.label}</span>
+        </nav>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-xl bg-[var(--accent)]/10 p-2.5 text-[var(--accent)]" aria-hidden="true">
+            <Users className="size-6" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-semibold">{guide.label}</h1>
+            <p className="mt-0.5 text-sm text-[var(--muted)]">{guide.subtitle}</p>
           </div>
           {isCurrentRole && (
-            <div className="inline-flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-xs font-medium text-white mb-3">
-              <Users className="h-3 w-3" aria-hidden="true" />
+            <Chip size="sm" variant="soft" color="accent" className="gap-1">
+              <Users className="size-3" aria-hidden="true" />
               {t("roleGuide.currentRole")}
-            </div>
+            </Chip>
           )}
-          <p className="text-white/75 text-sm max-w-2xl leading-relaxed">{guide.summary}</p>
         </div>
-      </div>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">{guide.summary}</p>
+      </Card>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 flex gap-8">
-        {/* Left sidebar — role nav */}
-        <aside className="hidden lg:block w-48 shrink-0" aria-label={t("common:manualNav.allRoles")}>
-          <div className="sticky top-4 space-y-0.5">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">{t("roleGuide.allRoles")}</p>
+      <div className="flex gap-6">
+        {/* Start sidebar — role nav */}
+        <aside className="hidden w-52 shrink-0 lg:block" aria-label={t("common:manualNav.allRoles")}>
+          <Card className="sticky top-4 gap-0.5 p-2">
+            <p className="mb-1 px-2 pt-1 text-xs font-semibold uppercase tracking-wider text-[var(--muted)] rtl:tracking-normal">{t("roleGuide.allRoles")}</p>
             {ALL_ROLES.map((r) => (
-              <Link key={r} href={`/manual/guides/${r}`}>
-                <div
-                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
-                    r === role
-                      ? "bg-[#eef4fb] text-[#1a3c5e] font-semibold"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                  aria-current={r === role ? "page" : undefined}
-                >
-                  <Users className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
-                   <span className="truncate">{lang === "ar" ? AR_ROLE_LABELS[r] : ROLE_LABELS[r]}</span>
-                </div>
+              <Link
+                key={r}
+                href={`/manual/guides/${r}`}
+                aria-current={r === role ? "page" : undefined}
+                className={`${navLink} ${r === role
+                  ? "bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
+                  : "text-[var(--muted)] hover:bg-[var(--default)] hover:text-[var(--foreground)]"}`}
+              >
+                <Users className="size-3 shrink-0 opacity-60" aria-hidden="true" />
+                <span className="truncate">{lang === "ar" ? AR_ROLE_LABELS[r] : ROLE_LABELS[r]}</span>
               </Link>
             ))}
-            <div className="pt-3 mt-3 border-t border-slate-200">
-              <Link href="/manual">
-                <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-muted-foreground hover:bg-slate-100 cursor-pointer transition-colors">
-                  <BookOpen className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  <span>{t("manual.title")}</span>
-                </div>
+            <div className="mt-2 border-t border-[var(--border)] pt-2">
+              <Link href="/manual" className={`${navLink} text-[var(--muted)] hover:bg-[var(--default)]`}>
+                <BookOpen className="size-3 shrink-0" aria-hidden="true" />
+                <span>{t("manual.title")}</span>
               </Link>
             </div>
-          </div>
+          </Card>
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 min-w-0 space-y-5">
-          {/* Role badge */}
-          <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold ${guide.badgeColor}`}>
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            {guide.label}
-          </div>
-
+        <main className="min-w-0 flex-1 space-y-5">
           {/* Restrictions banner */}
           {guide.restrictions && guide.restrictions.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4" role="note">
-              <p className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /> {t("roleGuide.importantRestrictions")}
+            <div className="rounded-2xl border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-4" role="note">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
+                <AlertTriangle className="size-3.5 text-[var(--warning)]" aria-hidden="true" /> {t("roleGuide.importantRestrictions")}
               </p>
               <ul className="space-y-1">
                 {guide.restrictions.map((r, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-amber-700">
-                    <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" aria-hidden="true" />
+                  <li key={i} className="flex items-start gap-2 text-xs">
+                    <XCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--warning)]" aria-hidden="true" />
                     {r}
                   </li>
                 ))}
@@ -346,11 +335,11 @@ export default function ManualRoleGuide({ role }: { role: string }) {
           )}
 
           {/* Access */}
-          <Section icon={Eye} title={t("roleGuide.accessTitle")} color="text-blue-600 bg-blue-50">
+          <Section icon={Eye} title={t("roleGuide.accessTitle")} color="accent">
             <ul className="space-y-1.5">
               {guide.access.map((a, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                  <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" aria-hidden="true" />
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <CheckCircle className="mt-0.5 size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
                   {a}
                 </li>
               ))}
@@ -358,14 +347,14 @@ export default function ManualRoleGuide({ role }: { role: string }) {
           </Section>
 
           {/* Can Create */}
-          <Section icon={Pencil} title={t("roleGuide.createTitle")} color="text-emerald-600 bg-emerald-50">
+          <Section icon={Pencil} title={t("roleGuide.createTitle")} color="success">
             {guide.canCreate.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">{t("roleGuide.cannotCreate")}</p>
+              <p className="text-sm italic text-[var(--muted)]">{t("roleGuide.cannotCreate")}</p>
             ) : (
               <ul className="space-y-1.5">
                 {guide.canCreate.map((a, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                    <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" aria-hidden="true" />
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <CheckCircle className="mt-0.5 size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
                     {a}
                   </li>
                 ))}
@@ -374,14 +363,14 @@ export default function ManualRoleGuide({ role }: { role: string }) {
           </Section>
 
           {/* Can Approve */}
-          <Section icon={ShieldCheck} title={t("roleGuide.approvalTitle")} color="text-purple-600 bg-purple-50">
+          <Section icon={ShieldCheck} title={t("roleGuide.approvalTitle")} color="accent">
             {guide.canApprove.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">{t("roleGuide.noApproval")}</p>
+              <p className="text-sm italic text-[var(--muted)]">{t("roleGuide.noApproval")}</p>
             ) : (
               <ul className="space-y-1.5">
                 {guide.canApprove.map((a, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                    <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-purple-500" aria-hidden="true" />
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <CheckCircle className="mt-0.5 size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
                     {a}
                   </li>
                 ))}
@@ -390,11 +379,11 @@ export default function ManualRoleGuide({ role }: { role: string }) {
           </Section>
 
           {/* Reports */}
-          <Section icon={FileText} title={t("roleGuide.reportsTitle")} color="text-green-600 bg-green-50">
+          <Section icon={FileText} title={t("roleGuide.reportsTitle")} color="success">
             <ul className="space-y-1.5">
               {guide.reports.map((r, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                  <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-green-500" aria-hidden="true" />
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <CheckCircle className="mt-0.5 size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
                   {r}
                 </li>
               ))}
@@ -402,16 +391,16 @@ export default function ManualRoleGuide({ role }: { role: string }) {
           </Section>
 
           {/* Dashboard */}
-          <Section icon={LayoutDashboard} title={t("roleGuide.dashboardTitle")} color="text-[#2d6a9f] bg-[#eef4fb]">
-            <p className="text-sm text-slate-700 leading-relaxed">{guide.dashboard}</p>
+          <Section icon={LayoutDashboard} title={t("roleGuide.dashboardTitle")} color="accent">
+            <p className="text-sm leading-relaxed">{guide.dashboard}</p>
           </Section>
 
           {/* Notifications */}
-          <Section icon={Bell} title={t("roleGuide.notificationsTitle")} color="text-violet-600 bg-violet-50">
+          <Section icon={Bell} title={t("roleGuide.notificationsTitle")} color="accent">
             <ul className="space-y-1.5">
               {guide.notifications.map((n, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                  <Bell className="h-4 w-4 shrink-0 mt-0.5 text-violet-400" aria-hidden="true" />
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <Bell className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
                   {n}
                 </li>
               ))}
@@ -419,11 +408,11 @@ export default function ManualRoleGuide({ role }: { role: string }) {
           </Section>
 
           {/* Tips */}
-          <Section icon={BookOpen} title={t("roleGuide.tipsTitle")} color="text-amber-600 bg-amber-50">
+          <Section icon={BookOpen} title={t("roleGuide.tipsTitle")} color="warning">
             <ul className="space-y-2">
               {guide.tips.map((tip, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                  <span className="shrink-0 h-5 w-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center mt-0.5" aria-hidden="true">{i + 1}</span>
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--warning)]/15 text-xs font-bold text-[var(--warning)]" aria-hidden="true">{i + 1}</span>
                   {tip}
                 </li>
               ))}
@@ -431,21 +420,19 @@ export default function ManualRoleGuide({ role }: { role: string }) {
           </Section>
 
           {/* Navigation row */}
-          <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-            <Link href="/manual">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                <BookOpen className="h-3.5 w-3.5" aria-hidden="true" /> {t("manual.title")}
-              </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
+            <Link href="/manual" className="button button--secondary button--sm gap-1.5">
+              <BookOpen className="size-3.5" aria-hidden="true" /> {t("manual.title")}
             </Link>
             <div className="flex items-center gap-2">
-              {ALL_ROLES.indexOf(role) > 0 && (
-                <Link href={`/manual/guides/${ALL_ROLES[ALL_ROLES.indexOf(role) - 1]}`}>
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs">← {t("roleGuide.previousRole")}</Button>
+              {index > 0 && (
+                <Link href={`/manual/guides/${ALL_ROLES[index - 1]}`} className="button button--ghost button--sm gap-1.5">
+                  <ArrowRight className="size-3.5 rotate-180 rtl:rotate-0" aria-hidden="true" /> {t("roleGuide.previousRole")}
                 </Link>
               )}
-              {ALL_ROLES.indexOf(role) < ALL_ROLES.length - 1 && (
-                <Link href={`/manual/guides/${ALL_ROLES[ALL_ROLES.indexOf(role) + 1]}`}>
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-xs">{t("roleGuide.nextRole")} <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" /></Button>
+              {index < ALL_ROLES.length - 1 && (
+                <Link href={`/manual/guides/${ALL_ROLES[index + 1]}`} className="button button--ghost button--sm gap-1.5">
+                  {t("roleGuide.nextRole")} <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden="true" />
                 </Link>
               )}
             </div>
@@ -456,20 +443,26 @@ export default function ManualRoleGuide({ role }: { role: string }) {
   );
 }
 
+const SECTION_TONES: Record<"accent" | "success" | "warning", string> = {
+  accent: "bg-[var(--accent)]/10 text-[var(--accent)]",
+  success: "bg-[var(--success)]/10 text-[var(--success)]",
+  warning: "bg-[var(--warning)]/15 text-[var(--warning)]",
+};
+
 function Section({
   icon: Icon, title, color, children,
 }: {
-  icon: React.ElementType; title: string; color: string; children: React.ReactNode;
+  icon: React.ElementType; title: string; color: keyof typeof SECTION_TONES; children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-slate-100 rounded-xl overflow-hidden">
-      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-slate-50 bg-slate-50/50">
-        <div className={`p-1.5 rounded-md ${color} opacity-90`} aria-hidden="true">
-          <Icon className="h-3.5 w-3.5" />
-        </div>
-        <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+    <Card className="gap-0 overflow-hidden p-0">
+      <div className="flex items-center gap-2.5 border-b border-[var(--border)] bg-[var(--default)]/50 px-5 py-3.5">
+        <span className={`rounded-md p-1.5 ${SECTION_TONES[color]}`} aria-hidden="true">
+          <Icon className="size-3.5" />
+        </span>
+        <h2 className="text-sm font-semibold">{title}</h2>
       </div>
       <div className="px-5 py-4">{children}</div>
-    </div>
+    </Card>
   );
 }

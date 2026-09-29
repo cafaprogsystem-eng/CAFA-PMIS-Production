@@ -507,6 +507,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       "/document-management": tNav("groups.dataManagement"),
       // Reached from the header, not the sidebar; the breadcrumb showed "Messages".
       "/messages": tNav("items.communicationCentre"),
+      // Manual sub-paths; the breadcrumb showed the raw English segment "Guides".
+      "/manual/guides": tNav("manualSections.roleGuides"),
+      "/manual/faq": tNav("manualSections.faq"),
     };
     for (const entry of navEntries) {
       const items = entry.kind === "group" ? entry.group.items : [entry.item];
