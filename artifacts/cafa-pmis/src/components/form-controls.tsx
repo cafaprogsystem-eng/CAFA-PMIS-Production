@@ -1,4 +1,4 @@
-import { forwardRef, type ComponentProps, type ReactNode } from "react";
+import { forwardRef, useId, type ComponentProps, type ReactNode } from "react";
 import { parseDate, type CalendarDate } from "@internationalized/date";
 import {
   Calendar, Checkbox, DateField, DatePicker, DateRangePicker, Input, Label, ListBox, RangeCalendar, Select,
@@ -277,5 +277,28 @@ export function RemovableTags({
         ))}
       </TagGroup.List>
     </TagGroup>
+  );
+}
+
+/**
+ * A label and one control, linked by a generated id: the label names the
+ * control for assistive tech and clicking it focuses the control.
+ * Usage: <Field label="Title" isRequired>{(id) => <Input id={id} … />}</Field>
+ */
+export function Field({
+  label, isRequired, className, labelClassName, children,
+}: {
+  label: ReactNode;
+  isRequired?: boolean;
+  className?: string;
+  labelClassName?: string;
+  children: (id: string) => ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      <Label htmlFor={id} isRequired={isRequired} className={labelClassName}>{label}</Label>
+      {children(id)}
+    </div>
   );
 }

@@ -31,7 +31,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import "@testing-library/jest-dom";
@@ -254,10 +254,8 @@ describe("SPR-UX-07: Beneficiary breakdown is accessible in detail view", () => 
 
 describe("SPR-UX-08: Evidence empty state is meaningful", () => {
   it("source: no-attachments warning contains descriptive text (not blank card)", () => {
-    // Verify the no-attachments div has a <p> tag with warning text
-    expect(SRC).toContain("stateForm.noAttachmentsWarning");
-    // And it's inside an amber warning div (not a blank card)
-    expect(SRC).toContain("border-amber-200");
+    // A HeroUI warning Alert carrying the explanatory text
+    expect(SRC).toMatch(/<Alert status="warning">\s*<Alert.Indicator \/>\s*<Alert.Content>\s*<Alert.Description>\{t\("stateForm.noAttachmentsWarning"\)\}/);
   });
 
   it("source: HQ support empty state added when hqRequests is empty (P4 fix)", () => {
@@ -271,18 +269,15 @@ describe("SPR-UX-08: Evidence empty state is meaningful", () => {
 
 // ── SPR-UX-10: Save/Submit in-flight state ───────────────────────────────────
 
-describe("SPR-UX-10: Save/Submit buttons carry aria-busy for in-flight state", () => {
-  it("source: Save Draft button has aria-busy attribute", () => {
-    expect(SRC).toContain("aria-busy={isSaving}");
+describe("SPR-UX-10: Save/Submit buttons announce the in-flight state", () => {
+  // HeroUI buttons don't accept aria-busy; the footer region carries it.
+  it("source: the footer region has aria-busy={isSaving}", () => {
+    expect(SRC).toContain("data-report-form-footer aria-busy={isSaving}");
   });
 
-  it("source: Submit button has disabled={isSaving} to prevent double-submit", () => {
-    expect(SRC).toContain("disabled={isSaving}");
-  });
-
-  it("source: both footer buttons carry aria-busy", () => {
-    const matches = [...SRC.matchAll(/aria-busy=\{isSaving\}/g)];
-    expect(matches.length).toBeGreaterThanOrEqual(2);
+  it("source: Submit and Save Draft are disabled while saving (no double submit)", () => {
+    expect(SRC).toContain("isDisabled={!isOnline || isSaving}");
+    expect(SRC).toContain('isDisabled={localDraft.status === "pending" || localDraft.status === "syncing" || isSaving}');
   });
 });
 
@@ -309,25 +304,12 @@ describe("SPR-UX-01: Form heading distinguishes create, edit, and revision modes
 // ── SPR-UX-02: Revision banner is prominent ───────────────────────────────────
 
 describe("SPR-UX-02: Returned-for-revision banner is prominent and uses role='alert'", () => {
-  it("source: revision banner uses role='alert' (not role='status')", () => {
-    // The banner wrapping the returned-for-revision message uses role="alert"
-    expect(SRC).toContain('role="alert" className="flex items-start gap-2 rounded-md border');
+  it("source: revision banner is a warning Alert with role='alert' (not role='status')", () => {
+    expect(SRC).toMatch(/<Alert status="warning" role="alert">\s*<Alert.Indicator \/>\s*<Alert.Content>\s*<Alert.Title>\{t\("stateForm.revisionBannerTitle"\)\}/);
   });
 
   it("source: role='status' is no longer used in the form", () => {
     expect(SRC).not.toContain('role="status"');
-  });
-
-  it("source: revision banner AlertTriangle has aria-hidden='true'", () => {
-    // All AlertTriangle usages in the form must carry aria-hidden="true"
-    const hiddenMatches = [...SRC.matchAll(/AlertTriangle[^<]*/g)].filter((m) =>
-      SRC.slice(m.index ?? 0, (m.index ?? 0) + 100).includes('aria-hidden="true"'),
-    );
-    expect(hiddenMatches.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("source: revision banner uses design-system border (border border-amber-300)", () => {
-    expect(SRC).toContain("border border-amber-300");
   });
 });
 
@@ -340,11 +322,11 @@ describe("SPR-UX-03: Locked identity fields retain aria-readonly and visual Lock
 
   it("source: Lock icon imported and rendered for locked fields", () => {
     expect(SRC).toContain("Lock,");
-    expect(SRC).toContain('<Lock className="h-3 w-3 text-muted-foreground" aria-hidden="true" />');
+    expect(SRC).toContain('<Lock className="size-3 text-[var(--muted)]" aria-hidden="true" />');
   });
 
-  it("source: locked fields have bg-muted cursor-not-allowed for visual cue", () => {
-    expect(SRC).toContain("bg-muted cursor-not-allowed");
+  it("source: locked fields have a muted background and not-allowed cursor", () => {
+    expect(SRC).toContain('className="cursor-not-allowed bg-[var(--default)]"');
   });
 });
 
@@ -415,13 +397,6 @@ describe("SPR-A11Y-03: Decorative icons carry aria-hidden='true'", () => {
     expect(SRC).toContain('<TrendingUp className="h-4 w-4" aria-hidden="true" />');
   });
 
-  it("source: attachment warning AlertTriangle is aria-hidden", () => {
-    // Find in the attachment warning context
-    const attachIdx = SRC.indexOf("border-amber-200 bg-amber-50");
-    const attachSection = SRC.slice(attachIdx, attachIdx + 200);
-    expect(attachSection).toContain('aria-hidden="true"');
-  });
-
   it("source: Add Activity Plus icon is aria-hidden", () => {
     const addActivityIdx = SRC.indexOf("addActivity");
     const addActivitySection = SRC.slice(Math.max(0, addActivityIdx - 300), addActivityIdx + 100);
@@ -440,24 +415,14 @@ describe("SPR-A11Y-03: Decorative icons carry aria-hidden='true'", () => {
     expect(addReqSection).toContain('aria-hidden="true"');
   });
 
-  it("source: Trash2 buttons have aria-label for screen readers", () => {
-    // Activity, risk, and HQ request remove buttons have aria-label
-    expect(SRC).toContain('aria-label={`Remove activity ${i + 1}`}');
-    expect(SRC).toContain('aria-label={`Remove risk ${i + 1}`}');
-    expect(SRC).toContain('aria-label={`Remove HQ support request ${i + 1}`}');
-  });
-
-  it("source: ChevronDown in project dropdown is aria-hidden", () => {
-    expect(SRC).toContain('<ChevronDown className="h-4 w-4 text-muted-foreground ms-auto shrink-0" aria-hidden="true" />');
-  });
-
-  it("source: X badge remove button icon is aria-hidden + has aria-label", () => {
-    expect(SRC).toContain('<X className="h-3 w-3" aria-hidden="true" />');
-    expect(SRC).toContain('aria-label={`Remove ${p.code}`}');
+  it("source: Trash2 buttons have translated aria-labels for screen readers", () => {
+    expect(SRC).toContain('aria-label={t("stateForm.removeActivityAria", { number: i + 1 })}');
+    expect(SRC).toContain('aria-label={t("stateForm.removeRiskAria", { number: i + 1 })}');
+    expect(SRC).toContain('aria-label={t("stateForm.removeRequestAria", { number: i + 1 })}');
   });
 
   it("source: Send icon in Submit button is aria-hidden", () => {
-    expect(SRC).toContain('<Send className="h-4 w-4" aria-hidden="true" />');
+    expect(SRC).toContain('<Send className="size-4" aria-hidden="true" />');
   });
 
   it("source: Loader2 spinner icons are aria-hidden", () => {
@@ -471,83 +436,27 @@ describe("SPR-A11Y-03: Decorative icons carry aria-hidden='true'", () => {
     expect(svgs.length).toBeGreaterThan(0);
   });
 
-  // ChipSelect, TagInput, UploadArea icon fixes
-  it("source: ChipSelect badge X buttons have aria-label='Remove {s}'", () => {
-    expect(SRC).toContain('aria-label={`Remove ${s}`}');
+  // TagInput / UploadArea
+  it("source: chosen sectors, localities and projects are removable HeroUI tags", () => {
+    expect(SRC).toContain("<RemovableTags");
   });
 
-  it("source: TagInput badge X buttons have aria-label='Remove {t}'", () => {
-    expect(SRC).toContain('aria-label={`Remove ${t}`}');
-  });
-
-  it("source: UploadArea FileText icon is aria-hidden", () => {
-    expect(SRC).toContain('<FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />');
-  });
-
-  it("source: UploadArea Upload button icon is aria-hidden", () => {
-    expect(SRC).toContain('<Upload className="h-3 w-3" aria-hidden="true" />');
-  });
-
-  it("source: UploadArea attachment remove button has aria-label", () => {
-    expect(SRC).toContain('aria-label={`Remove attachment ${d.fileName}`}');
-  });
-
-  it("source: UploadArea Loader2 during upload is aria-hidden", () => {
-    // The uploading spinner in UploadArea
-    const uploadLoaderMatch = SRC.match(/Loader2[^/\n]*?h-3\.5 w-3\.5[^/\n]*?aria-hidden="true"/s);
-    expect(uploadLoaderMatch).not.toBeNull();
+  it("source: UploadArea icons are aria-hidden and its remove button is named", () => {
+    expect(SRC).toContain('<FileText className="size-3.5 shrink-0 text-[var(--muted)]" aria-hidden="true" />');
+    expect(SRC).toContain('<Upload className="size-3.5" aria-hidden="true" />');
+    expect(SRC).toContain('<Loader2 className="size-3.5 animate-spin text-[var(--muted)]" aria-hidden="true" />');
+    expect(SRC).toContain('aria-label={t("stateForm.removeAttachmentAria", { fileName: d.fileName })}');
   });
 });
 
 // ── SPR-A11Y-05b: ChipSelect keyboard operability ────────────────────────────
 
 describe("SPR-A11Y-05b: ChipSelect is keyboard-operable with ARIA labelling", () => {
-  it("source: ChipSelect trigger is a real <button> element (not a div with role=button)", () => {
+  it("source: ChipSelect is a HeroUI multi-select (React Aria listbox pattern)", () => {
     const chipSelectFn = SRC.slice(SRC.indexOf("export function ChipSelect"), SRC.indexOf("function TagInput"));
-    // The trigger is a real <button> — no need for role="button"
-    expect(chipSelectFn).toContain("<button");
-    expect(chipSelectFn).toContain('aria-haspopup="listbox"');
-    expect(chipSelectFn).not.toContain('role="button"');
-  });
-
-  it("source: ChipSelect trigger has tabIndex={0} (keyboard focusable)", () => {
-    // The trigger is a real <button> with explicit tabIndex={0} so it is
-    // unambiguously in the tab order even in unusual focus environments.
-    const chipSelectFn = SRC.slice(SRC.indexOf("export function ChipSelect"), SRC.indexOf("function TagInput"));
-    expect(chipSelectFn).toContain("tabIndex={0}");
-  });
-
-  it("source: ChipSelect trigger has aria-expanded", () => {
-    const chipSelectFn = SRC.slice(SRC.indexOf("function ChipSelect"), SRC.indexOf("function TagInput"));
-    expect(chipSelectFn).toContain("aria-expanded={open}");
-  });
-
-  it("source: ChipSelect trigger has aria-haspopup='listbox'", () => {
-    expect(SRC).toContain('aria-haspopup="listbox"');
-  });
-
-  it("source: ChipSelect trigger handles Enter/Space/Escape keyboard events", () => {
-    const chipSelectFn = SRC.slice(SRC.indexOf("function ChipSelect"), SRC.indexOf("function TagInput"));
-    expect(chipSelectFn).toContain('e.key === "Enter"');
-    expect(chipSelectFn).toContain('e.key === " "');
-    expect(chipSelectFn).toContain('e.key === "Escape"');
-  });
-
-  it("source: ChipSelect label has aria-labelledby on trigger (valid AT association for non-labelable elements)", () => {
-    const chipSelectFn = SRC.slice(SRC.indexOf("export function ChipSelect"), SRC.indexOf("function TagInput"));
-    // The label is a <span> with a stable id; the trigger carries aria-labelledby
-    expect(chipSelectFn).toContain("const labelId = useId()");
-    expect(chipSelectFn).toContain("aria-labelledby={labelId}");
-  });
-
-  it("source: ChipSelect dropdown has role='listbox' and aria-multiselectable", () => {
-    expect(SRC).toContain('role="listbox"');
-    expect(SRC).toContain('aria-multiselectable="true"');
-  });
-
-  it("source: ChipSelect options have role='option' and aria-selected", () => {
-    expect(SRC).toContain('role="option"');
-    expect(SRC).toContain('aria-selected={selected.includes(opt)}');
+    expect(chipSelectFn).toContain('selectionMode="multiple"');
+    expect(chipSelectFn).toContain("<HLabel>{label}</HLabel>");
+    expect(chipSelectFn).toContain('<ListBox selectionMode="multiple">');
   });
 
   it("source: TagInput Label has htmlFor pointing to input id", () => {
@@ -594,7 +503,7 @@ describe("SPR-A11Y-04: Error summary region uses role='alert' and tabIndex=-1", 
 
 describe("SPR-A11Y-05: Revision banner uses role='alert'", () => {
   it("source: revision banner has role='alert'", () => {
-    expect(SRC).toContain('role="alert" className="flex items-start gap-2 rounded-md border border-amber-300');
+    expect(SRC).toContain('<Alert status="warning" role="alert">');
   });
 
   it("source: role='status' is not used anywhere in the form", () => {
@@ -618,9 +527,9 @@ describe("SPR-A11Y-06: No critical action relies only on colour", () => {
   });
 
   it("source: Trash2 remove buttons have aria-label (not icon-only)", () => {
-    expect(SRC).toContain("Remove activity");
-    expect(SRC).toContain("Remove risk");
-    expect(SRC).toContain("Remove HQ support request");
+    expect(SRC).toContain("stateForm.removeActivityAria");
+    expect(SRC).toContain("stateForm.removeRiskAria");
+    expect(SRC).toContain("stateForm.removeRequestAria");
   });
 });
 
@@ -644,6 +553,8 @@ describe("SPR-A11Y-07: PM and Super Admin access not blocked by stale ownership 
 });
 
 // ── ChipSelect rendered keyboard tests ───────────────────────────────────────
+// ChipSelect is a HeroUI (React Aria) multi-select: the listbox, options and
+// keyboard model come from React Aria; these tests pin the user-visible contract.
 
 import { ChipSelect } from "../components/program-state-report-form";
 
@@ -662,236 +573,91 @@ function renderChipSelect(selected: string[] = [], onChange = vi.fn()) {
   );
 }
 
+const trigger = () => screen.getByRole("button", { name: /Sectors Covered/ });
+
 describe("ChipSelect — rendered keyboard interaction (SPR-A11Y-05b)", () => {
   beforeAll(() => {
-    // Radix / focus shims already set up at module level above
     Element.prototype.scrollIntoView = vi.fn();
-    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
-    Element.prototype.setPointerCapture = vi.fn();
-    Element.prototype.releasePointerCapture = vi.fn();
   });
 
   it("label text is visible in the document", () => {
     renderChipSelect();
-    expect(screen.getByText("Sectors Covered")).toBeInTheDocument();
+    expect(screen.getAllByText("Sectors Covered").length).toBeGreaterThan(0);
   });
 
-  it("trigger button is in the tab order (tabIndex not -1)", () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']");
-    expect(trigger).not.toBeNull();
-    expect(trigger).not.toHaveAttribute("tabIndex", "-1");
+  it("trigger is a real button named by the visible label, in the tab order", () => {
+    renderChipSelect();
+    expect(trigger().tagName).toBe("BUTTON");
+    expect(trigger()).toHaveAttribute("aria-haspopup", "listbox");
+    expect(trigger()).not.toHaveAttribute("tabIndex", "-1");
   });
 
   it("trigger has aria-expanded=false when closed", () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']");
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    renderChipSelect();
+    expect(trigger()).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("clicking trigger opens the listbox", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const listbox = container.querySelector("[role='listbox']");
-    expect(listbox).not.toBeNull();
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
+  it("clicking the trigger opens a multi-select listbox", async () => {
+    renderChipSelect();
+    const button = trigger();
+    await userEvent.click(button);
+    const listbox = await screen.findByRole("listbox");
+    expect(listbox).toHaveAttribute("aria-multiselectable", "true");
+    expect(button).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("trigger Enter key opens the listbox", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    trigger.focus();
-    await userEvent.keyboard("{Enter}");
-    expect(container.querySelector("[role='listbox']")).not.toBeNull();
-  });
-
-  it("trigger Space key opens the listbox", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    trigger.focus();
-    await userEvent.keyboard(" ");
-    expect(container.querySelector("[role='listbox']")).not.toBeNull();
-  });
-
-  it("trigger ArrowDown key opens the listbox", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    trigger.focus();
-    await userEvent.keyboard("{ArrowDown}");
-    expect(container.querySelector("[role='listbox']")).not.toBeNull();
-  });
-
-  it("options are rendered as role=option with aria-selected", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const options = container.querySelectorAll("[role='option']");
-    expect(options.length).toBe(SECTOR_OPTIONS.length);
-    options.forEach((opt) => {
-      expect(opt).toHaveAttribute("aria-selected");
+  for (const key of ["{Enter}", " ", "{ArrowDown}"]) {
+    it(`trigger ${key.trim() || "Space"} key opens the listbox`, async () => {
+      renderChipSelect();
+      trigger().focus();
+      await userEvent.keyboard(key);
+      expect(await screen.findByRole("listbox")).toBeInTheDocument();
     });
-  });
+  }
 
-  it("options have tabIndex=0 so they are individually keyboard-focusable", async () => {
-    // The interactive element inside each li[role='option'] is a <button>,
-    // which is natively focusable. Verify the buttons exist and are not excluded
-    // from the tab order (tabIndex !== -1).
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const optionBtns = Array.from(
-      container.querySelectorAll<HTMLElement>("[role='listbox'] [role='option'] button")
-    );
-    expect(optionBtns.length).toBe(SECTOR_OPTIONS.length);
-    optionBtns.forEach((btn) => {
-      expect(btn).not.toHaveAttribute("tabIndex", "-1");
-    });
-  });
-
-  it("clicking an option calls onChange with that option selected", async () => {
-    const onChange = vi.fn();
-    const { container } = renderChipSelect([], onChange);
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    // Click the interactive button inside the first li[role='option']
-    const firstOptBtn = container.querySelector<HTMLElement>(
-      "[role='listbox'] [role='option'] button"
-    ) as HTMLElement;
-    await userEvent.click(firstOptBtn);
-    expect(onChange).toHaveBeenCalledWith(["WASH"]);
-  });
-
-  it("Space on a focused option toggles selection", async () => {
-    const onChange = vi.fn();
-    const { container } = renderChipSelect([], onChange);
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const optionBtns = Array.from(
-      container.querySelectorAll<HTMLElement>("[role='listbox'] [role='option'] button")
-    );
-    optionBtns[1].focus();
-    await userEvent.keyboard(" ");
-    expect(onChange).toHaveBeenCalledWith(["Health"]);
-  });
-
-  it("Enter on a focused option toggles selection", async () => {
-    const onChange = vi.fn();
-    const { container } = renderChipSelect([], onChange);
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const optionBtns = Array.from(
-      container.querySelectorAll<HTMLElement>("[role='listbox'] [role='option'] button")
-    );
-    optionBtns[2].focus();
-    await userEvent.keyboard("{Enter}");
-    expect(onChange).toHaveBeenCalledWith(["Education"]);
-  });
-
-  it("Escape on an option closes the listbox", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const options = container.querySelectorAll("[role='option']");
-    (options[0] as HTMLElement).focus();
-    await userEvent.keyboard("{Escape}");
-    expect(container.querySelector("[role='listbox']")).toBeNull();
-  });
-
-  it("ArrowDown moves focus to next option", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const optionBtns = Array.from(
-      container.querySelectorAll<HTMLElement>("[role='listbox'] [role='option'] button")
-    );
-    optionBtns[0].focus();
-    await userEvent.keyboard("{ArrowDown}");
-    expect(document.activeElement).toBe(optionBtns[1]);
-  });
-
-  it("ArrowUp on first option closes the listbox and restores focus to trigger", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const optionBtns = Array.from(
-      container.querySelectorAll<HTMLElement>("[role='listbox'] [role='option'] button")
-    );
-    optionBtns[0].focus();
-    await userEvent.keyboard("{ArrowUp}");
-    expect(container.querySelector("[role='listbox']")).toBeNull();
-  });
-
-  it("Home key moves focus to first option", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const optionBtns = Array.from(
-      container.querySelectorAll<HTMLElement>("[role='listbox'] [role='option'] button")
-    );
-    optionBtns[2].focus();
-    await userEvent.keyboard("{Home}");
-    expect(document.activeElement).toBe(optionBtns[0]);
-  });
-
-  it("End key moves focus to last option", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const optionBtns = Array.from(
-      container.querySelectorAll<HTMLElement>("[role='listbox'] [role='option'] button")
-    );
-    optionBtns[0].focus();
-    await userEvent.keyboard("{End}");
-    expect(document.activeElement).toBe(optionBtns[optionBtns.length - 1]);
-  });
-
-  it("already-selected option has aria-selected=true", async () => {
-    const { container } = renderChipSelect(["WASH"]);
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const options = container.querySelectorAll("[role='option']");
+  it("options are role=option with aria-selected reflecting the selection", async () => {
+    renderChipSelect(["WASH"]);
+    await userEvent.click(trigger());
+    const options = await screen.findAllByRole("option");
+    expect(options).toHaveLength(SECTOR_OPTIONS.length);
     expect(options[0]).toHaveAttribute("aria-selected", "true");
     expect(options[1]).toHaveAttribute("aria-selected", "false");
   });
 
-  it("selected chip shows in the container before the trigger", () => {
-    renderChipSelect(["WASH"]);
-    expect(screen.getByText("WASH")).toBeInTheDocument();
+  it("choosing an option calls onChange with it added", async () => {
+    const onChange = vi.fn();
+    renderChipSelect(["WASH"], onChange);
+    await userEvent.click(trigger());
+    await userEvent.click(await screen.findByRole("option", { name: "Health" }));
+    expect(onChange).toHaveBeenLastCalledWith(["WASH", "Health"]);
   });
 
-  it("chip remove button has accessible label", () => {
-    renderChipSelect(["WASH", "Health"]);
-    expect(screen.getByRole("button", { name: "Remove WASH" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Remove Health" })).toBeInTheDocument();
+  it("ArrowDown and Enter select an option from the keyboard", async () => {
+    const onChange = vi.fn();
+    renderChipSelect([], onChange);
+    trigger().focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await screen.findByRole("listbox");
+    await userEvent.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalled();
+    expect(onChange.mock.lastCall?.[0]).toHaveLength(1);
   });
 
-  it("chip remove button calls onChange with that item excluded", async () => {
+  it("Escape closes the listbox", async () => {
+    renderChipSelect();
+    await userEvent.click(trigger());
+    await screen.findByRole("listbox");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("each chosen value shows as a removable tag", async () => {
     const onChange = vi.fn();
     renderChipSelect(["WASH", "Health"], onChange);
-    const removeWASH = screen.getByRole("button", { name: "Remove WASH" });
-    await userEvent.click(removeWASH);
+    const tags = screen.getByRole("grid", { name: "Sectors Covered" });
+    const washRow = within(tags).getByRole("row", { name: /WASH/ });
+    await userEvent.click(within(washRow).getByRole("button"));
     expect(onChange).toHaveBeenCalledWith(["Health"]);
-  });
-
-  it("listbox has aria-labelledby pointing to the visible label", async () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    await userEvent.click(trigger);
-    const listbox = container.querySelector("[role='listbox']") as HTMLElement;
-    const labelledBy = listbox.getAttribute("aria-labelledby");
-    expect(labelledBy).toBeTruthy();
-    const labelEl = container.querySelector(`#${labelledBy}`);
-    expect(labelEl?.textContent).toContain("Sectors Covered");
-  });
-
-  it("trigger has aria-labelledby pointing to the visible label", () => {
-    const { container } = renderChipSelect();
-    const trigger = container.querySelector("button[aria-haspopup='listbox']") as HTMLElement;
-    const labelledBy = trigger.getAttribute("aria-labelledby");
-    expect(labelledBy).toBeTruthy();
-    const labelEl = container.querySelector(`#${labelledBy}`);
-    expect(labelEl?.textContent).toContain("Sectors Covered");
   });
 });
 

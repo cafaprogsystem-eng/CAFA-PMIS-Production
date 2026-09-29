@@ -41,7 +41,9 @@ vi.mock("react-i18next", () => ({
     t: (key: string, def?: unknown) => ({
       "hqForm.titleEdit": "Edit HQ Sector Report",
       "hqForm.returnedForRevision": "Returned for Revision",
-    }[key] ?? (typeof def === "string" ? def : key)),
+    }[key] ?? (typeof def === "string" ? def
+      // i18next-style options object: fall back to its defaultValue
+      : def && typeof (def as { defaultValue?: unknown }).defaultValue === "string" ? (def as { defaultValue: string }).defaultValue : key)),
     i18n: { language: "en", dir: () => "ltr", changeLanguage: vi.fn() },
   }),
   initReactI18next: { type: "3rdParty", init: vi.fn() },
@@ -284,8 +286,9 @@ describe("HQSR-005 — hydration (HQSR-EDIT-01…06)", () => {
 
   it("HQSR-EDIT-06: on_demand kind hydrates onDemandReason and period bounds", async () => {
     renderForm(onDemandReport);
-    expect(await screen.findByDisplayValue("2026-06-01")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("2026-06-15")).toBeInTheDocument();
+    // HeroUI DatePickers keep the ISO value in their hidden form input
+    expect((await screen.findAllByDisplayValue("2026-06-01")).length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue("2026-06-15").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Donor Request").length).toBeGreaterThan(0);
   });
 });
@@ -300,9 +303,9 @@ describe("HQSR-005 — identity locked (HQSR-EDIT-ID-01…03, OVR-04)", () => {
 
   it("HQSR-EDIT-ID-02/03: frequency and period controls disabled", () => {
     renderForm(existingReport);
-    const comboboxes = screen.getAllByRole("combobox");
-    // Frequency + Month + Year selects are all disabled in edit mode
-    const disabled = comboboxes.filter((c) => (c as HTMLButtonElement).disabled);
+    // Frequency + Month + Year selects (HeroUI Select triggers) are all disabled in edit mode
+    const selects = Array.from(document.querySelectorAll<HTMLButtonElement>("button[aria-haspopup='listbox']"));
+    const disabled = selects.filter((c) => c.disabled);
     expect(disabled.length).toBeGreaterThanOrEqual(3);
     expect(screen.getAllByText("frequency.monthly").length).toBeGreaterThan(0);
   });
@@ -313,7 +316,7 @@ describe("HQSR-005 — identity locked (HQSR-EDIT-ID-01…03, OVR-04)", () => {
       renderForm(existingReport);
       const sectorInput = screen.getByDisplayValue("Health");
       expect(sectorInput).toHaveAttribute("readonly");
-      const disabled = screen.getAllByRole("combobox").filter((c) => (c as HTMLButtonElement).disabled);
+      const disabled = Array.from(document.querySelectorAll<HTMLButtonElement>("button[aria-haspopup='listbox']")).filter((c) => c.disabled);
       expect(disabled.length).toBeGreaterThanOrEqual(3);
     } finally {
       meHolder.user = { id: 31, name: "TC User", role: "technical_coordinator", sector: "Health" };

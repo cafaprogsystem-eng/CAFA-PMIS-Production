@@ -12,27 +12,22 @@ import {
 import { useTranslation } from "react-i18next";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { StateLabel } from "@/components/state-label";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { DialogFooter, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+  Alert, Button as HButton, Checkbox, Chip, Input as HInput, Modal,
+  Skeleton as HSkeleton, TextArea as HTextArea,
+} from "@heroui/react";
+import { SelectField } from "@/components/select-field";
+import { DateInput, Field } from "@/components/form-controls";
+import { optionLabel, riskStatusText, severityColor, severityText } from "@/lib/report-form-options";
 import {
   Plus, Trash2, Send, Upload, FileText, Loader2, X,
   TrendingUp, Users, Activity, ShieldAlert, Clock,
   MapPin, BarChart3, AlertTriangle, Link2, AlertCircle,
 } from "@/components/icons";
 import { CommentsPanel } from "@/components/comments-panel";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { SECTORS } from "@/lib/sectors";
-import { severityBadgeVariant, hasPerm } from "@/lib/format";
+import { hasPerm } from "@/lib/format";
 import { FormVoiceRecorder, type PendingNote } from "@/components/form-voice-recorder";
 import {
   OfflineReportDraftStatus,
@@ -272,10 +267,10 @@ function BenTable<T extends BenRow>({
   const colHeaders = [nameCol, t("hqForm.colMen"), t("hqForm.colWomen"), t("hqForm.colBoys"), t("hqForm.colGirls"), t("hqForm.colTotal")];
   return (
     <div>
-      <p className="text-xs font-semibold mb-1 text-muted-foreground">{label}</p>
-      <div className="rounded border overflow-hidden">
+      <p className="text-xs font-semibold mb-1 text-[var(--muted)]">{label}</p>
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
         <table className="w-full text-xs">
-          <thead className="bg-muted/40">
+          <thead className="bg-[var(--default)]">
             <tr>
               {colHeaders.map((h) => (
                 <th key={h} className="px-2 py-1.5 text-start font-medium">{h}</th>
@@ -284,22 +279,22 @@ function BenTable<T extends BenRow>({
           </thead>
           <tbody className="divide-y">
             {rows.map((row, i) => (
-              <tr key={i} className="hover:bg-muted/20">
+              <tr key={i} className="hover:bg-[var(--default)]">
                 <td className="px-2 py-1.5 font-medium">{nameKey === "stateName" ? getLinkedStateLabel(row as { stateName?: string | null; stateNameAr?: string | null }, i18n?.language) : String(row[nameKey])}</td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{row.men.toLocaleString()}</bdi></td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{row.women.toLocaleString()}</bdi></td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{row.boys.toLocaleString()}</bdi></td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{row.girls.toLocaleString()}</bdi></td>
-                <td className="px-2 py-1.5 font-semibold"><bdi dir="ltr">{row.total.toLocaleString()}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{row.men.toLocaleString("en-GB")}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{row.women.toLocaleString("en-GB")}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{row.boys.toLocaleString("en-GB")}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{row.girls.toLocaleString("en-GB")}</bdi></td>
+                <td className="px-2 py-1.5 font-semibold"><bdi dir="ltr">{row.total.toLocaleString("en-GB")}</bdi></td>
               </tr>
             ))}
-            <tr className="bg-muted/30 font-semibold">
+            <tr className="bg-[var(--default)] font-semibold">
               <td className="px-2 py-1.5">{t("hqForm.totalRow")}</td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{total.men.toLocaleString()}</bdi></td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{total.women.toLocaleString()}</bdi></td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{total.boys.toLocaleString()}</bdi></td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{total.girls.toLocaleString()}</bdi></td>
-                <td className="px-2 py-1.5"><bdi dir="ltr">{total.total.toLocaleString()}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{total.men.toLocaleString("en-GB")}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{total.women.toLocaleString("en-GB")}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{total.boys.toLocaleString("en-GB")}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{total.girls.toLocaleString("en-GB")}</bdi></td>
+                <td className="px-2 py-1.5"><bdi dir="ltr">{total.total.toLocaleString("en-GB")}</bdi></td>
             </tr>
           </tbody>
         </table>
@@ -328,23 +323,23 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
   if (!isAuthorised) return null;
   if (isLoading) return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">{[1,2,3,4,5,6].map((i) => <Skeleton key={i} className="h-16" />)}</div>
-      <Skeleton className="h-24" />
+      <div className="grid grid-cols-3 gap-2">{[1,2,3,4,5,6].map((i) => <HSkeleton key={i} className="h-16" />)}</div>
+      <HSkeleton className="h-24" />
     </div>
   );
   if (!data) return null;
 
   const snap = data.snapshot;
   const snapCards = [
-    { label: t("hqForm.snapshotActiveProjects"), value: snap.activeProjects, icon: TrendingUp, color: "text-blue-600" },
-    { label: t("hqForm.snapshotActiveStates"), value: snap.activeStates, icon: MapPin, color: "text-purple-600" },
-    { label: t("hqForm.snapshotActiveLocalities"), value: snap.activeLocalities, icon: MapPin, color: "text-indigo-600" },
-    { label: t("hqForm.snapshotActivitiesDone"), value: snap.activitiesImplemented, icon: Activity, color: "text-green-600" },
-    { label: t("hqForm.snapshotBeneficiaries"), value: snap.beneficiariesReached.toLocaleString(), icon: Users, color: "text-teal-600" },
-    { label: t("hqForm.snapshotIndicatorProgress"), value: snap.indicatorProgressPct == null ? t("hqForm.unavailable") : `${snap.indicatorProgressPct}%`, icon: BarChart3, color: "text-cyan-600" },
-    { label: t("hqForm.snapshotDelayedActivities"), value: snap.delayedActivities, icon: AlertTriangle, color: "text-amber-600" },
-    { label: t("hqForm.snapshotOpenRisks"), value: snap.openRisks, icon: ShieldAlert, color: "text-red-600" },
-    { label: t("hqForm.snapshotPendingReviews"), value: snap.pendingApprovals, icon: Clock, color: "text-orange-600" },
+    { label: t("hqForm.snapshotActiveProjects"), value: snap.activeProjects, icon: TrendingUp, tone: "var(--accent)" },
+    { label: t("hqForm.snapshotActiveStates"), value: snap.activeStates, icon: MapPin, tone: "var(--accent)" },
+    { label: t("hqForm.snapshotActiveLocalities"), value: snap.activeLocalities, icon: MapPin, tone: "var(--accent)" },
+    { label: t("hqForm.snapshotActivitiesDone"), value: snap.activitiesImplemented, icon: Activity, tone: "var(--success)" },
+    { label: t("hqForm.snapshotBeneficiaries"), value: snap.beneficiariesReached.toLocaleString("en-GB"), icon: Users, tone: "var(--success)" },
+    { label: t("hqForm.snapshotIndicatorProgress"), value: snap.indicatorProgressPct == null ? t("hqForm.unavailable") : `${snap.indicatorProgressPct}%`, icon: BarChart3, tone: "var(--accent)" },
+    { label: t("hqForm.snapshotDelayedActivities"), value: snap.delayedActivities, icon: AlertTriangle, tone: "var(--warning)" },
+    { label: t("hqForm.snapshotOpenRisks"), value: snap.openRisks, icon: ShieldAlert, tone: "var(--danger)" },
+    { label: t("hqForm.snapshotPendingReviews"), value: snap.pendingApprovals, icon: Clock, tone: "var(--warning)" },
   ];
 
   const benTotal = data.beneficiaryBreakdown.men + data.beneficiaryBreakdown.women +
@@ -353,12 +348,12 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
   return (
     <div className="space-y-4">
       {/* Snapshot cards */}
-      <div className="grid grid-cols-3 sm:grid-cols-9 gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
         {snapCards.map((c) => (
-          <div key={c.label} className="rounded border p-2 bg-muted/10 text-center">
-            <c.icon className={`h-4 w-4 mx-auto mb-0.5 ${c.color}`} />
+          <div key={c.label} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-center">
+            <c.icon className="mx-auto mb-0.5 size-4" style={{ color: c.tone }} aria-hidden="true" />
             <p className="text-base font-bold"><bdi dir="ltr">{c.value}</bdi></p>
-            <p className="text-xs text-muted-foreground leading-tight">{c.label}</p>
+            <p className="text-xs text-[var(--muted)] leading-tight">{c.label}</p>
           </div>
         ))}
       </div>
@@ -366,31 +361,31 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
       {/* State performance summary */}
       {data.stateSummaries.length > 0 && (
         <div>
-          <p className="text-xs font-semibold mb-1 text-muted-foreground">{t("hqForm.statePerformanceSummary")}</p>
-          <div className="rounded border overflow-hidden">
+          <p className="text-xs font-semibold mb-1 text-[var(--muted)]">{t("hqForm.statePerformanceSummary")}</p>
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
             <table className="w-full text-xs">
-              <thead className="bg-muted/40">
+              <thead className="bg-[var(--default)]">
                 <tr>{[t("hqForm.colState"), t("hqForm.colProjects"), t("hqForm.colActivities"), t("hqForm.colBeneficiaries"), t("hqForm.colProgress"), t("hqForm.colOpenRisks")].map((h) => (
                   <th key={h} className="px-2 py-1.5 text-start font-medium">{h}</th>
                 ))}</tr>
               </thead>
               <tbody className="divide-y">
                 {data.stateSummaries.map((s) => (
-                  <tr key={s.stateId} className="hover:bg-muted/20">
+                  <tr key={s.stateId} className="hover:bg-[var(--default)]">
                     <td className="px-2 py-1.5 font-medium">{getLinkedStateLabel(s, i18n?.language)}</td>
                     <td className="px-2 py-1.5"><bdi dir="ltr">{s.projects}</bdi></td>
                     <td className="px-2 py-1.5"><bdi dir="ltr">{s.activities}</bdi></td>
-                    <td className="px-2 py-1.5"><bdi dir="ltr">{s.beneficiaries.toLocaleString()}</bdi></td>
+                    <td className="px-2 py-1.5"><bdi dir="ltr">{s.beneficiaries.toLocaleString("en-GB")}</bdi></td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-1">
-                        <div className="h-1.5 w-16 rounded bg-muted overflow-hidden">
+                        <div className="h-1.5 w-16 overflow-hidden rounded bg-[var(--default)]">
                           <div className="h-full bg-primary" style={{ width: `${s.progressPct}%` }} />
                         </div>
                         <span><bdi dir="ltr">{s.progressPct}%</bdi></span>
                       </div>
                     </td>
                     <td className="px-2 py-1.5">
-                      <span className={s.openRisks > 0 ? "text-red-600 font-medium" : "text-muted-foreground"}><bdi dir="ltr">{s.openRisks}</bdi></span>
+                      <span className={s.openRisks > 0 ? "text-[var(--danger)] font-medium" : "text-[var(--muted)]"}><bdi dir="ltr">{s.openRisks}</bdi></span>
                     </td>
                   </tr>
                 ))}
@@ -403,24 +398,24 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
       {/* Project performance summary */}
       {data.projectSummaries.length > 0 && (
         <div>
-          <p className="text-xs font-semibold mb-1 text-muted-foreground">{t("hqForm.projectPerformanceSummary")}</p>
-          <div className="rounded border overflow-hidden">
+          <p className="text-xs font-semibold mb-1 text-[var(--muted)]">{t("hqForm.projectPerformanceSummary")}</p>
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
             <table className="w-full text-xs">
-              <thead className="bg-muted/40">
+              <thead className="bg-[var(--default)]">
                 <tr>{[t("hqForm.colProject"), t("hqForm.colDonor"), t("hqForm.colProgress"), t("hqForm.colBeneficiaries"), t("hqForm.colBudgetUtil"), t("hqForm.colRisk")].map((h) => (
                   <th key={h} className="px-2 py-1.5 text-start font-medium">{h}</th>
                 ))}</tr>
               </thead>
               <tbody className="divide-y">
                 {data.projectSummaries.map((p) => (
-                  <tr key={p.id} className="hover:bg-muted/20">
-                    <td className="px-2 py-1.5"><span className="font-mono"><bdi dir="ltr">{p.code}</bdi></span> <span className="text-muted-foreground truncate">{p.title.slice(0,30)}{p.title.length > 30 ? "…" : ""}</span></td>
-                    <td className="px-2 py-1.5 text-muted-foreground">{p.donor || "—"}</td>
+                  <tr key={p.id} className="hover:bg-[var(--default)]">
+                    <td className="max-w-[16rem] px-2 py-1.5"><span className="font-mono"><bdi dir="ltr">{p.code}</bdi></span> <span className="line-clamp-2 text-[var(--muted)]" dir="auto" title={p.title}>{p.title}</span></td>
+                    <td className="px-2 py-1.5 text-[var(--muted)]">{p.donor || "—"}</td>
                     <td className="px-2 py-1.5"><bdi dir="ltr">{p.progressPct}%</bdi></td>
-                    <td className="px-2 py-1.5"><bdi dir="ltr">{p.beneficiaries.toLocaleString()}</bdi></td>
+                    <td className="px-2 py-1.5"><bdi dir="ltr">{p.beneficiaries.toLocaleString("en-GB")}</bdi></td>
                     <td className="px-2 py-1.5"><bdi dir="ltr">{p.budgetUtilizationPct == null ? t("hqForm.unavailable") : `${p.budgetUtilizationPct}%`}</bdi></td>
                     <td className="px-2 py-1.5">
-                      <Badge variant={p.riskLevel === "high" ? "destructive" : "secondary"} className="text-xs">{p.riskLevel}</Badge>
+                      {p.riskLevel ? <Chip size="sm" variant="soft" color={severityColor(p.riskLevel)}>{severityText(t, p.riskLevel)}</Chip> : "—"}
                     </td>
                   </tr>
                 ))}
@@ -433,7 +428,7 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
       {/* Beneficiary analysis — sector totals + breakdowns */}
       {benTotal > 0 && (
         <div className="space-y-3">
-          <p className="text-xs font-semibold mb-1 text-muted-foreground">{t("hqForm.beneficiaryAnalysis")}</p>
+          <p className="text-xs font-semibold mb-1 text-[var(--muted)]">{t("hqForm.beneficiaryAnalysis")}</p>
 
           {/* Sector totals */}
           <div className="grid grid-cols-5 gap-2 text-center text-xs">
@@ -441,15 +436,15 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
               const val = data.beneficiaryBreakdown[k];
               const label = t(`hqForm.col${k.charAt(0).toUpperCase() + k.slice(1)}`);
               return (
-                <div key={k} className="rounded border p-2 bg-muted/10">
-                  <p className="text-muted-foreground">{label}</p>
-                  <p className="font-bold text-base"><bdi dir="ltr">{val.toLocaleString()}</bdi></p>
+                <div key={k} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2">
+                  <p className="text-[var(--muted)]">{label}</p>
+                  <p className="font-bold text-base"><bdi dir="ltr">{val.toLocaleString("en-GB")}</bdi></p>
                 </div>
               );
             })}
             <div className="rounded border p-2 bg-primary/5">
-              <p className="text-muted-foreground">{t("hqForm.colTotal")}</p>
-              <p className="font-bold text-base"><bdi dir="ltr">{benTotal.toLocaleString()}</bdi></p>
+              <p className="text-[var(--muted)]">{t("hqForm.colTotal")}</p>
+              <p className="font-bold text-base"><bdi dir="ltr">{benTotal.toLocaleString("en-GB")}</bdi></p>
             </div>
           </div>
 
@@ -467,28 +462,28 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
       {/* Indicator analysis */}
       {data.indicators.length > 0 && (
         <div>
-          <p className="text-xs font-semibold mb-1 text-muted-foreground">{t("hqForm.indicatorAnalysis")}</p>
-          <div className="rounded border overflow-hidden">
+          <p className="text-xs font-semibold mb-1 text-[var(--muted)]">{t("hqForm.indicatorAnalysis")}</p>
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
             <table className="w-full text-xs">
-              <thead className="bg-muted/40">
+              <thead className="bg-[var(--default)]">
                 <tr>{[t("hqForm.colIndicator"), t("hqForm.colTarget"), t("hqForm.colAchieved"), t("hqForm.colProgress"), t("hqForm.colStatus")].map((h) => (
                   <th key={h} className="px-2 py-1.5 text-start font-medium">{h}</th>
                 ))}</tr>
               </thead>
               <tbody className="divide-y">
                 {data.indicators.map((ind, i) => (
-                  <tr key={i} className="hover:bg-muted/20">
+                  <tr key={i} className="hover:bg-[var(--default)]">
                     <td className="px-2 py-1.5 font-medium max-w-xs truncate">{ind.name}</td>
-                    <td className="px-2 py-1.5">{ind.target == null ? t("hqForm.unavailable") : <bdi dir="ltr">{ind.target.toLocaleString()}</bdi>}</td>
-                    <td className="px-2 py-1.5">{ind.achieved == null ? t("hqForm.unavailable") : <bdi dir="ltr">{ind.achieved.toLocaleString()}</bdi>}</td>
+                    <td className="px-2 py-1.5">{ind.target == null ? t("hqForm.unavailable") : <bdi dir="ltr">{ind.target.toLocaleString("en-GB")}</bdi>}</td>
+                    <td className="px-2 py-1.5">{ind.achieved == null ? t("hqForm.unavailable") : <bdi dir="ltr">{ind.achieved.toLocaleString("en-GB")}</bdi>}</td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-1">
                         {ind.progressPct == null ? (
                           <span>{t("hqForm.unavailable")}</span>
                         ) : (
                           <>
-                            <div className="h-1.5 w-14 rounded bg-muted overflow-hidden">
-                              <div className={`h-full ${ind.progressPct >= 100 ? "bg-green-500" : ind.progressPct >= 75 ? "bg-blue-500" : ind.progressPct >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${Math.min(ind.progressPct, 100)}%` }} />
+                            <div className="h-1.5 w-14 overflow-hidden rounded bg-[var(--default)]">
+                              <div className="h-full" style={{ width: `${Math.min(ind.progressPct, 100)}%`, background: ind.progressPct >= 100 ? "var(--success)" : ind.progressPct >= 75 ? "var(--accent)" : ind.progressPct >= 50 ? "var(--warning)" : "var(--danger)" }} />
                             </div>
                             <span><bdi dir="ltr">{ind.progressPct}%</bdi></span>
                           </>
@@ -496,9 +491,9 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
                       </div>
                     </td>
                     <td className="px-2 py-1.5">
-                      <Badge className={`text-xs ${ind.status == null ? "bg-muted text-muted-foreground" : ind.status === "Achieved" ? "bg-green-100 text-green-800" : ind.status === "On Track" ? "bg-blue-100 text-blue-800" : ind.status === "At Risk" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
-                        {ind.status ?? t("hqForm.unavailable")}
-                      </Badge>
+                      <Chip size="sm" variant="soft" color={ind.status == null ? "default" : ind.status === "Achieved" ? "success" : ind.status === "On Track" ? "accent" : ind.status === "At Risk" ? "warning" : "danger"}>
+                        {ind.status ? optionLabel(t, "indicatorStatus", ind.status) : t("hqForm.unavailable")}
+                      </Chip>
                     </td>
                   </tr>
                 ))}
@@ -509,15 +504,6 @@ function SectorSnapshotSection({ sector, auth }: { sector: string; auth: Authori
       )}
     </div>
   );
-}
-
-// ── Severity badge colour helper ──────────────────────────────────────────────
-
-function severityClass(sev: string) {
-  if (sev === "critical") return "bg-red-100 text-red-800 border-red-200";
-  if (sev === "high") return "bg-orange-100 text-orange-800 border-orange-200";
-  if (sev === "medium") return "bg-amber-100 text-amber-800 border-amber-200";
-  return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
 // ── Main form ─────────────────────────────────────────────────────────────────
@@ -551,6 +537,8 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
 
   const now = new Date();
   const currentYear = now.getFullYear();
+  const monthName = (m: number, style: "long" | "short") =>
+    new Date(2000, m - 1, 1).toLocaleString(i18n.language === "ar" ? "ar" : "en", { month: style });
   const yearOptions = Array.from({ length: 2035 - (currentYear - 2) + 1 }, (_, i) => currentYear - 2 + i);
 
   const userSectors = useMemo(() => {
@@ -815,9 +803,13 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
     queryKey: ["sector-risks", v.sector],
     queryFn: async () => {
       if (!v.sector) return [];
-      const res = await fetch(`/api/risks?sector=${encodeURIComponent(v.sector)}`);
+      const res = await fetch(`/api/risks?sector=${encodeURIComponent(v.sector)}&limit=200`);
       if (!res.ok) return [];
-      return res.json() as Promise<ExistingRisk[]>;
+      // The list endpoint answers with a paginated envelope ({ items, … });
+      // accept a bare array too, as the State Programme form does. Treating
+      // the envelope as an array crashed the whole Reports page.
+      const body = (await res.json()) as ExistingRisk[] | { items?: ExistingRisk[] };
+      return Array.isArray(body) ? body : body.items ?? [];
     },
     enabled: !!v.sector,
     staleTime: 30_000,
@@ -1273,7 +1265,7 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
                 ? t("hqForm.titleEdit")
                 : t("hqForm.formTitle")}
           </h3>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-[var(--muted)]">
             {isEditMode
               ? t("hqForm.formDescEdit")
               : t("hqForm.formDesc")}
@@ -1289,10 +1281,13 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
             />
           )}
           {!isOnline && (
-            <p id="hq-offline-workflow-notice" role="alert" className="mt-3 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-              <span className="font-medium">{t("sync.internetRequired", { ns: "common" })}.</span>{" "}
-              {t("sync.internetRequiredDescription", { ns: "common" })}
-            </p>
+            <Alert id="hq-offline-workflow-notice" status="warning" role="alert" className="mt-3">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>{t("sync.internetRequired", { ns: "common" })}</Alert.Title>
+                <Alert.Description>{t("sync.internetRequiredDescription", { ns: "common" })}</Alert.Description>
+              </Alert.Content>
+            </Alert>
           )}
         </div>
 
@@ -1301,28 +1296,27 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
             land on a clear, focused description of what went wrong. Unified
             with program-state-report-form.tsx's identical region. */}
         {formError && (
-          <div
-            ref={errorSummaryRef}
-            role="alert"
-            aria-live="assertive"
-            tabIndex={-1}
-            className="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
-          >
-            <p className="font-medium mb-1">{t("hqForm.correctErrorsBeforeContinuing")}</p>
-            <p>{formError}</p>
+          <div ref={errorSummaryRef} tabIndex={-1} className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+            <Alert status="danger" role="alert" aria-live="assertive">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>{t("hqForm.correctErrorsBeforeContinuing")}</Alert.Title>
+                <Alert.Description>{formError}</Alert.Description>
+              </Alert.Content>
+            </Alert>
           </div>
         )}
 
         {/* ── Returned-for-revision banner (HQSR-005) ─────────────────────────── */}
         {isReturnedForRevision && existingReport && (
-          <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 p-3 space-y-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{t("hqForm.returnedForRevision")}</p>
-                <p className="text-xs text-amber-700 dark:text-amber-400">{t("hqForm.revisionFeedbackHint")}</p>
-              </div>
-            </div>
+          <div className="space-y-3">
+            <Alert status="warning" role="alert">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>{t("hqForm.returnedForRevision")}</Alert.Title>
+                <Alert.Description>{t("hqForm.revisionFeedbackHint")}</Alert.Description>
+              </Alert.Content>
+            </Alert>
             {/* Generic comments panel — no SPR section taxonomy (SPR-010 is SPR-specific). */}
             <CommentsPanel
               entityType="report"
@@ -1338,120 +1332,143 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         <section id="rp-section-basic" className="space-y-3">
           <h4 className="text-sm font-semibold border-b pb-1">{t("hqForm.section1Title")}</h4>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>{t("hqForm.sectorLabel")}
-                {me?.user?.role === "technical_coordinator" && (
-                  <span className="text-xs font-normal text-muted-foreground ms-1">{t("hqForm.sectorFromAssigned")}</span>
-                )}
-              </Label>
-              {isEditMode ? (
-                // Identity is immutable in edit mode (HQSR-002) — display only.
-                <Input value={v.sector} readOnly aria-readonly="true" className="bg-muted cursor-not-allowed" />
+            {(() => {
+              const sectorLabel = (
+                <>
+                  {t("hqForm.sectorLabel")}
+                  {me?.user?.role === "technical_coordinator" && (
+                    <span className="ms-1 text-xs font-normal text-[var(--muted)]">{t("hqForm.sectorFromAssigned")}</span>
+                  )}
+                </>
+              );
+              // Identity is immutable in edit mode (HQSR-002) — display only.
+              return isEditMode ? (
+                <Field label={sectorLabel} isRequired>
+                  {(id) => <HInput id={id} fullWidth value={v.sector} readOnly aria-readonly="true" className="cursor-not-allowed bg-[var(--default)]" />}
+                </Field>
               ) : (
-                <Select value={v.sector} onValueChange={(val) => form.setValue("sector", val)}>
-                  <SelectTrigger><SelectValue placeholder={t("hqForm.sectorPlaceholder")} /></SelectTrigger>
-                  <SelectContent>{userSectors.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
-              )}
-            </div>
+                <SelectField
+                  label={sectorLabel}
+                  isRequired
+                  placeholder={t("hqForm.sectorPlaceholder")}
+                  value={v.sector}
+                  onChange={(val) => form.setValue("sector", val)}
+                  options={userSectors.map((s) => ({ value: s, label: s }))}
+                />
+              );
+            })()}
 
-            <div>
-              <Label>{t("hqForm.techCoordinatorLabel")}</Label>
-              <Input {...form.register("officerName")} placeholder={t("hqForm.techCoordinatorPlaceholder")} />
-            </div>
+            <Field label={t("hqForm.techCoordinatorLabel")}>
+              {(id) => <HInput className="text-page-start" dir="auto" id={id} fullWidth {...form.register("officerName")} placeholder={t("hqForm.techCoordinatorPlaceholder")} />}
+            </Field>
 
             <div className="col-span-2">
-              <Label>{t("hqForm.frequencyLabel")} <span className="text-destructive">*</span>
-                {isEditMode && <span className="text-xs font-normal text-muted-foreground ms-1">{t("hqForm.locked")}</span>}
-              </Label>
-              <Select value={v.frequency} onValueChange={(val) => { if (val) form.setValue("frequency", val as Frequency); }} disabled={isEditMode}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">{t("frequency.monthly")}</SelectItem>
-                  <SelectItem value="quarterly">{t("frequency.quarterly")}</SelectItem>
-                  <SelectItem value="annual">{t("frequency.annual")}</SelectItem>
-                  <SelectItem value="on_demand">{t("frequency.on_demand")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <SelectField
+                label={<>{t("hqForm.frequencyLabel")}
+                {isEditMode && <span className="text-xs font-normal text-[var(--muted)] ms-1">{t("hqForm.locked")}</span>}</>}
+                isRequired
+                isDisabled={isEditMode}
+                value={v.frequency}
+                onChange={(val) => { if (val) form.setValue("frequency", val as Frequency); }}
+                options={[{ value: "monthly", label: t("frequency.monthly") }, { value: "quarterly", label: t("frequency.quarterly") }, { value: "annual", label: t("frequency.annual") }, { value: "on_demand", label: t("frequency.on_demand") }]}
+              />
             </div>
 
             {v.frequency === "monthly" && (
               <>
+                <SelectField
+                  label={t("hqForm.monthLabel")}
+                  isRequired
+                  isDisabled={isEditMode}
+                  value={String(v.reportingMonth)}
+                  onChange={(val) => form.setValue("reportingMonth", Number(val))}
+                  options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: monthName(i + 1, "long") }))}
+                />
                 <div>
-                  <Label>{t("hqForm.monthLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={String(v.reportingMonth)} onValueChange={(val) => form.setValue("reportingMonth", Number(val))} disabled={isEditMode}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                        <SelectItem key={m} value={String(m)}>{new Date(2000, m - 1, 1).toLocaleString(i18n.language === "ar" ? "ar" : "en", { month: "long" })}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>{t("hqForm.yearLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={String(v.reportingYear)} onValueChange={(val) => form.setValue("reportingYear", Number(val))} disabled={isEditMode}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <SelectField
+                    label={t("hqForm.yearLabel")}
+                    isRequired
+                    isDisabled={isEditMode}
+                    value={String(v.reportingYear)}
+                    onChange={(val) => form.setValue("reportingYear", Number(val))}
+                    options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+                  />
                 </div>
               </>
             )}
             {v.frequency === "quarterly" && (
               <>
+                <SelectField
+                  label={t("hqForm.quarterLabel")}
+                  isRequired
+                  isDisabled={isEditMode}
+                  value={String(v.quarter)}
+                  onChange={(val) => form.setValue("quarter", Number(val))}
+                  options={[1, 2, 3, 4].map((q) => ({
+                    value: String(q),
+                    label: `${t("formUi.quarterN", { number: q })} (${monthName(q * 3 - 2, "short")}–${monthName(q * 3, "short")})`,
+                  }))}
+                />
                 <div>
-                  <Label>{t("hqForm.quarterLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={String(v.quarter)} onValueChange={(val) => form.setValue("quarter", Number(val))} disabled={isEditMode}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{[1,2,3,4].map((q) => <SelectItem key={q} value={String(q)}>Q{q} ({["Jan–Mar","Apr–Jun","Jul–Sep","Oct–Dec"][q-1]})</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>{t("hqForm.yearLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={String(v.reportingYear)} onValueChange={(val) => form.setValue("reportingYear", Number(val))} disabled={isEditMode}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <SelectField
+                    label={t("hqForm.yearLabel")}
+                    isRequired
+                    isDisabled={isEditMode}
+                    value={String(v.reportingYear)}
+                    onChange={(val) => form.setValue("reportingYear", Number(val))}
+                    options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+                  />
                 </div>
               </>
             )}
             {v.frequency === "annual" && (
               <div className="col-span-2">
-                <Label>{t("hqForm.yearLabel")} <span className="text-destructive">*</span></Label>
-                <Select value={String(v.reportingYear)} onValueChange={(val) => form.setValue("reportingYear", Number(val))} disabled={isEditMode}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{yearOptions.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-                </Select>
+                <SelectField
+                  label={t("hqForm.yearLabel")}
+                  isRequired
+                  isDisabled={isEditMode}
+                  value={String(v.reportingYear)}
+                  onChange={(val) => form.setValue("reportingYear", Number(val))}
+                  options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+                />
               </div>
             )}
             {v.frequency === "on_demand" && (
               <>
-                <div>
-                  <Label>{t("hqForm.startDateLabel")} <span className="text-destructive">*</span></Label>
-                  <Input type="date" {...form.register("periodStart")} readOnly={isEditMode} aria-readonly={isEditMode || undefined} className={isEditMode ? "bg-muted cursor-not-allowed" : undefined} />
-                </div>
-                <div>
-                  <Label>{t("hqForm.endDateLabel")} <span className="text-destructive">*</span></Label>
-                  <Input type="date" {...form.register("periodEnd")} readOnly={isEditMode} aria-readonly={isEditMode || undefined} className={isEditMode ? "bg-muted cursor-not-allowed" : undefined} />
-                </div>
+                <DateInput
+                  label={t("hqForm.startDateLabel")}
+                  isRequired
+                  isDisabled={isEditMode}
+                  value={v.periodStart}
+                  onChange={(d) => form.setValue("periodStart", d)}
+                />
+                <DateInput
+                  label={t("hqForm.endDateLabel")}
+                  isRequired
+                  isDisabled={isEditMode}
+                  value={v.periodEnd} min={v.periodStart || undefined}
+                  onChange={(d) => form.setValue("periodEnd", d)}
+                />
                 <div className="col-span-2">
-                  <Label>{t("hqForm.reasonLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={v.onDemandReason} onValueChange={(val) => form.setValue("onDemandReason", val)}>
-                    <SelectTrigger><SelectValue placeholder={t("hqForm.reasonPlaceholder")} /></SelectTrigger>
-                    <SelectContent>{ON_DEMAND_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <SelectField
+                    label={t("hqForm.reasonLabel")}
+                    isRequired
+                    placeholder={t("hqForm.reasonPlaceholder")}
+                    value={v.onDemandReason}
+                    onChange={(val) => form.setValue("onDemandReason", val)}
+                    options={ON_DEMAND_REASONS.map((r) => ({ value: r, label: optionLabel(t, "onDemandReasons", r) }))}
+                  />
                 </div>
               </>
             )}
 
-            <div className="col-span-2">
-              <Label>{t("hqForm.reportTitleLabel")} <span className="text-destructive">*</span></Label>
-              <Input
-                {...form.register("title")}
-                placeholder={t("hqForm.reportTitlePlaceholder")}
-                onFocus={() => { autoTitleRef.current = ""; }}
-              />
-            </div>
+            <Field className="col-span-2" label={t("hqForm.reportTitleLabel")} isRequired>
+              {(id) => <HInput className="text-page-start" dir="auto" id={id} fullWidth
+                  {...form.register("title")}
+                  placeholder={t("hqForm.reportTitlePlaceholder")}
+                  onFocus={() => { autoTitleRef.current = ""; }}
+                />}
+            </Field>
           </div>
         </section>
 
@@ -1460,7 +1477,7 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
           <section id="rp-section-progress" className="space-y-3">
             <h4 className="text-sm font-semibold border-b pb-1 flex items-center gap-2">
               <TrendingUp className="h-4 w-4" /> {t("hqForm.section2Title")}
-              <span className="text-xs font-normal text-muted-foreground">{t("hqForm.section2AutoGenerated")}</span>
+              <span className="text-xs font-normal text-[var(--muted)]">{t("hqForm.section2AutoGenerated")}</span>
             </h4>
             <SectorSnapshotSection sector={v.sector} auth={me} />
           </section>
@@ -1469,35 +1486,35 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         {/* ── SECTION 3: TECHNICAL ANALYSIS ──────────────────────────────────── */}
         <section className="space-y-3">
           <h4 id="hqsr-sec3-heading" className="text-sm font-semibold border-b pb-1">{t("hqForm.section3Title")}</h4>
-          <Textarea rows={5} {...form.register("technicalAnalysis")} aria-labelledby="hqsr-sec3-heading"
+          <HTextArea className="text-page-start" dir="auto" fullWidth rows={5} {...form.register("technicalAnalysis")} aria-labelledby="hqsr-sec3-heading"
             placeholder={t("hqForm.techAnalysisPlaceholder")} />
         </section>
 
         {/* ── SECTION 4: KEY FINDINGS ─────────────────────────────────────────── */}
         <section className="space-y-3">
           <h4 id="hqsr-sec4-heading" className="text-sm font-semibold border-b pb-1">{t("hqForm.section4Title")}</h4>
-          <Textarea rows={4} {...form.register("keyFindings")} aria-labelledby="hqsr-sec4-heading"
+          <HTextArea className="text-page-start" dir="auto" fullWidth rows={4} {...form.register("keyFindings")} aria-labelledby="hqsr-sec4-heading"
             placeholder={t("hqForm.keyFindingsPlaceholder")} />
         </section>
 
         {/* ── SECTION 5: QUALITY ASSESSMENT ──────────────────────────────────── */}
         <section className="space-y-3">
           <h4 id="hqsr-sec5-heading" className="text-sm font-semibold border-b pb-1">{t("hqForm.section5Title")}</h4>
-          <Textarea rows={4} {...form.register("qualityAssessment")} aria-labelledby="hqsr-sec5-heading"
+          <HTextArea className="text-page-start" dir="auto" fullWidth rows={4} {...form.register("qualityAssessment")} aria-labelledby="hqsr-sec5-heading"
             placeholder={t("hqForm.qualityAssessmentPlaceholder")} />
         </section>
 
         {/* ── SECTION 6: TECHNICAL CHALLENGES ────────────────────────────────── */}
         <section id="rp-section-challenges" className="space-y-3">
           <h4 id="hqsr-sec6-heading" className="text-sm font-semibold border-b pb-1">{t("hqForm.section6Title")}</h4>
-          <Textarea rows={4} {...form.register("technicalChallenges")} aria-labelledby="hqsr-sec6-heading"
+          <HTextArea className="text-page-start" dir="auto" fullWidth rows={4} {...form.register("technicalChallenges")} aria-labelledby="hqsr-sec6-heading"
             placeholder={t("hqForm.techChallengesPlaceholder")} />
         </section>
 
         {/* ── SECTION 7: RECOMMENDATIONS ──────────────────────────────────────── */}
         <section className="space-y-3">
           <h4 id="hqsr-sec7-heading" className="text-sm font-semibold border-b pb-1">{t("hqForm.section7Title")}</h4>
-          <Textarea rows={4} {...form.register("recommendations")} aria-labelledby="hqsr-sec7-heading"
+          <HTextArea className="text-page-start" dir="auto" fullWidth rows={4} {...form.register("recommendations")} aria-labelledby="hqsr-sec7-heading"
             placeholder={t("hqForm.recommendationsPlaceholder")} />
         </section>
 
@@ -1505,47 +1522,45 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         <section id="rp-section-activities" className="space-y-3">
           <div className="flex items-center justify-between border-b pb-1">
             <h4 className="text-sm font-semibold">{t("hqForm.section8Title")}</h4>
-            <Button type="button" size="sm" variant="outline" onClick={() => setStateObservations((c) => [...c, emptyObservation()])}>
+            <HButton type="button" size="sm" variant="tertiary" onPress={() => setStateObservations((c) => [...c, emptyObservation()])}>
                 <Plus className="h-3 w-3" /> {t("hqForm.addState")}
-            </Button>
+            </HButton>
           </div>
           {stateObservations.length === 0 && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-[var(--muted)]">
               {t("hqForm.noStateObservations")}
             </p>
           )}
           {stateObservations.map((o, i) => (
-            <div key={i} className="rounded border p-3 space-y-2 bg-muted/10">
+            <div key={i} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold">{t("hqForm.stateObservationHash", { num: i + 1 })}</p>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setStateObservations((c) => c.filter((_, idx) => idx !== i))}>
-                  <Trash2 className="h-3 w-3 text-red-600" />
-                </Button>
+                <HButton type="button" size="sm" variant="ghost" isIconOnly aria-label={t("hqForm.removeItemAria", { label: t("hqForm.stateObservationHash", { num: i + 1 }) })} onPress={() => setStateObservations((c) => c.filter((_, idx) => idx !== i))}>
+                  <Trash2 className="size-3.5 text-[var(--danger)]" aria-hidden="true" />
+                </HButton>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="col-span-2">
-                  <Label className="text-xs">{t("hqForm.stateLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={String(o.stateId || "")} onValueChange={(val) => updateObs(i, { stateId: Number(val) })}>
-                    <SelectTrigger className="h-8"><SelectValue placeholder={t("hqForm.statePlaceholder")} /></SelectTrigger>
-                    <SelectContent>{states.map((s) => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-2">
-                  <Label className="text-xs">{t("hqForm.techObservationLabel")} <span className="text-destructive">*</span></Label>
-                  <Textarea rows={2} value={o.technicalObservation} onChange={(e) => updateObs(i, { technicalObservation: e.target.value })} placeholder={t("hqForm.techObservationPlaceholder")} />
-                </div>
-                <div>
-                  <Label className="text-xs">{t("hqForm.qualityConcernLabel")}</Label>
-                  <Textarea rows={2} value={o.qualityConcern} onChange={(e) => updateObs(i, { qualityConcern: e.target.value })} placeholder={t("hqForm.qualityConcernPlaceholder")} />
-                </div>
-                <div>
-                  <Label className="text-xs">{t("hqForm.goodPracticeLabel")}</Label>
-                  <Textarea rows={2} value={o.goodPractice} onChange={(e) => updateObs(i, { goodPractice: e.target.value })} placeholder={t("hqForm.goodPracticePlaceholder")} />
-                </div>
-                <div className="col-span-2">
-                  <Label className="text-xs">{t("hqForm.actionRequiredLabel")}</Label>
-                  <Input value={o.actionRequired} onChange={(e) => updateObs(i, { actionRequired: e.target.value })} placeholder={t("hqForm.actionRequiredPlaceholder")} className="h-8" />
-                </div>
+                <SelectField
+                  className="col-span-2"
+                  label={t("hqForm.stateLabel")}
+                  isRequired
+                  placeholder={t("hqForm.statePlaceholder")}
+                  value={String(o.stateId || "")}
+                  onChange={(val) => updateObs(i, { stateId: Number(val) })}
+                  options={states.map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }))}
+                />
+                <Field className="col-span-2" labelClassName="text-xs" label={t("hqForm.techObservationLabel")} isRequired>
+                  {(id) => <HTextArea className="text-page-start" dir="auto" id={id} fullWidth rows={2} value={o.technicalObservation} onChange={(e) => updateObs(i, { technicalObservation: e.target.value })} placeholder={t("hqForm.techObservationPlaceholder")} />}
+                </Field>
+                <Field labelClassName="text-xs" label={t("hqForm.qualityConcernLabel")}>
+                  {(id) => <HTextArea className="text-page-start" dir="auto" id={id} fullWidth rows={2} value={o.qualityConcern} onChange={(e) => updateObs(i, { qualityConcern: e.target.value })} placeholder={t("hqForm.qualityConcernPlaceholder")} />}
+                </Field>
+                <Field labelClassName="text-xs" label={t("hqForm.goodPracticeLabel")}>
+                  {(id) => <HTextArea className="text-page-start" dir="auto" id={id} fullWidth rows={2} value={o.goodPractice} onChange={(e) => updateObs(i, { goodPractice: e.target.value })} placeholder={t("hqForm.goodPracticePlaceholder")} />}
+                </Field>
+                <Field className="col-span-2" labelClassName="text-xs" label={t("hqForm.actionRequiredLabel")}>
+                  {(id) => <HInput dir="auto" id={id} fullWidth value={o.actionRequired} onChange={(e) => updateObs(i, { actionRequired: e.target.value })} placeholder={t("hqForm.actionRequiredPlaceholder")} className="h-8 text-page-start" />}
+                </Field>
               </div>
             </div>
           ))}
@@ -1555,49 +1570,47 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         <section className="space-y-3">
           <div className="flex items-center justify-between border-b pb-1">
             <h4 className="text-sm font-semibold">{t("hqForm.section9Title")}</h4>
-            <Button type="button" size="sm" variant="outline" onClick={() => setTechnicalRatings((c) => [...c, emptyRating()])}>
+            <HButton type="button" size="sm" variant="tertiary" onPress={() => setTechnicalRatings((c) => [...c, emptyRating()])}>
                 <Plus className="h-3 w-3" /> {t("hqForm.addRating")}
-            </Button>
+            </HButton>
           </div>
           {technicalRatings.length === 0 && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-[var(--muted)]">
               {t("hqForm.noRatings")}
             </p>
           )}
           {technicalRatings.map((r, i) => (
-            <div key={i} className="rounded border p-3 space-y-2 bg-muted/10">
+            <div key={i} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold">{t("hqForm.ratingHash", { num: i + 1 })}</p>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setTechnicalRatings((c) => c.filter((_, idx) => idx !== i))}>
-                  <Trash2 className="h-3 w-3 text-red-600" />
-                </Button>
+                <HButton type="button" size="sm" variant="ghost" isIconOnly aria-label={t("hqForm.removeItemAria", { label: t("hqForm.ratingHash", { num: i + 1 }) })} onPress={() => setTechnicalRatings((c) => c.filter((_, idx) => idx !== i))}>
+                  <Trash2 className="size-3.5 text-[var(--danger)]" aria-hidden="true" />
+                </HButton>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <Label className="text-xs">{t("hqForm.typeLabel")}</Label>
-                  <Select value={r.entityType} onValueChange={(val) => updateRating(i, { entityType: val as "state" | "project" })}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="state">{t("hqForm.colState")}</SelectItem>
-                      <SelectItem value="project">{t("hqForm.colProject")}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <SelectField
+                    label={t("hqForm.typeLabel")}
+                    value={r.entityType}
+                    onChange={(val) => updateRating(i, { entityType: val as "state" | "project" })}
+                    options={[{ value: "state", label: t("hqForm.colState") }, { value: "project", label: t("hqForm.colProject") }]}
+                  />
                 </div>
+                <Field labelClassName="text-xs" label={r.entityType === "state" ? t("hqForm.stateNameLabel") : t("hqForm.projectCodeLabel")}>
+                  {(id) => <HInput dir="auto" id={id} fullWidth value={r.entityLabel} onChange={(e) => updateRating(i, { entityLabel: e.target.value })} placeholder={r.entityType === "state" ? t("hqForm.stateNamePlaceholder") : t("hqForm.projectCodePlaceholder")} className="h-8 text-page-start" />}
+                </Field>
                 <div>
-                  <Label className="text-xs">{r.entityType === "state" ? t("hqForm.stateNameLabel") : t("hqForm.projectCodeLabel")}</Label>
-                  <Input value={r.entityLabel} onChange={(e) => updateRating(i, { entityLabel: e.target.value })} placeholder={r.entityType === "state" ? t("hqForm.stateNamePlaceholder") : t("hqForm.projectCodePlaceholder")} className="h-8" />
+                  <SelectField
+                    label={t("hqForm.ratingLabel")}
+                    isRequired
+                    value={r.rating}
+                    onChange={(val) => updateRating(i, { rating: val })}
+                    options={TECHNICAL_RATINGS.map((t_) => ({ value: t_, label: optionLabel(t, "technicalRatings", t_) }))}
+                  />
                 </div>
-                <div>
-                  <Label className="text-xs">{t("hqForm.ratingLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={r.rating} onValueChange={(val) => updateRating(i, { rating: val })}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>{TECHNICAL_RATINGS.map((t_) => <SelectItem key={t_} value={t_}>{t_}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-3">
-                  <Label className="text-xs">{t("hqForm.reasonForRatingLabel")} <span className="text-destructive">*</span></Label>
-                  <Textarea rows={3} className="resize-y" value={r.reason} onChange={(e) => updateRating(i, { reason: e.target.value })} placeholder={t("hqForm.reasonForRatingPlaceholder")} />
-                </div>
+                <Field className="col-span-3" labelClassName="text-xs" label={t("hqForm.reasonForRatingLabel")} isRequired>
+                  {(id) => <HTextArea dir="auto" id={id} fullWidth rows={3} className="resize-y text-page-start" value={r.reason} onChange={(e) => updateRating(i, { reason: e.target.value })} placeholder={t("hqForm.reasonForRatingPlaceholder")} />}
+                </Field>
               </div>
             </div>
           ))}
@@ -1607,33 +1620,33 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         <section className="space-y-3">
           <div className="flex items-center justify-between border-b pb-1">
             <h4 className="text-sm font-semibold">{t("hqForm.section10Title")}</h4>
-            <Button type="button" size="sm" variant="outline" onClick={() => setCreateRiskOpen(true)}>
+            <HButton type="button" size="sm" variant="tertiary" onPress={() => setCreateRiskOpen(true)}>
                 <Plus className="h-3 w-3" /> {t("hqForm.createNewRisk")}
-            </Button>
+            </HButton>
           </div>
 
           {/* Auto-loaded sector risks */}
           {!v.sector && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <p className="text-xs text-[var(--muted)] flex items-center gap-1">
               <AlertCircle className="h-3.5 w-3.5" /> {t("hqForm.selectSectorForRisks")}
             </p>
           )}
           {v.sector && sectorRisksLoading && (
-            <div className="space-y-2">{[1,2,3].map((i) => <Skeleton key={i} className="h-10" />)}</div>
+            <div className="space-y-2">{[1,2,3].map((i) => <HSkeleton key={i} className="h-10" />)}</div>
           )}
           {v.sector && !sectorRisksLoading && sectorRisks.length === 0 && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-[var(--muted)]">
               {t("hqForm.noRisksFound", { sector: v.sector })}
             </p>
           )}
           {v.sector && !sectorRisksLoading && sectorRisks.length > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground mb-2">
-                {t("hqForm.risksFound_other", { count: sectorRisks.length, sector: v.sector })}
+              <p className="text-xs text-[var(--muted)] mb-2">
+                {t("hqForm.risksFound", { count: sectorRisks.length, sector: v.sector })}
               </p>
-              <div className="rounded border overflow-hidden">
+              <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
                 <table className="w-full text-xs">
-                  <thead className="bg-muted/40">
+                  <thead className="bg-[var(--default)]">
                     <tr>
                       <th className="px-2 py-1.5 w-8"></th>
                       <th className="px-2 py-1.5 text-start font-medium">{t("hqForm.riskColRisk")}</th>
@@ -1645,28 +1658,32 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
                   </thead>
                   <tbody className="divide-y">
                     {sectorRisks.map((r) => (
-                      <tr key={r.id} className={`hover:bg-muted/20 ${linkedRiskIds.includes(r.id) ? "bg-blue-50/60" : ""}`}>
+                      <tr key={r.id} className={linkedRiskIds.includes(r.id) ? "bg-[color-mix(in_oklab,var(--accent)_8%,transparent)]" : "hover:bg-[var(--default)]"}>
                         <td className="px-2 py-2 text-center">
                           <Checkbox
-                            checked={linkedRiskIds.includes(r.id)}
-                            onCheckedChange={() => toggleRiskLink(r.id)}
-                          />
+                            aria-label={t("hqForm.linkRiskAria", { title: r.title })}
+                            isSelected={linkedRiskIds.includes(r.id)}
+                            onChange={() => toggleRiskLink(r.id)}
+                          >
+                            <Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>
+                          </Checkbox>
                         </td>
-                        <td className="px-2 py-2 font-medium max-w-xs">
+                        <td className="max-w-xs px-2 py-2 font-medium">
                           <div className="flex items-center gap-1">
-                            {linkedRiskIds.includes(r.id) && <Link2 className="h-3 w-3 text-blue-500 shrink-0" />}
-                            <span className="truncate">{r.title}</span>
+                            {linkedRiskIds.includes(r.id) && <Link2 className="size-3 shrink-0 text-[var(--accent)]" aria-hidden="true" />}
+                            <span className="line-clamp-2" dir="auto" title={r.title}>{r.title}</span>
                           </div>
                         </td>
-                        <td className="px-2 py-2 text-muted-foreground">{r.category}</td>
+                        <td className="px-2 py-2 text-[var(--muted)]">{r.category ? optionLabel(t, "riskCategories", r.category) : "—"}</td>
                         <td className="px-2 py-2">
-                          <Badge className={`text-xs capitalize border ${severityClass(r.severity)}`}>{r.severity}</Badge>
+                          {r.severity && <Chip size="sm" variant="soft" color={severityColor(r.severity)}>{severityText(t, r.severity)}</Chip>}
                         </td>
                         <td className="px-2 py-2">
-                          <Badge variant="outline" className="text-xs capitalize">{r.status}</Badge>
+                          {r.status && <Chip size="sm" variant="tertiary">{riskStatusText(t, r.status)}</Chip>}
                         </td>
-                        <td className="px-2 py-2 text-muted-foreground text-xs">
-                          {r.stateName}{r.projectTitle ? ` / ${r.projectTitle.slice(0,20)}…` : ""}
+                        <td className="px-2 py-2 text-xs text-[var(--muted)]">
+                          {r.stateName ? getLinkedStateLabel(r, i18n.language) : ""}
+                          {r.projectTitle && <span className="block truncate" dir="auto" title={r.projectTitle}>{r.projectTitle}</span>}
                         </td>
                       </tr>
                     ))}
@@ -1674,8 +1691,8 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
                 </table>
               </div>
               {linkedRiskIds.length > 0 && (
-                <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1">
-                  <Link2 className="h-3.5 w-3.5" /> {t("hqForm.linkedRisks_other", { count: linkedRiskIds.length })}
+                <p className="mt-1.5 flex items-center gap-1 text-xs text-[var(--accent)]">
+                  <Link2 className="size-3.5" aria-hidden="true" /> {t("hqForm.linkedRisks", { count: linkedRiskIds.length })}
                 </p>
               )}
             </div>
@@ -1685,29 +1702,27 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         {/* ── SECTION 11: INDICATOR COMMENTARY ────────────────────────────────── */}
         <section className="space-y-3">
           <div className="flex items-center justify-between border-b pb-1">
-            <h4 className="text-sm font-semibold">{t("hqForm.section11Title")} <span className="font-normal text-muted-foreground">{t("hqForm.section11Optional")}</span></h4>
-            <Button type="button" size="sm" variant="outline" onClick={() => setIndicatorComments((c) => [...c, emptyIndComment()])}>
+            <h4 className="text-sm font-semibold">{t("hqForm.section11Title")} <span className="font-normal text-[var(--muted)]">{t("hqForm.section11Optional")}</span></h4>
+            <HButton type="button" size="sm" variant="tertiary" onPress={() => setIndicatorComments((c) => [...c, emptyIndComment()])}>
                 <Plus className="h-3 w-3" /> {t("hqForm.addCommentary")}
-            </Button>
+            </HButton>
           </div>
-          {indicatorComments.length === 0 && <p className="text-xs text-muted-foreground">{t("hqForm.noCommentary")}</p>}
+          {indicatorComments.length === 0 && <p className="text-xs text-[var(--muted)]">{t("hqForm.noCommentary")}</p>}
           {indicatorComments.map((c, i) => (
-            <div key={i} className="rounded border p-3 space-y-2 bg-muted/10">
+            <div key={i} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold">{t("hqForm.commentaryHash", { num: i + 1 })}</p>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setIndicatorComments((cur) => cur.filter((_, idx) => idx !== i))}>
-                  <Trash2 className="h-3 w-3 text-red-600" />
-                </Button>
+                <HButton type="button" size="sm" variant="ghost" isIconOnly aria-label={t("hqForm.removeItemAria", { label: t("hqForm.commentaryHash", { num: i + 1 }) })} onPress={() => setIndicatorComments((cur) => cur.filter((_, idx) => idx !== i))}>
+                  <Trash2 className="size-3.5 text-[var(--danger)]" aria-hidden="true" />
+                </HButton>
               </div>
               <div className="grid grid-cols-1 gap-2">
-                <div>
-                  <Label className="text-xs">{t("hqForm.indicatorNameLabel")}</Label>
-                  <Input value={c.indicatorName} onChange={(e) => updateIndComment(i, { indicatorName: e.target.value })} placeholder={t("hqForm.indicatorNamePlaceholder")} className="h-8" />
-                </div>
-                <div>
-                  <Label className="text-xs">{t("hqForm.techCommentaryLabel")}</Label>
-                  <Textarea rows={2} value={c.commentary} onChange={(e) => updateIndComment(i, { commentary: e.target.value })} placeholder={t("hqForm.techCommentaryPlaceholder")} />
-                </div>
+                <Field labelClassName="text-xs" label={t("hqForm.indicatorNameLabel")}>
+                  {(id) => <HInput dir="auto" id={id} fullWidth value={c.indicatorName} onChange={(e) => updateIndComment(i, { indicatorName: e.target.value })} placeholder={t("hqForm.indicatorNamePlaceholder")} className="h-8 text-page-start" />}
+                </Field>
+                <Field labelClassName="text-xs" label={t("hqForm.techCommentaryLabel")}>
+                  {(id) => <HTextArea className="text-page-start" dir="auto" id={id} fullWidth rows={2} value={c.commentary} onChange={(e) => updateIndComment(i, { commentary: e.target.value })} placeholder={t("hqForm.techCommentaryPlaceholder")} />}
+                </Field>
               </div>
             </div>
           ))}
@@ -1717,40 +1732,44 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         <section className="space-y-3">
           <div className="flex items-center justify-between border-b pb-1">
             <h4 className="text-sm font-semibold">{t("hqForm.section12Title")}</h4>
-            <Button type="button" size="sm" variant="outline" onClick={() => setSupportRequests((c) => [...c, emptySupport()])}>
+            <HButton type="button" size="sm" variant="tertiary" onPress={() => setSupportRequests((c) => [...c, emptySupport()])}>
                 <Plus className="h-3 w-3" /> {t("hqForm.addRequest")}
-            </Button>
+            </HButton>
           </div>
-          <p className="text-xs text-muted-foreground">{t("hqForm.supportRequired")}</p>
+          <p className="text-xs text-[var(--muted)]">{t("hqForm.supportRequired")}</p>
           {supportRequests.map((r, i) => (
-            <div key={i} className="rounded border p-3 space-y-2 bg-muted/10">
+            <div key={i} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold">{t("hqForm.requestHash", { num: i + 1 })}</p>
                 {supportRequests.length > 1 && (
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setSupportRequests((c) => c.filter((_, idx) => idx !== i))}>
-                    <Trash2 className="h-3 w-3 text-red-600" />
-                  </Button>
+                  <HButton type="button" size="sm" variant="ghost" isIconOnly aria-label={t("hqForm.removeItemAria", { label: t("hqForm.requestHash", { num: i + 1 }) })} onPress={() => setSupportRequests((c) => c.filter((_, idx) => idx !== i))}>
+                    <Trash2 className="size-3.5 text-[var(--danger)]" aria-hidden="true" />
+                  </HButton>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs">{t("hqForm.supportTypeLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={r.supportType} onValueChange={(val) => updateSupport(i, { supportType: val })}>
-                    <SelectTrigger className="h-8"><SelectValue placeholder={t("hqForm.supportTypePlaceholder")} /></SelectTrigger>
-                    <SelectContent>{SUPPORT_TYPES.map((t_) => <SelectItem key={t_} value={t_}>{t_}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <SelectField
+                    label={t("hqForm.supportTypeLabel")}
+                    isRequired
+                    placeholder={t("hqForm.supportTypePlaceholder")}
+                    value={r.supportType}
+                    onChange={(val) => updateSupport(i, { supportType: val })}
+                    options={SUPPORT_TYPES.map((t_) => ({ value: t_, label: optionLabel(t, "supportTypes", t_) }))}
+                  />
                 </div>
                 <div>
-                  <Label className="text-xs">{t("hqForm.priorityLabel")} <span className="text-destructive">*</span></Label>
-                  <Select value={r.priority} onValueChange={(val) => updateSupport(i, { priority: val })}>
-                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>{PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <SelectField
+                    label={t("hqForm.priorityLabel")}
+                    isRequired
+                    value={r.priority}
+                    onChange={(val) => updateSupport(i, { priority: val })}
+                    options={PRIORITIES.map((p) => ({ value: p, label: optionLabel(t, "priorities", p) }))}
+                  />
                 </div>
-                <div className="col-span-2">
-                  <Label className="text-xs">{t("hqForm.descriptionLabel")} <span className="text-destructive">*</span></Label>
-                  <Textarea rows={2} value={r.description} onChange={(e) => updateSupport(i, { description: e.target.value })} placeholder={t("hqForm.descriptionPlaceholder")} />
-                </div>
+                <Field className="col-span-2" labelClassName="text-xs" label={t("hqForm.descriptionLabel")} isRequired>
+                  {(id) => <HTextArea className="text-page-start" dir="auto" id={id} fullWidth rows={2} value={r.description} onChange={(e) => updateSupport(i, { description: e.target.value })} placeholder={t("hqForm.descriptionPlaceholder")} />}
+                </Field>
               </div>
             </div>
           ))}
@@ -1759,21 +1778,21 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         {/* ── SECTION 13: STRATEGIC PRIORITIES ────────────────────────────────── */}
         <section className="space-y-3">
           <h4 id="hqsr-sec13-heading" className="text-sm font-semibold border-b pb-1">{t("hqForm.section13Title")}</h4>
-          <Textarea rows={4} {...form.register("strategicPriorities")} aria-labelledby="hqsr-sec13-heading"
+          <HTextArea className="text-page-start" dir="auto" fullWidth rows={4} {...form.register("strategicPriorities")} aria-labelledby="hqsr-sec13-heading"
             placeholder={t("hqForm.strategicPrioritiesPlaceholder")} />
         </section>
 
         {/* ── SECTION 14: LESSONS LEARNED ──────────────────────────────────────── */}
         <section id="rp-section-lessons" className="space-y-3">
           <h4 id="hqsr-sec14-heading" className="text-sm font-semibold border-b pb-1">{t("hqForm.section14Title")}</h4>
-          <Textarea rows={4} {...form.register("lessonsLearned")} aria-labelledby="hqsr-sec14-heading"
+          <HTextArea className="text-page-start" dir="auto" fullWidth rows={4} {...form.register("lessonsLearned")} aria-labelledby="hqsr-sec14-heading"
             placeholder={t("hqForm.lessonsLearnedPlaceholder")} />
         </section>
 
         {/* ── SECTION 15: SECTOR OUTLOOK ──────────────────────────────────────── */}
         <section className="space-y-3">
           <h4 id="hqsr-sec15-heading" className="text-sm font-semibold border-b pb-1">{t("hqForm.section15Title")}</h4>
-          <Textarea rows={4} {...form.register("sectorOutlook")} aria-labelledby="hqsr-sec15-heading"
+          <HTextArea className="text-page-start" dir="auto" fullWidth rows={4} {...form.register("sectorOutlook")} aria-labelledby="hqsr-sec15-heading"
             placeholder={t("hqForm.sectorOutlookPlaceholder")} />
         </section>
 
@@ -1781,28 +1800,31 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
         <section id="rp-section-attachments" className="space-y-3">
           <h4 className="text-sm font-semibold border-b pb-1">{t("hqForm.section16Title")}</h4>
           <div className="flex items-center gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+            <HButton type="button" size="sm" variant="tertiary" onPress={() => fileInputRef.current?.click()}>
                 <Upload className="h-3 w-3" /> {t("hqForm.attachFile")}
-            </Button>
-            <span className="text-xs text-muted-foreground">{t("hqForm.attachmentHint")}</span>
+            </HButton>
+            <span className="text-xs text-[var(--muted)]">{t("hqForm.attachmentHint")}</span>
             <input ref={fileInputRef} type="file" className="hidden" accept={ATTACHMENT_ACCEPT} multiple
               onChange={(e) => { Array.from(e.target.files ?? []).forEach(uploadFile); e.target.value = ""; }} />
           </div>
           {attachments.length > 0 && (
             <ul className="space-y-1">
               {attachments.map((d) => (
-                <li key={d.tempId} className="flex items-center gap-2 border rounded p-2 text-xs bg-muted/20">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="truncate flex-1" title={d.fileName}>{d.fileName}</span>
-                  {d.uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
+                <li key={d.tempId} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-xs">
+                  <FileText className="size-3.5 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+                  <span className="flex-1 truncate" dir="auto" title={d.fileName}>{d.fileName}</span>
+                  {d.uploading ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : (
                     <>
-                      <Select value={d.attachmentType} onValueChange={(val) => setAttachments((a) => a.map((x) => x.tempId === d.tempId ? { ...x, attachmentType: val } : x))}>
-                        <SelectTrigger className="h-6 w-40 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>{ATTACHMENT_TYPES.map((t_) => <SelectItem key={t_} value={t_} className="text-xs">{t_}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <button type="button" onClick={() => setAttachments((a) => a.filter((x) => x.tempId !== d.tempId))} className="text-muted-foreground hover:text-destructive flex-shrink-0">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                      <SelectField
+                        aria-label={t("stateForm.attachmentTypeAria", { fileName: d.fileName })}
+                        triggerClassName="w-44"
+                        value={d.attachmentType}
+                        onChange={(val) => setAttachments((a) => a.map((x) => x.tempId === d.tempId ? { ...x, attachmentType: val } : x))}
+                        options={ATTACHMENT_TYPES.map((t_) => ({ value: t_, label: optionLabel(t, "attachmentTypes", t_) }))}
+                      />
+                      <HButton size="sm" variant="ghost" isIconOnly aria-label={t("stateForm.removeAttachmentAria", { fileName: d.fileName })} onPress={() => setAttachments((a) => a.filter((x) => x.tempId !== d.tempId))}>
+                        <X className="size-3.5" aria-hidden="true" />
+                      </HButton>
                     </>
                   )}
                 </li>
@@ -1813,90 +1835,89 @@ export function HqSectorReportForm({ onClose, existingReport, onDirtyChange }: P
 
         {/* ── SECTION 17: VOICE NOTE ───────────────────────────────────────────── */}
         <section className="space-y-3">
-          <h4 className="text-sm font-semibold border-b pb-1">{t("hqForm.section17Title")} <span className="font-normal text-muted-foreground">{t("hqForm.section17Optional")}</span></h4>
+          <h4 className="text-sm font-semibold border-b pb-1">{t("hqForm.section17Title")} <span className="font-normal text-[var(--muted)]">{t("hqForm.section17Optional")}</span></h4>
           <FormVoiceRecorder value={pendingVoiceNote} onChange={setPendingVoiceNote} />
         </section>
 
         {/* ── FOOTER ──────────────────────────────────────────────────────────── */}
-        <DialogFooter className="gap-2 flex-wrap">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>{t("hqForm.cancel")}</Button>
-          <Button type="button" variant="secondary" onClick={onSaveDraft} disabled={localDraft.status === "pending" || localDraft.status === "syncing" || isSaving} aria-busy={isSaving}>
-                {isSaving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} {t("hqForm.saveDraft")}
-          </Button>
-          <Button type="button" onClick={onSubmitReport} disabled={!isOnline || isSaving} aria-busy={isSaving} aria-describedby={!isOnline ? "hq-offline-workflow-notice" : undefined}>
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+        <div className="sticky -bottom-4 z-10 -mx-5 -mb-4 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] bg-[var(--overlay)] px-5 py-4" data-report-form-footer aria-busy={isSaving}>
+          <HButton type="button" variant="tertiary" onPress={onClose} isDisabled={isSaving}>{t("hqForm.cancel")}</HButton>
+          <HButton type="button" variant="secondary" onPress={() => { void onSaveDraft(); }} isDisabled={localDraft.status === "pending" || localDraft.status === "syncing" || isSaving}>
+            {isSaving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />} {t("hqForm.saveDraft")}
+          </HButton>
+          <HButton type="button" onPress={() => { void onSubmitReport(); }} isDisabled={!isOnline || isSaving} aria-describedby={!isOnline ? "hq-offline-workflow-notice" : undefined}>
+            {isSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
             {t("hqForm.submitReport")}
-          </Button>
-        </DialogFooter>
+          </HButton>
+        </div>
       </form>
 
       {/* ── Create New Risk Dialog ──────────────────────────────────────────── */}
-      <Dialog open={createRiskOpen} onOpenChange={setCreateRiskOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t("hqForm.createRiskDialogTitle")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground -mt-2">
-            {t("hqForm.createRiskDialogDesc")}
-          </p>
-          <div className="space-y-3 pt-1">
-            <div>
-              <Label className="text-xs">{t("hqForm.riskTitleLabel")} <span className="text-destructive">*</span></Label>
-              <Input value={newRiskDraft.title} onChange={(e) => setNewRiskDraft((d) => ({ ...d, title: e.target.value }))} placeholder={t("hqForm.riskTitlePlaceholder")} />
-            </div>
+      <Modal isOpen={createRiskOpen} onOpenChange={(o) => { if (!creatingRisk) setCreateRiskOpen(o); }}>
+        <Modal.Backdrop isDismissable={!creatingRisk}>
+        <Modal.Container size="md" scroll="inside">
+        <Modal.Dialog className="max-h-[calc(100dvh-2rem)] sm:max-w-lg">
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading>{t("hqForm.createRiskDialogTitle")}</Modal.Heading>
+            <p className="text-sm text-[var(--muted)]">{t("hqForm.createRiskDialogDesc")}</p>
+          </Modal.Header>
+          <Modal.Body className="space-y-3">
+            <Field labelClassName="text-xs" label={t("hqForm.riskTitleLabel")} isRequired>
+              {(id) => <HInput className="text-page-start" dir="auto" id={id} fullWidth value={newRiskDraft.title} onChange={(e) => setNewRiskDraft((d) => ({ ...d, title: e.target.value }))} placeholder={t("hqForm.riskTitlePlaceholder")} />}
+            </Field>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">{t("hqForm.categoryLabel")}</Label>
-                <Select value={newRiskDraft.category} onValueChange={(val) => setNewRiskDraft((d) => ({ ...d, category: val }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{RISK_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                </Select>
+                <SelectField
+                  label={t("hqForm.categoryLabel")}
+                  value={newRiskDraft.category}
+                  onChange={(val) => setNewRiskDraft((d) => ({ ...d, category: val }))}
+                  options={RISK_CATEGORIES.map((c) => ({ value: c, label: optionLabel(t, "riskCategories", c) }))}
+                />
               </div>
               <div>
-                <Label className="text-xs">{t("hqForm.severityLabel")}</Label>
-                <Select value={newRiskDraft.severity} onValueChange={(val) => setNewRiskDraft((d) => ({ ...d, severity: val }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">{t("hqForm.severityLow")}</SelectItem>
-                    <SelectItem value="medium">{t("hqForm.severityMedium")}</SelectItem>
-                    <SelectItem value="high">{t("hqForm.severityHigh")}</SelectItem>
-                    <SelectItem value="critical">{t("hqForm.severityCritical")}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <SelectField
+                  label={t("hqForm.severityLabel")}
+                  value={newRiskDraft.severity}
+                  onChange={(val) => setNewRiskDraft((d) => ({ ...d, severity: val }))}
+                  options={[{ value: "low", label: t("hqForm.severityLow") }, { value: "medium", label: t("hqForm.severityMedium") }, { value: "high", label: t("hqForm.severityHigh") }, { value: "critical", label: t("hqForm.severityCritical") }]}
+                />
               </div>
               <div>
-                <Label className="text-xs">{t("hqForm.likelihoodLabel")}</Label>
-                <Select value={newRiskDraft.likelihood} onValueChange={(val) => setNewRiskDraft((d) => ({ ...d, likelihood: val }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{RISK_LIKELIHOODS.map((l) => <SelectItem key={l} value={l} className="capitalize">{l}</SelectItem>)}</SelectContent>
-                </Select>
+                <SelectField
+                  label={t("hqForm.likelihoodLabel")}
+                  value={newRiskDraft.likelihood}
+                  onChange={(val) => setNewRiskDraft((d) => ({ ...d, likelihood: val }))}
+                  options={RISK_LIKELIHOODS.map((l) => ({ value: l, label: optionLabel(t, "likelihoods", l) }))}
+                />
               </div>
-              <div>
-                <Label className="text-xs">{t("hqForm.stateLabel")} <span className="text-destructive">*</span></Label>
-                <Select value={String(newRiskDraft.stateId || "")} onValueChange={(val) => setNewRiskDraft((d) => ({ ...d, stateId: Number(val) }))}>
-                  <SelectTrigger><SelectValue placeholder={t("hqForm.statePlaceholder")} /></SelectTrigger>
-                  <SelectContent>{states.map((s) => <SelectItem key={s.id} value={String(s.id)}><StateLabel state={s} /></SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+              <SelectField
+                label={t("hqForm.stateLabel")}
+                isRequired
+                placeholder={t("hqForm.statePlaceholder")}
+                value={String(newRiskDraft.stateId || "")}
+                onChange={(val) => setNewRiskDraft((d) => ({ ...d, stateId: Number(val) }))}
+                options={states.map((s) => ({ value: String(s.id), label: <StateLabel state={s} />, textValue: s.name }))}
+              />
             </div>
-            <div>
-              <Label className="text-xs">{t("hqForm.riskDescriptionLabel")}</Label>
-              <Textarea rows={2} value={newRiskDraft.description} onChange={(e) => setNewRiskDraft((d) => ({ ...d, description: e.target.value }))} placeholder={t("hqForm.riskDescriptionPlaceholder")} />
-            </div>
-            <div>
-              <Label className="text-xs">{t("hqForm.mitigationPlanLabel")}</Label>
-              <Textarea rows={2} value={newRiskDraft.mitigationPlan} onChange={(e) => setNewRiskDraft((d) => ({ ...d, mitigationPlan: e.target.value }))} placeholder={t("hqForm.mitigationPlanPlaceholder")} />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => { setCreateRiskOpen(false); setNewRiskDraft(emptyNewRisk()); }} disabled={creatingRisk}>{t("hqForm.cancel")}</Button>
-            <Button onClick={handleCreateRisk} disabled={creatingRisk}>
-                {creatingRisk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            <Field labelClassName="text-xs" label={t("hqForm.riskDescriptionLabel")}>
+              {(id) => <HTextArea className="text-page-start" dir="auto" id={id} fullWidth rows={2} value={newRiskDraft.description} onChange={(e) => setNewRiskDraft((d) => ({ ...d, description: e.target.value }))} placeholder={t("hqForm.riskDescriptionPlaceholder")} />}
+            </Field>
+            <Field labelClassName="text-xs" label={t("hqForm.mitigationPlanLabel")}>
+              {(id) => <HTextArea className="text-page-start" dir="auto" id={id} fullWidth rows={2} value={newRiskDraft.mitigationPlan} onChange={(e) => setNewRiskDraft((d) => ({ ...d, mitigationPlan: e.target.value }))} placeholder={t("hqForm.mitigationPlanPlaceholder")} />}
+            </Field>
+          </Modal.Body>
+          <Modal.Footer>
+            <HButton variant="tertiary" onPress={() => { setCreateRiskOpen(false); setNewRiskDraft(emptyNewRisk()); }} isDisabled={creatingRisk}>{t("hqForm.cancel")}</HButton>
+            <HButton onPress={() => { void handleCreateRisk(); }} isPending={creatingRisk}>
+              {!creatingRisk && <Plus className="size-4" aria-hidden="true" />}
               {t("hqForm.createAndLinkRisk")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </HButton>
+          </Modal.Footer>
+        </Modal.Dialog>
+        </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </>
   );
 }
@@ -1908,7 +1929,7 @@ function asArr(v: unknown): unknown[] { return Array.isArray(v) ? v : []; }
 function asObj(v: unknown): Record<string, unknown> { return v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {}; }
 
 export function HqSectorSectionsView({ sections }: { sections: Record<string, unknown> }) {
-  const { t } = useTranslation("reports");
+  const { t, i18n } = useTranslation("reports");
   const frequency = asStr(sections.frequency) || "monthly";
   const quarter = sections.quarter as number | undefined;
   const officerName = asStr(sections.officerName);
@@ -1930,10 +1951,10 @@ export function HqSectorSectionsView({ sections }: { sections: Record<string, un
     [t("hqForm.section14Title").replace(" *", ""), asStr(sections.lessonsLearned)],
     [t("hqForm.section15Title").replace(" *", ""), asStr(sections.sectorOutlook)],
     // backward-compat with old field names
-    ["Achievements Summary", asStr(sections.achievementsSummary)],
-    ["Sector Challenges", asStr(sections.sectorChallenges)],
-    ["Mitigation Actions", asStr(sections.mitigationActions)],
-    ["Support Required (legacy)", asStr(sections.supportRequired as string)],
+    [t("hqForm.legacyAchievementsSummary"), asStr(sections.achievementsSummary)],
+    [t("hqForm.legacySectorChallenges"), asStr(sections.sectorChallenges)],
+    [t("hqForm.legacyMitigationActions"), asStr(sections.mitigationActions)],
+    [t("hqForm.legacySupportRequired"), asStr(sections.supportRequired as string)],
   ].filter(([, val]) => typeof val === "string" && val.trim() && !Array.isArray(sections[val])) as [string, string][];
 
   const stateObs = asArr(sections.stateObservations) as Array<Record<string, unknown>>;
@@ -1946,7 +1967,7 @@ export function HqSectorSectionsView({ sections }: { sections: Record<string, un
   return (
     <div className="space-y-5">
       {/* Meta row */}
-      <div className="rounded border p-3 bg-muted/20 text-xs space-y-1">
+      <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
         {officerName && <p><strong className="text-foreground">{t("hqForm.viewTechCoordinator")}</strong> {officerName}</p>}
         <p><strong className="text-foreground">{t("hqForm.viewFrequency")}</strong> {freqLabel}</p>
         {asStr(sections.onDemandReason) && <p><strong className="text-foreground">{t("hqForm.viewReason")}</strong> {asStr(sections.onDemandReason)}</p>}
@@ -1966,12 +1987,12 @@ export function HqSectorSectionsView({ sections }: { sections: Record<string, un
           <h4 className="text-sm font-medium text-foreground mb-2">{t("hqForm.viewStateObservations")}</h4>
           <div className="space-y-2">
             {stateObs.map((o, i) => (
-              <div key={i} className="rounded border p-3 bg-muted/10 text-sm space-y-1">
-                <p className="font-medium">{asStr(o.stateName) || `State Observation ${i + 1}`}</p>
-                {asStr(o.technicalObservation) && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{asStr(o.technicalObservation)}</p>}
-                {asStr(o.qualityConcern) && <p className="text-xs"><span className="font-medium text-amber-700">{t("hqForm.viewQualityConcern")}</span> {asStr(o.qualityConcern)}</p>}
-                {asStr(o.goodPractice) && <p className="text-xs"><span className="font-medium text-green-700">{t("hqForm.viewGoodPractice")}</span> {asStr(o.goodPractice)}</p>}
-                {asStr(o.actionRequired) && <p className="text-xs"><span className="font-medium text-red-700">{t("hqForm.viewActionRequired")}</span> {asStr(o.actionRequired)}</p>}
+              <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm space-y-1">
+                <p className="font-medium">{asStr(o.stateName) ? getLinkedStateLabel(o as { stateName?: string | null; stateNameAr?: string | null }, i18n.language) : t("hqForm.stateObservationHash", { num: i + 1 })}</p>
+                {asStr(o.technicalObservation) && <p className="text-xs text-[var(--muted)] whitespace-pre-wrap">{asStr(o.technicalObservation)}</p>}
+                {asStr(o.qualityConcern) && <p className="text-xs"><span className="font-medium text-[var(--warning)]">{t("hqForm.viewQualityConcern")}</span> {asStr(o.qualityConcern)}</p>}
+                {asStr(o.goodPractice) && <p className="text-xs"><span className="font-medium text-[var(--success)]">{t("hqForm.viewGoodPractice")}</span> {asStr(o.goodPractice)}</p>}
+                {asStr(o.actionRequired) && <p className="text-xs"><span className="font-medium text-[var(--danger)]">{t("hqForm.viewActionRequired")}</span> {asStr(o.actionRequired)}</p>}
               </div>
             ))}
           </div>
@@ -1984,28 +2005,18 @@ export function HqSectorSectionsView({ sections }: { sections: Record<string, un
           <h4 className="text-sm font-medium text-foreground mb-2">{t("hqForm.viewTechnicalRatings")}</h4>
           <div className="space-y-1">
             {ratings.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 border rounded p-2 text-xs">
-                <Badge variant="outline" className="text-xs capitalize">{asStr(r.entityType)}</Badge>
-                <span className="font-medium flex-1">{asStr(r.entityLabel)}</span>
-                <Badge
-                  variant={
-                    asStr(r.rating) === "Excellent" ? "excellent" :
-                    asStr(r.rating) === "Good" ? "good" :
-                    asStr(r.rating) === "Fair" ? "needs-follow-up" :
-                    asStr(r.rating) === "Needs Improvement" ? "insufficient" :
-                    "rejected"
-                  }
-                  className="text-xs"
+              <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-2 text-xs">
+                <Chip size="sm" variant="tertiary">{asStr(r.entityType) === "project" ? t("hqForm.entityProject") : t("hqForm.entityState")}</Chip>
+                <span className="flex-1 font-medium" dir="auto">{asStr(r.entityLabel)}</span>
+                <Chip
+                  size="sm"
+                  variant="soft"
+                  color={asStr(r.rating) === "Excellent" || asStr(r.rating) === "Good" ? "success" : asStr(r.rating) === "Fair" ? "warning" : "danger"}
                 >
-                  {asStr(r.rating)}
-                </Badge>
+                  {optionLabel(t, "technicalRatings", asStr(r.rating))}
+                </Chip>
                 {asStr(r.reason) && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-muted-foreground line-clamp-2 min-w-0 flex-1 text-start">{asStr(r.reason)}</span>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">{asStr(r.reason)}</TooltipContent>
-                  </Tooltip>
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap text-page-start text-[var(--muted)]" dir="auto">{asStr(r.reason)}</span>
                 )}
               </div>
             ))}
@@ -2019,12 +2030,12 @@ export function HqSectorSectionsView({ sections }: { sections: Record<string, un
           <h4 className="text-sm font-medium text-foreground mb-2">{t("hqForm.viewSupportRequired")}</h4>
           <div className="space-y-2">
             {supportReqs.map((r, i) => (
-              <div key={i} className="rounded border p-3 bg-muted/10 text-sm">
+              <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium">{asStr(r.supportType)}</span>
-                  <Badge variant={asStr(r.priority) === "High" ? "destructive" : "secondary"} className="text-xs">{asStr(r.priority)}</Badge>
+                  <span className="font-medium">{optionLabel(t, "supportTypes", asStr(r.supportType))}</span>
+                  {asStr(r.priority) && <Chip size="sm" variant="soft" color={asStr(r.priority) === "High" ? "danger" : "default"}>{optionLabel(t, "priorities", asStr(r.priority))}</Chip>}
                 </div>
-                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{asStr(r.description)}</p>
+                <p className="text-xs text-[var(--muted)] whitespace-pre-wrap">{asStr(r.description)}</p>
               </div>
             ))}
           </div>
@@ -2037,11 +2048,11 @@ export function HqSectorSectionsView({ sections }: { sections: Record<string, un
           <h4 className="text-sm font-medium text-foreground mb-2">{t("hqForm.viewRisksAndIssues")}</h4>
           <div className="space-y-1">
             {reportRisks.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 border rounded p-2 text-xs">
-                {typeof r.id === "number" && <Link2 className="h-3 w-3 text-blue-500 shrink-0" />}
-                <span className="font-medium flex-1">{asStr(r.title)}</span>
-                <Badge variant="outline" className="text-xs">{asStr(r.category)}</Badge>
-                <Badge variant={severityBadgeVariant(asStr(r.severity))} className="text-xs">{asStr(r.severity)}</Badge>
+              <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-2 text-xs">
+                {typeof r.id === "number" && <Link2 className="size-3 shrink-0 text-[var(--accent)]" aria-hidden="true" />}
+                <span className="flex-1 font-medium" dir="auto">{asStr(r.title)}</span>
+                {asStr(r.category) && <Chip size="sm" variant="tertiary">{optionLabel(t, "riskCategories", asStr(r.category))}</Chip>}
+                {asStr(r.severity) && <Chip size="sm" variant="soft" color={severityColor(asStr(r.severity))}>{severityText(t, asStr(r.severity))}</Chip>}
               </div>
             ))}
           </div>
@@ -2056,7 +2067,7 @@ export function HqSectorSectionsView({ sections }: { sections: Record<string, un
             {indComments.map((c, i) => (
               <div key={i} className="rounded border p-2 bg-muted/10 text-xs">
                 <p className="font-medium mb-0.5">{asStr(c.indicatorName)}</p>
-                <p className="text-muted-foreground whitespace-pre-wrap">{asStr(c.commentary)}</p>
+                <p className="text-[var(--muted)] whitespace-pre-wrap">{asStr(c.commentary)}</p>
               </div>
             ))}
           </div>

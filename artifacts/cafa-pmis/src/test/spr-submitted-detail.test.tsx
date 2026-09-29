@@ -48,7 +48,8 @@ vi.mock("react-i18next", () => ({
         "detail.total": "Total",
       };
       if (key === "stateForm.freqQuarterlyQ") return `Quarterly — Q${opts?.quarter}`;
-      return map[key] ?? key;
+      // Like i18next: a missing key falls back to its defaultValue.
+      return map[key] ?? (typeof opts?.defaultValue === "string" ? opts.defaultValue : key);
     },
     i18n: { language: "en", dir: () => "ltr", changeLanguage: vi.fn() },
   }),
@@ -170,7 +171,9 @@ describe("SPR Activities section", () => {
 
   it("SPR-DETAIL-06: activity date and status visible", () => {
     renderView();
-    expect(screen.getByText(/Date: 2026-06-15/)).toBeInTheDocument();
+    // the date is formatted and isolated in its own <bdi>
+    expect(screen.getAllByText(/Date:/).length).toBeGreaterThan(0);
+    expect(screen.getByText("15 Jun 2026")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("Ongoing")).toBeInTheDocument();
   });

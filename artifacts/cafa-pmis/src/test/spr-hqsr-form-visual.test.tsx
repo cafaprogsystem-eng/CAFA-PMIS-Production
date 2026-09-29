@@ -279,24 +279,25 @@ describe("REP-SPRHQ-FORM-VIS — SPR + HQSR Authoring Form Visual Contracts", ()
   });
 
   it("REP-SPRHQ-FORM-VIS-08: Submit Report button is the primary action in both forms", () => {
+    // HeroUI Button: the default variant is the primary action
     renderSpr(undefined);
     let submit = screen.getByRole("button", { name: /stateForm\.submitReport/i });
-    expect(submit.className).toMatch(/\bbg-primary\b/);
+    expect(submit.className).toMatch(/\bbutton--primary\b/);
     cleanup();
     renderHqsr(undefined);
     submit = screen.getByRole("button", { name: /hqForm\.submitReport/i });
-    expect(submit.className).toMatch(/\bbg-primary\b/);
+    expect(submit.className).toMatch(/\bbutton--primary\b/);
   });
 
-  it("REP-SPRHQ-FORM-VIS-09: Save Draft + Submit carry aria-busy wiring and are enabled when idle", () => {
+  it("REP-SPRHQ-FORM-VIS-09: the footer announces busy state; Save Draft + Submit are enabled when idle", () => {
     for (const renderFn of [() => renderSpr(undefined), () => renderHqsr(undefined)]) {
       renderFn();
-      const busyBtns = Array.from(document.querySelectorAll("button[aria-busy]"));
-      expect(busyBtns.length).toBeGreaterThanOrEqual(2);
-      for (const b of busyBtns) {
-        expect(b.getAttribute("aria-busy")).toBe("false");
-        expect(b).not.toBeDisabled();
-      }
+      // HeroUI buttons don't take aria-busy; the footer region carries it
+      const footer = document.querySelector("[data-report-form-footer]")!;
+      expect(footer).toHaveAttribute("aria-busy", "false");
+      const actions = Array.from(footer.querySelectorAll("button")).filter((b) => /saveDraft|submitReport/i.test(b.textContent ?? ""));
+      expect(actions.length).toBe(2);
+      for (const b of actions) expect(b).not.toBeDisabled();
       cleanup();
     }
   });

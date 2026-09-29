@@ -164,22 +164,14 @@ describe("REP-E2E-05: Submit button disabled/loading while request pending", () 
   });
 
   it("SPR submit button is disabled while saving (isSaving state)", () => {
-    // SPR uses isSaving to prevent double-submit
-    expect(SPR_SRC).toContain("disabled={isSaving}");
-    expect(SPR_SRC).toContain("aria-busy={isSaving}");
+    // SPR uses isSaving to prevent double-submit; the footer region announces it
+    expect(SPR_SRC).toContain("isDisabled={!isOnline || isSaving}");
+    expect(SPR_SRC).toContain("data-report-form-footer aria-busy={isSaving}");
   });
 
   it("HQSR submit button is disabled while saving (isSaving state)", () => {
-    expect(HQSR_SRC).toContain("disabled={isSaving}");
-    expect(HQSR_SRC).toContain("isSaving");
-  });
-
-  it("Save Draft button carries aria-busy in SPR", () => {
-    const saveDraftBlock = SPR_SRC.slice(
-      SPR_SRC.indexOf("stateForm.saveDraft"),
-      SPR_SRC.indexOf("stateForm.saveDraft") + 400,
-    );
-    expect(saveDraftBlock).toContain("aria-busy");
+    expect(HQSR_SRC).toContain("isDisabled={!isOnline || isSaving}");
+    expect(HQSR_SRC).toContain("data-report-form-footer aria-busy={isSaving}");
   });
 });
 

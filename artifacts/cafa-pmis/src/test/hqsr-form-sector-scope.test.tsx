@@ -8,6 +8,7 @@
  *  - super_admin: full canonical list
  */
 
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import React from "react";
@@ -117,10 +118,13 @@ function renderForm(qc = new QueryClient({ defaultOptions: { queries: { retry: f
   );
 }
 
-/** Opens the Sector select (first combobox in the form) and returns option texts. */
-function openSectorOptions(): string[] {
-  const triggers = screen.getAllByRole("combobox");
-  fireEvent.click(triggers[0]);
+/** Opens the Sector select (the first listbox-trigger in the form) and returns option texts. */
+async function openSectorOptions(): Promise<string[]> {
+  const trigger = document.querySelector<HTMLElement>("button[aria-haspopup='listbox']");
+  if (!trigger) throw new Error("sector select trigger not found");
+  await userEvent.click(trigger);
+  // With no options React Aria keeps the list closed, which also means "no choices".
+  await screen.findByRole("listbox", {}, { timeout: 500 }).catch(() => null);
   return screen.queryAllByRole("option").map((o) => o.textContent ?? "");
 }
 
@@ -131,31 +135,31 @@ afterEach(() => {
 });
 
 describe("HQ Sector form — sector options scoping (HQSR-AUTH-FE-02)", () => {
-  it("TC with a single assigned sector sees only that sector", () => {
+  it("TC with a single assigned sector sees only that sector", async () => {
     meHolder.user = { id: 11, name: "TC", role: "technical_coordinator", sector: "WASH" };
     renderForm();
-    const opts = openSectorOptions();
+    const opts = await openSectorOptions();
     expect(opts).toEqual(["WASH"]);
   });
 
-  it("multi-sector TC sees exactly the assigned sectors", () => {
+  it("multi-sector TC sees exactly the assigned sectors", async () => {
     meHolder.user = { id: 12, name: "TC2", role: "technical_coordinator", sector: "WASH, Health" };
     renderForm();
-    const opts = openSectorOptions();
+    const opts = await openSectorOptions();
     expect(opts.sort()).toEqual(["Health", "WASH"]);
   });
 
-  it("TC with NO assigned sector fails closed — zero options, never the full list", () => {
+  it("TC with NO assigned sector fails closed — zero options, never the full list", async () => {
     meHolder.user = { id: 13, name: "TC3", role: "technical_coordinator", sector: null };
     renderForm();
-    const opts = openSectorOptions();
+    const opts = await openSectorOptions();
     expect(opts).toEqual([]);
   });
 
-  it("super_admin sees the full canonical sector list", () => {
+  it("super_admin sees the full canonical sector list", async () => {
     meHolder.user = { id: 14, name: "Admin", role: "super_admin", sector: null };
     renderForm();
-    const opts = openSectorOptions();
+    const opts = await openSectorOptions();
     expect(opts.sort()).toEqual([...SECTORS].sort());
   });
 

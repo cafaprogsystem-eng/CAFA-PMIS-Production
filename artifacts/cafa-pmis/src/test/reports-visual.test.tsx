@@ -468,9 +468,9 @@ describe("REP-DETAIL-VIS-04: Reviewer transition actions respect permissions", (
 
 describe("REP-DETAIL-VIS-05: SPR revision banner", () => {
   it("renders with role=alert and matches HQSR border/radius treatment", () => {
-    expect(sprSrc).toMatch(/role="alert"[^>]*rounded-md border border-amber-300 bg-amber-50/);
+    // Both forms use the same HeroUI warning Alert (which handles dark mode)
+    expect(sprSrc).toContain('<Alert status="warning" role="alert">');
     expect(sprSrc).not.toContain("border-2 border-amber-400");
-    expect(sprSrc).toContain("dark:border-amber-700");
   });
 });
 
@@ -512,10 +512,10 @@ describe("REP-DETAIL-VIS-09: Long narrative text does not overflow the modal", (
     expect(activityDetailSrc).not.toContain("mb-4 max-w-3xl");
   });
 
-  it("HQSR rating reason is line-clamped with a Tooltip instead of hard truncation", () => {
+  it("HQSR rating reason wraps in full (no truncation, no hover-only tooltip)", () => {
     expect(hqsrDetailSrc).not.toContain("truncate max-w-48");
-    expect(hqsrDetailSrc).toContain("line-clamp-2 min-w-0 flex-1");
-    expect(hqsrDetailSrc).toContain("<TooltipContent");
+    expect(hqsrDetailSrc).toContain("min-w-0 flex-1 whitespace-pre-wrap text-page-start");
+    expect(hqsrDetailSrc).not.toContain("<TooltipContent");
   });
 
   it("detail renderer headings are unified and detail labels avoid uppercase", () => {
@@ -531,7 +531,7 @@ describe("REP-DETAIL-VIS-09: Long narrative text does not overflow the modal", (
 
   it("SPR meta row uses text-sm values with text-xs muted labels", () => {
     expect(sprDetailSrc).toContain('className="rounded border p-3 bg-muted/20 space-y-1.5"');
-    expect(sprDetailSrc).toContain('strong className="text-xs font-medium text-muted-foreground"');
+    expect(sprDetailSrc).toContain('strong className="text-xs font-medium text-[var(--muted)]"');
   });
 });
 

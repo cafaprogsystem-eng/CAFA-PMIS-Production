@@ -44,7 +44,9 @@ vi.mock("react-i18next", () => ({
       "stateForm.titleRevise": "Revise State Programme Report",
       "stateForm.revisionBannerTitle": "This report was returned for revision.",
       "stateForm.revisionBannerBody": "Please review the reviewer feedback below and resubmit once the requested changes are made.",
-    }[key] ?? (typeof def === "string" ? def : key)),
+    }[key] ?? (typeof def === "string" ? def
+      // i18next-style options object: fall back to its defaultValue
+      : def && typeof (def as { defaultValue?: unknown }).defaultValue === "string" ? (def as { defaultValue: string }).defaultValue : key)),
     i18n: { language: "en", dir: () => "ltr", changeLanguage: vi.fn() },
   }),
   initReactI18next: { type: "3rdParty", init: vi.fn() },
@@ -207,9 +209,9 @@ describe("SPR-007 — hydration (SPR-EDIT-01…10)", () => {
 
   it("SPR-EDIT-03: frequency/period restored but disabled", () => {
     renderForm(existingReport);
-    const comboboxes = screen.getAllByRole("combobox");
-    // Frequency + Month + Year selects are all disabled in edit mode
-    const disabled = comboboxes.filter((c) => (c as HTMLButtonElement).disabled);
+    // Frequency + Month + Year selects (HeroUI Select triggers) are all disabled in edit mode
+    const selects = Array.from(document.querySelectorAll<HTMLButtonElement>("button[aria-haspopup='listbox']"));
+    const disabled = selects.filter((c) => c.disabled);
     expect(disabled.length).toBeGreaterThanOrEqual(3);
     expect(screen.getAllByText("frequency.monthly").length).toBeGreaterThan(0);
   });

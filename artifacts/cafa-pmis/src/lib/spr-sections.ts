@@ -45,3 +45,10 @@ export const SPR_SECTION_LABELS: Record<SprSectionKey, string> = {
 export function getSprSectionLabel(key: string): string {
   return (SPR_SECTION_LABELS as Record<string, string>)[key] ?? key;
 }
+
+/** Section labels in the active language (the English map above is the fallback). */
+export function translatedSprSectionLabels(t: (key: string, opts?: { defaultValue?: string; ns?: string }) => string): Record<SprSectionKey, string> {
+  return Object.fromEntries(
+    SPR_SECTION_KEYS.map((k) => [k, t(`stateForm.commentSections.${k}`, { ns: "reports", defaultValue: SPR_SECTION_LABELS[k] })]),
+  ) as Record<SprSectionKey, string>;
+}

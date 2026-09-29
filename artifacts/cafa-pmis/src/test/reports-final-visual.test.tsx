@@ -107,10 +107,10 @@ describe("REP-FINAL-VIS-04: Author and reviewer action availability unchanged", 
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("REP-FINAL-VIS-05: Returned-for-revision banner is alert-styled with amber styling", () => {
-  it("reports surfaces a role=alert revision banner with amber styling", () => {
-    const combined = reportsSrc + sprSrc + hqsrSrc;
-    expect(combined).toContain('role="alert"');
-    expect(combined).toMatch(/amber/);
+  it("reports surfaces a role=alert revision banner with warning styling", () => {
+    // HeroUI warning Alerts (the design-system amber)
+    for (const src of [sprSrc, hqsrSrc]) expect(src).toContain('<Alert status="warning" role="alert">');
+    expect(reportsSrc).toContain('<Alert status="warning" role="status" aria-label={t("form.revisionRequested")}>');
   });
 });
 

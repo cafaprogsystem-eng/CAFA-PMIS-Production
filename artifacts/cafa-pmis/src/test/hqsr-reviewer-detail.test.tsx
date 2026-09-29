@@ -59,7 +59,8 @@ vi.mock("react-i18next", () => ({
         "hqForm.section15Title": "15. Sector Outlook",
       };
       if (key === "hqForm.freqQuarterlyQ") return `Quarterly — Q${opts?.quarter ?? ""}`;
-      return map[key] ?? key;
+      // Like i18next: a missing key falls back to its defaultValue.
+      return map[key] ?? (typeof opts?.defaultValue === "string" ? opts.defaultValue : key);
     },
     i18n: { language: "en", dir: () => "ltr", changeLanguage: vi.fn() },
   }),

@@ -68,20 +68,20 @@ describe("REP-UX-02: Exactly one form footer per form (PMR/SPR/HQSR)", () => {
     expect(reportsSrc).toContain("Sticky footer — only for PMR/Activity; SPR and HQSR own their footer");
   });
 
-  it("SPR form has its own DialogFooter (not a second footer inside reports.tsx)", () => {
+  it("SPR form has its own footer (not a second footer inside reports.tsx)", () => {
     // SPR footer lives in program-state-report-form.tsx
-    const sprFooterCount = (sprSrc.match(/DialogFooter/g) ?? []).length;
-    expect(sprFooterCount).toBeGreaterThanOrEqual(1);
+    const sprFooterCount = (sprSrc.match(/data-report-form-footer/g) ?? []).length;
+    expect(sprFooterCount).toBe(1);
     // reports.tsx has the explicit comment confirming SPR owns its footer
     expect(reportsSrc).toContain("SPR and HQSR own their footer");
     // The guard !isProgramState && !isHqSector excludes SPR/HQSR from the shared footer
     expect(reportsSrc).toContain("!isProgramState && !isHqSector");
   });
 
-  it("HQSR form has its own DialogFooter (not a second footer inside reports.tsx)", () => {
+  it("HQSR form has its own footer (not a second footer inside reports.tsx)", () => {
     // HQSR footer lives in hq-sector-report-form.tsx
-    const hqsrFooterCount = (hqsrSrc.match(/DialogFooter/g) ?? []).length;
-    expect(hqsrFooterCount).toBeGreaterThanOrEqual(1);
+    const hqsrFooterCount = (hqsrSrc.match(/data-report-form-footer/g) ?? []).length;
+    expect(hqsrFooterCount).toBe(1);
   });
 });
 
@@ -192,12 +192,12 @@ describe("REP-UX-10: Responsive form footer visible, no horizontal overflow", ()
     expect(reportsSrc).toContain("flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--border)] px-6 py-4\" data-report-form-footer");
   });
 
-  it("SPR footer uses DialogFooter flex-wrap for narrow viewports", () => {
-    expect(sprSrc).toContain("gap-2 flex-wrap");
+  it("SPR footer sticks to the bottom and wraps on narrow viewports", () => {
+    expect(sprSrc).toContain('className="sticky -bottom-4 z-10 -mx-5 -mb-4 flex flex-wrap justify-end gap-2');
   });
 
-  it("HQSR footer uses DialogFooter flex-wrap for narrow viewports", () => {
-    expect(hqsrSrc).toContain("gap-2 flex-wrap");
+  it("HQSR footer sticks to the bottom and wraps on narrow viewports", () => {
+    expect(hqsrSrc).toContain('className="sticky -bottom-4 z-10 -mx-5 -mb-4 flex flex-wrap justify-end gap-2');
   });
 
   it("dialog form has a scrollable body with overflow-y-auto", () => {

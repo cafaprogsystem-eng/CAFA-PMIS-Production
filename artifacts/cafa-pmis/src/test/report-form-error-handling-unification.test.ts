@@ -27,7 +27,8 @@ describe("REPORT-FORM-ERROR-HANDLING-UNIFICATION: HQSR now matches SPR's error-r
     for (const src of [hqsrSrc, sprSrc]) {
       expect(src).toContain("function raiseFormError(msg: string) {");
       expect(src).toContain("setTimeout(() => errorSummaryRef.current?.focus(), 0);");
-      expect(src).toMatch(/role="alert"\s*\n\s*aria-live="assertive"/);
+      expect(src).toContain('<Alert status="danger" role="alert" aria-live="assertive">');
+      expect(src).toContain("<div ref={errorSummaryRef} tabIndex={-1}");
     }
   });
 
