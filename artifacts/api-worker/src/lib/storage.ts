@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
-import { DOMParser } from "@xmldom/xmldom";
+import "./aws-sdk-polyfills";
 import {
   S3Client,
   GetObjectCommand,
@@ -21,15 +21,6 @@ import type { Bindings } from "./db";
  * dropped, not ported.
  */
 
-// AWS SDK v3 parses S3's XML error/response bodies with the DOM's
-// DOMParser, a browser API Workers doesn't provide even under
-// nodejs_compat. Without this, any request that gets back an XML body
-// (e.g. a HeadObjectCommand 404) throws "DOMParser is not defined" instead
-// of the SDK's own NotFound error.
-if (typeof (globalThis as { DOMParser?: unknown }).DOMParser === "undefined") {
-  (globalThis as { DOMParser?: unknown }).DOMParser = DOMParser;
-}
-
 export class ObjectNotFoundError extends Error {
   constructor() {
     super("Object not found");
@@ -41,6 +32,35 @@ export class ObjectNotFoundError extends Error {
 export interface ObjectEntityMetadata {
   size: number;
   contentType?: string;
+}
+
+/**
+ * Ported from artifacts/api-server/src/lib/objectStorage.ts's
+ * isStorageConfigured — the "s3" provider branch only (this file has no gcs
+ * or replit equivalent to report on). Workers always runs against the R2
+ * binding's secrets, so there is no provider-selection question here, just
+ * whether the required R2 secrets were actually set on this Worker.
+ */
+export interface StorageStatus {
+  configured: boolean;
+  provider: "r2";
+  reason?: string;
+}
+
+export function isStorageConfigured(env: Bindings): StorageStatus {
+  const missing: string[] = [];
+  if (!env.R2_BUCKET?.trim()) missing.push("R2_BUCKET");
+  if (!env.R2_ENDPOINT_URL?.trim()) missing.push("R2_ENDPOINT_URL");
+  if (!env.R2_ACCESS_KEY_ID?.trim()) missing.push("R2_ACCESS_KEY_ID");
+  if (!env.R2_SECRET_ACCESS_KEY?.trim()) missing.push("R2_SECRET_ACCESS_KEY");
+  if (missing.length > 0) {
+    return {
+      configured: false,
+      provider: "r2",
+      reason: `Missing required environment variables: ${missing.join(", ")}`,
+    };
+  }
+  return { configured: true, provider: "r2" };
 }
 
 const PRIVATE_PREFIX = "objects";
@@ -70,6 +90,20 @@ export async function getObjectEntityUploadURL(
     new PutObjectCommand({ Bucket: env.R2_BUCKET, Key: key, ContentType: contentType }),
     { expiresIn: 900 },
   );
+}
+
+/** Confirms a `public/<filePath>` key actually exists in the bucket. */
+export async function searchPublicObject(
+  env: Bindings,
+  filePath: string,
+): Promise<{ bucket: string; key: string } | null> {
+  const key = `${PUBLIC_PREFIX}/${filePath}`;
+  try {
+    await s3Client(env).send(new HeadObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
+    return { bucket: env.R2_BUCKET, key };
+  } catch {
+    return null;
+  }
 }
 
 /** Confirms a canonical `/objects/...` path actually exists in the bucket. */
@@ -180,6 +214,27 @@ export async function deleteObject(
   // DELETE is idempotent on S3-compatible stores — 204 even for missing keys.
   await s3Client(env).send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: `${PRIVATE_PREFIX}/${entityId}` }));
   return { deleted: true, notFound: false };
+}
+
+/**
+ * Ported from artifacts/api-server/src/lib/objectStorage.ts's
+ * deleteStorageObjectSafely: idempotent wrapper used by deletion routes
+ * (e.g. the Project permanent-delete cascade) — treats a malformed/missing
+ * objectPath as already-deleted instead of failing the whole deletion.
+ */
+export async function deleteObjectSafely(
+  env: Bindings,
+  objectPath: string,
+): Promise<{ deleted: boolean }> {
+  try {
+    const result = await deleteObject(env, objectPath);
+    return { deleted: !result.notFound };
+  } catch (err) {
+    if (err instanceof ObjectNotFoundError) {
+      return { deleted: false }; // treat as already gone
+    }
+    throw err; // propagate transient/auth errors
+  }
 }
 
 /** Parses a presigned upload URL back into its canonical `/objects/...` path. */

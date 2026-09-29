@@ -28,6 +28,7 @@
     "users": "Users",
     "states": "States",
     "auditLog": "Audit Log",
+    "systemMonitoring": "System Activity",
     "profile": "Profile",
     "syncStatus": "Sync Status",
     "notificationPreferences": "Notification Preferences"
@@ -126,6 +127,7 @@
     "communicationCentre": "Messages & chat",
     "users": "Manage team members",
     "auditLog": "Activity history",
+    "systemMonitoring": "Email log and live presence",
     "ai": "Assistant and administration",
     "syncStatus": "Offline queue"
   },

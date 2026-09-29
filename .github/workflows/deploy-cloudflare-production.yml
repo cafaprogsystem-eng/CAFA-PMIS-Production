@@ -1,0 +1,56 @@
+name: Deploy Cloudflare production
+
+# Manual and deliberate — this deploys the real cafa-pmis.org production
+# environment, not something that should fire on every push. Only run this
+# once main's "Contract, build, test, and migration gates" check is green.
+#
+# The frontend build (pnpm --filter cafa-pmis run build) only works on
+# linux-x64 by design: pnpm-workspace.yaml's overrides deliberately prune
+# every non-linux-x64 native binary for @tailwindcss/oxide, esbuild,
+# lightningcss, and rollup. ubuntu-latest is the supported build
+# environment for this repo — this workflow is that environment, not a
+# workaround for one.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build frontend and deploy production Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck api-worker
+        run: pnpm --filter api-worker run typecheck
+
+      - name: Build cafa-pmis frontend
+        run: pnpm --filter cafa-pmis run build
+
+      - name: Deploy production Worker (API + static assets)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: d5b801b4d62ca15395ee9933159117a4
+          workingDirectory: artifacts/api-worker
+          command: deploy --env production

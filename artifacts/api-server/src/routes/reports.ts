@@ -239,6 +239,7 @@ const reportSelect = `
          r.beneficiaries_girls  AS "beneficiariesGirls",
          r.planned_budget     AS "plannedBudget",
          r.actual_expenditure AS "actualExpenditure",
+         r.currency,
          r.activities,
          r.quarter,
          r.on_demand_reason   AS "onDemandReason",
@@ -1150,6 +1151,11 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
     const activityId = Number((body as Record<string, unknown>).activityId) || null;
     const tcSectors = tcSectorRestriction(req);
     let projectPrimarySector: string | null = null;
+    // Migration 070 (REPORTS-CURRENCY): resolved the same way as projectPrimarySector —
+    // project-linked reports use the project's currency; standalone activities use their
+    // own. Only Project and Activity Reports have an unambiguous single source; other
+    // report types have no natural currency source and are left null.
+    let effectiveCurrency: string | null = null;
     // Holds the resolved stateId for activity reports (used in effectiveStateId below).
     let activityResolvedStateId: number | null | undefined = undefined;
     // Holds the resolved projectId for activity reports (null for standalone).
@@ -1162,8 +1168,9 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
         projectId: number | null;
         sector: string | null;
         stateId: number | null;
+        currency: string | null;
       }>(
-        `SELECT id, project_id AS "projectId", sector, state_id AS "stateId" FROM activities WHERE id = $1`,
+        `SELECT id, project_id AS "projectId", sector, state_id AS "stateId", currency FROM activities WHERE id = $1`,
         [activityId],
       );
       if (actLookup.rows.length === 0) {
@@ -1185,8 +1192,8 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
         activityResolvedProjectId = activity.projectId;
 
         // (1) Project must exist
-        const actProjRow = await pool.query<{ id: number; sector: string | null }>(
-          `SELECT id, sector FROM projects WHERE id = $1`,
+        const actProjRow = await pool.query<{ id: number; sector: string | null; currency: string | null }>(
+          `SELECT id, sector, currency FROM projects WHERE id = $1`,
           [activity.projectId],
         );
         if (actProjRow.rows.length === 0) {
@@ -1194,6 +1201,7 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
           return;
         }
         projectPrimarySector = actProjRow.rows[0].sector ?? null;
+        effectiveCurrency = actProjRow.rows[0].currency ?? null;
 
         // (2) TC sector check via Project Primary Sector — fail-closed.
         if (tcSectors) {
@@ -1307,6 +1315,7 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
         // effectiveSector for standalone = activity.sector
         // Stored in projectPrimarySector so the INSERT uses it via effectiveSector below.
         projectPrimarySector = activitySector;
+        effectiveCurrency = activity.currency ?? null;
 
         // Resolve effective stateId for standalone — state integrity rules:
         //
@@ -1338,8 +1347,8 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
     // ── Activity Report: Project-linked mode (activityId=null, projectId supplied) ──
     // User linked the report to a project but not a specific activity record.
     if (reportType === "activity" && !activityId && body.projectId != null && Number(body.projectId) > 0) {
-      const actProjRow = await pool.query<{ id: number; sector: string | null }>(
-        `SELECT id, sector FROM projects WHERE id = $1`,
+      const actProjRow = await pool.query<{ id: number; sector: string | null; currency: string | null }>(
+        `SELECT id, sector, currency FROM projects WHERE id = $1`,
         [Number(body.projectId)],
       );
       if (actProjRow.rows.length === 0) {
@@ -1347,6 +1356,7 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
         return;
       }
       projectPrimarySector = actProjRow.rows[0].sector ?? null;
+      effectiveCurrency = actProjRow.rows[0].currency ?? null;
 
       if (tcSectors) {
         if (!projectPrimarySector) {
@@ -1509,12 +1519,13 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
       // Projects module and may not be used as a PMR location basis.
       const projectRow = await pool.query<{
         id: number; sector: string | null; managementLevel: string | null; hasHqOperations: boolean;
-        reportingStartDate: string; reportingEndDate: string;
+        reportingStartDate: string; reportingEndDate: string; currency: string | null;
       }>(
         `SELECT id, sector, management_level AS "managementLevel",
                 has_hq_operations AS "hasHqOperations",
                 reporting_start_date::text AS "reportingStartDate",
-                reporting_end_date::text AS "reportingEndDate"
+                reporting_end_date::text AS "reportingEndDate",
+                currency
            FROM projects WHERE id = $1 AND deleted_at IS NULL`,
         [body.projectId],
       );
@@ -1523,6 +1534,7 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
         return;
       }
       projectPrimarySector = projectRow.rows[0].sector ?? null;
+      effectiveCurrency = projectRow.rows[0].currency ?? null;
 
       // ── HQ legitimacy check for project reports ──────────────────────────────
       // HQ is permitted only when the project explicitly has has_hq_operations = true.
@@ -1865,7 +1877,7 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
          beneficiaries_boys, beneficiaries_girls,
          planned_budget, actual_expenditure, activities, quarter,
          on_demand_reason, indicator_progress, activity_name, location_type,
-         status, submitted_by_id, author_id, workflow_path, submitted_at
+         status, submitted_by_id, author_id, workflow_path, submitted_at, currency
        ) VALUES (
          $1, $2, $3, $4,
          $5, $6, $7, $8,
@@ -1875,7 +1887,7 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
          $21, $22,
          $23, $24, $25, $26,
          $27, $28, $31, $32,
-         'draft', $29, $29, $30, NOW()
+         'draft', $29, $29, $30, NOW(), $33
        )
        RETURNING id`,
       [
@@ -1936,6 +1948,9 @@ router.post("/reports", requireReportsCreateOrProgramStateCreate, async (req, re
         newWorkflowPath,      // $30 → workflow_path
         rawActivityName, // $31 → activity_name (captured from req.body before Zod parse)
         rawLocationType, // $32 → location_type ("hq" | "state" | null)
+        effectiveCurrency, // $33 → currency (Migration 070): project's currency for project/
+                           // project-linked activity reports, activity's own currency for
+                           // standalone activity reports, null for all other report types.
       ],
     );
     newId = rows[0].id as number;
@@ -3045,13 +3060,18 @@ router.get(
       }
 
       const [bRow, budgetRow, actRow, indRow, riskRow] = await Promise.all([
-        pool.query<{ male: string; female: string; boys: string; girls: string }>(
+        // REPORTS-AGGREGATES-FIX (beneficiaries half): the `beneficiaries` table is an
+        // individual-level registry with no beneficiaries_male/female/boys/girls columns —
+        // those columns exist only on `projects` (one row per project, already aggregated),
+        // the same source projects.ts reads everywhere else. Every real call to this
+        // endpoint for a project-linked report used to throw "column ... does not exist".
+        pool.query<{ male: number; female: number; boys: number; girls: number }>(
           `SELECT
-             COALESCE(SUM(beneficiaries_male),0)   AS male,
-             COALESCE(SUM(beneficiaries_female),0) AS female,
-             COALESCE(SUM(beneficiaries_boys),0)   AS boys,
-             COALESCE(SUM(beneficiaries_girls),0)  AS girls
-           FROM beneficiaries WHERE project_id = $1`,
+             COALESCE(beneficiaries_male,0)   AS male,
+             COALESCE(beneficiaries_female,0) AS female,
+             COALESCE(beneficiaries_boys,0)   AS boys,
+             COALESCE(beneficiaries_girls,0)  AS girls
+           FROM projects WHERE id = $1`,
           [projectId],
         ),
         // `project_budgets` never existed in the tracked schema — this query used to
@@ -3072,8 +3092,11 @@ router.get(
            ORDER BY a.id LIMIT 50`,
           [projectId],
         ),
+        // REPORTS-AGGREGATES-FIX (indicators half): `indicators` has no `name` column
+        // (only `title`) — COALESCE(i.title, i.name) still fails at parse time
+        // regardless of matched rows, so this query 500'd on every real call.
         pool.query(
-          `SELECT i.id, COALESCE(i.title, i.name) AS name,
+          `SELECT i.id, i.title AS name,
                   i.target, COALESCE(i.achieved,0) AS achieved, i.unit
            FROM indicators i WHERE i.project_id = $1 LIMIT 30`,
           [projectId],
@@ -3086,7 +3109,7 @@ router.get(
         ),
       ]);
 
-      const b = bRow.rows[0];
+      const b = bRow.rows[0] ?? { male: 0, female: 0, boys: 0, girls: 0 };
       const bg = budgetRow.rows[0];
       const planned = Number(bg.planned);
       const actual = Number(bg.actual);

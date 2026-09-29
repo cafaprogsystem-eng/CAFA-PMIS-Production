@@ -1466,8 +1466,16 @@ router.post("/messages/:msgId/reactions", async (req, res, next) => {
       [msgId, userId, emoji],
     );
     if (!deleted.rows[0]) {
+      // No unique constraint exists on (message_id, user_id, emoji) in the
+      // tracked schema (lib/db/src/schema/index.ts only declares the id
+      // primary key), so ON CONFLICT here has no matching constraint to
+      // target and Postgres rejects the statement outright — this was
+      // crashing every reaction toggle with a 500. A plain INSERT restores
+      // the common (non-racing) case; the schema migration that would add
+      // the missing unique index and fully restore the original
+      // race-safety intent is a separate, deliberate change.
       await pool.query(
-        `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1,$2,$3) ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
+        `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1,$2,$3)`,
         [msgId, userId, emoji],
       );
     }
@@ -1684,6 +1692,12 @@ router.delete("/messages/:msgId", async (req, res, next) => {
     if (!msgId) { res.status(400).json({ error: "invalid_message_id" }); return; }
     const deletionType: "for_me" | "for_everyone" = (req.body as { deletionType?: string })?.deletionType === "for_everyone" ? "for_everyone" : "for_me";
 
+    // The WHERE clause only references $2 on the for_everyone branch. Postgres
+    // rejects a Bind with more parameters than the parsed statement actually
+    // references ("bind message supplies N parameters, but prepared statement
+    // requires M") — passing [msgId, userId] unconditionally on every branch
+    // crashed every default (for_me) deletion, the most common case, with a
+    // 500. Confirmed live against the production schema.
     const existing = await pool.query<{ sender_id: number; conversation_id: number; created_at: string; deleted_at: string | null; deletion_type: string | null }>(
       `SELECT sender_id, conversation_id, created_at, deleted_at, deletion_type FROM messages
        WHERE id=$1
@@ -1691,7 +1705,7 @@ router.delete("/messages/:msgId", async (req, res, next) => {
            SELECT 1 FROM message_user_hides muh
            WHERE muh.message_id=messages.id AND muh.user_id=$2
          )` : ""}`,
-      [msgId, userId],
+      deletionType === "for_everyone" ? [msgId, userId] : [msgId],
     );
     if (!existing.rows[0]) { res.status(404).json({ error: "not_found" }); return; }
 

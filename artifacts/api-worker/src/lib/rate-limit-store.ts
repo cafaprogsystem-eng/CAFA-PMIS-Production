@@ -44,3 +44,50 @@ export async function clearAccountFailures(db: QueryExecutor, identifier: string
     identifier,
   ]);
 }
+
+/**
+ * Ported from routes/profile.ts's express-rate-limit-backed password-change
+ * limiter (5 requests / 15 min, keyed by user id — this route requires an
+ * existing session, so it's a per-account request-rate limit, not a
+ * failed-attempt lockout like the login one above). express-rate-limit's
+ * `skip: () => !isProductionEnv()` (disabled outside production) has no
+ * Workers equivalent kept here — this is a security control, not a dev
+ * convenience worth reintroducing, so it now applies in every environment.
+ */
+const PASSWORD_CHANGE_BUCKET = "profile_password_change";
+export const PASSWORD_CHANGE_LIMIT = 5;
+export const PASSWORD_CHANGE_WINDOW_MS = 15 * 60 * 1000;
+
+export async function isPasswordChangeRateLimited(db: QueryExecutor, userId: number): Promise<boolean> {
+  const { rows } = await db.query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM rate_limit_events
+      WHERE bucket = $1 AND key = $2 AND occurred_at > NOW() - INTERVAL '15 minutes'`,
+    [PASSWORD_CHANGE_BUCKET, String(userId)],
+  );
+  return Number(rows[0]?.count ?? 0) >= PASSWORD_CHANGE_LIMIT;
+}
+
+export async function recordPasswordChangeAttempt(db: QueryExecutor, userId: number): Promise<void> {
+  await recordEvent(db, PASSWORD_CHANGE_BUCKET, String(userId));
+}
+
+/**
+ * Ported from artifacts/api-server/src/lib/rate-limit-store.ts's generic
+ * `isRateLimited` — a manual sliding-window limiter used by auth.ts for
+ * forgot-password (3/15min per IP) and send-verification-email (5/hour per
+ * IP). Matches the original semantics exactly: a request that would exceed
+ * `max` in the trailing `windowMs` is rejected WITHOUT being recorded (so a
+ * blocked caller never extends their own lockout by retrying).
+ */
+export async function isRateLimited(
+  db: QueryExecutor, bucket: string, key: string, max: number, windowMs: number,
+): Promise<boolean> {
+  const { rows } = await db.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM rate_limit_events
+      WHERE bucket = $1 AND key = $2 AND occurred_at > NOW() - ($3 || ' milliseconds')::interval`,
+    [bucket, key, windowMs],
+  );
+  if (Number(rows[0]?.count ?? 0) >= max) return true;
+  await recordEvent(db, bucket, key);
+  return false;
+}

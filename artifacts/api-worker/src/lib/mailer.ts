@@ -26,6 +26,17 @@ export type OutboundEmail = {
 export type EmailDeliveryStatus = "pending" | "sent" | "failed";
 type SendResult = { delivered: boolean; provider: string; messageId?: string; error?: string };
 
+/**
+ * Ported from artifacts/api-server/src/lib/mailer.ts. Monthly reporting
+ * reminder emails need server-side idempotency (a crash between "sent" and
+ * "settled" must never double-send) — Resend supports this the same way
+ * sendEmail already uses it (Idempotency-Key header), SendGrid does not.
+ */
+export function mailerSupportsIdempotentDelivery(env: Bindings): boolean {
+  const cfg = config(env);
+  return !cfg.enabled || cfg.provider === "resend";
+}
+
 function config(env: Bindings) {
   return {
     enabled: String(env.EMAIL_ENABLED ?? "").toLowerCase() === "true",
@@ -237,6 +248,19 @@ export function renderPasswordResetEmail(env: Bindings, opts: {
   return { subject, html, text };
 }
 
+export function renderPasswordResetConfirmEmail(_env: Bindings, opts: { name: string; email: string }): { subject: string; html: string; text: string } {
+  const subject = "Your CAFA system password has been changed";
+  const html = HEADER() + `
+    <h2 style="margin:0 0 16px;font-size:20px">Password changed</h2>
+    <p>Hello <strong>${opts.name}</strong>,</p>
+    <p>Your CAFA Program Management System password was successfully changed.</p>
+    <p style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:12px 16px;font-size:14px;color:#166534">✓ Your account is secure. You can now sign in with your new password.</p>
+    <p style="font-size:13px;color:#6b7280;margin-top:16px">If you did not make this change, contact your administrator immediately.</p>
+  ` + FOOTER;
+  const text = `Hello ${opts.name},\n\nYour CAFA PMIS password was successfully changed.\n\nIf you did not make this change, contact your administrator immediately.`;
+  return { subject, html, text };
+}
+
 export function renderInviteEmail(env: Bindings, opts: {
   name: string; email: string; roleLabel: string;
   stateName: string | null; sector: string | null;
@@ -282,5 +306,42 @@ export function renderVerifyEmail(env: Bindings, opts: {
     <p style="font-size:12px;color:#6b7280;margin-top:16px">This link expires on <strong>${expires}</strong> (24 hours). If you didn't create an account, ignore this email.</p>
   ` + FOOTER;
   const text = `Hello ${opts.name},\n\nVerify your CAFA PMIS email:\n${link}\n\nExpires: ${expires}`;
+  return { subject, html, text };
+}
+
+export function renderAccountActivatedEmail(env: Bindings, opts: { name: string; email: string }): { subject: string; html: string; text: string } {
+  const loginLink = publicAppUrl(env);
+  const subject = "Your CAFA system account has been activated";
+  const html = HEADER() + `
+    <h2 style="margin:0 0 16px;font-size:20px">Account activated</h2>
+    <p>Hello <strong>${opts.name}</strong>,</p>
+    <p>Your CAFA Program Management System account (<strong>${opts.email}</strong>) has been <strong>activated</strong>. You can now sign in.</p>
+    ${actionBtn("Sign in", loginLink)}
+  ` + FOOTER;
+  const text = `Hello ${opts.name},\n\nYour CAFA PMIS account has been activated. Sign in at: ${loginLink}`;
+  return { subject, html, text };
+}
+
+export function renderAccountSuspendedEmail(_env: Bindings, opts: { name: string; email: string }): { subject: string; html: string; text: string } {
+  const subject = "Your CAFA system account has been suspended";
+  const html = HEADER("#78350f") + `
+    <h2 style="margin:0 0 16px;font-size:20px">Account suspended</h2>
+    <p>Hello <strong>${opts.name}</strong>,</p>
+    <p>Your CAFA Program Management System account (<strong>${opts.email}</strong>) has been <strong>temporarily suspended</strong> and you will not be able to sign in until the suspension is lifted.</p>
+    <p style="font-size:13px;color:#6b7280">If you believe this is a mistake, please contact your system administrator.</p>
+  ` + FOOTER;
+  const text = `Hello ${opts.name},\n\nYour CAFA PMIS account has been temporarily suspended. Contact your administrator if you believe this is a mistake.`;
+  return { subject, html, text };
+}
+
+export function renderAccountDeactivatedEmail(_env: Bindings, opts: { name: string; email: string }): { subject: string; html: string; text: string } {
+  const subject = "Your CAFA system account has been deactivated";
+  const html = HEADER("#7f1d1d") + `
+    <h2 style="margin:0 0 16px;font-size:20px">Account deactivated</h2>
+    <p>Hello <strong>${opts.name}</strong>,</p>
+    <p>Your CAFA Program Management System account (<strong>${opts.email}</strong>) has been <strong>deactivated</strong> and you will no longer be able to sign in.</p>
+    <p style="font-size:13px;color:#6b7280">If you believe this is a mistake, please contact your system administrator.</p>
+  ` + FOOTER;
+  const text = `Hello ${opts.name},\n\nYour CAFA PMIS account has been deactivated. Contact your administrator if this is a mistake.`;
   return { subject, html, text };
 }

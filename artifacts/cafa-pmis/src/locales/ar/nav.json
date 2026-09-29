@@ -28,6 +28,7 @@
     "users": "المستخدمون",
     "states": "الولايات",
     "auditLog": "سجل المراجعة",
+    "systemMonitoring": "نشاط النظام",
     "profile": "الملف الشخصي",
     "syncStatus": "حالة المزامنة",
     "notificationPreferences": "تفضيلات الإشعارات"
@@ -126,6 +127,7 @@
     "communicationCentre": "الرسائل والمحادثات",
     "users": "إدارة الفريق",
     "auditLog": "سجل الأنشطة",
+    "systemMonitoring": "سجل البريد الإلكتروني وحالة الاتصال المباشرة",
     "ai": "المساعد والإدارة",
     "syncStatus": "قائمة انتظار اللاتصال"
   },

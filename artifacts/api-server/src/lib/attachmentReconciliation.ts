@@ -267,13 +267,25 @@ async function sourceRows(): Promise<SourceRow[]> {
       });
     });
   }
-  const canonicalisedRows = result.rows.map((row) => (
-    row.sourceKind === "project_document"
+  const canonicalisedRows = result.rows.map((row) => ({
+    ...row,
+    // The UNION ALL above mixes `integer` size/file_size columns (resource,
+    // project_document, plan_attachment, canonical_attachment) with `bigint`
+    // ones (report_attachment, legacy_storage_record); Postgres widens the
+    // whole UNIONed column to bigint, and node-postgres returns bigint as a
+    // string to avoid precision loss. Left uncoerced, `row.fileSize` is a
+    // string for every row while `provider.size` (from the storage HEAD
+    // response) is a real number, so `provider.size !== row.fileSize` is
+    // always true even on an exact match — silently forcing every
+    // provider-confirmed row into OWNER_DECISION_REQUIRED instead of
+    // OBJECT_RECOVERABLE. Confirmed via `pg_typeof` against the live UNION.
+    fileSize: row.fileSize == null ? null : Number(row.fileSize),
+    providerKind: (row.sourceKind === "project_document"
       || row.sourceKind === "report_attachment"
-      || row.sourceKind === "legacy_storage_record"
-      ? { ...row, providerKind: providerKindForLinkedAttachment(row.objectPath, row.legacyProviderKey) }
-      : row
-  ));
+      || row.sourceKind === "legacy_storage_record")
+      ? providerKindForLinkedAttachment(row.objectPath, row.legacyProviderKey)
+      : row.providerKind,
+  }));
   return [...canonicalisedRows, ...messageRows];
 }
 

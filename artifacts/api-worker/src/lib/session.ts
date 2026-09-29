@@ -185,5 +185,10 @@ export function setSessionCookie(c: AppContext, token: string, remember = false)
 }
 
 export function clearSessionCookie(c: AppContext): void {
-  deleteCookie(c, COOKIE_NAME, { path: "/" });
+  // Bug fix (found live during pre-launch certification): must match every
+  // attribute setSessionCookie set (httpOnly/sameSite/secure), not just
+  // path — the session is still fully revoked server-side either way, but
+  // a mismatched clearing Set-Cookie is a real regression from the
+  // source's behavior, not something to leave as-is.
+  deleteCookie(c, COOKIE_NAME, { path: "/", httpOnly: true, sameSite: "Lax", secure: true });
 }

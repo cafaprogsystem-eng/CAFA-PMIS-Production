@@ -99,7 +99,7 @@ async function assertCanonicalParent(
               pl.status, pl.last_final_approved_at AS "lastFinalApprovedAt",
               pl.created_by_id AS "createdById"
        FROM plans pl LEFT JOIN projects p ON p.id = pl.project_id
-       WHERE pl.id = $1${client === pool ? "" : " FOR UPDATE"}`,
+       WHERE pl.id = $1${client === pool ? "" : " FOR UPDATE OF pl"}`,
       [id],
     );
     const row = result.rows[0];
@@ -140,7 +140,7 @@ async function assertCanonicalParent(
     }>(
       `SELECT r.state_id AS "stateId", r.project_id AS "projectId", p.sector, r.status
        FROM risks r LEFT JOIN projects p ON p.id = r.project_id AND p.deleted_at IS NULL
-       WHERE r.id = $1${client === pool ? "" : " FOR UPDATE"}`,
+       WHERE r.id = $1${client === pool ? "" : " FOR UPDATE OF r"}`,
       [id],
     );
     const row = result.rows[0];

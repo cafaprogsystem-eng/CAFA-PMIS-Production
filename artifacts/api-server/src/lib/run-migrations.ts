@@ -3883,7 +3883,24 @@ CREATE TABLE IF NOT EXISTS socket_io_attachments (
 );
 `,
   },
-
+  {
+    name: "070_report_currency",
+    sql: /* sql */ `
+-- Migration 070: per-report currency (PMR-CONS-26 / BD-5 Consolidated View).
+--
+-- GET /reports/consolidated has always returned a per-PMR "currency" field so
+-- mixed-currency Project Reports for the same project display separately
+-- (spec: docs/audit-reports/pmr-module-final-closure.md, "Financials:
+-- plannedBudget/actualExpenditure/currency per-PMR; mixed currencies returned
+-- separately, never numerically combined") — but reports.currency was never
+-- created by any tracked migration, so every real call to that endpoint threw
+-- "column r.currency does not exist". Nullable, no default: only Project and
+-- Activity Reports have an unambiguous currency source (the linked project's
+-- or standalone activity's currency) to derive at creation time; other report
+-- types, and historical rows, legitimately have no currency value.
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS currency TEXT;
+`,
+  },
 ];
 
 // ── Runner ────────────────────────────────────────────────────────────────────

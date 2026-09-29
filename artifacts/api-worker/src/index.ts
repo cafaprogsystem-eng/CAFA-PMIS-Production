@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
+import { ZodError } from "zod";
 import type { Bindings } from "./lib/db";
 import { openDb } from "./lib/db";
 import {
@@ -12,12 +13,38 @@ import {
   clearSessionCookie,
 } from "./lib/session";
 import { isAccountLocked, recordFailedLogin, clearAccountFailures } from "./lib/rate-limit-store";
+import { disconnectSession } from "./lib/realtime";
 import { getOpenAIClient, buildSystemPrompt } from "./lib/ai";
-import { attachCurrentUser, requireAuth, type Variables } from "./lib/rbac";
+import { attachCurrentUser, requireAuth, isDemoRoleHarnessEnabled, permissionsFor, type CurrentUser, type Variables } from "./lib/rbac";
 import { notificationsRoutes } from "./routes/notifications";
 import { meRoutes } from "./routes/me";
 import { beneficiariesRoutes } from "./routes/beneficiaries";
 import { searchRoutes } from "./routes/search";
+import { usersRoutes } from "./routes/users";
+import { projectsRoutes } from "./routes/projects";
+import { statesRoutes } from "./routes/states";
+import { risksRoutes } from "./routes/risks";
+import { plansRoutes } from "./routes/plans";
+import { reportsRoutes } from "./routes/reports";
+import { commentsRoutes } from "./routes/comments";
+import { filesRoutes } from "./routes/files";
+import { storageRoutes } from "./routes/storage";
+import { attachmentsRoutes } from "./routes/attachments";
+import { voiceNotesRoutes } from "./routes/voice-notes";
+import { attachmentReconciliationRoutes } from "./routes/attachment-reconciliation";
+import { historicalStorageImportRoutes } from "./routes/historical-storage-import";
+import { manualRoutes } from "./routes/manual";
+import { conversationsRoutes } from "./routes/conversations";
+import { auditRoutes } from "./routes/audit";
+import { dashboardRoutes } from "./routes/dashboard";
+import { healthRoutes } from "./routes/health";
+import { profileRoutes } from "./routes/profile";
+import { passwordResetAdminRoutes } from "./routes/password-reset-admin";
+import { aiRoutes } from "./routes/ai";
+import { authRoutes } from "./routes/auth";
+import { realtimeLocksRoutes } from "./routes/realtime-locks";
+import { adminMonitoringRoutes } from "./routes/admin-monitoring";
+import { scheduled } from "./scheduled";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -113,6 +140,27 @@ app.post("/auth/login", async (c) => {
     const { token } = await createSession(db, row.id, remember);
     setSessionCookie(c, token, remember);
 
+    // Bug fix (found live during pre-launch certification): this response
+    // was missing `permissions`, unlike /auth/me and /me which both include
+    // it — any caller trusting the login response as an immediate identity
+    // payload (matching the /me contract shape) saw empty permissions until
+    // a separate /me fetch happened.
+    const currentUser: CurrentUser = {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      roleLabel: row.role_label,
+      scope: row.scope,
+      stateId: row.state_id,
+      stateName: null,
+      sector: row.sector,
+      sectors: row.role === "technical_coordinator" && row.sector
+        ? String(row.sector).split(",").map((s) => s.trim()).filter(Boolean)
+        : null,
+      avatarUrl: null,
+    };
+
     return c.json({
       user: {
         id: row.id,
@@ -126,6 +174,7 @@ app.post("/auth/login", async (c) => {
         sector: row.sector,
         status: row.status,
       },
+      permissions: permissionsFor(currentUser),
     });
   } finally {
     close();
@@ -169,12 +218,78 @@ app.post("/auth/logout", async (c) => {
   const { db, close } = openDb(c);
   try {
     const session = await getActiveSession(c, db);
-    if (session) await revokeSession(db, session.id);
+    if (session) {
+      await revokeSession(db, session.id);
+      // Terminate only this one session's realtime connections — other
+      // devices/tabs logged in as the same user stay connected.
+      await disconnectSession(c.env, session.id);
+    }
     clearSessionCookie(c);
     return c.json({ ok: true });
   } finally {
     close();
   }
+});
+
+/**
+ * WebSocket upgrade entrypoint for the realtime hub (Durable Object).
+ * Reuses the normal session-cookie auth every REST route already runs, then
+ * hands the resolved identity to the DO via a header — the DO itself never
+ * parses or unsigns the session cookie. See
+ * src/durable-objects/realtime-hub.ts and src/lib/realtime.ts.
+ */
+app.get("/realtime/connect", attachCurrentUser, requireAuth, async (c) => {
+  if (c.req.header("Upgrade") !== "websocket") {
+    return c.json({ error: "expected_websocket" }, 400);
+  }
+  const user = c.get("currentUser")!;
+  const session = c.get("authSession")!;
+  let identity = {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    stateId: user.stateId,
+    sectors: user.sectors,
+    sessionId: session.id,
+  };
+
+  // Dev-only role-switcher hint (see isDemoRoleHarnessEnabled) — only a
+  // super_admin session may impersonate another active user for testing.
+  const asUserId = c.req.query("asUserId");
+  if (asUserId && isDemoRoleHarnessEnabled(c.env) && user.role === "super_admin") {
+    const targetId = Number(asUserId);
+    if (Number.isSafeInteger(targetId) && targetId !== user.id) {
+      const { db, close } = openDb(c);
+      try {
+        const { rows } = await db.query<{
+          id: number; name: string; role: string; state_id: number | null; sector: string | null; status: string;
+        }>(
+          `SELECT id, name, role, state_id, sector, status FROM users WHERE id = $1 LIMIT 1`,
+          [targetId],
+        );
+        const row = rows[0];
+        if (row && row.status === "active") {
+          identity = {
+            id: row.id,
+            name: row.name,
+            role: row.role,
+            stateId: row.state_id,
+            sectors: row.role === "technical_coordinator" && row.sector
+              ? String(row.sector).split(",").map((s) => s.trim()).filter(Boolean)
+              : null,
+            sessionId: session.id,
+          };
+        }
+      } finally {
+        close();
+      }
+    }
+  }
+
+  const forwarded = new Request(c.req.raw, { headers: new Headers(c.req.raw.headers) });
+  forwarded.headers.set("X-CAFA-Realtime-User", JSON.stringify(identity));
+  const stub = c.env.REALTIME_HUB.get(c.env.REALTIME_HUB.idFromName("global"));
+  return stub.fetch(forwarded);
 });
 
 // ── AI Assistant (ported from routes/ai.ts's /ai/chat only — see lib/ai.ts) ──
@@ -315,5 +430,96 @@ app.route("/", notificationsRoutes);
 app.route("/", meRoutes);
 app.route("/", beneficiariesRoutes);
 app.route("/", searchRoutes);
+app.route("/", usersRoutes);
+app.route("/", projectsRoutes);
+app.route("/", statesRoutes);
+app.route("/", risksRoutes);
+app.route("/", plansRoutes);
+app.route("/", reportsRoutes);
+app.route("/", commentsRoutes);
+app.route("/", filesRoutes);
+app.route("/", storageRoutes);
+app.route("/", attachmentsRoutes);
+app.route("/", voiceNotesRoutes);
+app.route("/", attachmentReconciliationRoutes);
+app.route("/", historicalStorageImportRoutes);
+app.route("/", manualRoutes);
+app.route("/", conversationsRoutes);
+app.route("/", auditRoutes);
+app.route("/", dashboardRoutes);
+app.route("/", healthRoutes);
+app.route("/", profileRoutes);
+app.route("/", passwordResetAdminRoutes);
+app.route("/", aiRoutes);
+app.route("/", authRoutes);
+app.route("/", realtimeLocksRoutes);
+app.route("/", adminMonitoringRoutes);
 
-export default app;
+/**
+ * Ported from artifacts/api-server/src/lib/error-handler.ts's
+ * createApiErrorHandler: routes call `.parse()` directly (see
+ * routes/projects.ts, routes/beneficiaries.ts) and rely on this catch-all to
+ * turn a thrown ZodError into a 400 with field details, exactly like the
+ * Express version's app-level error middleware — no per-route try/catch.
+ * A 5xx (or unrecognised) error is redacted to a generic message; only an
+ * error carrying an explicit `errorCode` string is trusted to surface its
+ * own .message to the client.
+ */
+app.onError((err, c) => {
+  if (err instanceof ZodError) {
+    const first = err.issues[0];
+    const fieldPath = first?.path.length ? first.path.join(".") : "input";
+    const message = first?.message ?? "Validation failed";
+    return c.json({
+      error: "validation_error",
+      detail: `${fieldPath}: ${message}`,
+      fields: err.issues.map((e) => ({ path: e.path.join("."), message: e.message })),
+    }, 400);
+  }
+
+  const anyErr = err as unknown as Record<string, unknown>;
+  const requestedStatus = typeof anyErr?.status === "number"
+    ? anyErr.status
+    : typeof anyErr?.statusCode === "number" ? anyErr.statusCode : 500;
+  const status = Number.isInteger(requestedStatus) && requestedStatus >= 400 && requestedStatus <= 599
+    ? requestedStatus
+    : 500;
+
+  console.error("[unhandled-error]", err);
+
+  if (status >= 500) {
+    return c.json({ error: "server_error", detail: "Internal Server Error" }, 500);
+  }
+
+  const errorCode = typeof anyErr?.errorCode === "string" ? anyErr.errorCode : null;
+  if (!errorCode) {
+    return c.json({ error: "request_failed", detail: "Request failed" }, status as 400);
+  }
+
+  const message = typeof anyErr?.message === "string" ? anyErr.message : "Request failed";
+  return c.json({ error: errorCode, detail: message }, status as 400);
+});
+
+// Durable Object classes must be exported from the Worker's main entrypoint
+// module for the wrangler.toml [[durable_objects.bindings]] class_name to
+// resolve.
+export { RealtimeHub } from "./durable-objects/realtime-hub";
+
+/**
+ * The frontend (the generated API client in lib/api-client-react, and
+ * socket.ts) calls every endpoint under an /api prefix — a holdover from the
+ * AWS nginx/Express setup, where nginx proxied everything to Express and
+ * Express itself mounted its router under /api alongside the compiled SPA.
+ * `app` above has no such prefix (its routes are bare, e.g. `/me`,
+ * `/realtime/connect`), which was invisible all migration long because every
+ * test hit the Worker directly. Mounting the whole app under /api here is
+ * the one place that needs to know about that prefix — everything else
+ * (route files, the Durable Object, lib/realtime.ts's internal DO calls)
+ * stays unprefixed and unaware of it. The realtime WS upgrade path in
+ * particular is unaffected: the DO dispatches on the Upgrade header, not the
+ * request path (see durable-objects/realtime-hub.ts's fetch()).
+ */
+const root = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+root.route("/api", app);
+
+export default { fetch: root.fetch, scheduled };

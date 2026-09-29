@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const page = readFileSync("src/pages/users.tsx", "utf8");
+const monitoring = readFileSync("src/pages/system-monitoring.tsx", "utf8");
 const en = JSON.parse(readFileSync("src/locales/en/users.json", "utf8")) as Record<string, unknown>;
 const ar = JSON.parse(readFileSync("src/locales/ar/users.json", "utf8")) as Record<string, unknown>;
 
@@ -67,10 +68,14 @@ describe("USER-VIS: localised, accessible administrative directory", () => {
     expect(page).toContain("<DataGrid");
     expect(page).toContain('contentClassName="min-w-[1026px] table-fixed"');
     expect(page).toContain('aria-label={t("ariaLabel.usersTable")}');
-    expect(page).toContain('t("presence.header")');
-    expect(page).toContain("PresenceValue");
-    expect(page).toContain('socket.on("presence:update", onPresenceUpdate)');
-    expect(page).not.toContain("conversation:presence");
+    // Online presence moved to System Monitoring; the registry keeps last login.
+    expect(page).not.toContain("PresenceValue");
+    expect(page).not.toContain("presence:update");
+    expect(page).toContain('header: t("fields.lastLogin")');
+    expect(monitoring).toContain('header: t("systemMonitoring.tabPresence")');
+    expect(monitoring).toContain("PresenceValue");
+    expect(monitoring).toContain('socket.on("presence:update"');
+    expect(monitoring).not.toContain("conversation:presence");
     expect(page).toContain('pressed={status === "active"} onToggle={() => toggleStatus("active")}');
     expect(page).toContain("aria-pressed={pressed}");
     expect(page).toContain("pressed={role === r.role}");

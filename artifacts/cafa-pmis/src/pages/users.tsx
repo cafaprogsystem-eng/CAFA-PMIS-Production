@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { getLinkedStateLabel } from "@/components/state-label";
@@ -54,8 +54,6 @@ import {
   MapPin,
   Building2,
   FolderOpen,
-  CircleOff,
-  CircleFill,
 } from "@/components/icons";
 import type { IconComponent } from "@/components/icons";
 import { formatDate, formatDateTime, hasPerm } from "@/lib/format";
@@ -64,7 +62,6 @@ import { localizeUserApiError } from "@/lib/user-error-localization";
 import { StateLabel } from "@/components/state-label";
 import { StateReferenceStatus } from "@/components/state-reference-status";
 import { deriveStateReferenceData, type StateReferenceData } from "@/lib/state-reference-data";
-import { useSocket } from "@/lib/socket";
 import { SelectField } from "@/components/select-field";
 import { FilterKpi } from "@/components/filter-kpi";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -205,46 +202,6 @@ function RoleBadge({ role, label }: { role: string; label?: string | null }) {
   );
 }
 
-function relativeLastSeen(lastSeenAt: string, language: string): string {
-  const timestamp = new Date(lastSeenAt).getTime();
-  if (!Number.isFinite(timestamp)) return "";
-  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1_000));
-  const formatter = new Intl.RelativeTimeFormat(language === "ar" ? "ar" : "en-GB", {
-    numeric: "auto",
-  });
-  if (seconds < 60) return formatter.format(-seconds, "second");
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return formatter.format(-minutes, "minute");
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return formatter.format(-hours, "hour");
-  return formatter.format(-Math.floor(hours / 24), "day");
-}
-
-function PresenceValue({
-  isOnline,
-  lastSeenAt,
-}: {
-  isOnline: boolean;
-  lastSeenAt?: string | null;
-}) {
-  const { t, i18n } = useTranslation("users");
-  const relative = lastSeenAt ? relativeLastSeen(lastSeenAt, i18n.language) : "";
-  const label = isOnline
-    ? t("presence.online")
-    : relative
-      ? t("presence.offlineLastSeen", { time: relative })
-      : t("presence.offline");
-
-  return (
-    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-xs" aria-label={label}>
-      {isOnline
-        ? <CircleFill className="size-2.5 shrink-0 text-[var(--success)]" aria-hidden="true" />
-        : <CircleOff className="size-3.5 shrink-0 text-[var(--muted)]" aria-hidden="true" />}
-      <span className={`truncate ${isOnline ? "text-[var(--success)]" : "text-[var(--muted)]"}`} title={label}>{label}</span>
-    </span>
-  );
-}
-
 /** Icon + label row for a Dropdown item. */
 function MenuLabel({ icon: Icon, label, tone }: { icon: IconComponent; label: string; tone?: string }) {
   return (
@@ -364,8 +321,6 @@ type UserRow = {
   status?: string;
   languagePreference?: string;
   lastLoginAt?: string | null;
-  lastSeenAt?: string | null;
-  isOnline?: boolean;
   createdAt?: string | null;
   emailVerified?: boolean | null;
   emailVerifiedAt?: string | null;
@@ -377,7 +332,6 @@ type UsersTab = "all" | "resets" | "invitations";
 export default function UsersPage() {
   const { t, i18n } = useTranslation(["users", "common"]);
   const qc = useQueryClient();
-  const { socket } = useSocket();
   const { data: me } = useGetMe();
   const perms = me?.permissions;
   const canManage = hasPerm(perms, "users.manage") || me?.user?.role === "super_admin";
@@ -411,37 +365,6 @@ export default function UsersPage() {
   const stateReference = deriveStateReferenceData(statesQuery);
   const [activeTab, setActiveTab] = useState<UsersTab>("all");
 
-  useEffect(() => {
-    if (!socket) return;
-    const onPresenceUpdate = (event: {
-      userId?: unknown;
-      isOnline?: unknown;
-      lastSeenAt?: unknown;
-    }) => {
-      const userId = event.userId;
-      const isOnline = event.isOnline;
-      if (!Number.isSafeInteger(userId) || typeof isOnline !== "boolean") return;
-      const lastSeenAt = typeof event.lastSeenAt === "string" ? event.lastSeenAt : null;
-      qc.setQueriesData<{ items: UserRow[] }>(
-        { queryKey: getListUsersQueryKey() },
-        (page) => page
-          ? {
-              ...page,
-              items: page.items.map((user) => user.id === userId
-                ? {
-                    ...user,
-                    isOnline,
-                    // Online events do not reset a truthful persisted history.
-                    lastSeenAt: isOnline ? user.lastSeenAt ?? null : lastSeenAt,
-                  }
-                : user),
-            }
-          : page,
-      );
-    };
-    socket.on("presence:update", onPresenceUpdate);
-    return () => { socket.off("presence:update", onPresenceUpdate); };
-  }, [qc, socket]);
 
   // Mutations
   const invalidate = () => {
@@ -701,8 +624,8 @@ export default function UsersPage() {
   ];
 
   // The registry fits a laptop screen: username and email sit under the name,
-  // the sector under the State, verification under the account status, and
-  // the last login under presence.
+  // the sector under the State, verification under the account status.
+  // Online presence lives on the System Monitoring page.
   const columns: DataGridColumn<UserRow>[] = [
     { id: "name", header: t("fields.name"), isRowHeader: true, width: 250, pinned: "start", headerClassName: "w-[250px]",
       cell: (u) => (
@@ -737,14 +660,11 @@ export default function UsersPage() {
           )}
         </div>
       ) },
-    { id: "presence", header: t("presence.header"), width: 170, headerClassName: "w-[170px]",
+    { id: "lastLogin", header: t("fields.lastLogin"), width: 130, headerClassName: "w-[130px]",
       cell: (u) => (
-        <div className="min-w-0">
-          <PresenceValue isOnline={u.isOnline === true} lastSeenAt={u.lastSeenAt} />
-          <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]" title={u.lastLoginAt ? formatDateTime(u.lastLoginAt) : undefined}>
-            {t("fields.lastLogin")}: {u.lastLoginAt ? <bdi dir="ltr">{formatDate(u.lastLoginAt)}</bdi> : t("table.never")}
-          </p>
-        </div>
+        <span className="whitespace-nowrap text-xs text-[var(--muted)]" title={u.lastLoginAt ? formatDateTime(u.lastLoginAt) : undefined}>
+          {u.lastLoginAt ? <bdi dir="ltr">{formatDate(u.lastLoginAt)}</bdi> : t("table.never")}
+        </span>
       ) },
     { id: "created", header: t("fields.createdAt"), width: 100, headerClassName: "w-[100px]",
       cell: (u) => <span className="whitespace-nowrap text-xs text-[var(--muted)]"><bdi dir="ltr">{formatDate(u.createdAt)}</bdi></span> },

@@ -17,6 +17,7 @@ export interface Variables {
 
 export interface Bindings {
   HYPERDRIVE: Hyperdrive;
+  REALTIME_HUB: DurableObjectNamespace;
   SESSION_SECRET: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
@@ -35,6 +36,20 @@ export interface Bindings {
   AI_INTEGRATIONS_OPENAI_BASE_URL?: string;
   NODE_ENV?: string;
   CAFA_DEMO_MODE?: string;
+  HISTORICAL_IMPORT_S3_BUCKET?: string;
+  HISTORICAL_IMPORT_S3_REGION?: string;
+  HISTORICAL_IMPORT_S3_ENDPOINT_URL?: string;
+  HISTORICAL_IMPORT_S3_ACCESS_KEY_ID?: string;
+  HISTORICAL_IMPORT_S3_SECRET_ACCESS_KEY?: string;
+  MONTHLY_REPORTING_ENABLED?: string;
+  MONTHLY_REPORTING_TIMEZONE?: string;
+  MONTHLY_REPORTING_BUSINESS_HOUR?: string;
+  MONTHLY_REPORTING_STAGE_DAYS?: string;
+  MONTHLY_REPORTING_DUE_DAY?: string;
+  MONTHLY_REPORTING_POLL_MS?: string;
+  MONTHLY_REPORTING_RETRY_LIMIT?: string;
+  MONTHLY_REPORTING_RETRY_BACKOFF_MS?: string;
+  MONTHLY_REPORTING_LEASE_MS?: string;
 }
 
 export type AppContext = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -51,11 +66,18 @@ export interface QueryExecutor {
  * the real connection pooling/caching at the edge — a fresh, small local
  * Pool per request is Cloudflare's documented pattern for node-postgres, not
  * wasteful the way it would be against a directly-dialled database.
+ *
+ * `pool` is also returned (not just `db`) so routes that need a real
+ * transaction can call `pool.connect()` for a dedicated `PoolClient` — the
+ * `QueryExecutor` interface only types `.query()`, but a `PoolClient` from
+ * "pg" satisfies it too, so `client.query(...)` works the same way inside
+ * BEGIN/COMMIT/ROLLBACK as `db.query(...)` does outside one.
  */
-export function openDb(c: AppContext): { db: QueryExecutor; close: () => void } {
+export function openDb(c: AppContext): { db: QueryExecutor; pool: Pool; close: () => void } {
   const pool = new Pool({ connectionString: c.env.HYPERDRIVE.connectionString, max: 5 });
   return {
     db: pool,
+    pool,
     close: () => c.executionCtx.waitUntil(pool.end()),
   };
 }
