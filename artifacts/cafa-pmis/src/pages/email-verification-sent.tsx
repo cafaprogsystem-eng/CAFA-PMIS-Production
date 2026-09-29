@@ -3,7 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { Mail, ArrowLeft, RefreshCw } from "@/components/icons";
 import { useState } from "react";
 import { Button, Spinner } from "@heroui/react";
-import cafaLogo from "@/assets/cafa-logo.png";
+import cafaLogoWhite from "@/assets/brand/cafa-logo-white.svg";
 import { toast } from "sonner";
 
 function DotGrid() {
@@ -91,8 +91,7 @@ export default function EmailVerificationSentPage() {
           <div className="relative hidden sm:flex bg-[#1a2744] sm:w-[320px] shrink-0 flex-col items-center justify-center px-10 py-14 overflow-hidden">
             <DotGrid />
             <div className="relative z-10 flex flex-col items-center text-center gap-0">
-              <img src={cafaLogo} alt="CAFA" className="w-28 h-28 object-contain mb-4"
-                style={{ filter: "brightness(0) invert(1)" }} />
+              <img src={cafaLogoWhite} alt="CAFA Development Organization" className="mb-6 h-auto w-36" />
               <p className="text-white/50 text-xs tracking-widest uppercase mb-6 font-medium">
                 {t("rebuildingHope")}
               </p>

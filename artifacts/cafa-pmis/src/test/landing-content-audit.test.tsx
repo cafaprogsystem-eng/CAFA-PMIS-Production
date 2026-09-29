@@ -40,7 +40,8 @@ vi.mock("wouter", () => ({
 }));
 
 // Stub image imports so Vite asset processing is bypassed in vitest
-vi.mock("@/assets/cafa-icon.png", () => ({ default: "cafa-icon.png" }));
+vi.mock("@/assets/brand/cafa-mark.svg", () => ({ default: "cafa-mark.svg" }));
+vi.mock("@/assets/brand/cafa-mark-white.svg", () => ({ default: "cafa-mark-white.svg" }));
 vi.mock("@/assets/cafa-field.png", () => ({ default: "cafa-field.png" }));
 vi.mock("@/assets/landing-dashboard.webp", () => ({ default: "landing-dashboard.webp" }));
 vi.mock("@/assets/landing-projects.webp", () => ({ default: "landing-projects.webp" }));

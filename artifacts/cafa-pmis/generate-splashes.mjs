@@ -19,21 +19,23 @@ const SIZES = [
   { name: "ipad-air-11",       width: 1640, height: 2360 }, // 820×1180 @2x
 ];
 
-const BG = { r: 26, g: 39, b: 68, alpha: 1 }; // #1a2744 — CAFA navy
-const ICON_SIZE = 256;
+// White launch screen with the full-colour logo (matches the manifest's
+// background_color). The old navy background hid the navy logo.
+const BG = { r: 255, g: 255, b: 255, alpha: 1 };
+const LOGO = "src/assets/brand/cafa-logo.svg";
 
 mkdirSync("public/splashes", { recursive: true });
 
 for (const { name, width, height } of SIZES) {
-  const iconX = Math.floor((width  - ICON_SIZE) / 2);
-  const iconY = Math.floor((height - ICON_SIZE) / 2) - 40; // slightly above center
-
-  const iconBuf = await sharp("public/icons/icon-512.png")
-    .resize(ICON_SIZE, ICON_SIZE)
-    .toBuffer();
+  // Logo at half the screen width (capped for iPads), slightly above centre.
+  const logoWidth = Math.min(Math.round(width * 0.5), 820);
+  const logoBuf = await sharp(LOGO, { density: 600 }).resize({ width: logoWidth }).png().toBuffer();
+  const { height: logoHeight } = await sharp(logoBuf).metadata();
+  const logoX = Math.floor((width - logoWidth) / 2);
+  const logoY = Math.floor((height - logoHeight) / 2) - Math.round(height * 0.03);
 
   await sharp({ create: { width, height, channels: 4, background: BG } })
-    .composite([{ input: iconBuf, left: iconX, top: iconY }])
+    .composite([{ input: logoBuf, left: logoX, top: logoY }])
     .png({ compressionLevel: 9 })
     .toFile(`public/splashes/splash-${name}.png`);
 

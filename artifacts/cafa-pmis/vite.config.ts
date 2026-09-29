@@ -76,7 +76,7 @@ export default defineConfig({
         name: "CAFA PMIS",
         short_name: "CAFA",
         description: "CAFA Development Organization project management for Sudan operations. Tracks projects, beneficiaries, budgets, reports, and risks across 18 Sudanese states.",
-        theme_color: "#1a2744",
+        theme_color: "#2B2F90",
         background_color: "#ffffff",
         display: "standalone",
         orientation: "any",
@@ -92,10 +92,10 @@ export default defineConfig({
           { src: `${basePath}icons/icon-152.png`, sizes: "152x152", type: "image/png", purpose: "any" },
           { src: `${basePath}icons/icon-180.png`, sizes: "180x180", type: "image/png", purpose: "any" },
           { src: `${basePath}icons/icon-192.png`, sizes: "192x192", type: "image/png", purpose: "any" },
-          { src: `${basePath}icons/icon-192.png`, sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: `${basePath}icons/icon-maskable-192.png`, sizes: "192x192", type: "image/png", purpose: "maskable" },
           { src: `${basePath}icons/icon-384.png`, sizes: "384x384", type: "image/png", purpose: "any" },
           { src: `${basePath}icons/icon-512.png`, sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: `${basePath}icons/icon-512.png`, sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: `${basePath}icons/icon-maskable-512.png`, sizes: "512x512", type: "image/png", purpose: "maskable" },
           { src: `${basePath}icons/icon.svg`,     sizes: "any",      type: "image/svg+xml", purpose: "any" },
         ],
         screenshots: [
@@ -119,6 +119,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,eot}"],
+        // The downloadable brand kit (public/brand) is not used by the app itself.
+        globIgnores: ["brand/**"],
         cleanupOutdatedCaches: true,
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//],

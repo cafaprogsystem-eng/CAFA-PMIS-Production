@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/contexts/language-context";
-import cafaLogo from "@/assets/cafa-logo.png";
-import cafaIcon from "@/assets/cafa-icon.png";
+import cafaLogoWhite from "@/assets/brand/cafa-logo-white.svg";
+import cafaLogo from "@/assets/brand/cafa-logo.svg";
 import fieldBg from "@/assets/cafa-field.png";
 
 const CSS = `
@@ -50,10 +50,9 @@ export function AuthShell({ children }: { children: ReactNode }) {
           <div className="w-full max-w-5xl mx-auto flex items-center gap-12 lg:gap-24 flex-row">
             <div className="cafa-brand hidden lg:flex flex-col flex-1 text-white items-start text-start -mt-[88px]">
               <img
-                src={cafaLogo}
-                alt="CAFA Development Organisation"
-                className="w-[148px] h-[148px] object-contain mb-7"
-                style={{ filter: "brightness(0) invert(1)" }}
+                src={cafaLogoWhite}
+                alt="CAFA Development Organization"
+                className="mb-7 h-auto w-[168px]"
               />
               <p className="text-[11px] font-semibold tracking-[0.18em] uppercase text-white/65 mb-3">
                 {t("internalSystemLabel")}
@@ -68,7 +67,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
 
             <div className="cafa-card w-full max-w-[440px] shrink-0 rounded-2xl bg-white border border-gray-200 shadow-[0_12px_40px_rgba(0,0,0,0.16),0_2px_8px_rgba(0,0,0,0.08)] overflow-hidden">
               <div className="flex lg:hidden justify-center px-7 pt-7">
-                <img src={cafaIcon} alt="CAFA" className="h-12 object-contain" />
+                <img src={cafaLogo} alt="CAFA Development Organization" className="h-14 w-auto" />
               </div>
               {children}
             </div>

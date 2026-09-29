@@ -17,7 +17,8 @@ import {
   Shield, HelpCircle, BookMarked,
   Search, Network, Check,
 } from "@/components/icons";
-import cafaLogo from "@/assets/cafa-icon.png";
+import cafaMark from "@/assets/brand/cafa-mark.svg";
+import cafaMarkWhite from "@/assets/brand/cafa-mark-white.svg";
 import cafaField from "@/assets/cafa-field.png";
 import ssDashboard from "@/assets/landing-dashboard.webp";
 import ssProjects from "@/assets/landing-projects.webp";
@@ -500,7 +501,7 @@ export default function LandingPage() {
                 className="flex items-center gap-2.5 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={t("content.homeAriaLabel")}
               >
-                <img src={cafaLogo} alt="" className="h-7 w-auto" width={28} height={28} aria-hidden="true" />
+                <img src={cafaMark} alt="" className="size-7" width={28} height={28} aria-hidden="true" />
                 <div className="leading-none">
                   <span className="text-base font-semibold text-foreground block tracking-tight">CAFA PMIS</span>
                   <span className="text-[10px] text-muted-foreground hidden sm:block leading-none mt-0.5">
@@ -878,12 +879,11 @@ export default function LandingPage() {
               <div>
                 <div className="flex items-center gap-2.5 mb-3">
                   <img
-                    src={cafaLogo}
+                    src={cafaMarkWhite}
                     alt="CAFA"
-                    className="h-9 w-auto"
+                    className="size-9 opacity-90"
                     width={36}
                     height={36}
-                    style={{ filter: "brightness(0) invert(1)", opacity: 0.92 }}
                   />
                   <div>
                     <p className="text-[15px] font-semibold text-white tracking-tight">CAFA PMIS</p>

@@ -51,7 +51,7 @@ import { clearNotificationQueries } from "@/lib/notification-client";
 import { useSocket } from "@/lib/socket";
 import { invalidateAuthenticatedSession } from "@/lib/authenticated-session";
 import { useRecentItems } from "@/hooks/use-recent-items";
-import cafaLogo from "@/assets/cafa-icon.png";
+import cafaMark from "@/assets/brand/cafa-mark.svg";
 import {
   demoRoleHarnessEnabled,
   useGetMe,
@@ -589,7 +589,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const brand = (
     <Sidebar.Tooltip content={tNav("tooltips.platformName")} placement={isRtl ? "left" : "right"}>
       <div className="flex min-w-0 items-center gap-3 px-1 py-2">
-        <img src={cafaLogo} alt={tNav("brand.name")} className="size-6 shrink-0 object-contain" />
+        {/* Pro Sidebar header pattern: a size-6 mark beside the product name. */}
+        <img src={cafaMark} alt={tNav("brand.name")} className="size-6 shrink-0 object-contain" />
         <span data-testid="sidebar-brand-title" data-sidebar="label" className="text-foreground truncate text-sm font-semibold">{tNav("brand.name")}</span>
       </div>
     </Sidebar.Tooltip>
