@@ -172,9 +172,6 @@ try {
     preflight.headers.get("access-control-allow-origin") ?? "";
   const allowedMethods =
     preflight.headers.get("access-control-allow-methods") ?? "";
-  const exposedHeaders =
-    preflight.headers.get("access-control-expose-headers") ?? "";
-
   if (allowedOrigin !== baseUrl) {
     blocked("Object-storage CORS did not allow the exact staging origin.");
   }
@@ -183,11 +180,17 @@ try {
     blocked("Object-storage CORS did not allow PUT.");
   }
 
-  if (!/\betag\b/i.test(exposedHeaders)) {
-    blocked("Object-storage CORS did not expose ETag.");
-  }
-
-  pass("S3 CORS preflight allows exact staging-origin PUT and exposes ETag.");
+  // ETag exposure is checked on the actual PUT response below, not here:
+  // Cloudflare R2's CORS preflight (unlike real AWS S3, which this script
+  // was originally written against) never echoes Access-Control-Expose-
+  // Headers on the OPTIONS response itself, even when the bucket's CORS
+  // policy correctly configures it — confirmed live: the same bucket's
+  // real PUT response does include both ETag and a correct
+  // Access-Control-Expose-Headers: ETag. Checking the preflight for this
+  // was an AWS-specific assumption; checking the real response (which is
+  // what a browser actually needs to read the header) is the genuine,
+  // still-unweakened requirement.
+  pass("S3 CORS preflight allows exact staging-origin PUT.");
 
   const putResponse = await fetch(descriptor.uploadURL, {
     method: "PUT",
@@ -207,7 +210,11 @@ try {
     blocked("Presigned object-storage PUT did not return ETag.");
   }
 
-  pass("Presigned S3 PUT succeeded and returned ETag.");
+  if (!/\betag\b/i.test(putResponse.headers.get("access-control-expose-headers") ?? "")) {
+    blocked("Presigned object-storage PUT did not expose ETag via CORS.");
+  }
+
+  pass("Presigned S3 PUT succeeded, returned ETag, and exposed it via CORS.");
 
   const registrationResponse = await apiRequest(
     "/api/files/upload",
