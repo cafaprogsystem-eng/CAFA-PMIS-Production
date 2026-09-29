@@ -3,6 +3,22 @@ main = "src/index.ts"
 compatibility_date = "2026-09-20"
 compatibility_flags = ["nodejs_compat"]
 
+# KNOWN LAUNCH BLOCKER (found live during pre-launch certification, see the
+# Claude Doc / final report): bcrypt.compare/.hash at cost factor 12 (login,
+# invite-accept, password change/reset) is CPU-heavy by design — that's the
+# whole point of bcrypt — and intermittently (~50-60% of requests observed)
+# hits this Cloudflare account's Workers CPU time limit, failing with a hard
+# 503 "Worker exceeded CPU time limit" (confirmed via `wrangler tail`).
+# A `[limits] cpu_ms` override was attempted here and REJECTED outright by
+# Cloudflare's API: "CPU limits are not supported for the Free plan." This
+# account is currently on the Workers Free plan — confirmed directly, not
+# assumed. The fix is upgrading to Workers Paid (a real billing decision,
+# left to the user, same as the Neon/R2 account-level decisions earlier in
+# this migration) — once upgraded, uncomment the block below in both this
+# top-level config and [env.production] further down.
+# [limits]
+# cpu_ms = 50000
+
 # Same Neon database created in the Phase 1 connectivity proof
 # (project cafa-pmis-cloudflare, aws-eu-central-1).
 #
@@ -84,6 +100,12 @@ AI_INTEGRATIONS_OPENAI_BASE_URL = "https://api.openai.com/v1"
 # ─────────────────────────────────────────────────────────────────────────
 [env.production]
 name = "cafa-pmis-api-production"
+
+# See the top-level [limits] comment above — blocked by the account's
+# current Free plan, not inherited from top-level anyway (same
+# non-inheritance behavior confirmed earlier for [vars]).
+# [env.production.limits]
+# cpu_ms = 50000
 
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
