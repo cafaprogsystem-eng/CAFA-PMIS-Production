@@ -39,6 +39,13 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        env:
+          # CI/CD token for @heroui-pro/react's postinstall step, which
+          # downloads the actual Pro component/style files (dist/*.css
+          # included) from HeroUI's CDN — without it, install succeeds but
+          # silently skips those files, and the later frontend build fails
+          # looking for them. Get/rotate this from https://heroui.pro/dashboard/pro/tokens.
+          HEROUI_AUTH_TOKEN: ${{ secrets.HEROUI_AUTH_TOKEN }}
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck api-worker
