@@ -37,8 +37,10 @@ minimumReleaseAgeExclude:
   - stripe-replit-sync
 
 onlyBuiltDependencies:
+  - '@heroui-pro/react'
   - '@swc/core'
   - esbuild
+  - heroui-pro
   - msw
   - unrs-resolver
   - workerd
