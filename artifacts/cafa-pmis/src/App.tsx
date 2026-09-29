@@ -7,7 +7,6 @@ import { DirectionProvider } from "@radix-ui/react-direction";
 import { I18nProvider } from "@heroui/react";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 import { OfflineIndicator } from "@/components/offline-indicator";
@@ -327,7 +326,7 @@ function App() {
     <QueryClientProvider client={appQueryClient}>
       <LanguageProvider>
         <DirectionBridge>
-          <TooltipProvider>
+          <>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
                 <Switch>
@@ -345,7 +344,7 @@ function App() {
             </WouterRouter>
             <PwaUpdatePrompt />
             <SonnerToaster />
-          </TooltipProvider>
+          </>
         </DirectionBridge>
       </LanguageProvider>
     </QueryClientProvider>

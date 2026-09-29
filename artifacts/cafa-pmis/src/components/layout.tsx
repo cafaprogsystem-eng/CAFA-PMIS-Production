@@ -65,7 +65,6 @@ import { GlobalLocationSelector } from "@/components/global-location-selector";
 import { GlobalLanguageSwitcher } from "@/components/global-language-switcher";
 import { useLocationContext } from "@/contexts/location-context";
 import { RecordDetailProvider } from "@/contexts/record-detail-context";
-import { TooltipProvider } from "@/components/ui/tooltip";
 
 /* ─── Static page title map (English — used only for recent-item storage) ─ */
 const STATIC_PAGE_TITLES: Record<string, string> = {
@@ -609,7 +608,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <RecordDetailProvider>
-    <TooltipProvider delayDuration={200}>
+    <>
     {/* Every React Aria link in the shell and the pages (sidebar, navbar,
         breadcrumbs, menus) routes through wouter instead of reloading. */}
     <RouterProvider navigate={navigate}>
@@ -709,7 +708,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <Navbar.Item
                   className="lg:hidden"
                   onClick={toggleDesktopView}
-                  aria-label={desktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
+                  aria-label={desktopView ? tNav("viewMode.switchToMobile") : tNav("viewMode.switchToDesktop")}
                   aria-pressed={desktopView}
                 >
                   <MonitorSmartphone className={`size-4 ${desktopView ? "text-[var(--accent)]" : ""}`} aria-hidden />
@@ -819,7 +818,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ── Command Palette ──────────────────────────────────── */}
       <CommandPalette />
     </RouterProvider>
-    </TooltipProvider>
+    </>
     </RecordDetailProvider>
   );
 }

@@ -1,27 +1,23 @@
 /**
  * GlobalLocationSelector — compact header control for HQ-level location scoping.
  *
- * Renders a bordered 36-px dropdown (pin icon + label + chevron).
+ * Renders a bordered 36-px trigger (pin icon + label + chevron) that opens
+ * a HeroUI popover with a single-selection ListBox.
  * Returns null for state-scoped roles (isEditable = false).
  * Includes type-ahead search when the state list exceeds 8 items.
- * RTL-safe via logical CSS. Keyboard accessible: arrow keys, Enter/Space,
- * Escape, focus returns to trigger on close.
+ * RTL-safe via logical CSS. Keyboard accessible (React Aria): arrow keys,
+ * Enter/Space, Escape, focus returns to the trigger on close.
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { Input, ListBox, Popover, type Key, type Selection } from "@heroui/react";
+import { Button as AriaButton } from "react-aria-components";
 import { getStateLabel } from "@/components/state-label";
-import { MapPin, ChevronDown, Check, Search, X } from "@/components/icons";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { MapPin, ChevronDown, Search } from "@/components/icons";
 import { useLocationContext } from "@/contexts/location-context";
-import { cn } from "@/lib/utils";
 
 const SEARCH_THRESHOLD = 8;
+const ALL = "all";
 
 export function GlobalLocationSelector() {
   const { t, i18n } = useTranslation("common");
@@ -29,21 +25,12 @@ export function GlobalLocationSelector() {
     useLocationContext();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
   const showSearch = authorisedStates.length > SEARCH_THRESHOLD;
 
-  // Clear search when menu closes
+  // Clear search when the list closes
   useEffect(() => {
     if (!open) setSearch("");
   }, [open]);
-
-  // Auto-focus search input when menu opens (if search is visible)
-  useEffect(() => {
-    if (!open || !showSearch) return;
-    const id = setTimeout(() => searchRef.current?.focus(), 60);
-    return () => clearTimeout(id);
-  }, [open, showSearch]);
 
   if (!isEditable) return null;
 
@@ -60,114 +47,75 @@ export function GlobalLocationSelector() {
       )
     : authorisedStates;
 
+  const choose = (keys: Selection) => {
+    if (keys === "all") return;
+    const [key] = [...keys] as Key[];
+    if (key === undefined) return;
+    setSelectedStateId(key === ALL ? null : Number(key));
+    setOpen(false);
+  };
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <button
-          ref={triggerRef}
-          type="button"
-          aria-label={`${t("locationContext.label")}: ${label}`}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          // HeroUI Pro InlineSelect trigger styling, as in the Pro navbar
-          // "Dashboard" example (the menu itself stays a Radix one).
-          className="inline-select inline-select__trigger flex gap-2 focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
-        >
-          <MapPin className="size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />
-          <span className="inline-select__value text-foreground text-sm font-medium">{label}</span>
-          <ChevronDown className="inline-select__indicator" aria-hidden="true" />
-        </button>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent
-        align="start"
-        className="w-56 p-1"
-        role="listbox"
-        aria-label={t("locationContext.label")}
-        onCloseAutoFocus={e => {
-          e.preventDefault();
-          triggerRef.current?.focus();
-        }}
+    <Popover isOpen={open} onOpenChange={setOpen}>
+      {/* HeroUI Pro InlineSelect trigger styling, as in the Pro navbar
+          "Dashboard" example. Focus returns here when the list closes. */}
+      <AriaButton
+        aria-label={`${t("locationContext.label")}: ${label}`}
+        className="inline-select inline-select__trigger flex gap-2 focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
       >
-        {/* Type-ahead search — visible when list exceeds threshold */}
-        {showSearch && (
-          <div className="relative mb-1 px-1">
-            <Search
-              className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50"
-              aria-hidden="true"
-            />
-            <input
-              ref={searchRef}
-              type="search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t("locationContext.searchPlaceholder")}
-              className={cn(
-                "h-8 w-full rounded-md border border-border/60 bg-background",
-                "ps-8 pe-7 text-xs",
-                "focus:outline-none focus:ring-2 focus:ring-ring/40",
-              )}
-              aria-label={t("locationContext.searchPlaceholder")}
-              aria-autocomplete="list"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                aria-label={t("clearSearch")}
-                className="absolute end-2 top-1/2 -translate-y-1/2 p-0.5 text-muted-foreground/50 hover:text-muted-foreground"
-              >
-                <X className="h-3 w-3" aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        )}
+        <MapPin className="size-4 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+        <span className="inline-select__value text-sm font-medium text-[var(--foreground)]">{label}</span>
+        <ChevronDown className="inline-select__indicator" aria-hidden="true" />
+      </AriaButton>
 
-        {/* All Locations — always first */}
-        <DropdownMenuItem
-          role="option"
-          aria-selected={selectedStateId === null}
-          className="flex items-center gap-2 text-xs"
-          onSelect={() => { setSelectedStateId(null); setOpen(false); }}
-        >
-          <Check
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 text-primary",
-              selectedStateId !== null && "opacity-0",
-            )}
-            aria-hidden="true"
-          />
-          {t("locationContext.allLocations")}
-        </DropdownMenuItem>
-
-        {authorisedStates.length > 0 && <DropdownMenuSeparator />}
-
-        {/* State list (filtered when search active) */}
-        {filteredStates.length === 0 && search.trim() ? (
-          <p className="py-3 text-center text-xs text-muted-foreground" role="status">
-            {t("locationContext.noLocations")}
-          </p>
-        ) : (
-          filteredStates.map(state => (
-            <DropdownMenuItem
-              key={state.id}
-              role="option"
-              aria-selected={selectedStateId === state.id}
-              className="flex items-center gap-2 text-xs"
-              onSelect={() => { setSelectedStateId(state.id); setOpen(false); }}
-            >
-              <Check
-                className={cn(
-                  "h-3.5 w-3.5 shrink-0 text-primary",
-                  selectedStateId !== state.id && "opacity-0",
-                )}
-                aria-hidden="true"
+      <Popover.Content placement="bottom start" className="w-60 p-0">
+        <Popover.Dialog className="p-1" aria-label={t("locationContext.label")}>
+          {/* Type-ahead search — shown when the list exceeds the threshold */}
+          {showSearch && (
+            <div className="relative mb-1 p-1">
+              <Search className="pointer-events-none absolute start-3.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--muted)]" aria-hidden="true" />
+              <Input
+                type="search"
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={t("locationContext.searchPlaceholder")}
+                aria-label={t("locationContext.searchPlaceholder")}
+                className="h-8 w-full ps-8 text-xs"
               />
-              {stateLabel(state)}
-            </DropdownMenuItem>
-          ))
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+            </div>
+          )}
+
+          {filteredStates.length === 0 && search.trim() ? (
+            <p className="py-3 text-center text-xs text-[var(--muted)]" role="status">
+              {t("locationContext.noLocations")}
+            </p>
+          ) : (
+            <ListBox
+              aria-label={t("locationContext.label")}
+              selectionMode="single"
+              disallowEmptySelection
+              selectedKeys={[selectedStateId === null ? ALL : String(selectedStateId)]}
+              onSelectionChange={choose}
+              className="max-h-[min(22rem,calc(100dvh-8rem))] overflow-y-auto"
+            >
+              {/* All Locations — always first */}
+              {!search.trim() && (
+                <ListBox.Item id={ALL} textValue={t("locationContext.allLocations")} className="text-xs">
+                  {t("locationContext.allLocations")}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              )}
+              {filteredStates.map(state => (
+                <ListBox.Item key={state.id} id={String(state.id)} textValue={stateLabel(state)} className="text-xs">
+                  {stateLabel(state)}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          )}
+        </Popover.Dialog>
+      </Popover.Content>
+    </Popover>
   );
 }

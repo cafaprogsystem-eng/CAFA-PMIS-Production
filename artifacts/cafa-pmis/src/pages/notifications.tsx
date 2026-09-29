@@ -273,7 +273,7 @@ export default function NotificationsPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden">
                       <span data-notification-context className="text-xs text-muted-foreground">{entityLabel}</span>
                       <span className="text-muted-foreground/50" aria-hidden="true">•</span>
-                      <NotificationTime createdAt={n.createdAt} locale={i18n.language} />
+                      <NotificationTime createdAt={n.createdAt} locale={i18n.language === "ar" ? "ar-u-nu-latn" : "en-GB"} />
                     </div>
                   </div>
                   <div className="mt-1 hidden min-w-0 items-center gap-2 text-xs text-muted-foreground sm:flex">
@@ -281,7 +281,7 @@ export default function NotificationsPage() {
                  </div>
                 </div>
                 <div data-notification-time className="hidden min-w-[4.5rem] justify-self-start sm:block">
-                  <NotificationTime createdAt={n.createdAt} locale={i18n.language} />
+                  <NotificationTime createdAt={n.createdAt} locale={i18n.language === "ar" ? "ar-u-nu-latn" : "en-GB"} />
                 </div>
                 <div data-notification-actions className="flex items-center justify-end gap-0.5 sm:min-w-[4rem] sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                   {link && (

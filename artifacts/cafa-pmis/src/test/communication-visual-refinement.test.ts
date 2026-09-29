@@ -251,7 +251,7 @@ describe("Communication Centre final visual closure", () => {
 
     expect(source).toContain('px-3.5 py-2.5 text-start transition-colors');
     expect(dropdown).toContain("px-3 py-2.5");
-    expect(dropdown).toContain('className="text-xs text-muted-foreground shrink-0 tabular-nums"');
+    expect(dropdown).toContain('className="shrink-0 text-xs tabular-nums text-[var(--muted)]"');
   });
 
   it("COMM-FINAL-VIS-03 protects long labels and narrow viewports from overflow", async () => {
@@ -259,9 +259,10 @@ describe("Communication Centre final visual closure", () => {
 
     expect(source).toContain('w-fit max-w-[min(78%,42rem)] flex flex-col');
     expect(source).toContain("break-words [overflow-wrap:anywhere]");
-    expect(dropdown).toContain('w-[min(24rem,calc(100vw-1rem))] max-h-[min(32rem,calc(100dvh-1rem))]');
+    expect(dropdown).toContain("w-[min(24rem,calc(100vw-1rem))]");
+    expect(dropdown).toContain("max-h-[min(32rem,calc(100dvh-1rem))]");
     expect(dropdown).toContain("title={label}");
-    expect(dropdown).toContain("font-medium truncate");
+    expect(dropdown).toContain("truncate text-page-start text-sm font-medium");
   });
 
   it("COMM-FINAL-VIS-04 keeps loading, empty, and error states truthful in both entry surfaces", async () => {
@@ -273,7 +274,7 @@ describe("Communication Centre final visual closure", () => {
     expect(dropdown).toContain('if (!r.ok) throw new Error(`HTTP ${r.status}`);');
     expect(dropdown).toContain('role="status"');
     expect(dropdown).toContain(") : isError ? (");
-    expect(dropdown).toContain('onClick={() => void refetch()}');
+    expect(dropdown).toContain('onPress={() => void refetch()}');
     expect(dropdown).toContain('t("messages:headerNoConversations")');
   });
 
@@ -307,7 +308,7 @@ describe("Communication Centre final visual closure", () => {
     expect(source).toContain("opacity-100 md:opacity-0 md:group-hover:opacity-100 group-focus-within:opacity-100");
     expect(source).toContain('aria-label={t("addReaction")}');
     expect(source).toContain('aria-label={t("messageOptions")}');
-    expect(dropdown).toContain("focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary");
+    expect(dropdown).toContain("focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]");
     expect(dropdown).toContain('t("messages:viewAllConversations")');
   });
 

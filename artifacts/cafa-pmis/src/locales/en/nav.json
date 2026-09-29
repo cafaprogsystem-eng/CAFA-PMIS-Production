@@ -128,5 +128,9 @@
     "auditLog": "Activity history",
     "ai": "Assistant and administration",
     "syncStatus": "Offline queue"
+  },
+  "viewMode": {
+    "switchToMobile": "Switch to mobile view",
+    "switchToDesktop": "Switch to desktop view"
   }
 }

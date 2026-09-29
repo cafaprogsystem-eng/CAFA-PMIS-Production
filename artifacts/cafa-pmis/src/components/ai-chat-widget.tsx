@@ -5,12 +5,8 @@ import { toast } from "sonner";
 import { Bot, X, Minimize2, Send, Trash2, RotateCcw } from "@/components/icons";
 import { useQuery } from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button } from "@heroui/react";
+import { HintTooltip } from "@/components/hint-tooltip";
 import { cn } from "@/lib/utils";
 // react-markdown and its parser are large and only needed once the assistant
 // answers, so they load on demand instead of with the app shell.
@@ -393,8 +389,7 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
     <>
       {!embedded && (
         /* ── Floating launcher (icon changes when panel is open) ── */
-        <Tooltip>
-          <TooltipTrigger asChild>
+        <HintTooltip placement="start" content={open ? t("widget.close") : t("widget.openAssistant")} className="font-medium">
             <button
               ref={launcherRef}
               id="cafa-ai-launcher"
@@ -410,11 +405,11 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
               className={cn(
                 "fixed z-50 h-12 w-12 rounded-full flex items-center justify-center touch-none cursor-grab active:cursor-grabbing",
                 enabled
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  ? "bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"
                   : "bg-slate-600 text-white hover:bg-slate-700",
                 "shadow-md hover:shadow-lg",
                 isDragging ? "" : "transition-all duration-150 motion-reduce:transition-none",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
               )}
               style={launcherStyle}
             >
@@ -423,11 +418,7 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
                 : <Bot className="h-5 w-5" aria-hidden="true" />
               }
             </button>
-          </TooltipTrigger>
-          <TooltipContent side="left" sideOffset={10} className="text-xs font-medium">
-            {open ? t("widget.close") : t("widget.openAssistant")}
-          </TooltipContent>
-        </Tooltip>
+        </HintTooltip>
       )}
 
       {/* ── Chat panel — positioned directly above the launcher ── */}
@@ -439,7 +430,7 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
           className={cn(
              embedded ? "relative w-full flex flex-col" : "fixed z-50 flex flex-col",
             // Surface — use design tokens
-            "bg-card border border-border",
+            "border border-[var(--border)] bg-[var(--overlay)]",
             // Shape
             "rounded-2xl",
             // Shadow — restrained enterprise quality
@@ -463,7 +454,7 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
               "flex items-center gap-2.5 px-4 py-3 shrink-0 rounded-t-2xl select-none",
               !embedded && "touch-none cursor-grab active:cursor-grabbing",
               embedded && "cursor-pointer",
-              enabled ? "bg-primary text-primary-foreground" : "bg-slate-700 text-white",
+              enabled ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "bg-slate-700 text-white",
             )}
             style={{ minHeight: "54px" }}
             onPointerDown={handleDragPointerDown}
@@ -481,7 +472,7 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold leading-none tracking-tight">{t("widget.assistantName")}</p>
               {!minimized && (
-                <p className="text-[11px] text-primary-foreground/65 mt-0.5 leading-none">
+                <p className="mt-0.5 text-[11px] opacity-65 leading-none">
                   {enabled ? t("widget.readyToAssist") : t("widget.pendingActivation")}
                 </p>
               )}
@@ -524,10 +515,10 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
                     <Bot className="h-7 w-7 text-amber-500" aria-hidden="true" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground mb-2">
+                    <p className="mb-2 text-sm font-semibold text-[var(--foreground)]">
                       {t("widget.readyForConfiguration")}
                     </p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{uatMessage}</p>
+                    <p className="text-xs leading-relaxed text-[var(--muted)]">{uatMessage}</p>
                   </div>
                   {isAdminRole && (
                     <div className="w-full rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 text-xs text-amber-700 text-start space-y-1">
@@ -558,30 +549,30 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
                     {messages.map(msg => (
                       <div key={msg.id} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
                         {msg.role === "assistant" && (
-                          <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center shrink-0 mt-0.5 me-2" aria-hidden="true">
-                            <Bot className="h-3.5 w-3.5 text-primary-foreground" />
+                          <div className="me-2 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]" aria-hidden="true">
+                            <Bot className="size-3.5 text-[var(--accent-foreground)]" />
                           </div>
                         )}
                         <div className={cn(
                           "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
                           msg.role === "user"
-                            ? "bg-primary text-primary-foreground rounded-br-sm"
-                            : "bg-muted border border-border/50 text-foreground rounded-bl-sm",
+                            ? "rounded-ee-sm bg-[var(--accent)] text-[var(--accent-foreground)]"
+                            : "rounded-es-sm border border-[var(--border)] bg-[var(--default)] text-[var(--foreground)]",
                         )}>
                           {msg.role === "assistant" ? (
-                            <div className="prose prose-sm prose-gray max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:mt-1 [&>ul]:mb-2 [&>ol]:mt-1 [&>ol]:mb-2 [&>ul>li]:text-sm [&>ol>li]:text-sm">
+                            <div dir="auto" className="prose prose-sm max-w-none text-page-start text-[var(--foreground)] [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:mt-1 [&>ul]:mb-2 [&>ol]:mt-1 [&>ol]:mb-2 [&>ul>li]:text-sm [&>ol>li]:text-sm">
                               {msg.content ? (
                                 <Suspense fallback={<p className="whitespace-pre-wrap">{msg.content}</p>}><ReactMarkdown>{msg.content}</ReactMarkdown></Suspense>
                               ) : (
-                                <span className="flex gap-1 items-center text-muted-foreground" aria-label={t("widget.generatingResponse")}>
-                                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce motion-reduce:animate-none [animation-delay:0ms]" />
-                                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce motion-reduce:animate-none [animation-delay:150ms]" />
-                                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce motion-reduce:animate-none [animation-delay:300ms]" />
+                                <span className="flex items-center gap-1 text-[var(--muted)]" aria-label={t("widget.generatingResponse")}>
+                                  <span className="size-1.5 rounded-full bg-[var(--muted)] opacity-60 animate-bounce motion-reduce:animate-none [animation-delay:0ms]" />
+                                  <span className="size-1.5 rounded-full bg-[var(--muted)] opacity-60 animate-bounce motion-reduce:animate-none [animation-delay:150ms]" />
+                                  <span className="size-1.5 rounded-full bg-[var(--muted)] opacity-60 animate-bounce motion-reduce:animate-none [animation-delay:300ms]" />
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                            <p className="whitespace-pre-wrap text-page-start" dir="auto">{msg.content}</p>
                           )}
                         </div>
                       </div>
@@ -592,19 +583,20 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
                   {/* Quick prompts — shown only before user has sent a message */}
                   {messages.length <= 1 && (
                     <div className="px-4 pb-2 shrink-0">
-                      <p className="text-[11px] text-muted-foreground/70 uppercase tracking-wider mb-2 font-medium">{t("widget.quickQuestions")}</p>
+                      <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-[var(--muted)] rtl:tracking-normal">{t("widget.quickQuestions")}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {QUICK_PROMPT_KEYS.slice(0, 4).map(key => {
                           const prompt = t(`widget.prompts.${key}`);
                           return (
-                          <button
+                          <Button
                             key={key}
-                            type="button"
-                            onClick={() => sendMessage(prompt)}
-                            className="text-xs px-2.5 py-1 bg-primary/5 text-primary border border-primary/15 rounded-full hover:bg-primary/10 transition-colors motion-reduce:transition-none leading-none whitespace-nowrap"
+                            size="sm"
+                            variant="tertiary"
+                            onPress={() => sendMessage(prompt)}
+                            className="h-auto min-h-7 whitespace-normal rounded-full px-2.5 py-1 text-start text-xs"
                           >
                             {prompt}
-                          </button>
+                          </Button>
                           );
                         })}
                       </div>
@@ -612,8 +604,8 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
                   )}
 
                   {/* Composer */}
-                  <div className="px-3 pb-3 pt-2 border-t border-border shrink-0">
-                    <div className="flex gap-2 items-end bg-muted/50 border border-border rounded-xl px-3 py-2 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/20 transition-all motion-reduce:transition-none">
+                  <div className="shrink-0 border-t border-[var(--border)] px-3 pb-3 pt-2">
+                    <div className="flex items-end gap-2 rounded-xl border border-[var(--border)] bg-[var(--field-background,var(--default))] px-3 py-2 transition-all focus-within:ring-2 focus-within:ring-[var(--focus)] motion-reduce:transition-none">
                       <textarea
                         ref={inputRef}
                         value={input}
@@ -622,7 +614,8 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
                         placeholder={t("widget.messagePlaceholder")}
                         rows={1}
                         aria-label={t("widget.messageInput")}
-                        className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none max-h-24 leading-relaxed"
+                        dir="auto"
+                        className="max-h-24 flex-1 resize-none bg-transparent text-sm leading-relaxed text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none"
                         style={{ overflowY: input.split("\n").length > 3 ? "auto" : "hidden" }}
                         disabled={streaming}
                       />
@@ -630,25 +623,29 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={stop}
+                          isIconOnly
+                          onPress={stop}
                           aria-label={t("widget.stopGenerating")}
-                          className="h-7 w-7 p-0 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="size-7 min-w-0 shrink-0 text-[var(--danger)]"
                         >
                           <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                         </Button>
                       ) : (
                         <Button
                           size="sm"
-                          onClick={() => sendMessage(input)}
-                          disabled={!input.trim()}
+                          variant="primary"
+                          isIconOnly
+                          onPress={() => sendMessage(input)}
+                          isDisabled={!input.trim()}
                           aria-label={t("widget.sendMessage")}
-                          className="h-7 w-7 p-0 shrink-0 bg-primary hover:bg-primary/90 rounded-lg"
+                          className="size-7 min-w-0 shrink-0 rounded-lg"
                         >
-                          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                          {/* Send points along the reading direction */}
+                          <Send className="size-3.5 rtl:-scale-x-100" aria-hidden="true" />
                         </Button>
                       )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground/45 text-center mt-1.5">
+                    <p className="mt-1.5 text-center text-[10px] text-[var(--muted)] opacity-70">
                       {t("widget.internalUse", { page: location })}
                     </p>
                   </div>

@@ -56,7 +56,7 @@ describe("Notifications final visual closure", () => {
 
   it("NOTIF-FINAL-VIS-06 keeps the bell and popover coherent with the inbox", () => {
     // Trigger uses the HeroUI Pro Navbar.Item styling like its neighbours.
-    expect(bell).toContain('<button type="button" className="navbar__item" aria-label={t("title")}>');
+    expect(bell).toContain('<AriaButton className="navbar__item" aria-label={t("title")}>');
     expect(bell).toContain("w-[calc(100vw-2rem)] max-w-sm");
     expect(bell).toContain("max-h-[min(420px,calc(100dvh-8rem))]");
     expect(bell).toContain('t("viewAll")');
@@ -87,7 +87,8 @@ describe("Notifications final visual closure", () => {
 
   it("NOTIF-FINAL-VIS-10 preserves Arabic and RTL presentation", () => {
     expect(page).toContain("dir={i18n.dir()}");
-    expect(bell).toContain("dir={i18n.dir()}");
+    // The popover portals under <html dir>, so it follows the page direction.
+    expect(bell).toContain('placement="bottom end"');
     expect(preferences).toContain("dir={i18n.dir()}");
     expect(bell).toContain("rtl:rotate-180");
     expect(dashboard).toContain("rtl:rotate-180");
@@ -97,7 +98,7 @@ describe("Notifications final visual closure", () => {
 
   it("NOTIF-FINAL-VIS-11 preserves accessible keyboard and focus treatment", () => {
     expect(bell).toContain('aria-label={t("title")}');
-    expect(bell).toContain("focus-visible:ring-2 focus-visible:ring-ring");
+    expect(bell).toContain("focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]");
     expect(page).toContain('aria-label={t("openNotification")}');
     expect(page).toContain('aria-label={t("unreadStatus")}');
     expect(page).toContain('role="img"');

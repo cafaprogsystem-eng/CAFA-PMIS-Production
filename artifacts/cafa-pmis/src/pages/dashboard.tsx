@@ -78,12 +78,7 @@ import { useUrlViewMode, RECORD_REGISTRY_VIEWS, type RecordRegistryView } from "
 import { useRecordDetail } from "@/contexts/record-detail-context";
 import { ErrorState } from "@/components/ui/error-state";
 import type { ErrorVariant } from "@/components/ui/error-state";
-import {
-  Tooltip as UITooltip,
-  TooltipContent as UITooltipContent,
-  TooltipProvider as UITooltipProvider,
-  TooltipTrigger as UITooltipTrigger,
-} from "@/components/ui/tooltip";
+import { HintTooltip } from "@/components/hint-tooltip";
 import { SECTORS } from "@/lib/sectors";
 import { formatMonthLabel, formatStatusLabel } from "@/lib/format";
 import { entityTypeTranslationKey } from "@/lib/notification-presentation";
@@ -1169,22 +1164,15 @@ function FollowUpProjectsPanel({
                   </Chip>
                 ))}
                 {/* Overlap notice — categories may count the same project more than once */}
-                <UITooltipProvider>
-                  <UITooltip>
-                    <UITooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex items-center rounded-full text-muted-foreground/50 hover:text-muted-foreground transition-colors px-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        aria-label={t("followUp.overlapNote")}
-                      >
-                        <Info className="h-3 w-3" />
-                      </button>
-                    </UITooltipTrigger>
-                    <UITooltipContent side="top" className="max-w-[200px] text-xs">
-                      {t("followUp.overlapNote")}
-                    </UITooltipContent>
-                  </UITooltip>
-                </UITooltipProvider>
+                <HintTooltip content={t("followUp.overlapNote")} className="max-w-52">
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-full px-0.5 text-[var(--muted)] opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+                    aria-label={t("followUp.overlapNote")}
+                  >
+                    <Info className="size-3" aria-hidden="true" />
+                  </button>
+                </HintTooltip>
               </div>
             )}
 
@@ -1219,25 +1207,24 @@ function FollowUpProjectsPanel({
                         );
                       })}
                       {extra.length > 0 && (
-                        <UITooltipProvider>
-                          <UITooltip>
-                            <UITooltipTrigger asChild>
+                        <HintTooltip
+                          className="max-w-56"
+                          content={
+                            <ul className="list-inside list-disc space-y-0.5">
+                              {extra.map((r, i) => (
+                                <li key={i}>{followUpReasonLabel(r, t)}</li>
+                              ))}
+                            </ul>
+                          }
+                        >
                               <span
-                                className="inline-flex items-center rounded-full bg-muted text-muted-foreground text-[10px] font-medium px-1.5 py-0.5 leading-none cursor-default"
+                                role="img"
+                                className="inline-flex cursor-default items-center rounded-full bg-[var(--default)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
                                 aria-label={t("aria.moreFollowUpReasons", { count: extra.length, reasons: extra.map(r => followUpReasonLabel(r, t)).join(", ") })}
                               >
                                 {t("followUp.moreBadge", { count: extra.length })}
                               </span>
-                            </UITooltipTrigger>
-                            <UITooltipContent side="top" className="max-w-[220px] text-xs">
-                              <ul className="list-disc list-inside space-y-0.5">
-                                {extra.map((r, i) => (
-                                  <li key={i}>{followUpReasonLabel(r, t)}</li>
-                                ))}
-                              </ul>
-                            </UITooltipContent>
-                          </UITooltip>
-                        </UITooltipProvider>
+                        </HintTooltip>
                       )}
                     </div>
                   </Link>
@@ -1325,15 +1312,21 @@ function LateReportsPanel({
         ) : (
           <>
             {/* ── Report rows ── */}
-            <UITooltipProvider>
-              <div className="space-y-0.5" role="list" aria-label={t("lateReports.awaitingApproval")}>
+            <div className="space-y-0.5" role="list" aria-label={t("lateReports.awaitingApproval")}>
                 {visible.map(r => {
                   const title   = r.title ?? r.projectTitle ?? t("fallbacks.untitled");
                   const context = [r.stateName ? getStateLabel({ name: r.stateName, nameAr: (r as unknown as { stateNameAr?: string | null }).stateNameAr }, i18n.language) : null, r.submittedByName].filter(Boolean).join(" · ");
                   const days    = r.daysWaiting ?? 0;
                   return (
-                    <UITooltip key={r.id}>
-                      <UITooltipTrigger asChild>
+                    <HintTooltip
+                      key={r.id}
+                      className="max-w-56 space-y-0.5"
+                      content={<>
+                        <p className="font-medium leading-snug" dir="auto">{title}</p>
+                        <p className="opacity-70">{t("lateReports.statusPrefix")} {lrStatusLabel(r.status, t)}</p>
+                        <p className="opacity-70">{t("lateReports.daysAwaitingApproval", { days })}</p>
+                      </>}
+                    >
                         <Link
                           href={lrHref(r.reportType, r.id)}
                           role="listitem"
@@ -1361,17 +1354,10 @@ function LateReportsPanel({
                             </span>
                           </div>
                         </Link>
-                      </UITooltipTrigger>
-                      <UITooltipContent side="top" className="max-w-[220px] text-xs space-y-0.5">
-                        <p className="font-medium leading-snug">{title}</p>
-                        <p className="text-muted-foreground">{t("lateReports.statusPrefix")} {lrStatusLabel(r.status, t)}</p>
-                        <p className="text-muted-foreground">{t("lateReports.daysAwaitingApproval", { days })}</p>
-                      </UITooltipContent>
-                    </UITooltip>
+                    </HintTooltip>
                   );
                 })}
-              </div>
-            </UITooltipProvider>
+            </div>
 
             {/* ── Show All / Show Less ── */}
             {hasMore && (
@@ -3847,40 +3833,25 @@ export default function Dashboard() {
 
       {/* ── Filter scope notice — Performance and Risks tabs ────────── */}
       {(activeTab === "performance" || activeTab === "risks") && (
-        <UITooltipProvider>
           <div className="flex items-center gap-1.5 px-0.5" role="note" aria-label={t("aria.filterApplicability")}>
             <Info className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" aria-hidden="true" />
             <span className="text-xs text-muted-foreground/60 font-medium select-none">
               {t("header.filterScopeNote")}
             </span>
-            <UITooltip>
-              <UITooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  aria-label={t("aria.filterScopeDetails")}
-                >
-                  <Info className="h-3 w-3 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
-                </button>
-              </UITooltipTrigger>
-              <UITooltipContent
-                side="bottom"
-                align="start"
-                className="max-w-xs text-xs leading-relaxed bg-popover text-popover-foreground border border-border shadow-md"
+            <HintTooltip
+              placement="bottom"
+              className="max-w-xs leading-relaxed"
+              content={activeTab === "risks" ? t("filterScope.risksDetail") : t("filterScope.performanceDetail")}
+            >
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded text-[var(--muted)] opacity-50 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+                aria-label={t("aria.filterScopeDetails")}
               >
-                {activeTab === "risks" ? (
-                  <span>
-                    {t("filterScope.risksDetail")}
-                  </span>
-                ) : (
-                  <span>
-                    {t("filterScope.performanceDetail")}
-                  </span>
-                )}
-              </UITooltipContent>
-            </UITooltip>
+                <Info className="size-3" aria-hidden="true" />
+              </button>
+            </HintTooltip>
           </div>
-        </UITooltipProvider>
       )}
 
       {/* ── Tabs (HeroUI Tabs; the selected tab's content is the single panel) ── */}

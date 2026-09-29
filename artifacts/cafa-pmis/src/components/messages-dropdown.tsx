@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { MessageSquare, Users, User } from "@/components/icons";
-import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button, Chip, Popover, Spinner } from "@heroui/react";
+import { Button as AriaButton } from "react-aria-components";
 
 type ConvItem = {
   id: number;
@@ -25,13 +26,19 @@ function ago(s: string | null, t: (key: string, options?: Record<string, unknown
   if (h < 24) return t("messages:hoursShort", { count: h });
   const d = Math.floor(h / 24);
   if (d < 7) return t("messages:daysShort", { count: d });
-  return new Date(s).toLocaleDateString(language === "ar" ? "ar" : "en-GB", { day: "numeric", month: "short" });
+  return new Date(s).toLocaleDateString(language === "ar" ? "ar-u-nu-latn" : "en-GB", { day: "numeric", month: "short" });
+}
+/** Voice and attachment-only messages are stored with a fixed English body (as on the Messages page). */
+function previewBody(body: string, t: (key: string) => string): string {
+  if (body === "(Voice message)") return t("messages:voiceMessage");
+  if (body === "(attachment)") return t("messages:attachmentPlaceholder");
+  return body;
 }
 type ConversationListPage = { items: ConvItem[]; hasMore: boolean; nextCursor: string | null };
 
 function convIcon(type: string) {
-  if (type === "direct") return <User className="h-4 w-4 text-muted-foreground" />;
-  return <Users className="h-4 w-4 text-muted-foreground" />;
+  if (type === "direct") return <User className="size-4 text-[var(--muted)]" aria-hidden="true" />;
+  return <Users className="size-4 text-[var(--muted)]" aria-hidden="true" />;
 }
 
 function convLabel(
@@ -78,98 +85,82 @@ export function MessagesDropdown() {
   const unread = unreadData?.total;
   const hasUnread = typeof unread === "number" && unread > 0;
   const items = convs?.items ?? [];
+  const [isOpen, setIsOpen] = useState(false);
+  const go = (path: string) => { setIsOpen(false); setLocation(path); };
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        {/* HeroUI Pro Navbar.Item styling (the trigger stays a Radix one). */}
-        <button type="button" className="navbar__item" aria-label={t("items.communicationCentre")}>
-          <MessageSquare className="size-4" aria-hidden="true" />
-          {hasUnread && (
-            <Badge className="absolute -end-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center bg-destructive px-1 text-[10px] leading-none hover:bg-destructive">
-              {unread! > 99 ? "99+" : unread}
-            </Badge>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-[min(24rem,calc(100vw-1rem))] max-h-[min(32rem,calc(100dvh-1rem))] p-0 flex flex-col overflow-hidden"
-        align="end"
-      >
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-b shrink-0">
-          <div className="font-medium text-sm">{t("items.communicationCentre")}</div>
-          <button
-            className="shrink-0 text-xs text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setLocation("/messages")}
-          >
-            {t("messages:viewAllConversations")}
-          </button>
-        </div>
+    <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
+      {/* A bare React Aria button keeps the Pro Navbar.Item look of its neighbours. */}
+      <AriaButton className="navbar__item" aria-label={t("items.communicationCentre")}>
+        <MessageSquare className="size-4" aria-hidden="true" />
+        {hasUnread && (
+          <span className="absolute -end-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-[10px] font-semibold leading-none text-white">
+            {unread! > 99 ? "99+" : unread}
+          </span>
+        )}
+      </AriaButton>
+      <Popover.Content placement="bottom end" className="w-[min(24rem,calc(100vw-1rem))] overflow-hidden p-0">
+        <Popover.Dialog className="flex max-h-[min(32rem,calc(100dvh-1rem))] flex-col p-0" aria-label={t("items.communicationCentre")}>
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2">
+            <Popover.Heading className="text-sm font-medium">{t("items.communicationCentre")}</Popover.Heading>
+            <Button variant="ghost" size="sm" className="text-[var(--accent)]" onPress={() => go("/messages")}>
+              {t("messages:viewAllConversations")}
+            </Button>
+          </div>
 
-        <div className="min-h-0 overflow-y-auto">
-          {isLoading ? (
-            <div className="py-8 text-center text-sm text-muted-foreground" role="status">
-              <MessageSquare className="h-6 w-6 mx-auto mb-2 text-muted-foreground/30" />
-              <p>{t("messages:headerLoading")}</p>
-            </div>
-          ) : isError ? (
-            <div className="py-7 px-4 text-center">
-              <MessageSquare className="h-6 w-6 mx-auto mb-2 text-destructive/60" />
-              <p className="text-sm text-muted-foreground">{t("messages:headerError")}</p>
-              <button
-                type="button"
-                className="mt-2 text-xs font-medium text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => void refetch()}
-              >
-                {t("messages:retry")}
-              </button>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="py-8 px-4 text-center">
-              <MessageSquare className="h-6 w-6 mx-auto mb-2 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground">{t("messages:headerNoConversations")}</p>
-            </div>
-          ) : (
-            items.map((conv) => {
-              const label = convLabel(conv, t);
-              const hasConversationUnread = typeof conv.unreadCount === "number" && conv.unreadCount > 0;
-              return (
-              <button
-                key={conv.id}
-                title={label}
-                className={`flex w-full items-start gap-3 px-3 py-2.5 border-b last:border-0 text-start hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary transition-colors duration-150 ${hasConversationUnread ? "bg-primary/[0.03]" : ""}`}
-                onClick={() => setLocation(`/messages/${conv.id}`)}
-              >
-                <div className="mt-0.5 shrink-0">{convIcon(conv.type)}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className={`text-sm font-medium truncate ${hasConversationUnread ? "text-foreground" : "text-foreground/80"}`}>
-                      {label}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{ago(conv.lastMessageAt, t, i18n.language)}</span>
-                  </div>
-                  {conv.lastMessageBody && (
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.lastMessageBody}</p>
-                  )}
-                </div>
-                {hasConversationUnread && (
-                  <Badge className="shrink-0 h-5 min-w-5 px-1 text-xs">{conv.unreadCount}</Badge>
-                )}
-              </button>
-              );
-            })
-          )}
-        </div>
-
-        <div className="border-t px-3 py-2">
-          <button
-            className="w-full text-xs font-medium text-center text-primary hover:text-primary/80 transition-colors py-0.5 flex items-center justify-center gap-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setLocation("/messages")}
-          >
-            {t("messages:viewAllConversations")}
-          </button>
-        </div>
-      </PopoverContent>
+          <div className="min-h-0 overflow-y-auto">
+            {isLoading ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-[var(--muted)]" role="status">
+                <Spinner size="sm" aria-hidden="true" />
+                <p>{t("messages:headerLoading")}</p>
+              </div>
+            ) : isError ? (
+              <div className="px-4 py-7 text-center">
+                <MessageSquare className="mx-auto mb-2 size-6 text-[var(--danger)] opacity-60" aria-hidden="true" />
+                <p className="text-sm text-[var(--muted)]">{t("messages:headerError")}</p>
+                <Button variant="secondary" size="sm" className="mt-3" onPress={() => void refetch()}>
+                  {t("messages:retry")}
+                </Button>
+              </div>
+            ) : items.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <MessageSquare className="mx-auto mb-2 size-6 text-[var(--muted)] opacity-30" aria-hidden="true" />
+                <p className="text-sm text-[var(--muted)]">{t("messages:headerNoConversations")}</p>
+              </div>
+            ) : (
+              items.map((conv) => {
+                const label = convLabel(conv, t);
+                const hasConversationUnread = typeof conv.unreadCount === "number" && conv.unreadCount > 0;
+                return (
+                  <button
+                    key={conv.id}
+                    type="button"
+                    title={label}
+                    className={`flex w-full items-start gap-3 border-b border-[var(--border)] px-3 py-2.5 text-start transition-colors duration-150 last:border-0 hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] ${hasConversationUnread ? "bg-[var(--accent)]/[0.04]" : ""}`}
+                    onClick={() => go(`/messages/${conv.id}`)}
+                  >
+                    <div className="mt-0.5 shrink-0">{convIcon(conv.type)}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span dir="auto" className={`truncate text-page-start text-sm font-medium ${hasConversationUnread ? "text-[var(--foreground)]" : "text-[var(--foreground)]/80"}`}>
+                          {label}
+                        </span>
+                        <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">{ago(conv.lastMessageAt, t, i18n.language)}</span>
+                      </div>
+                      {conv.lastMessageBody && (
+                        <p dir="auto" className="mt-0.5 truncate text-page-start text-xs text-[var(--muted)]">{previewBody(conv.lastMessageBody, t)}</p>
+                      )}
+                    </div>
+                    {hasConversationUnread && (
+                      <Chip size="sm" variant="soft" color="accent" className="shrink-0"><bdi dir="ltr">{conv.unreadCount}</bdi></Chip>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </Popover.Dialog>
+      </Popover.Content>
     </Popover>
   );
 }

@@ -9,7 +9,7 @@ import {
 import { useGetDashboardAgenda } from "@workspace/api-client-react";
 import type { AgendaItem } from "@workspace/api-client-react";
 import { Button, Card, Chip, Dropdown, Header, Label, Separator, type Key } from "@heroui/react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HintTooltip } from "@/components/hint-tooltip";
 import { ErrorState, type ErrorVariant } from "@/components/ui/error-state";
 
 /* ─── constants ─────────────────────────────────────────────────────────── */
@@ -490,12 +490,7 @@ export function CalendarGridCard() {
           return (
             <div key={dateStr} className="flex items-center justify-center">
               {tipText ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>{btn}</TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs max-w-[160px] text-center leading-snug">
-                    {tipText}
-                  </TooltipContent>
-                </Tooltip>
+                <HintTooltip content={tipText} className="max-w-40 text-center">{btn}</HintTooltip>
               ) : btn}
             </div>
           );
@@ -732,16 +727,11 @@ export function RemindersCard() {
                 className="group flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--default)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]"
               >
                 <div className="flex-1 min-w-0">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
-                        {item.title}
-                      </p>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs max-w-[240px] leading-snug">
-                      {item.title}
-                    </TooltipContent>
-                  </Tooltip>
+                  {/* The whole row is the link; a native title shows the full
+                      clamped text without nesting a second focus stop. */}
+                  <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground" dir="auto" title={item.title}>
+                    {item.title}
+                  </p>
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                     <span className="text-xs text-[var(--muted)]">
                       {new Date(item.date + "T00:00:00").toLocaleDateString(dateLocale, { month: "short", day: "numeric" })}
