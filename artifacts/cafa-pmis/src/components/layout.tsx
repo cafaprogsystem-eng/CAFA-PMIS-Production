@@ -29,6 +29,7 @@ import {
   CloudOff,
   Bot,
   Bell,
+  Activity,
   Settings,
   Archive,
   Globe,
@@ -304,6 +305,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     myPerms.includes("documents.view");
   const isAuditVisible = ["super_admin", "executive_director", "program_manager"].includes(userRole);
   const canViewAi = Boolean(meData?.user);
+  const canViewSystemMonitoring = myPerms.includes("*") || myPerms.includes("system.monitoring.view");
 
   const switcherUsers = usersData ?? [];
 
@@ -314,6 +316,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { href: "/states", icon: MapPin, label: tNav("items.states") },
     ...(isAuditVisible
       ? [{ href: "/audit-log", icon: ShieldAlert, label: tNav("items.auditLog") }]
+      : []),
+    ...(canViewSystemMonitoring
+      ? [{ href: "/system-monitoring", icon: Activity, label: tNav("items.systemMonitoring") }]
       : []),
     ...(canViewAi
       ? [{ href: "/ai", icon: Bot, label: tNav("items.ai") }]

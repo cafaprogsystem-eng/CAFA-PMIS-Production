@@ -57,6 +57,7 @@ const ProfilePage      = lazy(() => import("@/pages/profile"));
 const SyncStatusPage   = lazy(() => import("@/pages/sync-status"));
 const FilesPage        = lazy(() => import("@/pages/files"));
 const AiPage           = lazy(() => import("@/pages/ai"));
+const SystemMonitoringPage = lazy(() => import("@/pages/system-monitoring"));
 const NotificationPreferencesPage = lazy(() => import("@/pages/notification-preferences"));
 const LandingPage          = lazy(() => import("@/pages/landing"));
 
@@ -204,6 +205,7 @@ function Router() {
           <Route path="/notifications" component={NotificationsPage} />
           <Route path="/access-denied" component={AccessDenied} />
           <Route path="/audit-log">{() => <ProtectedRoute perm="audit.view"><AuditLog /></ProtectedRoute>}</Route>
+          <Route path="/system-monitoring">{() => <ProtectedRoute perm="system.monitoring.view"><SystemMonitoringPage /></ProtectedRoute>}</Route>
           <Route path="/users">{() => <ProtectedRoute perm="users.view"><UsersPage /></ProtectedRoute>}</Route>
           <Route path="/profile" component={ProfilePage} />
           <Route path="/notification-preferences" component={NotificationPreferencesPage} />

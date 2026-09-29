@@ -241,5 +241,34 @@
       "title": "Could not load the audit log",
       "description": "The audit events could not be retrieved. Please try again."
     }
+  },
+  "systemMonitoring": {
+    "title": "System Activity",
+    "subtitle": "Email delivery log and live user presence, in one place.",
+    "tabEmailLog": "Email Log",
+    "tabPresence": "Presence",
+    "searchPlaceholder": "Search recipient, subject, or user…",
+    "allStatuses": "All statuses",
+    "statusSent": "Sent",
+    "statusFailed": "Failed",
+    "statusPending": "Pending",
+    "refresh": "Refresh",
+    "colRecipient": "Recipient",
+    "colUser": "User",
+    "colType": "Type",
+    "colSubject": "Subject",
+    "colStatus": "Status",
+    "colProvider": "Provider",
+    "colError": "Error",
+    "colTime": "Sent / Logged at",
+    "noLogs": "No email log entries",
+    "clearSearch": "Try clearing the search or status filter.",
+    "totalEntries": "log entries",
+    "presenceSubtitle": "Sorted with online users first.",
+    "colName": "Name",
+    "colRole": "Role",
+    "colState": "State",
+    "noUsers": "No users found",
+    "noPermission": "You do not have permission to view this page."
   }
 }

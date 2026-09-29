@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { getLinkedStateLabel } from "@/components/state-label";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -113,8 +113,6 @@ import {
   MapPin,
   Building2,
   FolderOpen,
-  Circle,
-  CircleOff,
 } from "lucide-react";
 import { formatDate, formatDateTime, hasPerm } from "@/lib/format";
 import { SECTORS } from "@/lib/sectors";
@@ -122,7 +120,6 @@ import { localizeUserApiError } from "@/lib/user-error-localization";
 import { StateLabel } from "@/components/state-label";
 import { StateReferenceStatus } from "@/components/state-reference-status";
 import { deriveStateReferenceData, type StateReferenceData } from "@/lib/state-reference-data";
-import { useSocket } from "@/lib/socket";
 
 // ─── API error helpers ────────────────────────────────────────────────────────
 
@@ -254,46 +251,6 @@ function RoleBadge({ role, label }: { role: string; label?: string | null }) {
   );
 }
 
-function relativeLastSeen(lastSeenAt: string, language: string): string {
-  const timestamp = new Date(lastSeenAt).getTime();
-  if (!Number.isFinite(timestamp)) return "";
-  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1_000));
-  const formatter = new Intl.RelativeTimeFormat(language === "ar" ? "ar" : "en-GB", {
-    numeric: "auto",
-  });
-  if (seconds < 60) return formatter.format(-seconds, "second");
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return formatter.format(-minutes, "minute");
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return formatter.format(-hours, "hour");
-  return formatter.format(-Math.floor(hours / 24), "day");
-}
-
-function PresenceValue({
-  isOnline,
-  lastSeenAt,
-}: {
-  isOnline: boolean;
-  lastSeenAt?: string | null;
-}) {
-  const { t, i18n } = useTranslation("users");
-  const relative = lastSeenAt ? relativeLastSeen(lastSeenAt, i18n.language) : "";
-  const label = isOnline
-    ? t("presence.online")
-    : relative
-      ? t("presence.offlineLastSeen", { time: relative })
-      : t("presence.offline");
-
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs" aria-label={label}>
-      {isOnline
-        ? <Circle className="h-3 w-3 fill-success text-success" aria-hidden="true" />
-        : <CircleOff className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
-      <span className={isOnline ? "text-success" : "text-muted-foreground"}>{label}</span>
-    </span>
-  );
-}
-
 type UserRow = {
   id: number;
   name: string;
@@ -321,7 +278,6 @@ type EditingUser = Partial<UserRow> & { password?: string; confirmPassword?: str
 export default function UsersPage() {
   const { t, i18n } = useTranslation(["users", "common"]);
   const qc = useQueryClient();
-  const { socket } = useSocket();
   const { data: me } = useGetMe();
   const perms = me?.permissions;
   const canManage = hasPerm(perms, "users.manage") || me?.user?.role === "super_admin";
@@ -354,38 +310,6 @@ export default function UsersPage() {
   const statesQuery = useListStates();
   const stateReference = deriveStateReferenceData(statesQuery);
   const [activeTab, setActiveTab] = useState<"all" | "resets" | "invitations">("all");
-
-  useEffect(() => {
-    if (!socket) return;
-    const onPresenceUpdate = (event: {
-      userId?: unknown;
-      isOnline?: unknown;
-      lastSeenAt?: unknown;
-    }) => {
-      const userId = event.userId;
-      const isOnline = event.isOnline;
-      if (!Number.isSafeInteger(userId) || typeof isOnline !== "boolean") return;
-      const lastSeenAt = typeof event.lastSeenAt === "string" ? event.lastSeenAt : null;
-      qc.setQueriesData<{ items: UserRow[] }>(
-        { queryKey: getListUsersQueryKey() },
-        (page) => page
-          ? {
-              ...page,
-              items: page.items.map((user) => user.id === userId
-                ? {
-                    ...user,
-                    isOnline,
-                    // Online events do not reset a truthful persisted history.
-                    lastSeenAt: isOnline ? user.lastSeenAt ?? null : lastSeenAt,
-                  }
-                : user),
-            }
-          : page,
-      );
-    };
-    socket.on("presence:update", onPresenceUpdate);
-    return () => { socket.off("presence:update", onPresenceUpdate); };
-  }, [qc, socket]);
 
   // Mutations
   const invalidate = () => {
@@ -818,7 +742,6 @@ export default function UsersPage() {
                   <TableHead>{t("table.state")}</TableHead>
                   <TableHead>{t("table.sector")}</TableHead>
                   <TableHead>{t("statusHeader")}</TableHead>
-                  <TableHead>{t("presence.header")}</TableHead>
                   <TableHead className="whitespace-nowrap">{t("fields.lastLogin")}</TableHead>
                   <TableHead>{t("fields.createdAt")}</TableHead>
                   <TableHead className="w-12"></TableHead>
@@ -877,7 +800,6 @@ export default function UsersPage() {
                       <TableCell className="text-sm">{getLinkedStateLabel(u, i18n.language)}</TableCell>
                       <TableCell className="text-sm">{u.sector ?? "—"}</TableCell>
                       <TableCell><StatusBadge status={u.status ?? "active"} /></TableCell>
-                      <TableCell><PresenceValue isOnline={u.isOnline === true} lastSeenAt={u.lastSeenAt} /></TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : t("table.never")}
                       </TableCell>
