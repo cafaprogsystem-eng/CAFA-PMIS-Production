@@ -43,6 +43,7 @@ import { passwordResetAdminRoutes } from "./routes/password-reset-admin";
 import { aiRoutes } from "./routes/ai";
 import { authRoutes } from "./routes/auth";
 import { realtimeLocksRoutes } from "./routes/realtime-locks";
+import { scheduled } from "./scheduled";
 
 /**
  * /auth/* stays hand-rolled (session/login/logout have no RBAC/permission
@@ -519,4 +520,4 @@ export { RealtimeHub } from "./durable-objects/realtime-hub";
 const root = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 root.route("/api", app);
 
-export default root;
+export default { fetch: root.fetch, scheduled };

@@ -103,6 +103,15 @@ name = "cafa-pmis-api-production"
 [env.production.limits]
 cpu_ms = 50000
 
+# Cron Triggers — production-only (see src/scheduled.ts). "0 */6 * * *"
+# matches the source due-date checker's setInterval frequency exactly;
+# "*/15 * * * *" polls the monthly-reporting-deadline evaluator often enough
+# to catch its business-hour threshold within 15 minutes without running
+# the (mostly-guard-clause, cheap) check on every single minute like the
+# source's setInterval(pollMs=60_000) did.
+[env.production.triggers]
+crons = ["0 */6 * * *", "*/15 * * * *"]
+
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
 id = "844d6002fd5b463d82a6e00cc90a73e9"

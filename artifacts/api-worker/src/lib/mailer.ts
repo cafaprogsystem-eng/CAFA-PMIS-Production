@@ -26,6 +26,17 @@ export type OutboundEmail = {
 export type EmailDeliveryStatus = "pending" | "sent" | "failed";
 type SendResult = { delivered: boolean; provider: string; messageId?: string; error?: string };
 
+/**
+ * Ported from artifacts/api-server/src/lib/mailer.ts. Monthly reporting
+ * reminder emails need server-side idempotency (a crash between "sent" and
+ * "settled" must never double-send) — Resend supports this the same way
+ * sendEmail already uses it (Idempotency-Key header), SendGrid does not.
+ */
+export function mailerSupportsIdempotentDelivery(env: Bindings): boolean {
+  const cfg = config(env);
+  return !cfg.enabled || cfg.provider === "resend";
+}
+
 function config(env: Bindings) {
   return {
     enabled: String(env.EMAIL_ENABLED ?? "").toLowerCase() === "true",
