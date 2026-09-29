@@ -261,7 +261,11 @@ usersRoutes.get("/users", requirePerm("users.view"), async (c) => {
   const status = c.req.query("status");
   const stateIdRaw = c.req.query("stateId");
   const sector = c.req.query("sector");
-  const limit = boundedInteger(c.req.query("limit"), 25, 1, 100);
+  // Max raised 100 -> 500 for the System Activity Presence tab, which
+  // deliberately fetches every user in one page (limit: 200) rather than
+  // paginating — 100 rejected that request outright (400), not a partial
+  // page. The main Users Management screen still pages at 25, unaffected.
+  const limit = boundedInteger(c.req.query("limit"), 25, 1, 500);
   const offset = boundedInteger(c.req.query("offset"), 0, 0, 100_000);
   if (limit === null || offset === null) return c.json({ error: "invalid_pagination" }, 400);
   if (role && !VALID_ROLES.has(role)) return c.json({ error: "invalid_role_filter" }, 400);

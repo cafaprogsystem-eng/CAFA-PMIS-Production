@@ -718,7 +718,7 @@ export const ListSwitcherUsersResponse = zod.array(
  * @summary List authorised directory users. Supports bounded server-side search, filters, and pagination.
  */
 export const listUsersQueryLimitDefault = 25;
-export const listUsersQueryLimitMax = 100;
+export const listUsersQueryLimitMax = 500;
 
 export const listUsersQueryOffsetDefault = 0;
 export const listUsersQueryOffsetMin = 0;

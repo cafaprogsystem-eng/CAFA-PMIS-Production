@@ -1372,7 +1372,7 @@ export declare const ListSwitcherUsersResponse: zod.ZodArray<zod.ZodObject<{
  * @summary List authorised directory users. Supports bounded server-side search, filters, and pagination.
  */
 export declare const listUsersQueryLimitDefault = 25;
-export declare const listUsersQueryLimitMax = 100;
+export declare const listUsersQueryLimitMax = 500;
 export declare const listUsersQueryOffsetDefault = 0;
 export declare const listUsersQueryOffsetMin = 0;
 export declare const listUsersQueryOffsetMax = 100000;

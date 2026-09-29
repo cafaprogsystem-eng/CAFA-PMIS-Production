@@ -3736,7 +3736,7 @@ export type ListUsersParams = {
     sector?: string;
     /**
      * @minimum 1
-     * @maximum 100
+     * @maximum 500
      */
     limit?: number;
     /**
