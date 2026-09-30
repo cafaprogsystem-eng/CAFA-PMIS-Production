@@ -36,6 +36,17 @@ minimumReleaseAgeExclude:
   - '@replit/*'
   - stripe-replit-sync
 
+# The published @heroui-pro/react is a stub whose real package.json (with its
+# peers) only arrives from the licensed download during install, so pnpm cannot
+# see its peers when resolving. react-resizable-panels exists here in two
+# majors (2.x for mockup-sandbox, 4.x for the app); without this declaration
+# HeroUI Pro sometimes resolved the hoisted 2.x and the production build failed
+# ("useDefaultLayout" is not exported).
+packageExtensions:
+  '@heroui-pro/react':
+    peerDependencies:
+      react-resizable-panels: '>=4.10.0'
+
 onlyBuiltDependencies:
   - '@heroui-pro/react'
   - '@swc/core'

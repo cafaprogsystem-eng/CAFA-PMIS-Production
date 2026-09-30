@@ -160,6 +160,8 @@ overrides:
   rollup>@rollup/rollup-win32-x64-gnu: '-'
   rollup>@rollup/rollup-win32-x64-msvc: '-'
 
+packageExtensionsChecksum: sha256-pZlTPEkSEb+9yr0Q3db/AbkPsT+hvynsFAq7WWVc/yg=
+
 importers:
 
   .:
@@ -375,7 +377,7 @@ importers:
         version: 2.22.0(react@19.1.0)
       '@heroui-pro/react':
         specifier: 1.0.0-beta.10
-        version: 1.0.0-beta.10
+        version: 1.0.0-beta.10(react-resizable-panels@4.13.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0))
       '@radix-ui/react-direction':
         specifier: ^1.1.4
         version: 1.1.4(@types/react@19.2.14)(react@19.1.0)
@@ -1860,6 +1862,8 @@ packages:
 
   '@heroui-pro/react@1.0.0-beta.10':
     resolution: {integrity: sha512-3Vxf4m72WyjG1RIMtSlAn8ZNs//JtEZBUXUbki5Xo23InOdgukY/nEYGqPWLKoSIUrXx1ZH6ykNJXyhIUut1xg==}
+    peerDependencies:
+      react-resizable-panels: '>=4.10.0'
 
   '@heroui/react@3.2.6':
     resolution: {integrity: sha512-KBhUUUdX4571SSjwpuBPEFZTYAw/tmGezTIsTnjIOlXDZkjWACfhFe6ibtReO+xTkUcfxCV1r3cF00/3OPlhhw==}
@@ -8599,10 +8603,11 @@ snapshots:
     optionalDependencies:
       react: 19.1.0
 
-  '@heroui-pro/react@1.0.0-beta.10':
+  '@heroui-pro/react@1.0.0-beta.10(react-resizable-panels@4.13.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0))':
     dependencies:
       chalk: 5.6.2
       heroui-pro: 1.0.0-beta.14
+      react-resizable-panels: 4.13.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
 
   '@heroui/react@3.2.6(@internationalized/date@3.12.4)(@react-aria/ssr@3.10.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(@react-aria/utils@3.34.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-aria-components@1.21.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-aria@3.52.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(tailwind-merge@3.5.0)(tailwindcss@4.3.0)':
     dependencies:
