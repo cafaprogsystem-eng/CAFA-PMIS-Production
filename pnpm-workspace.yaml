@@ -54,6 +54,8 @@ overrides:
   engine.io-client>ws: 8.21.0
   socket.io-adapter>ws: 8.21.0
   socket.io>socket.io-parser: 4.2.7
+  # engine.io <6.6.10: Engine.IO protocol revision mismatch DoS (high).
+  socket.io>engine.io: 6.6.11
   socket.io-client>socket.io-parser: 4.2.7
   # express-rate-limit accepts this patched 10.x release but its saved lock
   # entry predates the security fix.
