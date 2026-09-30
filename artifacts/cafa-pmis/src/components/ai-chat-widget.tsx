@@ -221,14 +221,21 @@ export function AIChatWidget({ embedded = false }: { embedded?: boolean }) {
     action();
   }, []);
 
+  // Both timers are cleared when superseded or on unmount, so they never fire
+  // on a widget that is gone (in tests that threw an unhandled error).
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const scrollToBottom = useCallback(() => {
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => messagesEndRef.current?.scrollIntoView?.({ behavior: "smooth" }), 50);
   }, []);
+  useEffect(() => () => clearTimeout(scrollTimer.current), []);
 
   useEffect(() => { if (open && !minimized) scrollToBottom(); }, [messages, open, minimized, scrollToBottom]);
 
   useEffect(() => {
-    if (open && !minimized && enabled) setTimeout(() => inputRef.current?.focus(), 100);
+    if (!(open && !minimized && enabled)) return;
+    const focusTimer = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(focusTimer);
   }, [open, minimized, enabled]);
 
   // Load this session's prior messages once, so a reload or close/reopen

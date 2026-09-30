@@ -47,6 +47,10 @@ function makeMemoryStorage(): Storage {
 }
 
 beforeEach(() => {
+  // jsdom does not implement scrollIntoView; the widget calls it (via a
+  // setTimeout) whenever the message list changes. Without this stub the
+  // timer threw an unhandled error on slower CI runners.
+  Element.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal("localStorage", makeMemoryStorage());
 });
 
@@ -112,5 +116,15 @@ describe("AI-CHAT-WIDGET-HISTORY-PERSISTENCE", () => {
     renderWidget();
 
     expect(await screen.findByText(/^Welcome/)).toBeInTheDocument();
+  });
+});
+
+describe("AI widget timers", () => {
+  it("clear their scroll/focus timers and guard scrollIntoView (jsdom lacks it)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("src/components/ai-chat-widget.tsx", "utf8");
+    expect(src).toContain("messagesEndRef.current?.scrollIntoView?.(");
+    expect(src).toContain("useEffect(() => () => clearTimeout(scrollTimer.current), []);");
+    expect(src).toContain("return () => clearTimeout(focusTimer);");
   });
 });
